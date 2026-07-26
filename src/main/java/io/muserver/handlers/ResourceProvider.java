@@ -146,29 +146,36 @@ class ClasspathCache implements ResourceProviderFactory {
     }
 
     private static final ResourceProvider nullProvider = new ResourceProvider() {
+        @Override
         public boolean exists() {
             return false;
         }
 
+        @Override
         public boolean isDirectory() {
             return false;
         }
 
+        @Override
         public @Nullable Long fileSize() {
             return null;
         }
 
+        @Override
         public @Nullable Date lastModified() {
             return null;
         }
 
+        @Override
         public boolean skipIfPossible(long bytes) {
             return false;
         }
 
+        @Override
         public void sendTo(MuRequest request, MuResponse response, boolean sendBody, long maxLen) {
         }
 
+        @Override
         public Stream<Path> listFiles() {
             return Stream.empty();
         }
@@ -193,6 +200,7 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
         this.localPath = baseDirectory.resolve(relativePath);
     }
 
+    @Override
     public boolean exists() {
         return Files.exists(localPath);
     }
@@ -202,6 +210,7 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
         return Files.isDirectory(localPath);
     }
 
+    @Override
     public @Nullable Long fileSize() {
         try {
             long size = Files.size(localPath);
@@ -330,6 +339,7 @@ class ClasspathResourceProvider implements ResourceProvider {
         return new ClasspathResourceProvider(exists, isDir, fileSize, lastModified, path, inputStream);
     }
 
+    @Override
     public boolean exists() {
         return exists;
     }

@@ -59,7 +59,7 @@ abstract class BaseResponse implements MuResponse {
     protected Charset ensureCharsetSet() {
         var charset = Headtils.bodyCharset(headers(), false);
         if (!headers.contains(HeaderNames.CONTENT_TYPE)) {
-            HeaderString val = charset == StandardCharsets.UTF_8 ? (HeaderString) ContentTypes.TEXT_PLAIN_UTF8 : HeaderString.valueOf("text/plain;charset=" + charset.name(), HeaderString.Type.VALUE);
+            HeaderString val = StandardCharsets.UTF_8.equals(charset) ? (HeaderString) ContentTypes.TEXT_PLAIN_UTF8 : HeaderString.valueOf("text/plain;charset=" + charset.name(), HeaderString.Type.VALUE);
             headers.set(HeaderNames.CONTENT_TYPE, val);
         }
         return charset;

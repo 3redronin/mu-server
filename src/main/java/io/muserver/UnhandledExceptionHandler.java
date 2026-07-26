@@ -145,7 +145,7 @@ class BuiltInExceptionHandler implements UnhandledExceptionHandler {
     private static HttpException convertToMu(WebApplicationException cause) {
         HttpStatus status = HttpStatus.of(cause.getResponse().getStatus());
         String message = cause.getMessage();
-        if (status == HttpStatus.NOT_FOUND_404 && "HTTP 404 Not Found".equals(message)) {
+        if (status.sameCode(HttpStatus.NOT_FOUND_404) && "HTTP 404 Not Found".equals(message)) {
             message = "This page is not available. Sorry about that.";
         }
         HttpException httpException = new HttpException(status, message, cause.getCause());
@@ -157,4 +157,3 @@ class BuiltInExceptionHandler implements UnhandledExceptionHandler {
     }
 
 }
-

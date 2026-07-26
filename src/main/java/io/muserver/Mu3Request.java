@@ -95,7 +95,7 @@ class Mu3Request implements MuRequest {
 
     @Override
     public Optional<InputStream> inputStream() {
-        if (bodySize == BodySize.NONE) {
+        if (BodySize.NONE.equals(bodySize)) {
             return Optional.empty();
         }
         inputStreamAccessed = true;
@@ -104,7 +104,7 @@ class Mu3Request implements MuRequest {
 
     @Override
     public Headers trailers() {
-        if (bodySize == BodySize.NONE) {
+        if (BodySize.NONE.equals(bodySize)) {
             return Headers.create();
         }
         if (!(body instanceof RequestTrailersAccessor)) {
@@ -315,8 +315,8 @@ class Mu3Request implements MuRequest {
         try {
             if (body instanceof Http1BodyStream) {
                 var http1Body = (Http1BodyStream) body;
-                boolean throwIfTooBig = Objects.requireNonNull(response, "The response has not been initialized").status()
-                    != HttpStatus.CONTENT_TOO_LARGE_413;
+                boolean throwIfTooBig = !Objects.requireNonNull(response, "The response has not been initialized").status()
+                    .sameCode(HttpStatus.CONTENT_TOO_LARGE_413);
                 var bodyState = http1Body.discardRemaining(throwIfTooBig);
                 return bodyState == Http1BodyStream.State.EOF && !http1Body.tooBig();
             } else {

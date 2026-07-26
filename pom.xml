@@ -418,7 +418,7 @@
                                 <arg>-XDcompilePolicy=simple</arg>
                                 <arg>-XDaddTypeAnnotationsToSymbol=true</arg>
                                 <arg>--should-stop=ifError=FLOW</arg>
-                                <arg>-Xplugin:ErrorProne -XepDisableAllChecks -Xep:NullAway:ERROR -Xep:BadInstanceof:ERROR -Xep:ByteBufferBackingArray:ERROR -Xep:DefaultLocale:ERROR -Xep:InterruptedExceptionSwallowed:ERROR -Xep:NarrowingCompoundAssignment:ERROR -Xep:ReturnValueIgnored:ERROR -Xep:StringCaseLocaleUsage:ERROR -Xep:WaitNotInLoop:ERROR -XepOpt:NullAway:OnlyNullMarked=true -XepOpt:NullAway:JSpecifyMode=true</arg>
+                                <arg>-Xplugin:ErrorProne -XepDisableAllChecks -Xep:NullAway:ERROR -Xep:ArrayEquals:ERROR -Xep:BadInstanceof:ERROR -Xep:ByteBufferBackingArray:ERROR -Xep:CollectionIncompatibleType:ERROR -Xep:DefaultCharset:ERROR -Xep:DefaultLocale:ERROR -Xep:EqualsHashCode:ERROR -Xep:InterruptedExceptionSwallowed:ERROR -Xep:LockNotBeforeTry:ERROR -Xep:MissingOverride:ERROR -Xep:NarrowingCompoundAssignment:ERROR -Xep:ReferenceEquality:ERROR -Xep:ReturnValueIgnored:ERROR -Xep:StringCaseLocaleUsage:ERROR -Xep:SynchronizeOnNonFinalField:ERROR -Xep:ThreadJoinLoop:ERROR -Xep:WaitNotInLoop:ERROR -XepOpt:NullAway:OnlyNullMarked=true -XepOpt:NullAway:JSpecifyMode=true</arg>
                             </compilerArgs>
                         </configuration>
                     </plugin>

@@ -212,6 +212,7 @@ class Http2Stream implements ResponseInfo {
         return request;
     }
 
+    @Override
     public BaseResponse response() {
         return requiredResponse();
     }
@@ -246,11 +247,11 @@ class Http2Stream implements ResponseInfo {
                     }
                 }
             }
-            if (n == HeaderNames.PSEUDO_AUTHORITY) {
+            if (HeaderNames.PSEUDO_AUTHORITY.equals(n)) {
                 if (authority != null) throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "double :authority", id);
                 authority = line.value();
                 iter.remove();
-            } else if (n == HeaderNames.PSEUDO_METHOD) {
+            } else if (HeaderNames.PSEUDO_METHOD.equals(n)) {
                 if (method != null) throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "double :method", id);
                 try {
                     method = Method.valueOf(line.getValue());
@@ -258,18 +259,18 @@ class Http2Stream implements ResponseInfo {
                     throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "invalid method", id);
                 }
                 iter.remove();
-            } else if (n == HeaderNames.PSEUDO_PATH) {
+            } else if (HeaderNames.PSEUDO_PATH.equals(n)) {
                 if (path != null) throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "double :path", id);
                 path = line.value();
                 iter.remove();
-            } else if (n == HeaderNames.PSEUDO_SCHEME) {
+            } else if (HeaderNames.PSEUDO_SCHEME.equals(n)) {
                 if (scheme != null) throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "double :scheme", id);
                 scheme = line.value();
                 iter.remove();
-            } else if (n == HeaderNames.HOST) {
+            } else if (HeaderNames.HOST.equals(n)) {
                 if (host != null) throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "double host", id);
                 host = line.value();
-            } else if (n == HeaderNames.CONTENT_LENGTH) {
+            } else if (HeaderNames.CONTENT_LENGTH.equals(n)) {
                 long len;
                 try {
                     len = Long.parseLong(line.value().toString());
@@ -281,20 +282,20 @@ class Http2Stream implements ResponseInfo {
                     throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "multiple content-length lines", id);
                 }
                 cl = len;
-            } else if (n == HeaderNames.CONNECTION) {
+            } else if (HeaderNames.CONNECTION.equals(n)) {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "connection", id);
-            } else if (n == HeaderNames.TRANSFER_ENCODING) {
+            } else if (HeaderNames.TRANSFER_ENCODING.equals(n)) {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "transfer-encoding", id);
-            } else if (n == HeaderNames.KEEP_ALIVE) {
+            } else if (HeaderNames.KEEP_ALIVE.equals(n)) {
                 // RFC 9113 §8.2.2: connection-specific header fields MUST NOT be used in HTTP/2
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "keep-alive", id);
-            } else if (n == HeaderNames.PROXY_CONNECTION) {
+            } else if (HeaderNames.PROXY_CONNECTION.equals(n)) {
                 // RFC 9113 §8.2.2: connection-specific header fields MUST NOT be used in HTTP/2
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "proxy-connection", id);
-            } else if (n == HeaderNames.UPGRADE) {
+            } else if (HeaderNames.UPGRADE.equals(n)) {
                 // RFC 9113 §8.2.2: connection-specific header fields MUST NOT be used in HTTP/2
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "upgrade", id);
-            } else if (n == HeaderNames.TE) {
+            } else if (HeaderNames.TE.equals(n)) {
                 // RFC 9113 §8.2.2: TE header MAY appear but MUST NOT contain any value other than "trailers"
                 if (!"trailers".equalsIgnoreCase(line.value().toString())) {
                     throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "te header with value other than trailers", id);
@@ -339,7 +340,7 @@ class Http2Stream implements ResponseInfo {
         var outgoingFlowControl = new Http2OutgoingFlowController(id, clientSettings.initialWindowSize);
         var incomingFlowControl = new Http2IncomingFlowController(id, serverSettings.initialWindowSize);
 
-        InputStream body = bodySize == BodySize.NONE ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(
+        InputStream body = BodySize.NONE.equals(bodySize) ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(
             connection.server.requestIdleTimeoutMillis(),
             read -> {
                 var update = incomingFlowControl.incrementCredit(read);

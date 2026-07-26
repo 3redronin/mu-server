@@ -36,7 +36,10 @@ class HuffmanDecoder {
             }
         }
 
-        if (node != root) {
+        // Decoding is complete only when traversal returns to this exact root node.
+        @SuppressWarnings("ReferenceEquality")
+        boolean hasPartialSymbol = node != root;
+        if (hasPartialSymbol) {
             if (bitsSinceLastSymbol > 7 || !tailBitsAreAllOnes) {
                 throw new Http2Exception(Http2ErrorCode.COMPRESSION_ERROR, "invalid huffman padding");
             }

@@ -30,7 +30,7 @@ class FieldBlockDecoder {
                 canChangeTableSize = false;
                 int index = readHpackInt(7, b, buffer);
                 var line = table.getValue(index);
-                if (line.name() == HeaderNames.PSEUDO_PATH) {
+                if (HeaderNames.PSEUDO_PATH.equals(line.name())) {
                     uriLen += line.value().length();
                 }
                 totalLen += line.length();
@@ -69,7 +69,7 @@ class FieldBlockDecoder {
                         name = table.getValue(nameIndex).name();
                     }
 
-                    boolean isUri = name == HeaderNames.PSEUDO_PATH;
+                    boolean isUri = HeaderNames.PSEUDO_PATH.equals(name);
                     HeaderString value = readHeaderString(buffer, HeaderString.Type.VALUE);
                     if (isUri) {
                         uriLen += value.length();

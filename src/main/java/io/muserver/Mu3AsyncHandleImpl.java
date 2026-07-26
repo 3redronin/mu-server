@@ -29,8 +29,8 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
             var duration = System.currentTimeMillis() - before;
             var newTimeout = timeoutMillis - duration;
             if (newTimeout <= 0) throw new TimeoutException("Timeout on completion future");
+            lock.lock();
             try {
-                lock.lock();
                 responseFuture.get(newTimeout, TimeUnit.MILLISECONDS);
             } finally {
                 lock.unlock();
@@ -116,8 +116,8 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
 
     @Override
     public void write(ByteBuffer data, DoneCallback callback) {
+        lock.lock();
         try {
-            lock.lock();
             responseFuture = responseFuture.thenRunAsync(() -> {
                 try {
                     copyBufferToResponseOutput(data);
@@ -138,8 +138,8 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
 
     @Override
     public Future<@Nullable Void> write(ByteBuffer data) {
+        lock.lock();
         try {
-            lock.lock();
             CompletableFuture<@Nullable Void> writeFuture = responseFuture.thenRunAsync(() -> {
                 try {
                     copyBufferToResponseOutput(data);

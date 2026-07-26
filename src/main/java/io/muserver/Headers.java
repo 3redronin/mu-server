@@ -197,6 +197,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
     /**
      * @return An iterator to iterate through the headers
      */
+    @Override
     Iterator<Map.Entry<String, String>> iterator();
 
     /**
@@ -554,6 +555,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      *
      * @return a string representation of these headers
      */
+    @Override
     String toString();
 
     /**

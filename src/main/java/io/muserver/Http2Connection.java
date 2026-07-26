@@ -538,7 +538,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         } else {
             var oldSettings = clientSettings;
             var newSettings = settingsDiff.copyIfChanged(clientSettings);
-            if (newSettings != oldSettings) {
+            // copyIfChanged returns the input instance when no setting changed.
+            @SuppressWarnings("ReferenceEquality")
+            boolean settingsChanged = newSettings != oldSettings;
+            if (settingsChanged) {
                 clientSettings = newSettings;
                 if (newSettings.initialWindowSize != oldSettings.initialWindowSize) {
                     for (var stream : streams.values()) {

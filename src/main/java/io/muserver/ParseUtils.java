@@ -68,6 +68,17 @@ interface Http1ConnectionMsg {}
 class MessageBodyBit implements Http1ConnectionMsg {
     static final MessageBodyBit EndOfBodyBit = new MessageBodyBit(new byte[0], 0, 0, true);
     static final MessageBodyBit EOFMsg = new MessageBodyBit(new byte[0], 0, 0, false);
+
+    @SuppressWarnings("ReferenceEquality") // The parser returns these exact sentinel instances.
+    static boolean isEndOfBody(Http1ConnectionMsg message) {
+        return message == EndOfBodyBit;
+    }
+
+    @SuppressWarnings("ReferenceEquality") // The parser returns this exact sentinel instance.
+    static boolean isEof(Http1ConnectionMsg message) {
+        return message == EOFMsg;
+    }
+
     private final byte[] bytes;
     private final int offset;
     private final int length;

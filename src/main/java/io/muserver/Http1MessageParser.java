@@ -104,7 +104,7 @@ class Http1MessageParser implements Http1MessageReader {
                         var req = request();
                         if (isVChar(b)) { // todo: only allow valid target chars
                             var reject = req.getRejectRequest();
-                            var bad = reject != null && reject.status() == HttpStatus.URI_TOO_LONG_414;
+                            var bad = reject != null && reject.status().sameCode(HttpStatus.URI_TOO_LONG_414);
                             if (!bad && buffer.size() < maxUrlLength) {
                                 append(buffer, b);
                             } else if (!bad) {

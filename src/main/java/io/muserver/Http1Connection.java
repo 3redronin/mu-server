@@ -18,7 +18,6 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static io.muserver.MessageBodyBit.EOFMsg;
 import static java.util.Collections.emptySet;
 
 class Http1Connection extends BaseHttpConnection {
@@ -76,7 +75,7 @@ class Http1Connection extends BaseHttpConnection {
                     log.info("Error reading from client input stream " + e.getClass() + " " + e.getMessage());
                     break;
                 }
-                if (msg == EOFMsg) {
+                if (MessageBodyBit.isEof(msg)) {
                     log.info("EOF detected");
 //                    reqStream.closeQuietly() // TODO: confirm if the input stream should be closed
                     markRemoteClosed();
@@ -101,7 +100,7 @@ class Http1Connection extends BaseHttpConnection {
                 Method method = java.util.Objects.requireNonNull(request.getMethod(), "No HTTP method was parsed");
                 HttpVersion httpVersion = java.util.Objects.requireNonNull(request.getHttpVersion(), "No HTTP version was parsed");
                 BodySize bodySize = java.util.Objects.requireNonNull(request.getBodySize(), "No body size was parsed");
-                InputStream requestBody = (bodySize == BodySize.NONE) ? EmptyInputStream.INSTANCE : new Http1BodyStream(requestParser, server.maxRequestBodySize());
+                InputStream requestBody = BodySize.NONE.equals(bodySize) ? EmptyInputStream.INSTANCE : new Http1BodyStream(requestParser, server.maxRequestBodySize());
                 var muRequest = new Mu3Request(this, method, requestUri, serverUri, httpVersion, request.headers(), bodySize, requestBody);
                 clientSocket.setSoTimeout(requestTimeout);
 
@@ -202,8 +201,13 @@ class Http1Connection extends BaseHttpConnection {
 
     @Override
     public void onExchangeEnded(ResponseInfo exchange) {
-        activeExchange.updateAndGet(cur -> cur != null && cur.request == exchange.request() ? null : cur);
+        activeExchange.updateAndGet(cur -> cur != null && isSameRequest(cur.request, exchange.request()) ? null : cur);
         super.onExchangeEnded(exchange);
+    }
+
+    @SuppressWarnings("ReferenceEquality") // Connection ownership belongs to the exact request instance.
+    private static boolean isSameRequest(@Nullable Mu3Request current, MuRequest completed) {
+        return current == completed;
     }
 
 

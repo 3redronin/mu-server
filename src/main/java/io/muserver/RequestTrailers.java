@@ -18,18 +18,17 @@ final class RequestTrailers {
     }
 
     static boolean isForbiddenTrailerField(HeaderString name) {
-        return name == HeaderNames.CONNECTION
-            || name == HeaderNames.TRANSFER_ENCODING
-            || name == HeaderNames.CONTENT_LENGTH
-            || name == HeaderNames.HOST
-            || name == HeaderNames.TE
-            || name == HeaderNames.UPGRADE
-            || name == HeaderNames.CONTENT_TYPE
-            || name == HeaderNames.CONTENT_ENCODING
-            || name == HeaderNames.CONTENT_RANGE
-            || name == HeaderNames.AUTHORIZATION
-            || name == HeaderNames.PROXY_AUTHORIZATION;
+        return HeaderNames.CONNECTION.equals(name)
+            || HeaderNames.TRANSFER_ENCODING.equals(name)
+            || HeaderNames.CONTENT_LENGTH.equals(name)
+            || HeaderNames.HOST.equals(name)
+            || HeaderNames.TE.equals(name)
+            || HeaderNames.UPGRADE.equals(name)
+            || HeaderNames.CONTENT_TYPE.equals(name)
+            || HeaderNames.CONTENT_ENCODING.equals(name)
+            || HeaderNames.CONTENT_RANGE.equals(name)
+            || HeaderNames.AUTHORIZATION.equals(name)
+            || HeaderNames.PROXY_AUTHORIZATION.equals(name);
     }
 }
-
 

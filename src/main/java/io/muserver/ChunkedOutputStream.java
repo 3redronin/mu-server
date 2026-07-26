@@ -66,7 +66,10 @@ class ChunkedOutputStream extends OutputStream {
                     try {
                         out.flush();
                     } catch (Throwable flushException) {
-                        if (flushException != writeException) {
+                        // Throwable.addSuppressed rejects self-suppression based on identity.
+                        @SuppressWarnings("ReferenceEquality")
+                        boolean isDifferentException = flushException != writeException;
+                        if (isDifferentException) {
                             flushException.addSuppressed(writeException);
                         }
                         throw flushException;

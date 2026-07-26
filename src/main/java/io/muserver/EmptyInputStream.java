@@ -20,6 +20,7 @@ public class EmptyInputStream extends InputStream {
      * Returns EOF
      * @return <code>-1</code>
      */
+    @Override
     public int read() {
         return -1;
     }

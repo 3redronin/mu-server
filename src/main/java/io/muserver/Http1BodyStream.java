@@ -107,7 +107,7 @@ class Http1BodyStream extends InputStream implements RequestTrailersAccessor {
                             status.set(State.IO_EXCEPTION);
                             throw (pe instanceof IOException) ? (IOException) pe : new IOException("Parse error in request body", pe);
                         }
-                        if (next == MessageBodyBit.EndOfBodyBit) {
+                        if (MessageBodyBit.isEndOfBody(next)) {
                             trailers = parser instanceof Http1MessageParser ? ((Http1MessageParser) parser).takeTrailers() : null;
                             bb = null;
                             status.set(State.EOF);
@@ -178,10 +178,10 @@ class Http1BodyStream extends InputStream implements RequestTrailersAccessor {
                     status.set(State.IO_EXCEPTION);
                     break;
                 }
-                if (last == MessageBodyBit.EndOfBodyBit) {
+                if (MessageBodyBit.isEndOfBody(last)) {
                     trailers = parser instanceof Http1MessageParser ? ((Http1MessageParser) parser).takeTrailers() : null;
                     drained = true;
-                } else if (last == MessageBodyBit.EOFMsg) {
+                } else if (MessageBodyBit.isEof(last)) {
                     status.set(State.IO_EXCEPTION);
                     break;
                 } else if (last instanceof MessageBodyBit) {

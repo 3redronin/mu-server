@@ -84,6 +84,7 @@ class Http2Settings implements LogicalHttp2Frame {
      */
     private static final byte[] ackBytes = new byte[] { 0, 0, 0, 4, 1, 0, 0, 0, 0 };
 
+    @Override
     public void writeTo(@Nullable Http2Peer connection, OutputStream out) throws IOException {
         if (isAck) {
             out.write(ackBytes);

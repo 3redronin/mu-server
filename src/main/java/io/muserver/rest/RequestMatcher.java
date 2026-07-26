@@ -295,8 +295,13 @@ class RequestMatcher {
     private static CombinedMediaType bestMediaType(List<MediaType> requestedTypes, List<MediaType> serverProvided) {
         return serverProvided.stream()
             .flatMap(serverType -> requestedTypes.stream().map(clientType -> CombinedMediaType.s(clientType, serverType)))
-            .filter(combined -> combined != CombinedMediaType.NONMATCH)
+            .filter(RequestMatcher::isMediaTypeMatch)
             .max(Comparator.naturalOrder()).get();
+    }
+
+    @SuppressWarnings("ReferenceEquality") // CombinedMediaType.s returns this sentinel for incompatible types.
+    private static boolean isMediaTypeMatch(CombinedMediaType combined) {
+        return combined != CombinedMediaType.NONMATCH;
     }
 
     static class StepOneOutput {

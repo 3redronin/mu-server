@@ -48,10 +48,12 @@ class StringEntityProviders {
 
         static final StringMessageReaderWriter INSTANCE = new StringMessageReaderWriter();
 
+        @Override
         public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
             return String.class.equals(type);
         }
 
+        @Override
         public long getSize(String s, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
             if (s == null || s.isEmpty()) {
                 return 0;
@@ -82,14 +84,17 @@ class StringEntityProviders {
             return byteLength;
         }
 
+        @Override
         public void writeTo(String s, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
             entityStream.write(s.getBytes(EntityProviders.charsetFor(mediaType)));
         }
 
+        @Override
         public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
             return String.class.equals(type);
         }
 
+        @Override
         public String readFrom(Class<String> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
             return new String(Mutils.toByteArray(entityStream, 2048), EntityProviders.charsetFor(mediaType));
         }
@@ -210,10 +215,12 @@ class StringEntityProviders {
 
     @Consumes("*/*")
     static class ReaderEntityReader implements MessageBodyReader<Reader> {
+        @Override
         public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
             return Reader.class.isAssignableFrom(type);
         }
 
+        @Override
         public Reader readFrom(Class<Reader> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
             return new InputStreamReader(entityStream, EntityProviders.charsetFor(mediaType));
         }

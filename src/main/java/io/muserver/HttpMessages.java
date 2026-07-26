@@ -71,18 +71,22 @@ class HttpRequestTemp implements HttpMessageTemp {
         this.url = url;
     }
 
+    @Override
     public @Nullable HttpVersion getHttpVersion() {
         return httpVersion;
     }
 
+    @Override
     public void setHttpVersion(@Nullable HttpVersion httpVersion) {
         this.httpVersion = httpVersion;
     }
 
+    @Override
     public @Nullable BodySize getBodySize() {
         return bodySize;
     }
 
+    @Override
     public void setBodySize(@Nullable BodySize bodySize) {
         this.bodySize = bodySize;
     }

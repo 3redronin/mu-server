@@ -43,6 +43,7 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
         return lines;
     }
 
+    @Override
     public List<Map.Entry<String, String>> entries() {
         return Collections.unmodifiableList(lines);
     }

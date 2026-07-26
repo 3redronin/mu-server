@@ -77,6 +77,7 @@ public interface SsePublisher extends Closeable {
      * <p><strong>Warning:</strong> most clients will reconnect several seconds after this message is called. To prevent that
      * happening, close the stream from the client or on the next request return a {@link HttpStatus#NO_CONTENT_204} to the client.</p>
      */
+    @Override
     void close() throws IOException;
 
     /**

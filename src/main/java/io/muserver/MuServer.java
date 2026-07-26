@@ -19,6 +19,7 @@ import java.util.concurrent.TimeUnit;
  */
 public interface MuServer extends Closeable {
 
+    @Override
     default void close() {
         stop();
     }
@@ -83,8 +84,7 @@ public interface MuServer extends Closeable {
     static String artifactVersion() {
         try {
             Properties props = new Properties();
-            InputStream in = MuServer.class.getResourceAsStream("/META-INF/maven/io.muserver/mu-server/pom.properties");
-            try (in) {
+            try (InputStream in = MuServer.class.getResourceAsStream("/META-INF/maven/io.muserver/mu-server/pom.properties")) {
                 if (in == null) {
                     return "0.x";
                 }

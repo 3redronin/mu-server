@@ -62,6 +62,7 @@ public class HttpsConfig implements SSLInfo {
     /**
      * @return An unmodifiable list of protocols supported, such as <code>TLSv1.2</code>
      */
+    @Override
     public List<String> protocols() {
         return List.of(protocolsArray());
     }
@@ -95,10 +96,13 @@ public class HttpsConfig implements SSLInfo {
         try {
             SSLContext ctx = SSLContext.getInstance("TLS");
             ctx.init(new KeyManager[0], new TrustManager[] {new X509TrustManager() {
+                    @Override
                     public void checkClientTrusted(X509Certificate[] x509Certificates, String s) {
                     }
+                    @Override
                     public void checkServerTrusted(X509Certificate[] x509Certificates, String s) {
                     }
+                    @Override
                     public X509Certificate@Nullable[] getAcceptedIssuers() {
                         return null;
                     }

@@ -165,6 +165,7 @@ public class ParameterizedHeader {
      *
      * @return A String, such as "some-value" or "content-type:text/html;charset=UTF-8"
      */
+    @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
         Map<String, @Nullable String> parameters = this.parameters();
