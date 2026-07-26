@@ -259,11 +259,21 @@ abstract class ResourceMethodParam {
             @Nullable Pattern patternIfNotDefault = pattern == null || UriPattern.DEFAULT_CAPTURING_GROUP_PATTERN.equals(pattern.pattern()) ? null : pattern;
             return builder.withSchema(
                 schemaObjectFrom(type(), genericType(), isRequired())
-                    .withDefaultValue(source() == ValueSource.PATH_PARAM || !hasExplicitDefault() ? null : defaultValue())
+                    .withDefaultValue(documentationDefaultValue())
                     .withExternalDocs(externalDoc)
                     .withPattern(patternIfNotDefault)
                     .build()
             );
+        }
+
+        private @Nullable Object documentationDefaultValue() {
+            if (source() == ValueSource.PATH_PARAM || !hasExplicitDefault()) {
+                return null;
+            }
+            if (!array) {
+                return defaultValue();
+            }
+            return Collections.singletonList(defaultValue());
         }
 
         RequestBasedParam(Introspection introspection, Annotation[] annotations,

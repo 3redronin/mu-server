@@ -17,6 +17,7 @@ import jakarta.ws.rs.ext.ParamConverter;
 import jakarta.ws.rs.ext.ParamConverterProvider;
 import okhttp3.FormBody;
 import okhttp3.Response;
+import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
@@ -439,6 +440,32 @@ public class ResourceMethodArrayParamTest {
 
         try (Response response = call(request(server.uri().resolve("/arrays?value=one,%20two,")))) {
             assertThat(response.body().string(), is("one|two"));
+        }
+    }
+
+    @Test
+    public void openApiArrayDefaultsAreSingletonArrays() throws IOException {
+        @Path("arrays")
+        class ArrayResource {
+            @GET
+            public String get(@DefaultValue("42") @QueryParam("value") Integer[] values) {
+                return join(values);
+            }
+        }
+        server = httpsServerForTest().addHandler(restHandler(new ArrayResource())
+            .withOpenApiJsonUrl("/openapi.json")).start();
+
+        try (Response response = call(request(server.uri().resolve("/arrays")))) {
+            assertThat(response.body().string(), is("42"));
+        }
+        try (Response response = call(request(server.uri().resolve("/openapi.json")))) {
+            assertThat(response.code(), is(200));
+            JSONObject schema = (JSONObject) new JSONObject(response.body().string())
+                .query("/paths/~1arrays/get/parameters/0/schema");
+            assertThat(schema.getString("type"), is("array"));
+            assertThat(schema.getJSONObject("items").getString("type"), is("integer"));
+            assertThat(schema.getJSONArray("default").length(), is(1));
+            assertThat(schema.getJSONArray("default").getInt(0), is(42));
         }
     }
 
