@@ -28,6 +28,8 @@ import static java.util.stream.Collectors.toMap;
 class ResourceMethod {
     final ResourceClass resourceClass;
     private final ResourceClassIntrospection.MethodInfo methodInfo;
+    private final List<MediaType> directlyConsumes;
+    private final List<MediaType> directlyProduces;
     final List<MediaType> effectiveConsumes;
     final List<MediaType> effectiveProduces;
     final List<ResourceMethodParam> params;
@@ -36,14 +38,17 @@ class ResourceMethod {
     final Annotation[] methodAnnotations; // the annotations defined on the method to be passed to the message body writers
 
     ResourceMethod(ResourceClass resourceClass, ResourceClassIntrospection.MethodInfo methodInfo,
-                   List<ResourceMethodParam> params, SchemaObjectCustomizer schemaObjectCustomizer,
-                   DescriptionData descriptionData) {
+                   List<ResourceMethodParam> params, SchemaObjectCustomizer schemaObjectCustomizer) {
         this.resourceClass = resourceClass;
         this.methodInfo = methodInfo;
         this.params = params;
         this.schemaObjectCustomizer = schemaObjectCustomizer;
-        this.descriptionData = descriptionData;
+        this.descriptionData = methodInfo.descriptionData;
         this.methodAnnotations = methodInfo.methodAnnotations.toArray(new Annotation[0]);
+        this.directlyProduces = Collections.unmodifiableList(
+            new ArrayList<>(MediaTypeHeaderDelegate.fromStrings(methodInfo.directlyProduces)));
+        this.directlyConsumes = Collections.unmodifiableList(
+            new ArrayList<>(MediaTypeHeaderDelegate.fromStrings(methodInfo.directlyConsumes)));
         this.effectiveProduces = !directlyProduces().isEmpty() ? directlyProduces() : (!resourceClass.produces.isEmpty() ? resourceClass.produces : RequestMatcher.WILDCARD_AS_LIST);
         this.effectiveConsumes = !directlyConsumes().isEmpty() ? directlyConsumes() : (!resourceClass.consumes.isEmpty() ? resourceClass.consumes : RequestMatcher.WILDCARD_AS_LIST);
     }
@@ -69,11 +74,11 @@ class ResourceMethod {
     }
 
     List<MediaType> directlyConsumes() {
-        return methodInfo.directlyConsumes;
+        return directlyConsumes;
     }
 
     List<MediaType> directlyProduces() {
-        return methodInfo.directlyProduces;
+        return directlyProduces;
     }
 
     boolean hasAll(List<Class<? extends Annotation>> annotations) {

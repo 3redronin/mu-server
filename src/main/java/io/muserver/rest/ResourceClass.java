@@ -18,7 +18,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -28,12 +27,6 @@ import static java.util.stream.Collectors.toList;
 class ResourceClass {
 
     private static final Logger log = LoggerFactory.getLogger(ResourceClass.class);
-    private static final ClassValue<AtomicBoolean> visibilityWarningsLogged = new ClassValue<AtomicBoolean>() {
-        @Override
-        protected AtomicBoolean computeValue(Class<?> type) {
-            return new AtomicBoolean();
-        }
-    };
 
     final UriPattern pathPattern;
     final Class<?> resourceClass;
@@ -85,7 +78,7 @@ class ResourceClass {
         }
 
         try {
-            if (shouldLogVisibilityWarnings(resourceClass)) {
+            if (introspection.shouldLogVisibilityWarnings()) {
                 introspection.visibilityWarnings.forEach(log::warn);
             }
         } catch (LinkageError | RuntimeException ignored) {
@@ -98,10 +91,8 @@ class ResourceClass {
             for (ResourceMethodParam.Introspection param : methodInfo.params) {
                 params.add(param.bind(paramConverterProviders));
             }
-            DescriptionData descriptionData =
-                DescriptionData.fromAnnotation(methodInfo.methodHandle, null);
             resourceMethods.add(new ResourceMethod(
-                this, methodInfo, params, schemaObjectCustomizer, descriptionData));
+                this, methodInfo, params, schemaObjectCustomizer));
         }
         this.resourceMethods = Collections.unmodifiableList(resourceMethods);
         this.methodInfoSet = true;
@@ -112,7 +103,7 @@ class ResourceClass {
     }
 
     static boolean shouldLogVisibilityWarnings(Class<?> resourceClass) {
-        return visibilityWarningsLogged.get(resourceClass).compareAndSet(false, true);
+        return ResourceClassIntrospection.forClass(resourceClass).shouldLogVisibilityWarnings();
     }
 
     static List<Class<? extends Annotation>> getNameBindingAnnotations(AnnotatedElement annotationSource) {

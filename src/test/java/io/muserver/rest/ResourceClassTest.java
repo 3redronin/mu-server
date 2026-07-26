@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.OPTIONS;
@@ -10,6 +11,7 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.ext.ParamConverter;
 import jakarta.ws.rs.ext.ParamConverterProvider;
+import jakarta.ws.rs.ext.RuntimeDelegate;
 import org.junit.Test;
 
 import java.lang.annotation.Annotation;
@@ -154,7 +156,7 @@ public class ResourceClassTest {
 
         assertThrows(UnsupportedOperationException.class, () -> model.methods.add(method));
         assertThrows(UnsupportedOperationException.class,
-            () -> method.directlyProduces.add(MediaType.APPLICATION_JSON_TYPE));
+            () -> method.directlyProduces.add(MediaType.APPLICATION_JSON));
         assertThrows(UnsupportedOperationException.class, () -> method.params.add(param));
         assertThrows(UnsupportedOperationException.class,
             () -> method.nameBindingAnnotations.add(Deprecated.class));
@@ -216,8 +218,37 @@ public class ResourceClassTest {
             ResourceClassIntrospection.forClass(StringLookupResource.class);
         assertThat(interfaceModel.methods.get(0).params.get(0).source,
             equalTo(ResourceMethodParam.ValueSource.PATH_PARAM));
-        assertThat(interfaceModel.methods.get(0).annotationSource.getDeclaringClass(),
-            equalTo(GenericLookupResource.class));
+    }
+
+    @Test
+    public void methodMediaTypesAreParsedForEachHandlerRuntimeDelegate() {
+        MuRuntimeDelegate.ensureSet();
+        RuntimeDelegate original = RuntimeDelegate.getInstance();
+        try {
+            RuntimeDelegate.setInstance(new MarkingRuntimeDelegate("first"));
+            ResourceClass first = ResourceClass.fromObject(new RuntimeDelegateMediaResource(),
+                ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
+
+            RuntimeDelegate.setInstance(new MarkingRuntimeDelegate("second"));
+            ResourceClass second = ResourceClass.fromObject(new RuntimeDelegateMediaResource(),
+                ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
+
+            assertSame(first.introspection, second.introspection);
+            assertThat(first.produces.get(0).getParameters().get("delegate"), equalTo("first"));
+            assertThat(second.produces.get(0).getParameters().get("delegate"), equalTo("second"));
+            assertThat(first.consumes.get(0).getParameters().get("delegate"), equalTo("first"));
+            assertThat(second.consumes.get(0).getParameters().get("delegate"), equalTo("second"));
+            assertThat(first.resourceMethods.get(0).directlyProduces().get(0)
+                .getParameters().get("delegate"), equalTo("first"));
+            assertThat(second.resourceMethods.get(0).directlyProduces().get(0)
+                .getParameters().get("delegate"), equalTo("second"));
+            assertThat(first.resourceMethods.get(0).directlyConsumes().get(0)
+                .getParameters().get("delegate"), equalTo("first"));
+            assertThat(second.resourceMethods.get(0).directlyConsumes().get(0)
+                .getParameters().get("delegate"), equalTo("second"));
+        } finally {
+            RuntimeDelegate.setInstance(original);
+        }
     }
 
     private static List<ParamConverterProvider> providersWithPrefix(String prefix) {
@@ -412,6 +443,47 @@ public class ResourceClassTest {
         @GET
         public String get() {
             return "ok";
+        }
+    }
+
+    @Path("/runtime-delegate-media")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    private static class RuntimeDelegateMediaResource {
+        @GET
+        @Consumes(MediaType.TEXT_PLAIN)
+        @Produces(MediaType.TEXT_PLAIN)
+        public String get() {
+            return "ok";
+        }
+    }
+
+    private static final class MarkingRuntimeDelegate extends MuRuntimeDelegate {
+        private final String marker;
+
+        private MarkingRuntimeDelegate(String marker) {
+            this.marker = marker;
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> HeaderDelegate<T> createHeaderDelegate(Class<T> type) {
+            if (type != MediaType.class) {
+                return super.createHeaderDelegate(type);
+            }
+            return (HeaderDelegate<T>) new HeaderDelegate<MediaType>() {
+                @Override
+                public MediaType fromString(String value) {
+                    String[] typeAndSubtype = value.split("/", 2);
+                    return new MediaType(typeAndSubtype[0], typeAndSubtype[1],
+                        Collections.singletonMap("delegate", marker));
+                }
+
+                @Override
+                public String toString(MediaType value) {
+                    return value.getType() + "/" + value.getSubtype();
+                }
+            };
         }
     }
 
