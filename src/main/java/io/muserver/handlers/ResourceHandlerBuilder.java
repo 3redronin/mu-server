@@ -15,6 +15,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Scanner;
 
 import static io.muserver.handlers.ResourceType.DEFAULT_EXTENSION_MAPPINGS;
@@ -181,8 +182,8 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
         }
         String css = this.directoryListingCss;
         if (directoryListingEnabled && css == null) {
-            InputStream cssStream = RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css");
-            assert cssStream != null;
+            InputStream cssStream = Objects.requireNonNull(RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css"),
+                "Bundled directory listing CSS was not found");
             Scanner scanner = new Scanner(cssStream, StandardCharsets.UTF_8).useDelimiter("\\A");
             css = scanner.next();
             scanner.close();

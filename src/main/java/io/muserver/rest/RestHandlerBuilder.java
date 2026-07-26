@@ -19,6 +19,7 @@ import org.jspecify.annotations.Nullable;
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -605,8 +606,10 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         OpenApiDocumentor documentor = null;
         if (openApiHtmlUrl != null || openApiJsonUrl != null || openApiYamlUrl != null) {
             if (openApiHtmlCss == null) {
-                InputStream cssStream = RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css");
-                Scanner scanner = new Scanner(cssStream, "UTF-8").useDelimiter("\\A");
+                InputStream cssStream = Objects.requireNonNull(
+                    RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css"),
+                    "Bundled OpenAPI CSS was not found");
+                Scanner scanner = new Scanner(cssStream, StandardCharsets.UTF_8).useDelimiter("\\A");
                 openApiHtmlCss = scanner.next();
                 scanner.close();
 

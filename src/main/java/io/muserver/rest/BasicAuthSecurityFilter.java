@@ -10,6 +10,7 @@ import jakarta.ws.rs.core.SecurityContext;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.Principal;
 import java.util.Base64;
 
@@ -63,7 +64,7 @@ public class BasicAuthSecurityFilter implements ContainerRequestFilter {
         }
 
         String base64Encoded = authorization.substring("Basic ".length());
-        String decoded = new String(Base64.getDecoder().decode(base64Encoded), "UTF-8");
+        String decoded = new String(Base64.getDecoder().decode(base64Encoded), StandardCharsets.UTF_8);
         String[] userPass = decoded.split(":", 2);
         if (userPass.length != 2) {
             filterContext.abortWith(Response.status(400).entity("An invalid " + HttpHeaders.AUTHORIZATION + " header was used").build());
