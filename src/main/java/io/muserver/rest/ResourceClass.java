@@ -86,8 +86,12 @@ class ResourceClass {
             throw new IllegalStateException("Cannot call setupMethodInfo twice");
         }
 
-        if (shouldLogVisibilityWarnings(resourceClass)) {
-            nonPublicResourceMethodWarnings(resourceClass).forEach(log::warn);
+        try {
+            if (shouldLogVisibilityWarnings(resourceClass)) {
+                nonPublicResourceMethodWarnings(resourceClass).forEach(log::warn);
+            }
+        } catch (LinkageError | RuntimeException ignored) {
+            // A best-effort diagnostic must not prevent an otherwise usable resource class from registering.
         }
         List<ResourceMethod> resourceMethods = new ArrayList<>();
         java.lang.reflect.Method[] methods = this.resourceClass.getMethods();
