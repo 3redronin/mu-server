@@ -77,14 +77,11 @@ public interface MuServer {
     static String artifactVersion() {
         try {
             Properties props = new Properties();
-            InputStream in = MuServer.class.getResourceAsStream("/META-INF/maven/io.muserver/mu-server/pom.properties");
-            if (in == null) {
-                return "0.x";
-            }
-            try {
+            try (InputStream in = MuServer.class.getResourceAsStream("/META-INF/maven/io.muserver/mu-server/pom.properties")) {
+                if (in == null) {
+                    return "0.x";
+                }
                 props.load(in);
-            } finally {
-                in.close();
             }
             return props.getProperty("version");
         } catch (Exception ex) {
