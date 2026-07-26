@@ -24,8 +24,8 @@ supported components can alternatively be registered programmatically using `Res
 ### 3.1 Resource Classes 
 
 The spec specifies two lifecycles for resource classes: per-request instantiation (via reflection) or
-singletons, such amongst concurrent requests. Following the principle of only supporting programatic
-configration, Mu-Server only supports singletons, so any constructors or fields are ignored by MuServer.
+singletons, shared amongst concurrent requests. Following the principle of only supporting programmatic
+configuration, Mu Server only supports singletons, so any constructors or fields are ignored by Mu Server.
 
 #### 3.1.1 Lifecycle and Environment 
 
@@ -45,7 +45,8 @@ N/A Not applicable as only singletons supported
 
 - [x] Resource methods implemented with GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD support
 - [x] Sub-resource Locators (only supports returning of instantiated objects rather than classes, as MuServer does not instantiate classes for the API user)
-- [ ] Custom HTTP methods not supported.
+- [ ] Arbitrary custom HTTP methods are not supported. A custom request-method designator annotated with
+  `@HttpMethod` is only usable when its value is one of Mu Server's built-in `Method` enum values.
 
 #### 3.3.1 Visibility 
 
@@ -61,22 +62,38 @@ N/A Not applicable as only singletons supported
 - [x] Static valueOf method objects
 - [x] Single-string constructor objects
 - [x] `List<T>`, `Set<T>`, and `SortedSet<T>` for values satisfying above 3 cases. 
+- [ ] `T[]` parameters for `@CookieParam`, `@FormParam`, `@HeaderParam`, `@MatrixParam`, and `@QueryParam`
 - [x] `@DefaultValue`
 - [x] `@Encoded`
+
+For resource methods consuming `multipart/form-data`, the following 3.1 `@FormParam` parameter types are
+separate from the whole-body `List<EntityPart>` entity provider described in section 4.2.4:
+
+- [ ] `@FormParam EntityPart` (not started)
+- [ ] `@FormParam InputStream` (not started)
+- [ ] `@FormParam String` (not started)
+
+The existing `@FormParam String` support for `application/x-www-form-urlencoded` is implemented; the unchecked
+item above is specifically for extracting a named part from a multipart body.
 
 #### 3.3.3 Return Type 
 
 - [x] void methods
 - [x] Response objects
+- [x] Relative locations passed to `Response.created(URI)` are resolved against the application base URI
 - [x] GenericEntity objects
 - [x] Arbitrary objects (where supported by MessageBodyWriters)
 
 #### 3.3.4 Exceptions 
 
-- [x] 1: Use the response property of WebApplicationExceptions to send the error message
-- [x] 2: Use an exception mapping provider if available
-- [x] 3: Unchecked and unmapped exceptions should be thrown to the web server
-- [x] 4: (not applicable to mu-server)
+- [x] Use a registered exception mapping provider if available
+- [x] Use the response carried by a `WebApplicationException` when no application mapper handles it
+- [ ] Register the Jakarta REST 3.1 default `ExceptionMapper<Throwable>`. It should turn otherwise-unmapped
+  exceptions into a plain 500 response while preserving the response carried by a `WebApplicationException`;
+  application mappers must take precedence.
+
+Currently, ordinary unchecked exceptions with no mapper are rethrown to Mu Server. This is historical behavior,
+not the Jakarta REST 3.1 default-mapper behavior.
 
 #### 3.3.5 HEAD and OPTIONS 
 
@@ -95,6 +112,8 @@ N/A Not applicable as only singletons supported
 ### 3.5 Declaring Media Type Capabilities 
 
 - [x] Implemented.
+- [x] A missing `Accept` header matches as `*/*`
+- [x] A missing `Content-Type` header matches resource methods as `*/*`
 
 ### 3.6 Annotation Inheritance 
 
@@ -133,11 +152,24 @@ N/A Not applicable as only singletons supported
 N/A. This will never be implemented. Users should explicitly and programmatically specify any providers using
 the `io.muserver.rest.RestHandlerBuilder` class.
 
-#### 4.1.2 Constructors 
+#### 4.1.2 Services
+
+Jakarta REST 3.1 service loading is a narrower requirement than general provider classpath scanning:
+
+- [ ] Discover and register `Feature` implementations returned by both `ServiceLoader.load(Feature.class)` and
+  `ServiceLoader.load(Feature.class, Feature.class.getClassLoader())`
+- [ ] Discover and register `DynamicFeature` implementations using the same two class-loader searches
+- [ ] Disable both searches when `Application.getProperties()` contains
+  `jakarta.ws.rs.loadServices` with the value `Boolean.FALSE`
+
+These services are enabled by default and are required to be registered in the runtime `Configuration`. Mu Server
+does not currently implement `Feature`, `DynamicFeature`, or `Configuration`, so this 3.1 requirement is unsupported.
+
+#### 4.1.3 Constructors
 
 N/A as Mu will never instantiate user classes.
 
-#### 4.1.3 Priorities
+#### 4.1.4 Priorities
 
 No plan to implement as it would add another dependency.
 
@@ -164,10 +196,12 @@ No plan to implement as it would add another dependency.
 - [x] `java.io.InputStream` All media types (*/*)
 - [x] `java.io.Reader` All media types (*/*)
 - [x] `java.io.File` All media types (*/*)
-- [ ] `javax.activation.DataSource` Will not implement as it is removed in Java 9
+- [ ] `jakarta.activation.DataSource` Will not implement as Jakarta Activation is an optional dependency
 - [ ] `javax.xml.transform.Source` XML types (text/xml, application/xml and media types of the form application/*+xml)
-- [ ] `javax.xml.bind.JAXBElement` and application-supplied JAXB classes XML types (text/xml and application/xml and media types of the form application/*+xml)
+- [ ] `jakarta.xml.bind.JAXBElement` and application-supplied JAXB classes XML types (text/xml and application/xml and media types of the form application/*+xml)
 - [x] `MultivaluedMap<String,String>` Form content (application/x-www-form-urlencoded)
+- [ ] `java.util.List<EntityPart>` multipart/form-data `MessageBodyReader` (not started)
+- [ ] `java.util.List<EntityPart>` multipart/form-data `MessageBodyWriter` (not started)
 - [x] `StreamingOutput` All media types (*/*), MessageBodyWriter only
 - [x] `java.lang.Boolean`, `java.lang.Character`, `java.lang.Number` Only for text/plain
 - [x] Corresponding primitive types supported via boxing/unboxing conversion.
@@ -192,6 +226,7 @@ No plan to implement as it would add another dependency.
 
 - [x] Implemented, except as per Mu-Server conventions, no automatic registering is used, so a `@Provider` annotation is ignored.
 Call `RestHandlerBuilder.addExceptionMapper` to register mappers.
+- [ ] The required Jakarta REST 3.1 default `ExceptionMapper<Throwable>` is not yet registered.
 
 ### 4.5 Exceptions 
 
@@ -250,7 +285,8 @@ N/A
 
 ### 6.6 Priorities 
 
-No plan to implement as it would add another dependency. The order filters and interceptors are added are the order they are run in.
+- [x] `@Priority` ordering for request filters, response filters, reader interceptors, and writer interceptors.
+  Components without `@Priority` use `Priorities.USER`.
 
 ### 6.7 Exceptions 
 
@@ -388,6 +424,7 @@ Call `MuRuntimeDelegate.ensureSet()` once before the first `SeBootstrap` call to
 ## 12 Runtime Delegate
 
 - [x] Implemented, including Java SE configuration and bootstrap. `createEndpoint` is not supported.
+- [ ] `createEntityPartBuilder` / `EntityPart.Builder` is not implemented.
 
 ## Interface implementations
 
@@ -397,3 +434,7 @@ The following are not described by the spec but are interfaces defined in the ja
 - [x] `Link`
 - [x] `VariantListBuilder`
 - [x] `ResourceInfo` (this is available in a filter by calling `ResourceInfo resourceInfo = (ResourceInfo) requestContext.getProperty(MuRuntimeDelegate.RESOURCE_INFO_PROPERTY);`)
+- [x] Jakarta REST 3.1 `Cookie.Builder`, `NewCookie.Builder`, and `NewCookie.SameSite`
+- [x] Jakarta REST 3.1 `Response.isClosed()`
+- [x] Jakarta REST 3.1 `ContainerRequestContext.hasProperty(String)`
+- [ ] Jakarta REST 3.1 `EntityPart` and `EntityPart.Builder` (not started)
