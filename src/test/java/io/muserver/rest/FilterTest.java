@@ -1043,6 +1043,37 @@ public class FilterTest {
     }
 
     @Test
+    public void applicationMappedResponseIsFilteredAfterResponseFilterFailure() throws IOException {
+        AtomicInteger mapperCalls = new AtomicInteger();
+        AtomicInteger responseFilterCalls = new AtomicInteger();
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new BrokenResource())
+                .addExceptionMapper(IllegalStateException.class, exception -> {
+                    mapperCalls.incrementAndGet();
+                    return jakarta.ws.rs.core.Response.status(422)
+                        .entity("mapped")
+                        .type(jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE)
+                        .build();
+                })
+                .addResponseFilter((requestContext, responseContext) -> {
+                    int call = responseFilterCalls.incrementAndGet();
+                    if (call == 1) {
+                        throw new IllegalStateException("first response failed");
+                    }
+                    responseContext.setEntity(responseContext.getEntity() + " filtered");
+                }))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/broken")))) {
+            assertThat(response.code(), equalTo(422));
+            assertThat(response.body().string(), equalTo("mapped filtered"));
+        }
+        assertThat(mapperCalls.get(), equalTo(1));
+        assertThat(responseFilterCalls.get(), equalTo(2));
+    }
+
+    @Test
     public void exceptionMapperIsNotUsedAgainWhenWritingItsResponseFails() throws IOException {
         AtomicInteger mapperCalls = new AtomicInteger();
 
