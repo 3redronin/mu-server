@@ -161,6 +161,10 @@ abstract class ResourceMethodParam {
             } else if (source == ValueSource.SUSPENDED) {
                 return new SuspendedParam(this, boundAnnotations);
             } else {
+                if (type.isArray() && io.muserver.Cookie.class.isAssignableFrom(type.getComponentType())) {
+                    throw new MuException("io.muserver.Cookie[] is not supported for Jakarta REST parameters. "
+                        + "Use jakarta.ws.rs.core.Cookie[] with @CookieParam instead.");
+                }
                 ParamConverter<?> converter =
                     getParamConverter(this, boundAnnotations, paramConverterProviders);
                 boolean lazyDefaultValue = converter.getClass().getDeclaredAnnotation(ParamConverter.Lazy.class) != null;

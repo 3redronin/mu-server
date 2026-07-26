@@ -488,6 +488,25 @@ public class ResourceMethodArrayParamTest {
     }
 
     @Test
+    public void muCookieArraysRemainUnsupported() {
+        @Path("arrays")
+        class ArrayResource {
+            @GET
+            public String get(@CookieParam("value") io.muserver.Cookie[] ignored) {
+                return "unexpected";
+            }
+        }
+
+        try {
+            restHandler(new ArrayResource()).build();
+            Assert.fail("Should have rejected Mu Cookie arrays");
+        } catch (MuException expected) {
+            assertThat(expected.getMessage(), containsString("io.muserver.Cookie[] is not supported"));
+            assertThat(expected.getMessage(), containsString("jakarta.ws.rs.core.Cookie[]"));
+        }
+    }
+
+    @Test
     public void primitiveArraysRemainUnsupported() {
         @Path("arrays")
         class ArrayResource {
