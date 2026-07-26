@@ -17,6 +17,7 @@ import scaffolding.ServerUtils;
 
 import java.net.URI;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.List;
@@ -206,6 +207,21 @@ public class ProblemDetailsExceptionsTest {
             assertThat(json.getString("detail"), is("An unexpected error occurred"));
             assertThat(json.getString("instance").startsWith("urn:uuid:"), is(true));
         }
+    }
+
+    @Test
+    public void mapperGeneratesAnInstanceWhenProblemDetailsExceptionHasNone() {
+        ProblemDetailsException problem = new ProblemDetailsException(
+            400, "Bad Request", null, null, null, Collections.emptyMap(), null);
+        ProblemDetailsExceptionMapper<ProblemDetailsException> mapper = problemDetailsExceptionMapper()
+            .withLog4xxProblemDetailsInstanceIds(false)
+            .build();
+
+        jakarta.ws.rs.core.Response response = mapper.toResponse(problem);
+        JSONObject json = new JSONObject((String) response.getEntity());
+
+        assertThat(response.getStatus(), is(400));
+        assertThat(json.getString("instance"), startsWith("urn:uuid:"));
     }
 
     @Test

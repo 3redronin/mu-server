@@ -1,6 +1,5 @@
 package io.muserver.rest;
 
-import io.muserver.Mutils;
 import io.muserver.openapi.Jsonizer;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
@@ -59,11 +58,15 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
     public Response toResponse(E exception) {
         if (exception instanceof ProblemDetailsException) {
             ProblemDetailsException problem = (ProblemDetailsException) exception;
+            URI instance = problem.getInstance();
+            if (instance == null) {
+                instance = newInstance();
+            }
             if (shouldLogInstance(problem.getStatus())) {
-                log.error("Sending a problem details response with instance={}", problem.getInstance(), exception);
+                log.error("Sending a problem details response with instance={}", instance, exception);
             }
             return toResponse(Response.status(problem.getStatus()), problem.getStatus(), problem.getTitle(),
-                problem.getDetail(), problem.getType(), problem.getInstance(), problem.getExtensionMembers(), shouldAddNoStoreHeader(problem.getStatus()));
+                problem.getDetail(), problem.getType(), instance, problem.getExtensionMembers(), shouldAddNoStoreHeader(problem.getStatus()));
         }
 
         if (exception instanceof UriParameterConversionException) {
@@ -83,10 +86,8 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
             if (family != Response.Status.Family.CLIENT_ERROR && family != Response.Status.Family.SERVER_ERROR) {
                 return response;
             }
-            String title = webApplicationException.getMessage();
-            if (Mutils.nullOrEmpty(title)) {
-                title = defaultTitle(response.getStatus());
-            }
+            String message = webApplicationException.getMessage();
+            String title = message == null || message.isEmpty() ? defaultTitle(response.getStatus()) : message;
             URI instance = newInstance();
             if (shouldLogInstance(response.getStatus())) {
                 log.error("Sending a problem details response with instance={}", instance, exception);
