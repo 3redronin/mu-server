@@ -109,6 +109,7 @@ public class UriPattern {
         }
     }
 
+    @Override
     public String toString() {
         return pattern.toString();
     }

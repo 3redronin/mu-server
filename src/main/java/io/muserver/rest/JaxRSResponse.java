@@ -76,6 +76,7 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         );
     }
 
+    @Override
     public Annotation[] getAnnotations() {
         return annotations;
     }

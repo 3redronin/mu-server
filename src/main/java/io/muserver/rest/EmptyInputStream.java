@@ -8,6 +8,7 @@ class EmptyInputStream extends InputStream {
     private EmptyInputStream() {
     }
 
+    @Override
     public int read() {
         return -1;
     }

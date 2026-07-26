@@ -176,9 +176,9 @@ class ResourceClass {
     }
 
     static ResourceClass forSubResourceLocator(ResourceMethod rm, Class<?> instanceClass, @Nullable Object instance, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders) {
-        @Nullable List<MediaType> existingConsumes = rm.effectiveConsumes.isEmpty() || (rm.directlyConsumes.isEmpty() && rm.effectiveConsumes.size() == 1 && rm.effectiveConsumes.get(0) == MediaType.WILDCARD_TYPE) ? null : rm.effectiveConsumes;
+        @Nullable List<MediaType> existingConsumes = rm.effectiveConsumes.isEmpty() || (rm.directlyConsumes.isEmpty() && rm.effectiveConsumes.size() == 1 && MediaType.WILDCARD_TYPE.equals(rm.effectiveConsumes.get(0))) ? null : rm.effectiveConsumes;
         List<MediaType> consumes = getConsumes(existingConsumes, instanceClass);
-        @Nullable List<MediaType> existingProduces = rm.effectiveProduces.isEmpty() || (rm.directlyProduces.isEmpty() && rm.effectiveProduces.size() == 1 && rm.effectiveProduces.get(0) == MediaType.WILDCARD_TYPE) ? null : rm.effectiveProduces;
+        @Nullable List<MediaType> existingProduces = rm.effectiveProduces.isEmpty() || (rm.directlyProduces.isEmpty() && rm.effectiveProduces.size() == 1 && MediaType.WILDCARD_TYPE.equals(rm.effectiveProduces.get(0))) ? null : rm.effectiveProduces;
         List<MediaType> produces = getProduces(existingProduces, instanceClass);
         ResourceClass resourceClass = new ResourceClass(
             java.util.Objects.requireNonNull(rm.pathPattern, "Sub-resource locator had no path pattern"),
