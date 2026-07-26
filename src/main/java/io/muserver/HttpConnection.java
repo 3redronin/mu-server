@@ -34,11 +34,12 @@ public interface HttpConnection {
 
     /**
      * Gets the number of milliseconds that this connection has not had any read or write operations
+     * @return The number of milliseconds since the last read or write activity on this connection.
      */
     long idleTimeMillis();
 
     /**
-     * @return <code>true</code> if the connnection is secured over HTTPS, otherwise <code>false</code>
+     * @return <code>true</code> if the connection is secured over HTTPS, otherwise <code>false</code>
      */
     boolean isHttps();
 
@@ -123,6 +124,7 @@ public interface HttpConnection {
      * Closes this connection immediately, causing a connection reset on the client side.
      * <p>Generally, it is not recommended to use this as it may result in EOF errors for clients due to
      * skipping shutdown protocols.</p>
+     * @throws IOException If the connection cannot be aborted cleanly.
      */
     void abort() throws IOException;
 
@@ -138,4 +140,3 @@ public interface HttpConnection {
      */
     Optional<String> sniHostName();
 }
-

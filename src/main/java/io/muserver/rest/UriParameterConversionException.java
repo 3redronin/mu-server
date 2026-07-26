@@ -30,9 +30,13 @@ import java.util.Objects;
  * <p>The original conversion failure is available from {@link #getCause()}.
  */
 public final class UriParameterConversionException extends NotFoundException {
+    /** Backing field for {@link #getParameterName()}. */
     private final String parameterName;
+    /** Backing field for {@link #getParameterValue()}. */
     private final @Nullable String parameterValue;
+    /** Backing field for {@link #getTargetType()}. */
     private final Class<?> targetType;
+    /** Backing field for {@link #getAllowedValues()}. */
     private final List<String> allowedValues;
 
     UriParameterConversionException(String parameterName, @Nullable String parameterValue, Class<?> targetType, List<String> allowedValues, Throwable cause) {
@@ -44,6 +48,8 @@ public final class UriParameterConversionException extends NotFoundException {
     }
 
     /**
+     * Gets the name declared by the URI parameter annotation.
+     *
      * @return the name declared by the parameter annotation
      */
     public String getParameterName() {
@@ -51,6 +57,8 @@ public final class UriParameterConversionException extends NotFoundException {
     }
 
     /**
+     * Gets the raw parameter value that failed conversion.
+     *
      * @return the supplied parameter value, or {@code null} if no value was supplied
      */
     public @Nullable String getParameterValue() {
@@ -58,6 +66,8 @@ public final class UriParameterConversionException extends NotFoundException {
     }
 
     /**
+     * Gets the Java type required by the resource method.
+     *
      * @return the Java type required by the resource method
      */
     public Class<?> getTargetType() {

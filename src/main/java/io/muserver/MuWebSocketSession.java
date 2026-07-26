@@ -31,6 +31,7 @@ public interface MuWebSocketSession {
      * Sends a text message to the client
      * @param message The message to be sent
      * @throws IllegalStateException if a partial write is in progress
+     * @throws IOException If the message cannot be written to the client.
      */
     void sendText(String message) throws IOException;
 
@@ -39,6 +40,7 @@ public interface MuWebSocketSession {
      * @param textFragment The partial text message, as a byte buffer containing a substring of UTF-8 encoded bytes
      * @param isLastFragment <code>true</code> if this is the last fragment of a partial text message
      * @throws IllegalStateException if a partial binary write is in progress
+     * @throws IOException If the fragment cannot be written to the client.
      */
     void sendTextFragment(ByteBuffer textFragment, boolean isLastFragment) throws IOException;
 
@@ -95,6 +97,7 @@ public interface MuWebSocketSession {
      * Sends a full binary message to the client
      * @param message The message to be sent
      * @throws IllegalStateException if a partial write is in progress
+     * @throws IOException If the message cannot be written to the client.
      */
     void sendBinary(ByteBuffer message) throws IOException;
 
@@ -126,6 +129,7 @@ public interface MuWebSocketSession {
      * @param message The message to be sent
      * @param isLastFragment <code>true</code> if this is the last fragment of a message
      * @throws IllegalStateException if a partial text write is in progress
+     * @throws IOException If the fragment cannot be written to the client.
      */
     void sendBinaryFragment(ByteBuffer message, boolean isLastFragment) throws IOException;
 
@@ -156,6 +160,7 @@ public interface MuWebSocketSession {
     /**
      * Sends a ping message to the client, which is used for keeping sockets alive.
      * @param payload The message to send.
+     * @throws IOException If the ping cannot be written to the client.
      */
     void sendPing(ByteBuffer payload) throws IOException;
 
@@ -185,6 +190,7 @@ public interface MuWebSocketSession {
     /**
      * Sends a pong message to the client, generally in response to receiving a ping via {@link MuWebSocket#onPing(ByteBuffer)}
      * @param payload The payload to send back to the client.
+     * @throws IOException If the pong cannot be written to the client.
      */
     void sendPong(ByteBuffer payload) throws IOException;
 

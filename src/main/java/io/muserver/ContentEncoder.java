@@ -51,6 +51,7 @@ public interface ContentEncoder {
      * @param response The response to potentially encode
      * @param stream The response stream, which should be wrapped by an encoding stream if supported.
      * @return An encoding output stream if this encoder supports it, otherwise <code>null</code>
+     * @throws IOException If the encoder cannot create or initialize the wrapped output stream.
      */
     @Nullable
     OutputStream wrapStream(MuRequest request, MuResponse response, OutputStream stream) throws IOException;
@@ -110,4 +111,3 @@ public interface ContentEncoder {
     }
 
 }
-

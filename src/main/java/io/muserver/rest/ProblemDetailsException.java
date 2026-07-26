@@ -12,11 +12,17 @@ import java.util.Map;
  * An RFC 9457 problem-details exception.
  */
 public class ProblemDetailsException extends WebApplicationException {
+    /** Backing field for {@link #getStatus()}. */
     private final int status;
+    /** Backing field for {@link #getTitle()}. */
     private final String title;
+    /** Backing field for {@link #getDetail()}. */
     private final @Nullable String detail;
+    /** Backing field for {@link #getType()}. */
     private final @Nullable URI type;
+    /** Backing field for {@link #getInstance()}. */
     private final URI instance;
+    /** Backing field for {@link #getExtensionMembers()}. */
     private final Map<String, @Nullable Object> extensionMembers;
 
     ProblemDetailsException(int status, String title, @Nullable String detail, @Nullable URI type, URI instance,
@@ -31,6 +37,8 @@ public class ProblemDetailsException extends WebApplicationException {
     }
 
     /**
+     * Gets the HTTP status code for the problem response.
+     *
      * @return The HTTP status code for the problem response.
      */
     public int getStatus() {
@@ -38,6 +46,8 @@ public class ProblemDetailsException extends WebApplicationException {
     }
 
     /**
+     * Gets the short, human-readable title for the problem response.
+     *
      * @return The short title for the problem response.
      */
     public String getTitle() {
@@ -45,6 +55,8 @@ public class ProblemDetailsException extends WebApplicationException {
     }
 
     /**
+     * Gets the human-readable detail specific to this occurrence of the problem.
+     *
      * @return The human-readable detail for the problem response, or {@code null}.
      */
     public @Nullable String getDetail() {
@@ -52,6 +64,8 @@ public class ProblemDetailsException extends WebApplicationException {
     }
 
     /**
+     * Gets the URI identifying the problem type.
+     *
      * @return The problem type URI.
      */
     public @Nullable URI getType() {
@@ -59,6 +73,8 @@ public class ProblemDetailsException extends WebApplicationException {
     }
 
     /**
+     * Gets the URI identifying this specific occurrence of the problem.
+     *
      * @return The problem instance URI.
      */
     public URI getInstance() {
@@ -66,6 +82,8 @@ public class ProblemDetailsException extends WebApplicationException {
     }
 
     /**
+     * Gets the RFC 9457 extension members that will be included in the response body.
+     *
      * @return Any RFC 9457 extension members.
      */
     public Map<String, @Nullable Object> getExtensionMembers() {
@@ -78,6 +96,7 @@ public class ProblemDetailsException extends WebApplicationException {
     public static ProblemDetailsExceptionBuilder builder() {
         return new ProblemDetailsExceptionBuilder();
     }
+
     /**
      * @param status the HTTP status code for the problem response
      * @return a builder to create a new ProblemDetailsException with the given status
