@@ -435,7 +435,8 @@ public class FilterTest {
             ).start();
         try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
             assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), is("<h1>400 Bad Request</h1><p>Bad!!!</p>"));
+            assertThat(resp.header("content-type"), is("application/problem+json"));
+            assertThat(resp.body().string(), containsString("\"title\":\"Bad!!!\""));
         }
     }
 
@@ -973,7 +974,7 @@ public class FilterTest {
 
         try (Response response = call(request(server.uri().resolve("/broken")))) {
             assertThat(response.code(), equalTo(500));
-            assertThat(response.body().string(), containsString("500 Internal Server Error"));
+            assertThat(response.body().string(), containsString("\"status\":500"));
         }
 
         assertThat(responseFilterCalls.get(), equalTo(1));

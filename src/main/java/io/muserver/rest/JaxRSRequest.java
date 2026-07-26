@@ -497,6 +497,10 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         this.responseFilterChainStarted = true;
     }
 
+    boolean responseFilterChainStarted() {
+        return responseFilterChainStarted;
+    }
+
     void setRequestFilterChainRunning(boolean requestFilterChainRunning) {
         this.requestFilterChainRunning = requestFilterChainRunning;
     }

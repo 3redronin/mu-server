@@ -124,7 +124,7 @@ public class PreconditionsTest {
         )) {
             assertThat(resp.code(), equalTo(412));
             String body = resp.body().string();
-            assertThat(body, containsString("412 Precondition Failed"));
+            assertThat(body, containsString("\"status\":412"));
             assertThat(body, containsString("if-unmodified-since"));
         }
 
@@ -198,7 +198,7 @@ public class PreconditionsTest {
         )) {
             assertThat(resp.code(), equalTo(412));
             String body = resp.body().string();
-            assertThat(body, containsString("412 Precondition Failed"));
+            assertThat(body, containsString("\"status\":412"));
             assertThat(body, containsString("if-match"));
         }
         try (Response resp = call(request(url).put(somePutBody())
@@ -237,7 +237,7 @@ public class PreconditionsTest {
         )) {
             assertThat(resp.code(), equalTo(412));
             String body = resp.body().string();
-            assertThat(body, containsString("412 Precondition Failed"));
+            assertThat(body, containsString("\"status\":412"));
             assertThat(body, containsString("if-match"));
         }
     }

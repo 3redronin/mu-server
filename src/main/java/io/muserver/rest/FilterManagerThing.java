@@ -64,6 +64,9 @@ class FilterManagerThing {
     }
 
     void onBeforeSendResponse(JaxRSRequest requestContext, ContainerResponseContext responseContext) throws IOException {
+        if (requestContext.responseFilterChainStarted()) {
+            return;
+        }
         requestContext.markResponseFilterChainStarted();
         for (ContainerResponseFilter responseFilter : responseFilters) {
             List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(responseFilter.getClass());

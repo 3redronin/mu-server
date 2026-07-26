@@ -42,6 +42,8 @@ import java.util.UUID;
  * {@link ProblemDetailsExceptionMapperBuilder#problemDetailsExceptionMapper()} to enable this behavior for JAX-RS
  * resource method execution.
  * </p>
+ *
+ * @param <E> The mapped exception type.
  */
 public class ProblemDetailsExceptionMapper <E extends Throwable> implements ExceptionMapper<E> {
     private static final Logger log = LoggerFactory.getLogger(ProblemDetailsExceptionMapper.class);

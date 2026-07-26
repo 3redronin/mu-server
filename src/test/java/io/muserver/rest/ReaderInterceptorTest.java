@@ -397,7 +397,7 @@ public class ReaderInterceptorTest {
         }
         try (Response resp = call(request(server.uri().resolve("/errors")).post(requestBody("runtimeException")))) {
             assertThat(resp.code(), is(500));
-            assertThat(resp.body().string(), containsString("500 Internal Server Error"));
+            assertThat(resp.body().string(), containsString("\"status\":500"));
         }
     }
 

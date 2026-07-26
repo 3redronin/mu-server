@@ -402,7 +402,7 @@ public class WriterInterceptorTest {
         }
         try (Response resp = call(request(server.uri().resolve("/errors/runtimeException")))) {
             assertThat(resp.code(), is(500));
-            assertThat(resp.body().string(), containsString("500 Internal Server Error"));
+            assertThat(resp.body().string(), containsString("\"status\":500"));
         }
         try (Response resp = call(request(server.uri().resolve("/errors/responseException")))) {
             assertThat(resp.code(), is(409));

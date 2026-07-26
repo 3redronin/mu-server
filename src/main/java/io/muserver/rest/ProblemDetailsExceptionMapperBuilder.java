@@ -1,5 +1,7 @@
 package io.muserver.rest;
 
+import jakarta.ws.rs.WebApplicationException;
+
 /**
  * Builds {@link ProblemDetailsExceptionMapper} instances.
  * <p>
