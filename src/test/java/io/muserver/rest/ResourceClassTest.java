@@ -80,8 +80,8 @@ public class ResourceClassTest {
 
         assertThat(resourceClass.resourceMethods, hasSize(1));
         ResourceMethod resourceMethod = resourceClass.resourceMethods.get(0);
-        assertThat(resourceMethod.methodHandle.isBridge(), equalTo(false));
-        assertThat(resourceMethod.genericReturnType.getTypeName(), equalTo("java.util.List<java.lang.String>"));
+        assertThat(resourceMethod.methodHandle().isBridge(), equalTo(false));
+        assertThat(resourceMethod.genericReturnType().getTypeName(), equalTo("java.util.List<java.lang.String>"));
     }
 
     @Test
@@ -90,9 +90,9 @@ public class ResourceClassTest {
 
         assertThat(resourceClass.resourceMethods, hasSize(1));
         ResourceMethod resourceMethod = resourceClass.resourceMethods.get(0);
-        assertThat(resourceMethod.methodHandle.isBridge(), equalTo(false));
-        assertThat(resourceMethod.methodHandle.getParameterTypes()[0], equalTo(String.class));
-        assertThat(resourceMethod.params.get(0).source, equalTo(ResourceMethodParam.ValueSource.PATH_PARAM));
+        assertThat(resourceMethod.methodHandle().isBridge(), equalTo(false));
+        assertThat(resourceMethod.methodHandle().getParameterTypes()[0], equalTo(String.class));
+        assertThat(resourceMethod.params.get(0).source(), equalTo(ResourceMethodParam.ValueSource.PATH_PARAM));
     }
 
     @Test
@@ -101,9 +101,9 @@ public class ResourceClassTest {
 
         assertThat(resourceClass.resourceMethods, hasSize(1));
         ResourceMethod resourceMethod = resourceClass.resourceMethods.get(0);
-        assertThat(resourceMethod.methodHandle.isBridge(), equalTo(false));
-        assertThat(resourceMethod.methodHandle.getParameterTypes()[0], equalTo(String.class));
-        assertThat(resourceMethod.params.get(0).source, equalTo(ResourceMethodParam.ValueSource.PATH_PARAM));
+        assertThat(resourceMethod.methodHandle().isBridge(), equalTo(false));
+        assertThat(resourceMethod.methodHandle().getParameterTypes()[0], equalTo(String.class));
+        assertThat(resourceMethod.params.get(0).source(), equalTo(ResourceMethodParam.ValueSource.PATH_PARAM));
     }
 
     @Test
@@ -111,7 +111,7 @@ public class ResourceClassTest {
         ResourceClass resourceClass = ResourceClass.fromObject(new InterfaceResourceWithInheritedImplementation(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
 
         assertThat(resourceClass.resourceMethods, hasSize(1));
-        assertThat(resourceClass.resourceMethods.get(0).methodHandle.getDeclaringClass(), equalTo(UnannotatedImplementation.class));
+        assertThat(resourceClass.resourceMethods.get(0).methodHandle().getDeclaringClass(), equalTo(UnannotatedImplementation.class));
     }
 
     @Test

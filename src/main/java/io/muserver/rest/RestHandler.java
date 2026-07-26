@@ -89,7 +89,7 @@ public class RestHandler implements MuHandler {
 
             Function<RequestMatcher.MatchedMethod,ResourceClass> subResourceLocator = matchedMethod -> {
                 Function<ResourceMethod, @Nullable Object> onSuspended = resourceMethod -> {
-                    throw new MuException("Suspended is not supported on sub-resource locators. Method: " + resourceMethod.methodHandle);
+                    throw new MuException("Suspended is not supported on sub-resource locators. Method: " + resourceMethod.methodHandle());
                 };
                 ResourceMethod rm = matchedMethod.resourceMethod;
                 try {
@@ -100,7 +100,7 @@ public class RestHandler implements MuHandler {
                 } catch (WebApplicationException wae) {
                     throw wae;
                 } catch (Exception e) {
-                    throw new MuException("Error creating instance returned by sub-resource-locator " + rm.methodHandle, e);
+                    throw new MuException("Error creating instance returned by sub-resource-locator " + rm.methodHandle(), e);
                 }
             };
 
@@ -125,9 +125,9 @@ public class RestHandler implements MuHandler {
             requestContext.setMatchedMethod(mm);
 
             List<MediaType> produces = producesRef = mm.resourceMethod.resourceClass.produces;
-            List<MediaType> directlyProduces = directlyProducesRef = mm.resourceMethod.directlyProduces;
+            List<MediaType> directlyProduces = directlyProducesRef = mm.resourceMethod.directlyProduces();
             Annotation[] methodAnnotations = mm.resourceMethod.methodAnnotations;
-            @Nullable Type methodReturnType = mm.resourceMethod.genericReturnType;
+            @Nullable Type methodReturnType = mm.resourceMethod.genericReturnType();
 
             filterManagerThing.onPostMatch(requestContext);
             if (requestContext.getAbortResponse() != null) {
@@ -183,20 +183,20 @@ public class RestHandler implements MuHandler {
 
     static @Nullable Object invokeResourceMethod(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, Function<ResourceMethod, @Nullable Object> suspendedParamCallback, EntityProviders entityProviders, CollectionParameterStrategy collectionParameterStrategy) throws Exception {
         ResourceMethod rm = mm.resourceMethod;
-        @Nullable Object[] params = new Object[rm.methodHandle.getParameterCount()];
+        @Nullable Object[] params = new Object[rm.methodHandle().getParameterCount()];
         for (ResourceMethodParam param : rm.params) {
             @Nullable Object paramValue;
-            if (param.source == ResourceMethodParam.ValueSource.MESSAGE_BODY) {
+            if (param.source() == ResourceMethodParam.ValueSource.MESSAGE_BODY) {
                 paramValue = readRequestEntity(requestContext, param);
-            } else if (param.source == ResourceMethodParam.ValueSource.CONTEXT) {
+            } else if (param.source() == ResourceMethodParam.ValueSource.CONTEXT) {
                 paramValue = getContextParam(requestContext, muResponse, mm, param, entityProviders);
-            } else if (param.source == ResourceMethodParam.ValueSource.SUSPENDED) {
+            } else if (param.source() == ResourceMethodParam.ValueSource.SUSPENDED) {
                 paramValue = suspendedParamCallback.apply(rm);
             } else {
                 ResourceMethodParam.RequestBasedParam rbp = (ResourceMethodParam.RequestBasedParam) param;
                 paramValue = rbp.getValue(requestContext, mm, collectionParameterStrategy);
             }
-            params[param.index] = paramValue;
+            params[param.index()] = paramValue;
         }
         return rm.invoke(params);
     }
@@ -394,7 +394,7 @@ public class RestHandler implements MuHandler {
     private static @Nullable Object getContextParam(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, ResourceMethodParam param, EntityProviders providers) {
         MuRequest request = requestContext.muRequest;
         Object paramValue;
-        Class<?> type = param.type;
+        Class<?> type = param.type();
         if (type.equals(UriInfo.class)) {
             paramValue = createUriInfo(requestContext.relativePath(), mm, request.uri().resolve(request.contextPath() + "/"), request.uri());
         } else if (type.equals(MuResponse.class)) {
@@ -406,7 +406,7 @@ public class RestHandler implements MuHandler {
         } else if (SecurityContext.class.isAssignableFrom(type)) {
             SecurityContext sc = requestContext.getSecurityContext();
             if (sc != null && !type.isAssignableFrom(sc.getClass())) {
-                throw new MuException("Invalid security context type: " + sc.getClass() + " being used for " + mm.resourceMethod.methodHandle);
+                throw new MuException("Invalid security context type: " + sc.getClass() + " being used for " + mm.resourceMethod.methodHandle());
             }
             return sc;
         } else if (type.equals(Sse.class)) {
@@ -428,8 +428,8 @@ public class RestHandler implements MuHandler {
 
     private static Object readRequestEntity(JaxRSRequest requestContext, ResourceMethodParam parameter) throws java.io.IOException {
         requestContext.setAnnotations(parameter.annotations);
-        requestContext.setType(parameter.type);
-        requestContext.setGenericType(parameter.genericType);
+        requestContext.setType(parameter.type());
+        requestContext.setGenericType(parameter.genericType());
         return requestContext.executeInterceptors();
     }
 

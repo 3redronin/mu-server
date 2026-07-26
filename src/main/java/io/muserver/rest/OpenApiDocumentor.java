@@ -129,7 +129,7 @@ class OpenApiDocumentor implements MuHandler {
 
         for (ResourceMethod method : root.resourceMethods) {
             if (method.isSubResourceLocator()) {
-                ResourceClass rc = ResourceClass.forSubResourceLocator(method, method.methodHandle.getReturnType(), null, schemaObjectCustomizer, paramConverterProviders);
+                ResourceClass rc = ResourceClass.forSubResourceLocator(method, method.methodHandle().getReturnType(), null, schemaObjectCustomizer, paramConverterProviders);
                 String newParentResourcePath = Mutils.join(parentResourcePath, "/", method.resourceClass.pathPattern.pathWithoutRegex);
                 addResourceClass(recursiveLevel + 1, newParentResourcePath, tags, pathItems, rc);
                 continue;
@@ -152,7 +152,7 @@ class OpenApiDocumentor implements MuHandler {
                 pathItems.put(path, pathItem);
             }
             List<ParameterObject> parameters = method.paramsIncludingLocators().stream()
-                .filter(p -> p.source.openAPIIn != null && p instanceof ResourceMethodParam.RequestBasedParam)
+                .filter(p -> p.source().openAPIIn != null && p instanceof ResourceMethodParam.RequestBasedParam)
                 .map(ResourceMethodParam.RequestBasedParam.class::cast)
                 .map(p -> p.createDocumentationBuilder().build())
                 .reduce(new ArrayList<>(), (parameterObjects, parameterObject) -> {
@@ -216,7 +216,7 @@ class OpenApiDocumentor implements MuHandler {
     static String getPathWithoutRegex(ResourceClass rc, ResourceMethod rm, String parentResourcePath) {
         return "/" + Mutils.trim(Mutils.join(parentResourcePath, "/",
             Mutils.join(rc.pathPattern == null ? null : rc.pathPattern.pathWithoutRegex,
-                "/", rm.pathPattern == null ? null : rm.pathPattern.pathWithoutRegex)), "/");
+                "/", rm.pathPattern() == null ? null : rm.pathPattern().pathWithoutRegex)), "/");
     }
 
 }

@@ -27,46 +27,58 @@ import static java.util.stream.Collectors.toMap;
 
 class ResourceMethod {
     final ResourceClass resourceClass;
-    final @Nullable UriPattern pathPattern;
-    final java.lang.reflect.Method methodHandle;
-    final @Nullable Type genericReturnType;
-    final @Nullable Method httpMethod;
-    final @Nullable String pathTemplate;
+    private final ResourceClassIntrospection.MethodInfo methodInfo;
     final List<MediaType> effectiveConsumes;
-    final List<MediaType> directlyConsumes;
-    final List<MediaType> directlyProduces;
     final List<MediaType> effectiveProduces;
     final List<ResourceMethodParam> params;
     private final SchemaObjectCustomizer schemaObjectCustomizer;
     private final DescriptionData descriptionData;
-    private final boolean isDeprecated;
-    private final List<Class<? extends Annotation>> nameBindingAnnotations;
     final Annotation[] methodAnnotations; // the annotations defined on the method to be passed to the message body writers
 
     ResourceMethod(ResourceClass resourceClass, ResourceClassIntrospection.MethodInfo methodInfo,
                    List<ResourceMethodParam> params, SchemaObjectCustomizer schemaObjectCustomizer,
                    DescriptionData descriptionData) {
         this.resourceClass = resourceClass;
-        this.pathPattern = methodInfo.pathPattern;
-        this.methodHandle = methodInfo.methodHandle;
-        this.genericReturnType = methodInfo.genericReturnType;
+        this.methodInfo = methodInfo;
         this.params = params;
-        this.httpMethod = methodInfo.httpMethod;
-        this.pathTemplate = methodInfo.pathTemplate;
-        this.directlyProduces = methodInfo.directlyProduces;
-        this.directlyConsumes = methodInfo.directlyConsumes;
         this.schemaObjectCustomizer = schemaObjectCustomizer;
         this.descriptionData = descriptionData;
-        this.isDeprecated = methodInfo.deprecated;
-        this.nameBindingAnnotations = methodInfo.nameBindingAnnotations;
         this.methodAnnotations = methodInfo.methodAnnotations.toArray(new Annotation[0]);
-        this.effectiveProduces = !directlyProduces.isEmpty() ? directlyProduces : (!resourceClass.produces.isEmpty() ? resourceClass.produces : RequestMatcher.WILDCARD_AS_LIST);
-        this.effectiveConsumes = !directlyConsumes.isEmpty() ? directlyConsumes : (!resourceClass.consumes.isEmpty() ? resourceClass.consumes : RequestMatcher.WILDCARD_AS_LIST);
+        this.effectiveProduces = !directlyProduces().isEmpty() ? directlyProduces() : (!resourceClass.produces.isEmpty() ? resourceClass.produces : RequestMatcher.WILDCARD_AS_LIST);
+        this.effectiveConsumes = !directlyConsumes().isEmpty() ? directlyConsumes() : (!resourceClass.consumes.isEmpty() ? resourceClass.consumes : RequestMatcher.WILDCARD_AS_LIST);
+    }
+
+    @Nullable UriPattern pathPattern() {
+        return methodInfo.pathPattern;
+    }
+
+    java.lang.reflect.Method methodHandle() {
+        return methodInfo.methodHandle;
+    }
+
+    @Nullable Type genericReturnType() {
+        return methodInfo.genericReturnType;
+    }
+
+    @Nullable Method httpMethod() {
+        return methodInfo.httpMethod;
+    }
+
+    @Nullable String pathTemplate() {
+        return methodInfo.pathTemplate;
+    }
+
+    List<MediaType> directlyConsumes() {
+        return methodInfo.directlyConsumes;
+    }
+
+    List<MediaType> directlyProduces() {
+        return methodInfo.directlyProduces;
     }
 
     boolean hasAll(List<Class<? extends Annotation>> annotations) {
         for (Class<? extends Annotation> annotation : annotations) {
-            if (!nameBindingAnnotations.contains(annotation) && !resourceClass.nameBindingAnnotations.contains(annotation)) {
+            if (!methodInfo.nameBindingAnnotations.contains(annotation) && !resourceClass.nameBindingAnnotations.contains(annotation)) {
                 return false;
             }
         }
@@ -83,24 +95,24 @@ class ResourceMethod {
     }
 
     boolean isSubResource() {
-        return pathPattern != null;
+        return pathPattern() != null;
     }
 
     boolean isSubResourceLocator() {
-        return httpMethod == null;
+        return httpMethod() == null;
     }
 
     UriPattern requiredPathPattern() {
-        return Objects.requireNonNull(pathPattern, "Resource method has no path pattern");
+        return Objects.requireNonNull(pathPattern(), "Resource method has no path pattern");
     }
 
     Method requiredHttpMethod() {
-        return Objects.requireNonNull(httpMethod, "Sub-resource locator has no HTTP method");
+        return Objects.requireNonNull(httpMethod(), "Sub-resource locator has no HTTP method");
     }
 
     @Nullable Object invoke(@Nullable Object... params) throws Exception {
         try {
-            return methodHandle.invoke(resourceClass.requiredResourceInstance(), params);
+            return methodHandle().invoke(resourceClass.requiredResourceInstance(), params);
         } catch (InvocationTargetException e) {
             @Nullable Throwable cause = e.getCause();
             if (cause instanceof Exception) {
@@ -111,7 +123,7 @@ class ResourceMethod {
     }
 
     OperationObjectBuilder createOperationBuilder(List<SchemaReference> customSchemas) {
-        List<ApiResponseObj> apiResponseList = getApiResponses(methodHandle);
+        List<ApiResponseObj> apiResponseList = getApiResponses(methodHandle());
 
         Map<String, ResponseObject> httpStatusCodes = new HashMap<>();
 
@@ -163,11 +175,11 @@ class ResourceMethod {
             .filter(p -> p instanceof ResourceMethodParam.MessageBodyParam)
             .map(ResourceMethodParam.MessageBodyParam.class::cast)
             .map(messageBodyParam -> {
-                Class<?> bodyType = messageBodyParam.type;
-                Type bodyParameterizedType = messageBodyParam.genericType;
+                Class<?> bodyType = messageBodyParam.type();
+                Type bodyParameterizedType = messageBodyParam.genericType();
                 SchemaReference schemaReference = SchemaReference.find(customSchemas, bodyType, bodyParameterizedType);
                 SchemaObjectBuilder builder = schemaReference != null ? schemaReference.schema.toBuilder() :
-                    schemaObjectFrom(bodyType, bodyParameterizedType, messageBodyParam.isRequired)
+                    schemaObjectFrom(bodyType, bodyParameterizedType, messageBodyParam.isRequired())
                         .withTitle(Objects.requireNonNull(messageBodyParam.descriptionData).summary)
                         .withDescription(messageBodyParam.descriptionData.description);
                 return requestBodyObject()
@@ -180,7 +192,7 @@ class ResourceMethod {
                             .withExample(Objects.requireNonNull(messageBodyParam.descriptionData).example)
                             .build()))
                     .withDescription(messageBodyParam.descriptionData.summaryAndDescription())
-                    .withRequired(messageBodyParam.isRequired)
+                    .withRequired(messageBodyParam.isRequired())
                     .build();
             })
             .findFirst().orElse(null);
@@ -189,7 +201,7 @@ class ResourceMethod {
             List<ResourceMethodParam.RequestBasedParam> formParams = params.stream()
                 .filter(p -> p instanceof ResourceMethodParam.RequestBasedParam)
                 .map(ResourceMethodParam.RequestBasedParam.class::cast)
-                .filter(p -> p.source == ResourceMethodParam.ValueSource.FORM_PARAM)
+                .filter(p -> p.source() == ResourceMethodParam.ValueSource.FORM_PARAM)
                 .collect(Collectors.toList());
             if (!formParams.isEmpty()) {
                 List<String> required = new ArrayList<>();
@@ -202,27 +214,27 @@ class ResourceMethod {
                                     .withRequired(required)
                                     .withProperties(
                                         formParams.stream().collect(
-                                            toMap(n -> n.key,
+                                            toMap(ResourceMethodParam.RequestBasedParam::key,
                                                 n -> {
-                                                    if (n.isRequired) {
-                                                        required.add(n.key);
+                                                    if (n.isRequired()) {
+                                                        required.add(n.key());
                                                     }
-                                                    Class<?> paramType = n.type;
-                                                    Type paramParameterizedType = n.genericType;
+                                                    Class<?> paramType = n.type();
+                                                    Type paramParameterizedType = n.genericType();
 
                                                     SchemaReference schemaReference = SchemaReference.find(customSchemas, paramType, paramParameterizedType);
-                                                    SchemaObjectBuilder schemaObjectBuilder = schemaReference != null ? schemaReference.schema.toBuilder() : schemaObjectFrom(paramType, paramParameterizedType, n.isRequired);
-                                                    schemaObjectBuilder.withDeprecated(n.isDeprecated ? true : null);
+                                                    SchemaObjectBuilder schemaObjectBuilder = schemaReference != null ? schemaReference.schema.toBuilder() : schemaObjectFrom(paramType, paramParameterizedType, n.isRequired());
+                                                    schemaObjectBuilder.withDeprecated(n.deprecated() ? true : null);
                                                     if (n.hasExplicitDefault()) {
                                                         schemaObjectBuilder.withDefaultValue(n.defaultValue());
                                                     }
                                                     if (n.descriptionData != null) {
                                                         String desc = n.descriptionData.summaryAndDescription();
                                                         schemaObjectBuilder.withExample(n.descriptionData.example)
-                                                            .withDescription(n.key.equals(desc) ? null : desc);
+                                                            .withDescription(n.key().equals(desc) ? null : desc);
                                                     }
                                                     return schemaObjectCustomizer
-                                                        .customize(schemaObjectBuilder, schemaContext(SchemaObjectCustomizerTarget.FORM_PARAM, n.key, paramType, paramParameterizedType, requestBodyMediaType))
+                                                        .customize(schemaObjectBuilder, schemaContext(SchemaObjectCustomizerTarget.FORM_PARAM, n.key(), paramType, paramParameterizedType, requestBodyMediaType))
                                                         .build();
                                                 }))
                                     )
@@ -238,7 +250,7 @@ class ResourceMethod {
             .withSummary(descriptionData.summary)
             .withDescription(descriptionData.description)
             .withExternalDocs(descriptionData.externalDocumentation)
-            .withDeprecated(isDeprecated ? true : null)
+            .withDeprecated(methodInfo.deprecated ? true : null)
             .withRequestBody(requestBody)
             .withResponses(
                 responsesObject()
@@ -248,7 +260,7 @@ class ResourceMethod {
     }
 
     private SchemaObjectCustomizerContext schemaContext(SchemaObjectCustomizerTarget target, @Nullable String parameter, Class<?> type, @Nullable Type parameterizedType, MediaType mediaType) {
-        return new SchemaObjectCustomizerContext(target, type, parameterizedType, resourceClass.resourceInstance, methodHandle, parameter, mediaType);
+        return new SchemaObjectCustomizerContext(target, type, parameterizedType, resourceClass.resourceInstance, methodHandle(), parameter, mediaType);
     }
 
     private static List<ApiResponseObj> getApiResponses(java.lang.reflect.Method methodHandle) {
@@ -290,7 +302,7 @@ class ResourceMethod {
 
     @Override
     public String toString() {
-        return "ResourceMethod{" + resourceClass.resourceClassName() + "#" + methodHandle.getName() + "}";
+        return "ResourceMethod{" + resourceClass.resourceClassName() + "#" + methodHandle().getName() + "}";
     }
 
     boolean canProduceFor(List<MediaType> clientAccepts) {
