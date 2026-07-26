@@ -228,13 +228,15 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
     /**
      * <p>Adds a mapper that converts an exception to a response.</p>
-     * <p>Jakarta REST behavior is registered by default for otherwise-unmapped exceptions via
-     * {@link ProblemDetailsExceptionMapper}, mapping {@link Throwable} to RFC 9457 problem-details JSON. The built-in
-     * mapper logs unexpected 5xx failures with their problem instance IDs, while 4xx responses are not logged by
-     * default.</p>
      * <p>For example, you may create a custom exception such as a ValidationException that you throw from your
      * jax-rs methods. A mapper for this exception type could return a Response with a 400 code and a custom
      * validation error message.</p>
+     * <p>Jakarta REST behavior is registered by default for otherwise-unmapped exceptions via
+     * {@link ProblemDetailsExceptionMapper}, mapping {@link Throwable} to RFC 9457 problem-details JSON. To restore
+     * Mu Server's standard HTML error fallback, remove the default mapping:</p>
+     * <pre><code>
+     * restHandlerBuilder.removeExceptionMapper(Throwable.class);
+     * </code></pre>
      *
      * @param <T>             The exception type that the mapper can handle
      * @param exceptionClass  The type of exception to map.
