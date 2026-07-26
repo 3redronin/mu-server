@@ -53,14 +53,13 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     private volatile int lastStreamId = 0;
     private volatile int peerGoAwayLastStreamId = MAX_POSSIBLE_STREAM_ID;
     private final Http2IncomingFlowController incomingFlowControl = new Http2IncomingFlowController(0, 65535);
-    private final Http2OutgoingFlowController outgoingFlowControl = new Http2OutgoingFlowController(0, 65535);
     private final ConcurrentLinkedQueue<Long> settingsAckQueue = new ConcurrentLinkedQueue<>();
     private final ConcurrentHashMap<Integer, Http2Stream> streams = new ConcurrentHashMap<>();
     private final ExecutorService executorService;
     private final long settingsAckTimeoutMillis;
 
     private final Lock stateLock = new ReentrantLock();
-    private final Http2WriteCoordinator writeCoordinator = new Http2WriteCoordinator();
+    private final Http2WriteCoordinator writeCoordinator = new Http2WriteCoordinator(65535);
     private volatile boolean finalGoAwayQueued;
     private volatile long finalGoAwayEarliestTime = Long.MAX_VALUE;
 
@@ -140,28 +139,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         }
     }
 
-    private void suspendDataWrites() {
-        stateLock.lock();
-        try {
-            if (writeState.canSendFrames) {
-                writeCoordinator.suspendDataScheduling();
-            }
-        } finally {
-            stateLock.unlock();
-        }
-    }
-
-    private void writeFirstAndResumeData(LogicalHttp2Frame frame) {
-        stateLock.lock();
-        try {
-            if (writeState.canSendFrames) {
-                writeCoordinator.submitFirstAndResumeData(new WriteTask(frame, false));
-            }
-        } finally {
-            stateLock.unlock();
-        }
-    }
-
     private void signalWriteLoop() {
         stateLock.lock();
         try {
@@ -171,22 +148,27 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         }
     }
 
-    private void resetPendingWritesForStream(int streamId, IOException reason) {
+    private Http2WriteCoordinator.CommandResult resetPendingWritesForStream(
+        int streamId,
+        IOException reason,
+        @Nullable Http2Stream stream
+    ) throws Http2Exception {
         stateLock.lock();
         try {
             if (writeState.canSendFrames) {
-                writeCoordinator.resetStream(streamId, reason);
+                return writeCoordinator.resetStream(streamId, reason, stream);
             }
+            throw Http2Exception.connection(Http2ErrorCode.INTERNAL_ERROR, "HTTP/2 writer closed before peer reset was processed");
         } finally {
             stateLock.unlock();
         }
     }
 
-    private void openStreamForWrites(int streamId) {
+    private void openStreamForWrites(int streamId, int initialCredit) {
         stateLock.lock();
         try {
             if (writeState.canSendFrames) {
-                writeCoordinator.openStream(streamId);
+                writeCoordinator.openStream(streamId, initialCredit);
             }
         } finally {
             stateLock.unlock();
@@ -199,6 +181,45 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             if (writeState.canSendFrames) {
                 writeCoordinator.forgetStream(streamId);
             }
+        } finally {
+            stateLock.unlock();
+        }
+    }
+
+    private Http2WriteCoordinator.CommandResult applyConnectionWindowUpdate(int increment) throws Http2Exception {
+        stateLock.lock();
+        try {
+            if (writeState.canSendFrames) {
+                return writeCoordinator.applyConnectionWindowUpdate(increment);
+            }
+            throw Http2Exception.connection(Http2ErrorCode.INTERNAL_ERROR, "HTTP/2 writer closed before WINDOW_UPDATE was processed");
+        } finally {
+            stateLock.unlock();
+        }
+    }
+
+    private Http2WriteCoordinator.CommandResult applyStreamWindowUpdate(int streamId, int increment) throws Http2Exception {
+        stateLock.lock();
+        try {
+            if (writeState.canSendFrames) {
+                return writeCoordinator.applyStreamWindowUpdate(streamId, increment);
+            }
+            throw Http2Exception.connection(Http2ErrorCode.INTERNAL_ERROR, "HTTP/2 writer closed before WINDOW_UPDATE was processed");
+        } finally {
+            stateLock.unlock();
+        }
+    }
+
+    private Http2WriteCoordinator.CommandResult applyInitialWindowSizeChange(int difference) throws Http2Exception {
+        stateLock.lock();
+        try {
+            if (writeState.canSendFrames) {
+                return writeCoordinator.applyInitialWindowSizeChange(
+                    difference,
+                    new WriteTask(Http2Settings.ACK, false)
+                );
+            }
+            throw Http2Exception.connection(Http2ErrorCode.INTERNAL_ERROR, "HTTP/2 writer closed before SETTINGS was processed");
         } finally {
             stateLock.unlock();
         }
@@ -334,7 +355,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     private void drainWritableFrames(OutputStream clientOut) throws IOException {
         Http2WriteCoordinator.WritableFrame candidate;
-        while ((candidate = writeCoordinator.pollWritable(this::reserveFlowControlCreditUpTo)) != null) {
+        while ((candidate = writeCoordinator.pollWritable()) != null) {
             try {
                 LogicalHttp2Frame frame = candidate.frame();
                 log.info("Writing {}", frame);
@@ -352,32 +373,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                 throw e;
             }
         }
-    }
-
-    /**
-     * Reserves stream and connection flow-control credit at the writer's scheduling point.
-     */
-    private int reserveFlowControlCreditUpTo(int streamId, int requested) {
-        // Only this writer withdraws connection credit, so it cannot decrease between this check
-        // and withdrawal. A reader can concurrently add credit.
-        int connectionCredit = Math.max(0, outgoingFlowControl.credit());
-        int reservable = Math.min(requested, connectionCredit);
-        if (reservable == 0) {
-            return 0;
-        }
-
-        Http2Stream stream = streams.get(streamId);
-        if (stream != null) {
-            reservable = stream.withdrawOutgoingCreditUpTo(reservable);
-            if (reservable == 0) {
-                return 0;
-            }
-        }
-
-        if (!outgoingFlowControl.withdrawIfCan(reservable)) {
-            throw new IllegalStateException("Connection flow-control credit changed while the writer was reserving it");
-        }
-        return reservable;
     }
 
     @Override
@@ -533,18 +528,20 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     }
 
-    private void readResetStreamFrame(Http2FrameHeader fh) throws Http2Exception {
+    private void readResetStreamFrame(Http2FrameHeader fh) throws Http2Exception, InterruptedException {
         var rstStream = Http2ResetStreamFrame.readFrom(fh, buffer);
         int streamId = rstStream.streamId();
         var stream = streams.get(streamId);
         log.info("Reset stream " + rstStream + " for " + stream);
+        if (stream == null && (streamId > lastStreamId || streamId % 2 == 0)) {
+            throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID on rst_stream");
+        }
+
+        // The application exchange may already have ended while response DATA remains pending.
+        // Reset coordinator state even when there is no longer an application-facing stream.
+        resetPendingWritesForStream(streamId, new IOException("Peer reset stream " + streamId), stream).await();
         if (stream != null) {
-            resetPendingWritesForStream(streamId, new IOException("Peer reset stream " + streamId));
-            stream.onReset(rstStream);
-        } else {
-            if (streamId > lastStreamId || streamId % 2 == 0) {
-                throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID on rst_stream");
-            }
+            stream.notifyReset(rstStream);
         }
     }
 
@@ -578,23 +575,21 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         signalWriteLoop();
     }
 
-    private void readWindowUpdate(Http2FrameHeader fh) throws Http2Exception {
+    private void readWindowUpdate(Http2FrameHeader fh) throws Http2Exception, InterruptedException {
         var windowUpdate = Http2WindowUpdate.readFrom(fh, buffer);
         if (windowUpdate.level() == Http2Level.CONNECTION) {
-            outgoingFlowControl.applyWindowUpdate(windowUpdate);
-            signalWriteLoop();
+            applyConnectionWindowUpdate(windowUpdate.windowSizeIncrement()).await();
         } else {
-            Http2Stream stream = streams.get(windowUpdate.streamId());
-            if (stream != null) {
-                stream.onWindowUpdate(windowUpdate);
-                signalWriteLoop();
-            } else if (windowUpdate.streamId() > lastStreamId || (windowUpdate.streamId() % 2) == 0) {
+            if (windowUpdate.streamId() > lastStreamId || (windowUpdate.streamId() % 2) == 0) {
                 throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID on window update");
             }
+            // The handler may have completed while flow-controlled response DATA remains queued.
+            // The coordinator keeps that protocol stream's credit until its writes are drained.
+            applyStreamWindowUpdate(windowUpdate.streamId(), windowUpdate.windowSizeIncrement()).await();
         }
     }
 
-    private void readSettingsFrame(Http2FrameHeader fh) throws Http2Exception {
+    private void readSettingsFrame(Http2FrameHeader fh) throws Http2Exception, InterruptedException {
         var settingsDiff = Http2Settings.readFrom(fh, buffer);
         if (settingsDiff.isAck) {
             var ackedOne = settingsAckQueue.poll();
@@ -611,29 +606,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             boolean settingsChanged = newSettings != oldSettings;
             boolean initialWindowSizeChanged = settingsChanged
                 && newSettings.initialWindowSize != oldSettings.initialWindowSize;
-            if (initialWindowSizeChanged) {
-                // Prevent pending DATA from observing the new credit before the corresponding
-                // SETTINGS acknowledgement has been placed ahead of it.
-                suspendDataWrites();
-            }
             if (settingsChanged) {
                 clientSettings = newSettings;
-                if (initialWindowSizeChanged) {
-                    for (var stream : streams.values()) {
-                        try {
-                            stream.applyClientSettingsChange(oldSettings, newSettings);
-                        } catch (Http2Exception e) {
-                            throw Http2Exception.connection(e.errorCode(), e.getMessage());
-                        }
-                    }
-                }
-
             }
 
-            // should we write this somewhere else?
             // The ACK is ordered ahead of DATA that the new initial window size might unblock.
             if (initialWindowSizeChanged) {
-                writeFirstAndResumeData(Http2Settings.ACK);
+                int difference = newSettings.initialWindowSize - oldSettings.initialWindowSize;
+                applyInitialWindowSizeChange(difference).await();
             } else {
                 writeFirst(Http2Settings.ACK);
             }
@@ -729,16 +709,13 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             errorHeaders.add(HeaderNames.PSEUDO_STATUS, e.status());
             errorHeaders.add(e.responseHeaders());
             byte[] message = rejectReason.getBytes(StandardCharsets.UTF_8);
-            if (outgoingFlowControl.credit() >= message.length) {
-                errorHeaders.set(HeaderNames.CONTENT_TYPE, "text/plain;charset=utf-8");
-                errorHeaders.set(HeaderNames.CONTENT_LENGTH, message.length);
-                server.getStatsImpl().onInvalidRequest();
-                write(new Http2HeadersFrame(fh.streamId(), false, errorHeaders));
-                write(new Http2DataFrame(fh.streamId(), true, message, 0, message.length));
-            } else {
-                errorHeaders.set(HeaderNames.CONTENT_LENGTH, 0);
-                write(new Http2HeadersFrame(fh.streamId(), true, errorHeaders));
-            }
+            errorHeaders.set(HeaderNames.CONTENT_TYPE, "text/plain;charset=utf-8");
+            errorHeaders.set(HeaderNames.CONTENT_LENGTH, message.length);
+            server.getStatsImpl().onInvalidRequest();
+            openStreamForWrites(fh.streamId(), clientSettings.initialWindowSize);
+            write(new Http2HeadersFrame(fh.streamId(), false, errorHeaders));
+            write(new Http2DataFrame(fh.streamId(), true, message, 0, message.length));
+            forgetStreamForWrites(fh.streamId());
         }
     }
 
@@ -796,7 +773,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     private void startRequest(Http2HeadersFrame frame) throws Http2Exception {
         var stream = Http2Stream.start(this, frame, serverSettings, clientSettings);
-        openStreamForWrites(frame.streamId());
+        openStreamForWrites(frame.streamId(), clientSettings.initialWindowSize);
         streams.put(frame.streamId(), stream);
         onRequestStarted(stream.request);
         executorService.submit(() -> {

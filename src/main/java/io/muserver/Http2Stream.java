@@ -19,7 +19,6 @@ class Http2Stream implements ResponseInfo {
     final Mu3Request request;
     private final Http2IncomingFlowController incomingFlowControl;
 
-    private final Http2OutgoingFlowController outgoingFlowControl;
     @Nullable
     private Http2Response response;
     private volatile Http2StreamState state;
@@ -27,27 +26,22 @@ class Http2Stream implements ResponseInfo {
     private final InputStream bodyInputStream;
     private final @Nullable Long declaredRequestBodyLength;
     private long receivedRequestBodyLength;
-    Http2Stream(int id, Http2Connection connection, Http2StreamState state, Mu3Request request, Http2IncomingFlowController incomingFlowControl, Http2OutgoingFlowController outgoingFlowControl, InputStream bodyInputStream) {
-        this(id, connection, state, request, incomingFlowControl, outgoingFlowControl, bodyInputStream, request.declaredBodySize().size());
+    Http2Stream(int id, Http2Connection connection, Http2StreamState state, Mu3Request request, Http2IncomingFlowController incomingFlowControl, InputStream bodyInputStream) {
+        this(id, connection, state, request, incomingFlowControl, bodyInputStream, request.declaredBodySize().size());
     }
 
-    Http2Stream(int id, Http2Connection connection, Http2StreamState state, Mu3Request request, Http2IncomingFlowController incomingFlowControl, Http2OutgoingFlowController outgoingFlowControl, InputStream bodyInputStream, @Nullable Long declaredRequestBodyLength) {
+    Http2Stream(int id, Http2Connection connection, Http2StreamState state, Mu3Request request, Http2IncomingFlowController incomingFlowControl, InputStream bodyInputStream, @Nullable Long declaredRequestBodyLength) {
         this.id = id;
         this.connection = connection;
         this.state = state;
         this.request = request;
         this.incomingFlowControl = incomingFlowControl;
-        this.outgoingFlowControl = outgoingFlowControl;
         this.bodyInputStream = bodyInputStream;
         this.declaredRequestBodyLength = declaredRequestBodyLength;
     }
 
     int maxFrameSize() {
         return connection.maxFrameSize();
-    }
-
-    int withdrawOutgoingCreditUpTo(int maximumBytes) {
-        return outgoingFlowControl.withdrawUpTo(maximumBytes);
     }
 
     @Override
@@ -62,17 +56,11 @@ class Http2Stream implements ResponseInfo {
         return request.completedSuccessfully() && requiredResponse().responseState().completedSuccessfully();
     }
 
-    void onWindowUpdate(Http2WindowUpdate windowUpdate) throws Http2Exception {
-        outgoingFlowControl.applyWindowUpdate(windowUpdate);
-    }
-
-    void applyClientSettingsChange(Http2Settings oldSettings, Http2Settings newSettings) throws Http2Exception {
-        outgoingFlowControl.applySettingsChange(oldSettings, newSettings);
-    }
-
-    void onReset(Http2ResetStreamFrame rstStream) {
+    void resetProtocolState() {
         state = state.reset();
-        outgoingFlowControl.terminate();
+    }
+
+    void notifyReset(Http2ResetStreamFrame rstStream) {
         Http2Response currentResponse = requiredResponse();
         if (!currentResponse.responseState().endState()) {
             currentResponse.setState(ResponseState.CLIENT_CANCELLED);
@@ -89,7 +77,6 @@ class Http2Stream implements ResponseInfo {
 
     void cancel(IOException reason, boolean refundUnreadData) {
         state = state.reset();
-        outgoingFlowControl.terminate();
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).cancel(reason, refundUnreadData);
         }
@@ -294,7 +281,6 @@ class Http2Stream implements ResponseInfo {
         var serverUri = connection.creator.uri().resolve(relativeUrl);
         var requestUri = Headtils.getUri(log, headers, relativeUrl, serverUri);
 
-        var outgoingFlowControl = new Http2OutgoingFlowController(id, clientSettings.initialWindowSize);
         var incomingFlowControl = new Http2IncomingFlowController(id, serverSettings.initialWindowSize);
 
         InputStream body = BodySize.NONE.equals(bodySize) ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(
@@ -316,7 +302,7 @@ class Http2Stream implements ResponseInfo {
 
 
         var state = headerFrame.endStream() ? Http2StreamState.HALF_CLOSED_REMOTE : Http2StreamState.OPEN;
-        Http2Stream stream = new Http2Stream(id, connection, state, request, incomingFlowControl, outgoingFlowControl, body, cl);
+        Http2Stream stream = new Http2Stream(id, connection, state, request, incomingFlowControl, body, cl);
         stream.response = new Http2Response(stream, new FieldBlock(), request);
         request.setResponse(stream.response);
         return stream;
