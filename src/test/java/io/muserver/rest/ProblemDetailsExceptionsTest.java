@@ -540,11 +540,13 @@ public class ProblemDetailsExceptionsTest {
     }
 
     @Test
-    public void logOptionsDefaultToEnabled() {
+    public void logOptionsHaveSafeDefaultsAndCanBeEnabled() {
         ProblemDetailsExceptionMapperBuilder builder = problemDetailsExceptionMapper();
 
-        assertThat(builder.log4xxProblemDetailsInstanceIds(), is(true));
+        assertThat(builder.log4xxProblemDetailsInstanceIds(), is(false));
         assertThat(builder.log5xxProblemDetailsInstanceIds(), is(true));
+
+        assertThat(builder.withLog4xxProblemDetailsInstanceIds(true).log4xxProblemDetailsInstanceIds(), is(true));
     }
 
     @After
