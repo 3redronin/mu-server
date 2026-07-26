@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -31,6 +32,12 @@ import static java.util.stream.Collectors.toList;
 class ResourceClass {
 
     private static final Logger log = LoggerFactory.getLogger(ResourceClass.class);
+    private static final ClassValue<AtomicBoolean> visibilityWarningsLogged = new ClassValue<AtomicBoolean>() {
+        @Override
+        protected AtomicBoolean computeValue(Class<?> type) {
+            return new AtomicBoolean();
+        }
+    };
 
     final UriPattern pathPattern;
     final Class<?> resourceClass;
@@ -79,7 +86,9 @@ class ResourceClass {
             throw new IllegalStateException("Cannot call setupMethodInfo twice");
         }
 
-        nonPublicResourceMethodWarnings(resourceClass).forEach(log::warn);
+        if (shouldLogVisibilityWarnings(resourceClass)) {
+            nonPublicResourceMethodWarnings(resourceClass).forEach(log::warn);
+        }
         List<ResourceMethod> resourceMethods = new ArrayList<>();
         java.lang.reflect.Method[] methods = this.resourceClass.getMethods();
         for (java.lang.reflect.Method restMethod : methods) {
@@ -123,12 +132,16 @@ class ResourceClass {
             for (java.lang.reflect.Method method : current.getDeclaredMethods()) {
                 if (!Modifier.isPublic(method.getModifiers()) && isResourceMethodOrLocator(method)) {
                     warnings.add("The JAX-RS annotated method " + method.toGenericString()
-                        + " is ignored because only public methods may be exposed as resource methods or sub-resource locators.");
+                        + " cannot itself be exposed as a resource method or sub-resource locator because only public methods may be exposed.");
                 }
             }
         }
         Collections.sort(warnings);
         return warnings;
+    }
+
+    static boolean shouldLogVisibilityWarnings(Class<?> resourceClass) {
+        return visibilityWarningsLogged.get(resourceClass).compareAndSet(false, true);
     }
 
     private static boolean isResourceMethodOrLocator(java.lang.reflect.Method method) {

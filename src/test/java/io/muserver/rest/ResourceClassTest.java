@@ -113,7 +113,7 @@ public class ResourceClassTest {
         assertThat(warnings.get(2), containsString("ResourceWithNonPublicMethods.protectedLocator()"));
         assertThat(warnings.get(3), containsString("ResourceWithNonPublicMethods.protectedSubResourceMethod()"));
         for (String warning : warnings) {
-            assertThat(warning, containsString("is ignored because only public methods may be exposed as resource methods or sub-resource locators."));
+            assertThat(warning, containsString("cannot itself be exposed as a resource method or sub-resource locator because only public methods may be exposed."));
         }
     }
 
@@ -126,6 +126,21 @@ public class ResourceClassTest {
     public void warnsAboutNonPublicAnnotatedMethodsOnSuperclasses() {
         assertThat(ResourceClass.nonPublicResourceMethodWarnings(ResourceWithInheritedVisibilityProblem.class),
             contains(containsString("BaseResourceWithVisibilityProblem.hidden()")));
+    }
+
+    @Test
+    public void warningDoesNotClaimInheritedAnnotationSourceIsIgnored() {
+        ResourceClass resourceClass = ResourceClass.fromObject(new ResourceWithPublicOverride(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
+
+        assertThat(resourceClass.resourceMethods, hasSize(1));
+        assertThat(ResourceClass.nonPublicResourceMethodWarnings(ResourceWithPublicOverride.class),
+            contains(containsString("BaseResourceWithPublicOverride.inherited() cannot itself be exposed")));
+    }
+
+    @Test
+    public void onlyLogsVisibilityWarningsOncePerResourceClass() {
+        assertThat(ResourceClass.shouldLogVisibilityWarnings(ResourceForDeduplicationTest.class), equalTo(true));
+        assertThat(ResourceClass.shouldLogVisibilityWarnings(ResourceForDeduplicationTest.class), equalTo(false));
     }
 
     @Path("/api/fruits")
@@ -262,6 +277,23 @@ public class ResourceClassTest {
 
     @Path("/api/inherited-problem")
     private static class ResourceWithInheritedVisibilityProblem extends BaseResourceWithVisibilityProblem { }
+
+    private static class BaseResourceWithPublicOverride {
+        @GET
+        protected String inherited() {
+            return "";
+        }
+    }
+
+    @Path("/api/public-override")
+    private static class ResourceWithPublicOverride extends BaseResourceWithPublicOverride {
+        @Override
+        public String inherited() {
+            return "";
+        }
+    }
+
+    private static class ResourceForDeduplicationTest { }
 
     @Target(ElementType.METHOD)
     @Retention(RetentionPolicy.RUNTIME)
