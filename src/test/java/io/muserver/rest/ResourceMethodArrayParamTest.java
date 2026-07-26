@@ -438,7 +438,7 @@ public class ResourceMethodArrayParamTest {
         server = httpsServerForTest().addHandler(restHandler(new ArrayResource())
             .withCollectionParameterStrategy(CollectionParameterStrategy.SPLIT_ON_COMMA)).start();
 
-        try (Response response = call(request(server.uri().resolve("/arrays?value=one,%20two,")))) {
+        try (Response response = call(request(server.uri().resolve("/arrays?value=one,,%20two,")))) {
             assertThat(response.body().string(), is("one|two"));
         }
     }

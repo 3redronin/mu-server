@@ -424,7 +424,11 @@ abstract class ResourceMethodParam {
                     value = value.trim();
                     if (value.contains(",")) {
                         String[] bits = value.split("\\s*,\\s*");
-                        Collections.addAll(copy, bits);
+                        for (String bit : bits) {
+                            if (!bit.isEmpty()) {
+                                copy.add(bit);
+                            }
+                        }
                     } else if (!value.isEmpty()) {
                         copy.add(value.trim());
                     }
