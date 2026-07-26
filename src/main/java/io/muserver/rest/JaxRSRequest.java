@@ -476,7 +476,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     @Override
     public void abortWith(Response response) {
         ensureNotInResponseFilter("abortWith");
-        response = Objects.requireNonNull(response, "response");
+        Objects.requireNonNull(response, "response");
         if (!requestFilterChainRunning) {
             throw new FilterAbortedException(response);
         }
