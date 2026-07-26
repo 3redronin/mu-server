@@ -48,6 +48,22 @@ import java.util.UUID;
 public class ProblemDetailsExceptionMapper <E extends Throwable> implements ExceptionMapper<E> {
     private static final Logger log = LoggerFactory.getLogger(ProblemDetailsExceptionMapper.class);
     private static final MediaType APPLICATION_PROBLEM_JSON = MediaType.valueOf("application/problem+json");
+    private static final String[] REPLACED_REPRESENTATION_HEADERS = {
+        "Content-Type",
+        "Content-Length",
+        "Content-Encoding",
+        "Content-Language",
+        "Content-Location",
+        "Content-Range",
+        "Content-Disposition",
+        "ETag",
+        "Last-Modified",
+        "Content-MD5",
+        "Digest",
+        "Content-Digest",
+        "Repr-Digest",
+        "Trailer"
+    };
     private final boolean log4xxProblemDetailsInstanceIds;
     private final boolean log5xxProblemDetailsInstanceIds;
 
@@ -98,11 +114,43 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
             if (shouldLogInstance(response.getStatus())) {
                 log.error("Sending a problem details response with instance={}", instance, exception);
             }
-            return toResponse(Response.fromResponse(response), response.getStatus(), title, detail, null, instance, null,
+            Response.ResponseBuilder responseBuilder = Response.fromResponse(response);
+            removeReplacedRepresentationHeaders(response, responseBuilder);
+            return toResponse(responseBuilder, response.getStatus(), title, detail, null, instance, null,
                 shouldAddNoStoreHeader(response.getStatus()) && response.getHeaderString("Cache-Control") == null && response.getHeaderString("Pragma") == null && response.getHeaderString("Expires") == null);
         }
 
         return serverError(exception);
+    }
+
+    private static void removeReplacedRepresentationHeaders(Response originalResponse, Response.ResponseBuilder responseBuilder) {
+        for (String header : REPLACED_REPRESENTATION_HEADERS) {
+            responseBuilder.header(header, null);
+        }
+
+        String vary = originalResponse.getHeaderString("Vary");
+        if (vary == null) {
+            return;
+        }
+        StringBuilder retainedVary = new StringBuilder();
+        boolean removedAccept = false;
+        for (String value : vary.split(",")) {
+            String trimmed = value.trim();
+            if (trimmed.equalsIgnoreCase("Accept")) {
+                removedAccept = true;
+            } else if (!trimmed.isEmpty()) {
+                if (retainedVary.length() > 0) {
+                    retainedVary.append(", ");
+                }
+                retainedVary.append(trimmed);
+            }
+        }
+        if (removedAccept) {
+            responseBuilder.header("Vary", null);
+            if (retainedVary.length() > 0) {
+                responseBuilder.header("Vary", retainedVary.toString());
+            }
+        }
     }
 
     private Response uriParameterConversionError(UriParameterConversionException exception) {

@@ -457,6 +457,71 @@ public class ProblemDetailsExceptionsTest {
     }
 
     @Test
+    public void generatedProblemsReplaceRepresentationHeadersAndPreserveOtherHeaders() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get() {
+                throw new WebApplicationException(jakarta.ws.rs.core.Response.status(429)
+                    .header("Content-Type", "text/plain")
+                    .header("Content-Length", "1")
+                    .header("Content-Encoding", "gzip")
+                    .header("Content-Language", "fr")
+                    .header("Content-Location", "/old-representation")
+                    .header("Content-Range", "bytes 0-0/1")
+                    .header("Content-Disposition", "attachment; filename=old.txt")
+                    .header("ETag", "\"old\"")
+                    .header("Last-Modified", "Wed, 21 Oct 2015 07:28:00 GMT")
+                    .header("Content-MD5", "old-md5")
+                    .header("Digest", "sha-256=old")
+                    .header("Content-Digest", "sha-256=:old:")
+                    .header("Repr-Digest", "sha-256=:old:")
+                    .header("Trailer", "Digest")
+                    .header("Vary", "Accept, Origin")
+                    .header("Retry-After", "30")
+                    .header("Location", "/try-later")
+                    .header("Cache-Control", "private")
+                    .header("Set-Cookie", "one=1; Path=/")
+                    .header("Set-Cookie", "two=2; Path=/")
+                    .header("X-Test", "one")
+                    .header("X-Test", "two")
+                    .build());
+            }
+        }
+
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
+
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            JSONObject json = new JSONObject(resp.body().string());
+            assertThat(resp.code(), is(429));
+            assertThat(resp.header("Content-Type"), is("application/problem+json"));
+            assertThat(resp.header("Content-Length"), not(is("1")));
+            assertThat(resp.header("Content-Encoding"), is(nullValue()));
+            assertThat(resp.header("Content-Language"), is(nullValue()));
+            assertThat(resp.header("Content-Location"), is(nullValue()));
+            assertThat(resp.header("Content-Range"), is(nullValue()));
+            assertThat(resp.header("Content-Disposition"), is(nullValue()));
+            assertThat(resp.header("ETag"), is(nullValue()));
+            assertThat(resp.header("Last-Modified"), is(nullValue()));
+            assertThat(resp.header("Content-MD5"), is(nullValue()));
+            assertThat(resp.header("Digest"), is(nullValue()));
+            assertThat(resp.header("Content-Digest"), is(nullValue()));
+            assertThat(resp.header("Repr-Digest"), is(nullValue()));
+            assertThat(resp.header("Trailer"), is(nullValue()));
+            assertThat(Arrays.stream(resp.header("Vary").split(","))
+                .map(String::trim)
+                .anyMatch("Accept"::equalsIgnoreCase), is(false));
+            assertThat(resp.header("Vary"), containsString("Origin"));
+            assertThat(resp.header("Retry-After"), is("30"));
+            assertThat(resp.header("Location"), is(server.uri().resolve("/try-later").toString()));
+            assertThat(resp.header("Cache-Control"), is("private"));
+            assertThat(resp.headers("Set-Cookie"), is(Arrays.asList("one=1; Path=/", "two=2; Path=/")));
+            assertThat(resp.headers("X-Test"), is(Arrays.asList("one", "two")));
+            assertThat(json.getInt("status"), is(429));
+        }
+    }
+
+    @Test
     public void headRequestsWithProblemDetailsResponsesHaveNoBody() throws Exception {
         @Path("samples")
         class Sample {
