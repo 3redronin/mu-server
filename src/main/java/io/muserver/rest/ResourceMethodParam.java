@@ -58,41 +58,106 @@ abstract class ResourceMethodParam {
 
     static ResourceMethodParam fromParameter(int index, Parameter parameterHandle, Parameter annotationSource, Class<?> concreteClass,
                                              List<ParamConverterProvider> paramConverterProviders, @Nullable UriPattern methodPattern) {
+        return introspect(index, parameterHandle, annotationSource, concreteClass, methodPattern)
+            .bind(paramConverterProviders);
+    }
 
+    static Introspection introspect(int index, Parameter parameterHandle, Parameter annotationSource,
+                                    Class<?> concreteClass, @Nullable UriPattern methodPattern) {
         ResolvedParameter parameter = new ResolvedParameter(parameterHandle, annotationSource, concreteClass);
         @Nullable Pattern pattern = null;
         ValueSource source = getSource(annotationSource);
+        boolean requestBased = source != ValueSource.MESSAGE_BODY
+            && source != ValueSource.CONTEXT
+            && source != ValueSource.SUSPENDED;
         boolean isRequired = source == ValueSource.PATH_PARAM || hasDeclared(annotationSource, Required.class);
-        if (source == ValueSource.MESSAGE_BODY) {
-            DescriptionData descriptionData = DescriptionData.fromAnnotation(annotationSource, null);
-            return new MessageBodyParam(index, source, parameter, descriptionData, isRequired);
-        } else if (source == ValueSource.CONTEXT) {
-            return new ContextParam(index, source, parameter);
-        } else if (source == ValueSource.SUSPENDED) {
-            return new SuspendedParam(index, source, parameter);
-        } else {
-            boolean encodedRequested = hasDeclared(annotationSource, Encoded.class);
-            boolean isDeprecated = hasDeclared(annotationSource, Deprecated.class);
-            String key = parameterName(source, annotationSource);
-            ParamConverter<?> converter = getParamConverter(parameter, paramConverterProviders);
-            boolean lazyDefaultValue = converter.getClass().getDeclaredAnnotation(ParamConverter.Lazy.class) != null;
-            boolean explicitDefault = hasDeclared(annotationSource, DefaultValue.class);
-            @Nullable Object defaultValue = getDefaultValue(parameter, annotationSource, converter, lazyDefaultValue, source, key);
-
+        boolean encodedRequested = requestBased && hasDeclared(annotationSource, Encoded.class);
+        boolean isDeprecated = requestBased && hasDeclared(annotationSource, Deprecated.class);
+        String key = requestBased ? parameterName(source, annotationSource) : "";
+        boolean explicitDefault = requestBased && hasDeclared(annotationSource, DefaultValue.class);
+        @Nullable String explicitDefaultValue = explicitDefault
+            ? requireNonNull(annotationSource.getDeclaredAnnotation(DefaultValue.class)).value()
+            : null;
+        if (source == ValueSource.PATH_PARAM && methodPattern != null) {
+            String regex = methodPattern.regexFor(key);
+            if (regex != null) {
+                pattern = Pattern.compile(regex);
+            }
+        }
+        if (requestBased) {
             isRequired |= (!explicitDefault && parameter.type.isPrimitive());
+        }
+        return new Introspection(index, source, parameter, annotationSource, isRequired,
+            encodedRequested, isDeprecated, key, pattern, explicitDefault, explicitDefaultValue);
+    }
 
-            if (key.length() == 0) {
-                throw new WebApplicationException("No parameter specified for the " + source + " in " + parameterHandle);
-            }
-            if (source == ValueSource.PATH_PARAM && methodPattern != null) {
-                String regex = methodPattern.regexFor(key);
-                if (regex != null) {
-                    pattern = Pattern.compile(regex);
+    static final class Introspection {
+        final int index;
+        final ValueSource source;
+        private final Parameter parameterHandle;
+        private final Class<?> type;
+        private final Type genericType;
+        final List<Annotation> annotations;
+        private final Parameter annotationSource;
+        final boolean isRequired;
+        private final boolean encodedRequested;
+        private final boolean deprecated;
+        private final String key;
+        private final @Nullable Pattern pattern;
+        private final boolean explicitDefault;
+        private final @Nullable String explicitDefaultValue;
+
+        private Introspection(int index, ValueSource source, ResolvedParameter parameter,
+                              Parameter annotationSource, boolean isRequired,
+                              boolean encodedRequested, boolean deprecated, String key,
+                              @Nullable Pattern pattern, boolean explicitDefault,
+                              @Nullable String explicitDefaultValue) {
+            this.index = index;
+            this.source = source;
+            this.parameterHandle = parameter.handle;
+            this.type = parameter.type;
+            this.genericType = parameter.genericType;
+            this.annotations = Collections.unmodifiableList(
+                Arrays.asList(parameter.annotations.clone()));
+            this.annotationSource = annotationSource;
+            this.isRequired = isRequired;
+            this.encodedRequested = encodedRequested;
+            this.deprecated = deprecated;
+            this.key = key;
+            this.pattern = pattern;
+            this.explicitDefault = explicitDefault;
+            this.explicitDefaultValue = explicitDefaultValue;
+        }
+
+        ResourceMethodParam bind(List<ParamConverterProvider> paramConverterProviders) {
+            ResolvedParameter parameter = new ResolvedParameter(
+                parameterHandle, type, genericType, annotations.toArray(new Annotation[0]));
+            if (source == ValueSource.MESSAGE_BODY) {
+                return new MessageBodyParam(index, source, parameter,
+                    DescriptionData.fromAnnotation(annotationSource, null), isRequired);
+            } else if (source == ValueSource.CONTEXT) {
+                return new ContextParam(index, source, parameter);
+            } else if (source == ValueSource.SUSPENDED) {
+                return new SuspendedParam(index, source, parameter);
+            } else {
+                ParamConverter<?> converter = getParamConverter(parameter, paramConverterProviders);
+                boolean lazyDefaultValue = converter.getClass().getDeclaredAnnotation(ParamConverter.Lazy.class) != null;
+                @Nullable Object defaultValue = getDefaultValue(
+                    parameter, explicitDefault, explicitDefaultValue, converter,
+                    lazyDefaultValue, source, key);
+
+                if (key.length() == 0) {
+                    throw new WebApplicationException(
+                        "No parameter specified for the " + source + " in " + parameterHandle);
                 }
-            }
 
-            DescriptionData descriptionData = DescriptionData.fromAnnotation(annotationSource, key);
-            return new RequestBasedParam(index, source, parameter, defaultValue, encodedRequested, lazyDefaultValue, converter, descriptionData, key, isDeprecated, isRequired, pattern, explicitDefault);
+                DescriptionData descriptionData =
+                    DescriptionData.fromAnnotation(annotationSource, key);
+                return new RequestBasedParam(index, source, parameter, defaultValue,
+                    encodedRequested, lazyDefaultValue, converter,
+                    descriptionData, key, deprecated, isRequired,
+                    pattern, explicitDefault);
+            }
         }
     }
 
@@ -110,6 +175,14 @@ abstract class ResourceMethodParam {
             Class<?> resolvedClass = GenericTypeResolver.rawClass(genericType);
             this.type = resolvedClass == null ? handle.getType() : resolvedClass;
             this.annotations = combinedAnnotations(handle, annotationSource);
+        }
+
+        private ResolvedParameter(Parameter handle, Class<?> type, Type genericType,
+                                  Annotation[] annotations) {
+            this.handle = handle;
+            this.type = type;
+            this.genericType = genericType;
+            this.annotations = annotations;
         }
 
         private static Annotation[] combinedAnnotations(Parameter handle, Parameter annotationSource) {
@@ -413,12 +486,15 @@ abstract class ResourceMethodParam {
         throw new MuException("Could not find a suitable ParamConverter for " + parameterizedType + " at " + parameter.handle.getDeclaringExecutable());
     }
 
-    private static @Nullable Object getDefaultValue(ResolvedParameter parameter, Parameter annotationSource, ParamConverter<?> converter, boolean lazyDefaultValue, ValueSource source, String parameterName) {
-        DefaultValue annotation = annotationSource.getDeclaredAnnotation(DefaultValue.class);
-        if (annotation == null) {
+    private static @Nullable Object getDefaultValue(ResolvedParameter parameter, boolean explicitDefault,
+                                                     @Nullable String explicitDefaultValue,
+                                                     ParamConverter<?> converter, boolean lazyDefaultValue,
+                                                     ValueSource source, String parameterName) {
+        if (!explicitDefault) {
             return converter instanceof HasDefaultValue ? ((HasDefaultValue) converter).getDefault() : null;
         }
-        return convertValue(parameter.handle, parameter.type, converter, lazyDefaultValue, annotation.value(), source, parameterName);
+        return convertValue(parameter.handle, parameter.type, converter, lazyDefaultValue,
+            explicitDefaultValue, source, parameterName);
     }
 
     private static @Nullable Object convertValue(Parameter parameterHandle, Class<?> parameterType, @Nullable ParamConverter<?> converter, boolean skipConverter, @Nullable Object value, ValueSource source, String parameterName) {

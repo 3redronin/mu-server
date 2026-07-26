@@ -43,24 +43,25 @@ class ResourceMethod {
     private final List<Class<? extends Annotation>> nameBindingAnnotations;
     final Annotation[] methodAnnotations; // the annotations defined on the method to be passed to the message body writers
 
-    ResourceMethod(ResourceClass resourceClass, @Nullable UriPattern pathPattern, java.lang.reflect.Method methodHandle, List<ResourceMethodParam> params, @Nullable Method httpMethod, @Nullable String pathTemplate, List<MediaType> produces, List<MediaType> consumes, SchemaObjectCustomizer schemaObjectCustomizer, DescriptionData descriptionData, boolean isDeprecated, List<Class<? extends Annotation>> nameBindingAnnotations, Annotation[] methodAnnotations) {
+    ResourceMethod(ResourceClass resourceClass, ResourceClassIntrospection.MethodInfo methodInfo,
+                   List<ResourceMethodParam> params, SchemaObjectCustomizer schemaObjectCustomizer,
+                   DescriptionData descriptionData) {
         this.resourceClass = resourceClass;
-        this.pathPattern = pathPattern;
-        this.methodHandle = methodHandle;
-        this.genericReturnType = GenericTypeResolver.resolveConcrete(methodHandle.getGenericReturnType(),
-            resourceClass.resourceClass, methodHandle.getDeclaringClass());
+        this.pathPattern = methodInfo.pathPattern;
+        this.methodHandle = methodInfo.methodHandle;
+        this.genericReturnType = methodInfo.genericReturnType;
         this.params = params;
-        this.httpMethod = httpMethod;
-        this.pathTemplate = pathTemplate;
-        this.directlyProduces = produces;
-        this.directlyConsumes = consumes;
+        this.httpMethod = methodInfo.httpMethod;
+        this.pathTemplate = methodInfo.pathTemplate;
+        this.directlyProduces = methodInfo.directlyProduces;
+        this.directlyConsumes = methodInfo.directlyConsumes;
         this.schemaObjectCustomizer = schemaObjectCustomizer;
         this.descriptionData = descriptionData;
-        this.isDeprecated = isDeprecated;
-        this.nameBindingAnnotations = nameBindingAnnotations;
-        this.methodAnnotations = methodAnnotations;
-        this.effectiveProduces = !produces.isEmpty() ? produces : (!resourceClass.produces.isEmpty() ? resourceClass.produces : RequestMatcher.WILDCARD_AS_LIST);
-        this.effectiveConsumes = !consumes.isEmpty() ? consumes : (!resourceClass.consumes.isEmpty() ? resourceClass.consumes : RequestMatcher.WILDCARD_AS_LIST);
+        this.isDeprecated = methodInfo.deprecated;
+        this.nameBindingAnnotations = methodInfo.nameBindingAnnotations;
+        this.methodAnnotations = methodInfo.methodAnnotations.toArray(new Annotation[0]);
+        this.effectiveProduces = !directlyProduces.isEmpty() ? directlyProduces : (!resourceClass.produces.isEmpty() ? resourceClass.produces : RequestMatcher.WILDCARD_AS_LIST);
+        this.effectiveConsumes = !directlyConsumes.isEmpty() ? directlyConsumes : (!resourceClass.consumes.isEmpty() ? resourceClass.consumes : RequestMatcher.WILDCARD_AS_LIST);
     }
 
     boolean hasAll(List<Class<? extends Annotation>> annotations) {

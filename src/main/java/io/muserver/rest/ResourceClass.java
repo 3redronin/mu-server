@@ -1,6 +1,5 @@
 package io.muserver.rest;
 
-import io.muserver.Method;
 import io.muserver.openapi.TagObject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.NameBinding;
@@ -12,7 +11,6 @@ import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedElement;
-import java.lang.reflect.Parameter;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -37,6 +35,7 @@ class ResourceClass {
     final TagObject tag;
     final List<Class<? extends Annotation>> nameBindingAnnotations;
     private final SchemaObjectCustomizer schemaObjectCustomizer;
+    final ResourceClassIntrospection introspection;
 
     /**
      * If this class is sub-resource, then this is the locator method. Otherwise null.
@@ -54,6 +53,7 @@ class ResourceClass {
         this.nameBindingAnnotations = nameBindingAnnotations;
         this.schemaObjectCustomizer = schemaObjectCustomizer;
         this.locatorMethod = locatorMethod;
+        this.introspection = ResourceClassIntrospection.forClass(resourceClass);
     }
 
     public boolean matches(URI uri) {
@@ -74,37 +74,16 @@ class ResourceClass {
         }
 
         List<ResourceMethod> resourceMethods = new ArrayList<>();
-        java.lang.reflect.Method[] methods = this.resourceClass.getMethods();
-        for (java.lang.reflect.Method restMethod : methods) {
-            if (restMethod.isBridge()) {
-                continue;
-            }
-            java.lang.reflect.Method annotationSource = JaxMethodLocator.getMethodThatHasJaxRSAnnotations(restMethod, resourceClass);
-            @Nullable Method httpMethod = ResourceMethod.getMuMethod(annotationSource);
-            restMethod.setAccessible(true);
-            Path methodPath = annotationSource.getAnnotation(Path.class);
-            if (methodPath == null && httpMethod == null) {
-                continue; // after this, only methods that are (sub)resource-methods or resource locators are processed
-            }
-
-            List<Class<? extends Annotation>> methodNameBindingAnnotations = getNameBindingAnnotations(annotationSource);
-
-            @Nullable UriPattern methodPattern = methodPath == null ? null : UriPattern.uriTemplateToRegex(methodPath.value());
-
-
-            List<MediaType> methodProduces = MediaTypeDeterminer.supportedProducesTypes(annotationSource);
-            List<MediaType> methodConsumes = MediaTypeDeterminer.supportedConsumesTypes(annotationSource);
+        for (ResourceClassIntrospection.MethodInfo methodInfo : introspection.methods) {
+            methodInfo.methodHandle.setAccessible(true);
             List<ResourceMethodParam> params = new ArrayList<>();
-            Parameter[] annotationParameters = annotationSource.getParameters();
-            Parameter[] methodParameters = restMethod.getParameters();
-            for (int i = 0; i < annotationParameters.length; i++) {
-                ResourceMethodParam resourceMethodParam = ResourceMethodParam.fromParameter(i, methodParameters[i], annotationParameters[i], resourceClass, paramConverterProviders, methodPattern);
-                params.add(resourceMethodParam);
+            for (ResourceMethodParam.Introspection param : methodInfo.params) {
+                params.add(param.bind(paramConverterProviders));
             }
-            DescriptionData descriptionData = DescriptionData.fromAnnotation(restMethod, null);
-            @Nullable String pathTemplate = methodPath == null ? null : methodPath.value();
-            boolean isDeprecated = annotationSource.isAnnotationPresent(Deprecated.class);
-            resourceMethods.add(new ResourceMethod(this, methodPattern, restMethod, params, httpMethod, pathTemplate, methodProduces, methodConsumes, schemaObjectCustomizer, descriptionData, isDeprecated, methodNameBindingAnnotations, annotationSource.getAnnotations()));
+            DescriptionData descriptionData =
+                DescriptionData.fromAnnotation(methodInfo.methodHandle, null);
+            resourceMethods.add(new ResourceMethod(
+                this, methodInfo, params, schemaObjectCustomizer, descriptionData));
         }
         this.resourceMethods = Collections.unmodifiableList(resourceMethods);
         this.methodInfoSet = true;
