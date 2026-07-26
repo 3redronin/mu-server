@@ -35,22 +35,27 @@ class BinaryEntityProviders {
     @Produces("*/*")
     @Consumes("*/*")
     static class ByteArrayReaderWriter implements MessageBodyReader<byte[]>, MessageBodyWriter<byte[]> {
+        @Override
         public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
             return type.isArray() && type.getComponentType().equals(byte.class);
         }
 
+        @Override
         public byte[] readFrom(Class<byte[]> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
             return Mutils.toByteArray(entityStream, 2048);
         }
 
+        @Override
         public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
             return type.isArray() && type.getComponentType().equals(byte.class);
         }
 
+        @Override
         public long getSize(byte[] bytes, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
             return bytes.length;
         }
 
+        @Override
         public void writeTo(byte[] bytes, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
             entityStream.write(bytes);
         }
@@ -58,10 +63,12 @@ class BinaryEntityProviders {
 
     @Produces("*/*")
     static class StreamingOutputWriter implements MessageBodyWriter<StreamingOutput> {
+        @Override
         public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
             return StreamingOutput.class.isAssignableFrom(type);
         }
 
+        @Override
         public void writeTo(StreamingOutput streamingOutput, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
             streamingOutput.write(entityStream);
         }
@@ -70,10 +77,12 @@ class BinaryEntityProviders {
 
     @Consumes("*/*")
     static class InputStreamReader implements MessageBodyReader<InputStream> {
+        @Override
         public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
             return InputStream.class.isAssignableFrom(type);
         }
 
+        @Override
         public InputStream readFrom(Class<InputStream> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
             return entityStream;
         }

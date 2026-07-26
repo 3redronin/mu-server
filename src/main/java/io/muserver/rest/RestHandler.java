@@ -288,6 +288,8 @@ public class RestHandler implements MuHandler {
                     if (jaxRSResponse.hasEntity()) {
                         jaxRSResponse.executeInterceptors(writerInterceptors); // run the interceptors
                     }
+                    // Interceptors replace a stream by installing a different instance.
+                    @SuppressWarnings("ReferenceEquality")
                     boolean entityStreamReplaced = jaxRSResponse.getOutputStream() != originalEntityStream;
                     writerAnnontations = jaxRSResponse.getAnnotations();
                     Object entity = jaxRSResponse.getEntity();

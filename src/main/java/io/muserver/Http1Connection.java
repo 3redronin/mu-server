@@ -74,6 +74,7 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
         super.channelInactive(ctx);
     }
 
+    @Override
     protected void channelRead0(ChannelHandlerContext ctx, Object msg) {
         try {
             onChannelRead(ctx, msg);
@@ -98,7 +99,10 @@ class Http1Connection extends SimpleChannelInboundHandler<Object> implements Htt
                             nettyHandlerAdapter.onResponseComplete(exchange, serverStats, connectionStats);
                             ctx.channel().eventLoop().execute(() -> {
                                 if (exchange.state() != HttpExchangeState.UPGRADED) {
-                                    if (this.currentExchange != exchange) {
+                                    // Completion must belong to the exact exchange currently owning this connection.
+                                    @SuppressWarnings("ReferenceEquality")
+                                    boolean isCurrentExchange = this.currentExchange == exchange;
+                                    if (!isCurrentExchange) {
                                         throw new IllegalStateException("Expected current exchange to be " + exchange + " but was " + this.currentExchange);
                                     }
                                     this.currentExchange = null;

@@ -784,6 +784,7 @@ public class MuServerBuilder {
             .channel(NioServerSocketChannel.class)
             .childHandler(new ChannelInitializer<SocketChannel>() {
 
+                @Override
                 protected void initChannel(SocketChannel socketChannel) {
                     ChannelPipeline p = socketChannel.pipeline();
                     p.addLast("idle", new IdleStateHandler(0, 0, idleTimeoutMills, TimeUnit.MILLISECONDS));

@@ -454,6 +454,7 @@ class HtmlDocumentor {
             return this;
         }
 
+        @Override
         public void close() throws IOException {
             writer.write("</" + tag + ">");
         }

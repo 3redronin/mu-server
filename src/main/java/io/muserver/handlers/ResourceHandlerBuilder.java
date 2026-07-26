@@ -176,6 +176,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      * Creates the handler
      * @return The built handler
      */
+    @Override
     public ResourceHandler build() {
         if (resourceProviderFactory == null) {
             throw new IllegalStateException("No resourceProviderFactory has been set");

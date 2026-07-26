@@ -134,6 +134,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
     /**
      * @return An iterator to iterate through the headers
      */
+    @Override
     Iterator<Map.Entry<String, String>> iterator();
 
     /**
@@ -383,6 +384,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * <p>If you wish to print all values or customize the header values that are hidden, use {@link #toString(Collection)}</p>
      * @return a string representation of these headers
      */
+    @Override
     String toString();
 
     /**

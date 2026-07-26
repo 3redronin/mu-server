@@ -23,9 +23,11 @@ import static java.util.Arrays.asList;
 class BuiltInParamConverterProvider implements ParamConverterProvider {
 
     private final ParamConverter<String> stringParamConverter = new ParamConverter<String>() {
+        @Override
         public String fromString(String value) {
             return value;
         }
+        @Override
         public String toString(String value) {
             return value;
         }
@@ -136,13 +138,16 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             this.boxedClass = boxedClass;
             this.stringToValue = stringToValue;
         }
+        @Override
         public @Nullable T fromString(@Nullable String value) {
             if (Mutils.nullOrEmpty(value)) return null;
             return stringToValue.apply(java.util.Objects.requireNonNull(value));
         }
+        @Override
         public String toString(T value) {
             return String.valueOf(value);
         }
+        @Override
         public String toString() {
             return boxedClass.getSimpleName() + " param converter";
         }
@@ -158,18 +163,22 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             this.primitiveClass = primitiveClass;
             this.stringToValue = stringToValue;
         }
+        @Override
         public T fromString(@Nullable String value) {
             if (value == null || value.isEmpty()) {
                 return defaultValue;
             }
             return stringToValue.apply(value);
         }
+        @Override
         public String toString(T value) {
             return String.valueOf(value);
         }
+        @Override
         public Object getDefault() {
             return defaultValue;
         }
+        @Override
         public String toString() {
             return primitiveClass.getSimpleName() + " param converter";
         }
@@ -187,12 +196,14 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
                 ? Stream.of(enumClass.getEnumConstants()).map(Enum::name).collect(Collectors.toList())
                 : java.util.Collections.emptyList();
         }
+        @Override
         public @Nullable E fromString(@Nullable String value) {
             if (Mutils.nullOrEmpty(value)) return null;
             if (fromStringConverter != null) return fromStringConverter.fromString(value);
             return Enum.valueOf(enumClass, value);
         }
 
+        @Override
         public String toString(E value) {
             return value.name();
         }
@@ -202,6 +213,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
             return allowedValues;
         }
 
+        @Override
         public String toString() {
             String validValues = Stream.of(enumClass.getEnumConstants()).map(Enum::name).collect(Collectors.joining(", "));
             return enumClass.getSimpleName() + " converter (valid values: " + validValues + ")";
@@ -213,6 +225,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         private ConstructorConverter(Constructor<T> constructor) {
             this.constructor = constructor;
         }
+        @Override
         public @Nullable T fromString(@Nullable String value) {
             if (Mutils.nullOrEmpty(value)) return null;
             try {
@@ -221,9 +234,11 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
                 throw new IllegalArgumentException("Could not convert \"" + value + "\" to a " + constructor.getDeclaringClass().getSimpleName(), e);
             }
         }
+        @Override
         public String toString(T value) {
             return String.valueOf(value);
         }
+        @Override
         public String toString() {
             return "ConstructorConverter{" + constructor + '}';
         }
@@ -247,6 +262,7 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         private StaticMethodConverter(Method staticMethod) {
             this.staticMethod = staticMethod;
         }
+        @Override
         public @Nullable T fromString(@Nullable String value) {
             if (Mutils.nullOrEmpty(value)) return null;
             try {
@@ -255,9 +271,11 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
                 throw new IllegalArgumentException("Could not convert \"" + value + "\" to a " + staticMethod.getDeclaringClass().getSimpleName() + " because " + e.getMessage(), e);
             }
         }
+        @Override
         public String toString(T value) {
             return String.valueOf(value);
         }
+        @Override
         public String toString() {
             return staticMethod.toString();
         }

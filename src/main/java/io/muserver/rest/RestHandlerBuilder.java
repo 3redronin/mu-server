@@ -559,6 +559,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     /**
      * @return The newly build {@link RestHandler}
      */
+    @Override
     public RestHandler build() {
         List<MessageBodyReader> readers = EntityProviders.builtInReaders();
         readers.addAll(customReaders);

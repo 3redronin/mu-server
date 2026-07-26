@@ -108,7 +108,12 @@ class EntityProviders {
     }
 
     boolean isBuiltInWriter(MessageBodyWriter<?> writer) {
-        return writers.stream().anyMatch(candidate -> candidate.provider == writer && candidate.isBuiltIn);
+        return writers.stream().anyMatch(candidate -> {
+            // Provider selection returns the exact instance held by its wrapper.
+            @SuppressWarnings("ReferenceEquality")
+            boolean sameProvider = candidate.provider == writer;
+            return sameProvider && candidate.isBuiltIn;
+        });
     }
 
     public static List<MessageBodyReader> builtInReaders() {
