@@ -347,6 +347,13 @@ abstract class ResourceMethodParam {
                 }
             }
 
+            if (paramClass.equals(io.muserver.Cookie.class)) {
+                List<String> cookieValues = cookieValue(muRequest, key());
+                return cookieValues.isEmpty() ? null : new CookieBuilder()
+                    .withName(key())
+                    .withValue(cookieValues.get(0))
+                    .build();
+            }
             if (paramClass.isAssignableFrom(PathSegment.class)) {
                 PathSegment seg = matchedMethod.pathParams.get(key());
                 if (seg != null && encodedRequested()) {
@@ -587,11 +594,6 @@ abstract class ResourceMethodParam {
         if (source == ValueSource.COOKIE_PARAM && (value == null || value instanceof String)) {
             if (parameterType.equals(Cookie.class)) {
                 return value == null ? null : new Cookie(parameterName, (String) value);
-            } else if (parameterType.equals(io.muserver.Cookie.class)) {
-                return value == null ? null : new CookieBuilder()
-                    .withName(parameterName)
-                    .withValue((String) value)
-                    .build();
             }
         }
         if (converter == null || skipConverter) {
