@@ -1,13 +1,15 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.MediaType;
 import okhttp3.Response;
-import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Test;
@@ -16,6 +18,7 @@ import scaffolding.ServerUtils;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -55,10 +58,7 @@ public class ProblemDetailsExceptionsTest {
         }
 
         this.server = ServerUtils.httpsServerForTest()
-            .addHandler(restHandler(new Sample())
-                .addExceptionMapper(Throwable.class, problemDetailsExceptionMapper()
-                    .withLog4xxProblemDetailsInstanceIds(false)
-                    .build()))
+            .addHandler(restHandler(new Sample()))
             .start();
 
         try (Response resp = call(request().url(server.uri().resolve("/samples?breed=BAD_DOG").toString()))) {
@@ -147,7 +147,10 @@ public class ProblemDetailsExceptionsTest {
 
         this.server = ServerUtils.httpsServerForTest()
             .addHandler(restHandler(new Sample())
-                .addExceptionMapper(Throwable.class, problemDetailsExceptionMapper().build()))
+                .addExceptionMapper(WebApplicationException.class, problemDetailsExceptionMapper()
+                    .withLog5xxProblemDetailsInstanceIds(false)
+                    .withLog4xxProblemDetailsInstanceIds(false)
+                    .build()))
             .start();
 
         try (Response resp = call(request().url(server.uri().resolve("/samples/explicit").toString()))) {
@@ -162,9 +165,6 @@ public class ProblemDetailsExceptionsTest {
             assertThat(json.getString("instance"), is("urn:uuid:12345678-1234-1234-1234-123456789abc"));
             assertThat(json.getJSONArray("errors").getJSONObject(0).getString("field"), is("name"));
             assertThat(json.getJSONArray("errors").getJSONObject(0).getString("message"), is("Required"));
-            if (json != null) {
-                return;
-            }
         }
 
         ProblemDetailsException problem = problemDetailsException(409)
@@ -192,8 +192,8 @@ public class ProblemDetailsExceptionsTest {
             JSONObject json = new JSONObject(body);
             assertThat(resp.code(), is(400));
             assertThat(resp.header("content-type"), is("application/problem+json"));
-            assertThat(json.getString("title"), is("Bad Request"));
-            assertThat(json.getString("detail"), is("Bad input"));
+            assertThat(json.getString("title"), is("Bad input"));
+            assertThat(json.has("detail"), is(false));
             assertThat(json.getString("instance").startsWith("urn:uuid:"), is(true));
         }
 
@@ -239,24 +239,206 @@ public class ProblemDetailsExceptionsTest {
             JSONObject json = new JSONObject(body);
             assertThat(resp.code(), is(400));
             assertThat(resp.header("content-type"), is("application/problem+json"));
-            assertThat(json.getString("title"), is("Bad Request"));
-            assertThat(json.getString("detail"), is("Bad input"));
+            assertThat(json.getString("title"), is("Bad input"));
+            assertThat(json.has("detail"), is(false));
             assertThat(json.getString("instance").startsWith("urn:uuid:"), is(true));
         }
 
         try (Response resp = call(request().url(server.uri().resolve("/samples/server").toString()))) {
             assertThat(resp.code(), is(500));
             String body = resp.body().string();
-            try {
-                new JSONObject(body);
-                throw new AssertionError("Should not reach here");
-            } catch (JSONException e) {
-                // good
-            }
-            assertThat(body, containsString("Oops! An unexpected error occurred"));
+            JSONObject json = new JSONObject(body);
+            assertThat(json.getString("title"), is("Internal Server Error"));
+            assertThat(json.getInt("status"), is(500));
+            assertThat(json.getString("detail"), is("An unexpected error occurred"));
         }
     }
 
+    @Test
+    public void defaultMapperUsedForUnhandledRuntimeExceptions() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get() {
+                throw new IllegalStateException("Password xyz; database /private/path/customer.db");
+            }
+        }
+
+        this.server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Sample()))
+            .start();
+
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            String body = resp.body().string();
+            JSONObject json = new JSONObject(body);
+            assertThat(resp.code(), is(500));
+            assertThat(resp.header("content-type"), is("application/problem+json"));
+            assertThat(resp.headers("cache-control"), is(singletonList("no-store")));
+            assertThat(json.getInt("status"), is(500));
+            assertThat(json.getString("title"), is("Internal Server Error"));
+            assertThat(body.contains("Password xyz"), is(false));
+            assertThat(body.contains("/private/path/customer.db"), is(false));
+            assertThat(body.contains("IllegalStateException"), is(false));
+        }
+    }
+
+    @Test
+    public void acceptHeadersDoNotChangeGeneratedProblemDetailsResponse() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get() {
+                throw new IllegalStateException("boom");
+            }
+        }
+
+        this.server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Sample()))
+            .start();
+
+        for (String acceptHeader : Arrays.asList(
+            "application/problem+json",
+            "application/json",
+            "*/*",
+            "text/html",
+            "application/problem+json;q=0"
+        )) {
+            try (Response resp = call(request().url(server.uri().resolve("/samples").toString())
+                .header("Accept", acceptHeader))) {
+                assertThat(resp.code(), is(500));
+                assertThat(resp.header("content-type"), is("application/problem+json"));
+                String vary = resp.header("vary");
+                if (vary != null) {
+                    assertThat(vary.toLowerCase(Locale.ROOT).contains("accept"), is(false));
+                }
+            }
+        }
+    }
+
+    @Test
+    public void explicitWebApplicationExceptionResponsesArePreserved() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            @Path("/text")
+            public String text() {
+                throw new WebApplicationException(
+                    jakarta.ws.rs.core.Response.status(418)
+                        .entity("No coffee")
+                        .type(MediaType.TEXT_PLAIN_TYPE)
+                        .header("X-Test", "yes")
+                        .build());
+            }
+
+            @GET
+            @Path("/binary")
+            public String binary() {
+                throw new WebApplicationException(
+                    jakarta.ws.rs.core.Response.status(201)
+                        .entity(new byte[]{(byte) 0xCA, (byte) 0xFE, 0x00, 0x01})
+                        .type(MediaType.APPLICATION_OCTET_STREAM_TYPE)
+                        .header("X-Test", "yes")
+                        .build());
+            }
+
+            @GET
+            @Path("/problem")
+            public String problem() {
+                throw new WebApplicationException(
+                    jakarta.ws.rs.core.Response.status(409)
+                        .entity("{\"title\":\"Existing\"}")
+                        .type(MediaType.valueOf("application/problem+json"))
+                        .header("X-Test", "yes")
+                        .build());
+            }
+        }
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
+
+        try (Response resp = call(request().url(server.uri().resolve("/samples/text").toString()))) {
+            assertThat(resp.code(), is(418));
+            assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
+            assertThat(resp.header("X-Test"), is("yes"));
+            assertThat(resp.body().string(), is("No coffee"));
+        }
+
+        try (Response resp = call(request().url(server.uri().resolve("/samples/binary").toString()))) {
+            assertThat(resp.code(), is(201));
+            assertThat(resp.header("content-type"), is("application/octet-stream"));
+            assertThat(resp.header("X-Test"), is("yes"));
+            assertThat(Arrays.equals(resp.body().bytes(), new byte[]{(byte) 0xCA, (byte) 0xFE, 0x00, 0x01}), is(true));
+        }
+
+        try (Response resp = call(request().url(server.uri().resolve("/samples/problem").toString()))) {
+            assertThat(resp.code(), is(409));
+            assertThat(resp.header("content-type"), is("application/problem+json"));
+            assertThat(resp.header("X-Test"), is("yes"));
+            assertThat(resp.body().string(), is("{\"title\":\"Existing\"}"));
+        }
+    }
+
+    @Test
+    public void webApplicationExceptionsWithoutEntityConvertToProblemDetails() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String client() {
+                throw new BadRequestException("Username is required");
+            }
+
+            @GET
+            @Path("/not-found")
+            public String notFound() {
+                throw new NotFoundException("Could not find resource");
+            }
+
+            @GET
+            @Path("/headerful")
+            public String headerful() {
+                throw new WebApplicationException(jakarta.ws.rs.core.Response.status(429)
+                    .header("Retry-After", "30")
+                    .build());
+            }
+        }
+
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
+
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            JSONObject json = new JSONObject(resp.body().string());
+            assertThat(resp.code(), is(400));
+            assertThat(json.getString("title"), is("Username is required"));
+        }
+
+        try (Response resp = call(request().url(server.uri().resolve("/samples/not-found").toString()))) {
+            JSONObject json = new JSONObject(resp.body().string());
+            assertThat(resp.code(), is(404));
+            assertThat(json.getString("title"), is("Could not find resource"));
+        }
+
+        try (Response resp = call(request().url(server.uri().resolve("/samples/headerful").toString()))) {
+            JSONObject json = new JSONObject(resp.body().string());
+            assertThat(resp.code(), is(429));
+            assertThat(resp.header("Retry-After"), is("30"));
+            assertThat(json.getString("title"), containsString("Too Many Requests"));
+        }
+    }
+
+    @Test
+    public void headRequestsWithProblemDetailsResponsesHaveNoBody() throws Exception {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get() {
+                throw new IllegalStateException("boom");
+            }
+        }
+        this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
+
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()).head())) {
+            assertThat(resp.code(), is(500));
+            assertThat(resp.header("content-type"), is("application/problem+json"));
+            assertThat(resp.body().bytes(), is(new byte[0]));
+        }
+    }
 
     @Test
     public void logOptionsDefaultToEnabled() {

@@ -37,6 +37,14 @@ package io.muserver.rest;
  * }
  * }</pre>
  * <p>Note: all values are optional.</p>
+ * <p>
+ * Generated responses are produced with media type {@code application/problem+json} and do not participate in response
+ * content negotiation.
+ * </p>
+ * <p>
+ * If a {@link WebApplicationException} includes a custom response entity and media type, that response is preserved by the
+ * mapper; no problem-details envelope is applied.
+ * </p>
  */
 public class ProblemDetailsExceptionMapperBuilder {
     private boolean log4xxProblemDetailsInstanceIds = true;

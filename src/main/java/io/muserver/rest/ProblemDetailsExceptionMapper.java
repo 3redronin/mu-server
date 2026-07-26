@@ -62,7 +62,8 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
             if (shouldLogInstance(problem.getStatus())) {
                 log.error("Sending a problem details response with instance={}", problem.getInstance(), exception);
             }
-            return toResponse(problem.getStatus(), problem.getTitle(), problem.getDetail(), problem.getType(), problem.getInstance(), problem.getExtensionMembers());
+            return toResponse(Response.status(problem.getStatus()), problem.getStatus(), problem.getTitle(),
+                problem.getDetail(), problem.getType(), problem.getInstance(), problem.getExtensionMembers(), shouldAddNoStoreHeader(problem.getStatus()));
         }
 
         if (exception instanceof UriParameterConversionException) {
@@ -82,16 +83,16 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
             if (family != Response.Status.Family.CLIENT_ERROR && family != Response.Status.Family.SERVER_ERROR) {
                 return response;
             }
-
+            String title = webApplicationException.getMessage();
+            if (Mutils.nullOrEmpty(title)) {
+                title = defaultTitle(response.getStatus());
+            }
             URI instance = newInstance();
             if (shouldLogInstance(response.getStatus())) {
                 log.error("Sending a problem details response with instance={}", instance, exception);
             }
-            String detail = exception.getMessage();
-            if (Mutils.nullOrEmpty(detail)) {
-                detail = defaultTitle(response.getStatus());
-            }
-            return toResponse(response.getStatus(), defaultTitle(response.getStatus()), detail, null, instance, null);
+            return toResponse(Response.fromResponse(response), response.getStatus(), title, null, null, instance, null,
+                shouldAddNoStoreHeader(response.getStatus()) && response.getHeaderString("Cache-Control") == null && response.getHeaderString("Pragma") == null && response.getHeaderString("Expires") == null);
         }
 
         return serverError(exception);
@@ -112,7 +113,7 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
             extensionMembers.put("allowedValues", exception.getAllowedValues());
         }
         String detail = "Invalid value for URI parameter \"" + exception.getParameterName() + "\".";
-        return toResponse(status, defaultTitle(status), detail, null, instance, extensionMembers);
+        return toResponse(Response.status(status), status, defaultTitle(status), detail, null, instance, extensionMembers, false);
     }
 
     private Response serverError(Throwable exception) {
@@ -120,7 +121,7 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
         if (log5xxProblemDetailsInstanceIds) {
             log.error("Sending a problem details response with instance={}", instance, exception);
         }
-        return toResponse(500, defaultTitle(500), "An unexpected error occurred", null, instance, null);
+        return toResponse(Response.status(500), 500, defaultTitle(500), "An unexpected error occurred", null, instance, null, true);
     }
 
     private boolean shouldLogInstance(int status) {
@@ -132,6 +133,10 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
             return log5xxProblemDetailsInstanceIds;
         }
         return false;
+    }
+
+    private static boolean shouldAddNoStoreHeader(int status) {
+        return Response.Status.Family.familyOf(status) == Response.Status.Family.SERVER_ERROR;
     }
 
     private URI newInstance() {
@@ -153,7 +158,7 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
         }
     }
 
-    private static Response toResponse(int status, String title, @Nullable String detail, @Nullable URI type, @Nullable URI instance, @Nullable Map<String, @Nullable Object> extensionMembers) {
+    private static Response toResponse(Response.ResponseBuilder responseBuilder, int status, String title, @Nullable String detail, @Nullable URI type, URI instance, @Nullable Map<String, @Nullable Object> extensionMembers, boolean noStoreCacheControl) {
         Map<String, @Nullable Object> values = new LinkedHashMap<>();
         if (type != null) {
             values.put("type", type);
@@ -174,6 +179,10 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
         } catch (IOException e) {
             throw new RuntimeException("Could not serialize problem details JSON", e);
         }
-        return Response.status(status).type(APPLICATION_PROBLEM_JSON).entity(writer.toString()).build();
+        responseBuilder.type(APPLICATION_PROBLEM_JSON).entity(writer.toString());
+        if (noStoreCacheControl) {
+            responseBuilder.header("Cache-Control", "no-store");
+        }
+        return responseBuilder.build();
     }
 }

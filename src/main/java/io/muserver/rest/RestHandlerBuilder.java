@@ -34,6 +34,7 @@ import static java.util.Arrays.asList;
 public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
     private static final Comparator<Object> INTERCEPTOR_PRIORITY = Comparator.comparingInt(RestHandlerBuilder::priority);
+    private static final ExceptionMapper<Throwable> DEFAULT_EXCEPTION_MAPPER = ProblemDetailsExceptionMapperBuilder.problemDetailsExceptionMapper().build();
 
     private final List<Object> resources = new ArrayList<>();
     private final List<MessageBodyWriter> customWriters = new ArrayList<>();
@@ -53,6 +54,9 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private CORSConfig corsConfig = CORSConfigBuilder.disabled().build();
     private final List<SchemaObjectCustomizer> schemaObjectCustomizers = new ArrayList<>();
     private @Nullable CollectionParameterStrategy collectionParameterStrategy;
+    {
+        exceptionMappers.put(Throwable.class, DEFAULT_EXCEPTION_MAPPER);
+    }
 
     /**
      * Adds one or more rest resources to this handler
@@ -224,6 +228,8 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
     /**
      * <p>Adds a mapper that converts an exception to a response.</p>
+     * <p>Jakarta REST behavior is registered by default for otherwise-unmapped exceptions via
+     * {@link ProblemDetailsExceptionMapper}, mapping {@link Throwable} to RFC 9457 problem-details JSON.</p>
      * <p>For example, you may create a custom exception such as a ValidationException that you throw from your
      * jax-rs methods. A mapper for this exception type could return a Response with a 400 code and a custom
      * validation error message.</p>
@@ -234,7 +240,28 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @return Returns this builder.
      */
     public <T extends Throwable> RestHandlerBuilder addExceptionMapper(Class<T> exceptionClass, ExceptionMapper<T> exceptionMapper) {
+        if (exceptionClass == null) {
+            throw new IllegalArgumentException("exceptionClass cannot be null");
+        }
+        if (exceptionMapper == null) {
+            throw new IllegalArgumentException("exceptionMapper cannot be null. Use removeExceptionMapper(" + exceptionClass.getName() + ") to remove a mapper.");
+        }
         this.exceptionMappers.put(exceptionClass, exceptionMapper);
+        return this;
+    }
+
+    /**
+     * Removes a previously-registered exception mapper. If no mapper has been registered for the given exception type,
+     * this is a no-op.
+     *
+     * @param exceptionClass The type of exception whose mapper should be removed.
+     * @return This builder.
+     */
+    public RestHandlerBuilder removeExceptionMapper(Class<? extends Throwable> exceptionClass) {
+        if (exceptionClass == null) {
+            throw new IllegalArgumentException("exceptionClass cannot be null");
+        }
+        this.exceptionMappers.remove(exceptionClass);
         return this;
     }
 
