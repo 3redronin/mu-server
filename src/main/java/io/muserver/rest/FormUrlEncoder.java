@@ -1,18 +1,12 @@
 package io.muserver.rest;
 
-import io.muserver.MuException;
-
-import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 final class FormUrlEncoder {
 
     static String formUrlEncode(String value) {
-        try {
-            return URLEncoder.encode(value, "UTF-8");
-        } catch (UnsupportedEncodingException e) {
-            throw new MuException("Error encoding " + value, e);
-        }
+        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 
     private FormUrlEncoder() {

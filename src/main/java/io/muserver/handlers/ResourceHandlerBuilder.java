@@ -2,9 +2,11 @@ package io.muserver.handlers;
 
 import io.muserver.MuHandlerBuilder;
 import io.muserver.rest.RestHandlerBuilder;
+import org.jspecify.annotations.Nullable;
 
 import java.io.File;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -14,8 +16,6 @@ import java.util.Collections;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Scanner;
-
-import org.jspecify.annotations.Nullable;
 
 import static io.muserver.handlers.ResourceType.DEFAULT_EXTENSION_MAPPINGS;
 import static java.util.Objects.requireNonNull;
@@ -185,7 +185,7 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
         if (directoryListingEnabled && css == null) {
             InputStream cssStream = requireNonNull(RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css"),
                 "Bundled directory listing CSS was not found");
-            Scanner scanner = new Scanner(cssStream, "UTF-8").useDelimiter("\\A");
+            Scanner scanner = new Scanner(cssStream, StandardCharsets.UTF_8).useDelimiter("\\A");
             css = scanner.next();
             scanner.close();
         }

@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.*;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -12,8 +14,6 @@ import java.time.format.DateTimeParseException;
 import java.util.Date;
 import java.util.Objects;
 import java.util.stream.Stream;
-
-import org.jspecify.annotations.Nullable;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -33,14 +33,10 @@ public class Mutils {
      * @return the encoded value
      */
     public static String urlEncode(String value) {
-        try {
-            return URLEncoder.encode(value, "UTF-8")
-                .replace("+", "%20")
-                .replace("%7E", "~") // as per https://www.ietf.org/rfc/rfc3986.html ~ doesn't need encoding
-                ;
-        } catch (UnsupportedEncodingException e) {
-            throw new MuException("Error encoding " + value, e);
-        }
+        return URLEncoder.encode(value, UTF_8)
+            .replace("+", "%20")
+            .replace("%7E", "~") // as per https://www.ietf.org/rfc/rfc3986.html ~ doesn't need encoding
+            ;
     }
 
     /**
@@ -49,11 +45,7 @@ public class Mutils {
      * @return the decoded value
      */
     public static String urlDecode(String value) {
-        try {
-            return URLDecoder.decode(value, "UTF-8");
-        } catch (UnsupportedEncodingException e) {
-            throw new MuException("Error encoding " + value, e);
-        }
+        return URLDecoder.decode(value, UTF_8);
     }
 
     private Mutils() {

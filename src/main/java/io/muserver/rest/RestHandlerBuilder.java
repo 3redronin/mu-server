@@ -14,14 +14,14 @@ import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.container.PreMatching;
 import jakarta.ws.rs.core.Application;
 import jakarta.ws.rs.ext.*;
+import org.jspecify.annotations.Nullable;
 
 import java.io.InputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.stream.Collectors;
-
-import org.jspecify.annotations.Nullable;
 
 import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
 import static java.util.Arrays.asList;
@@ -586,7 +586,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
                 InputStream cssStream = Objects.requireNonNull(
                     RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css"),
                     "Bundled OpenAPI CSS was not found");
-                Scanner scanner = new Scanner(cssStream, "UTF-8").useDelimiter("\\A");
+                Scanner scanner = new Scanner(cssStream, StandardCharsets.UTF_8).useDelimiter("\\A");
                 openApiHtmlCss = scanner.next();
                 scanner.close();
 
