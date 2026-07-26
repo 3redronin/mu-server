@@ -228,6 +228,7 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
             '}';
     }
 
+    @Override
     public int streamId() {
         return streamId;
     }

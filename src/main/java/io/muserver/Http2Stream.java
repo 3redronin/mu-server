@@ -22,7 +22,7 @@ class Http2Stream implements ResponseInfo {
     private final Http2OutgoingFlowController outgoingFlowControl;
     @Nullable
     private Http2Response response;
-    private Http2StreamState state;
+    private volatile Http2StreamState state;
     private long endTime = 0;
     private final InputStream bodyInputStream;
     private final @Nullable Long declaredRequestBodyLength;
@@ -46,31 +46,8 @@ class Http2Stream implements ResponseInfo {
         return connection.maxFrameSize();
     }
 
-    private int currentWritableDataCredit() {
-        return Math.max(0, Math.min(outgoingFlowControl.credit(), connection.currentWriteCredit()));
-    }
-
-    private boolean waitUntilWritableDataCreditAvailable(long timeout, TimeUnit unit) throws InterruptedException {
-        while (true) {
-            if (outgoingFlowControl.terminated() || !canSendFrames()) {
-                return false;
-            }
-            int streamCredit = outgoingFlowControl.credit();
-            int connectionCredit = connection.currentWriteCredit();
-            if (streamCredit > 0 && connectionCredit > 0) {
-                return true;
-            }
-            if (streamCredit <= 0) {
-                if (!outgoingFlowControl.waitUntilAvailable(1, timeout, unit)) {
-                    return false;
-                }
-            }
-            if (connectionCredit <= 0) {
-                if (!connection.waitUntilWriteCreditAvailable(1, timeout, unit)) {
-                    return false;
-                }
-            }
-        }
+    int withdrawOutgoingCreditUpTo(int maximumBytes) {
+        return outgoingFlowControl.withdrawUpTo(maximumBytes);
     }
 
     @Override
@@ -124,6 +101,10 @@ class Http2Stream implements ResponseInfo {
 
     boolean canSendFrames() {
         return state.canSendEndStream();
+    }
+
+    boolean isClosed() {
+        return state == Http2StreamState.CLOSED;
     }
 
     void onTrailers(Http2HeadersFrame headersFrame) throws Http2Exception {
@@ -359,16 +340,7 @@ class Http2Stream implements ResponseInfo {
         int remaining = length;
         int frameOffset = offset;
         while (remaining > 0) {
-            if (!waitUntilWritableDataCreditAvailable(1, TimeUnit.HOURS)) {
-                if (outgoingFlowControl.terminated() || !canSendFrames()) {
-                    throw new IOException("Stream closed while waiting for flow control credit");
-                }
-                throw new IOException("Timed out waiting for flow control credit");
-            }
-            int frameLength = Math.min(Math.min(remaining, maxFrameSize()), currentWritableDataCredit());
-            if (frameLength <= 0) {
-                continue;
-            }
+            int frameLength = Math.min(remaining, maxFrameSize());
             blockingWrite(new Http2DataFrame(id, false, payload, frameOffset, frameLength));
             frameOffset += frameLength;
             remaining -= frameLength;
@@ -391,16 +363,6 @@ class Http2Stream implements ResponseInfo {
             throw new IllegalStateException("Cannot send data after the stream has been closed. Tried to send " + frame);
         }
 
-        // todo: use a proper timeout
-        int neededCredit = frame.flowControlSize();
-        if (neededCredit != 0) {
-            if (!outgoingFlowControl.waitUntilWithdraw(neededCredit, 1, TimeUnit.HOURS)) {
-                if (outgoingFlowControl.terminated() || !canSendFrames()) {
-                    throw new IOException("Stream closed while waiting for flow control credit");
-                }
-                throw new IOException("Timed out waiting for flow control credit");
-            }
-        }
         WriteTask writeTask = new WriteTask(frame, true);
         connection.write(writeTask);
         if (frame.endStream()) {
@@ -424,6 +386,9 @@ class Http2Stream implements ResponseInfo {
  */
 interface LogicalHttp2Frame {
     void writeTo(Http2Peer connection, OutputStream out) throws IOException;
+    default int streamId() {
+        return 0;
+    }
     default int flowControlSize() {
         return 0;
     }

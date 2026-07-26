@@ -3,8 +3,6 @@ package io.muserver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -15,7 +13,6 @@ class Http2OutgoingFlowController {
     private int credit;
     private boolean terminated;
     private final Lock lock = new ReentrantLock();
-    private final Condition creditAvailable = lock.newCondition();
 
     Http2OutgoingFlowController(int streamId, int initialCredit) {
         this.streamId = streamId;
@@ -39,7 +36,6 @@ class Http2OutgoingFlowController {
         lock.lock();
         try {
             credit = Math.addExact(credit, diff);
-            creditAvailable.signalAll();
             log.info("new credit for stream " + streamId + " is " + credit);
         } catch (ArithmeticException e) {
             throw streamId == 0
@@ -59,51 +55,12 @@ class Http2OutgoingFlowController {
         }
     }
 
-    boolean waitUntilAvailable(int bytes, long timeout, TimeUnit unit) throws InterruptedException {
-        if (bytes < 0) throw new IllegalArgumentException("Negative availability check");
-        lock.lock();
-        try {
-            while (bytes > credit) {
-                if (terminated) {
-                    return false;
-                }
-                var signalled = creditAvailable.await(timeout, unit);
-                if (!signalled && !terminated) {
-                    return false;
-                }
-            }
-            return true;
-        } finally {
-            lock.unlock();
-        }
-    }
-
-    boolean waitUntilWithdraw(int bytes, long timeout, TimeUnit unit) throws InterruptedException {
-        if (bytes < 0) throw new IllegalArgumentException("Negative withdrawal");
-        lock.lock();
-        try {
-            while (bytes > credit) {
-                if (terminated) {
-                    return false;
-                }
-                var signalled = creditAvailable.await(timeout, unit);
-                if (!signalled && !terminated) {
-                    return false;
-                }
-            }
-            credit -= bytes;
-        } finally {
-            lock.unlock();
-        }
-        return true;
-    }
-
     boolean withdrawIfCan(int bytes) {
         if (bytes == 0) return true;
         if (bytes < 0) throw new IllegalArgumentException("Negative withdrawal");
         lock.lock();
         try {
-            if (bytes <= credit) {
+            if (!terminated && bytes <= credit) {
                 log.info("withdrawing " + bytes + " bytes from " + streamId);
                 if (bytes == 65535) {
                     log.info("hmmm");
@@ -117,11 +74,27 @@ class Http2OutgoingFlowController {
         }
     }
 
+    int withdrawUpTo(int maximumBytes) {
+        if (maximumBytes < 0) throw new IllegalArgumentException("Negative withdrawal");
+        if (maximumBytes == 0) return 0;
+        lock.lock();
+        try {
+            if (terminated || credit <= 0) {
+                return 0;
+            }
+            int withdrawn = Math.min(maximumBytes, credit);
+            credit -= withdrawn;
+            log.info("withdrawing {} bytes from {}", withdrawn, streamId);
+            return withdrawn;
+        } finally {
+            lock.unlock();
+        }
+    }
+
     void terminate() {
         lock.lock();
         try {
             terminated = true;
-            creditAvailable.signalAll();
         } finally {
             lock.unlock();
         }

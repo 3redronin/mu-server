@@ -127,11 +127,13 @@ Only coordinator processing can transition this state.
 An outbound frame command is validated and its state transition reserved by the
 coordinator before it becomes pending for socket output. A reset closes the
 stream, fails or discards all unsent frames for that stream, and prevents later
-commands from being accepted.
+commands from being accepted. The exception is an additional `RST_STREAM`
+generated in response to a frame that arrives on the closed stream, as permitted
+by RFC 9113 Section 5.4.2.
 
-`RST_STREAM` is therefore the final frame emitted for a stream. Frames already
-written before the reset command is processed remain validly ordered before the
-reset.
+`RST_STREAM` is therefore the final non-priority frame emitted for a stream,
+apart from those permitted additional resets. Frames already written before the
+reset command is processed remain validly ordered before the reset.
 
 ## Flow control
 
@@ -198,8 +200,8 @@ No lock is held while:
 
 1. Inbound frame events from the reader are processed in wire order.
 2. Every protocol state mutation has the coordinator as its linearization point.
-3. No frame other than permitted priority information is emitted after
-   `RST_STREAM`.
+3. No frame other than permitted priority information or a permitted additional
+   `RST_STREAM` is emitted after `RST_STREAM`.
 4. No DATA is emitted unless both connection and stream credit were reserved.
 5. Reset or connection failure completes every affected pending write with an
    error.
