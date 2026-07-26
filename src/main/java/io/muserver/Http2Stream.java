@@ -14,12 +14,6 @@ class Http2Stream implements ResponseInfo {
 
     private static final Logger log = LoggerFactory.getLogger(Http2Stream.class);
 
-
-    private enum State {
-        /* IDLE, RESERVED_LOCAL, RESERVED_REMOTE, */ OPEN, HALF_CLOSED_LOCAL, HALF_CLOSED_REMOTE, CLOSED
-
-
-    }
     final int id;
     private final Http2Connection connection;
     final Mu3Request request;
@@ -28,16 +22,16 @@ class Http2Stream implements ResponseInfo {
     private final Http2OutgoingFlowController outgoingFlowControl;
     @Nullable
     private Http2Response response;
-    private State state;
+    private Http2StreamState state;
     private long endTime = 0;
     private final InputStream bodyInputStream;
     private final @Nullable Long declaredRequestBodyLength;
     private long receivedRequestBodyLength;
-    Http2Stream(int id, Http2Connection connection, State state, Mu3Request request, Http2IncomingFlowController incomingFlowControl, Http2OutgoingFlowController outgoingFlowControl, InputStream bodyInputStream) {
+    Http2Stream(int id, Http2Connection connection, Http2StreamState state, Mu3Request request, Http2IncomingFlowController incomingFlowControl, Http2OutgoingFlowController outgoingFlowControl, InputStream bodyInputStream) {
         this(id, connection, state, request, incomingFlowControl, outgoingFlowControl, bodyInputStream, request.declaredBodySize().size());
     }
 
-    Http2Stream(int id, Http2Connection connection, State state, Mu3Request request, Http2IncomingFlowController incomingFlowControl, Http2OutgoingFlowController outgoingFlowControl, InputStream bodyInputStream, @Nullable Long declaredRequestBodyLength) {
+    Http2Stream(int id, Http2Connection connection, Http2StreamState state, Mu3Request request, Http2IncomingFlowController incomingFlowControl, Http2OutgoingFlowController outgoingFlowControl, InputStream bodyInputStream, @Nullable Long declaredRequestBodyLength) {
         this.id = id;
         this.connection = connection;
         this.state = state;
@@ -100,7 +94,7 @@ class Http2Stream implements ResponseInfo {
     }
 
     void onReset(Http2ResetStreamFrame rstStream) {
-        state = State.CLOSED;
+        state = state.reset();
         outgoingFlowControl.terminate();
         Http2Response currentResponse = requiredResponse();
         if (!currentResponse.responseState().endState()) {
@@ -117,7 +111,7 @@ class Http2Stream implements ResponseInfo {
     }
 
     void cancel(IOException reason, boolean refundUnreadData) {
-        state = State.CLOSED;
+        state = state.reset();
         outgoingFlowControl.terminate();
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).cancel(reason, refundUnreadData);
@@ -125,16 +119,16 @@ class Http2Stream implements ResponseInfo {
     }
 
     boolean canReceiveData() {
-        return state == State.OPEN || state == State.HALF_CLOSED_LOCAL;
+        return state.canReceiveEndStream();
     }
 
     boolean canSendFrames() {
-        return state == State.OPEN || state == State.HALF_CLOSED_REMOTE;
+        return state.canSendEndStream();
     }
 
     void onTrailers(Http2HeadersFrame headersFrame) throws Http2Exception {
         if (!canReceiveData()) {
-            state = State.CLOSED;
+            state = state.reset();
             throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Invalid state for trailers", id);
         }
         if (!headersFrame.endStream()) {
@@ -150,22 +144,13 @@ class Http2Stream implements ResponseInfo {
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).onTrailers(headersFrame.headers());
         }
-        switch (state) {
-            case OPEN:
-                state = State.HALF_CLOSED_REMOTE;
-                break;
-            case HALF_CLOSED_LOCAL:
-                state = State.CLOSED;
-                break;
-            default:
-                throw new IllegalStateException("Invalid state for trailers: " + state);
-        }
+        state = state.remoteEndStream();
     }
 
     void onData(int flowControlSize, Http2DataFrame dataFrame) throws Http2Exception {
         // todo: thread safety
         if (!canReceiveData()) {
-            state = State.CLOSED;
+            state = state.reset();
             throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Invalid state for data", id);
         }
 
@@ -185,16 +170,7 @@ class Http2Stream implements ResponseInfo {
             }
             ((Http2BodyInputStream)bodyInputStream).onData(dataFrame, flowControlSize);
             if (dataFrame.endStream()) {
-                switch (state) {
-                    case OPEN:
-                        state = State.HALF_CLOSED_REMOTE;
-                        break;
-                    case HALF_CLOSED_LOCAL:
-                        state = State.CLOSED;
-                        break;
-                    default:
-                        throw new IllegalStateException("Invalid state for data: " + state);
-                }
+                state = state.remoteEndStream();
             }
         } else {
             throw new Http2Exception(Http2ErrorCode.INTERNAL_ERROR, "Received data on a stream with no body", id);
@@ -358,7 +334,7 @@ class Http2Stream implements ResponseInfo {
         }
 
 
-        var state = headerFrame.endStream() ? State.HALF_CLOSED_REMOTE : State.OPEN;
+        var state = headerFrame.endStream() ? Http2StreamState.HALF_CLOSED_REMOTE : Http2StreamState.OPEN;
         Http2Stream stream = new Http2Stream(id, connection, state, request, incomingFlowControl, outgoingFlowControl, body, cl);
         stream.response = new Http2Response(stream, new FieldBlock(), request);
         request.setResponse(stream.response);
@@ -407,11 +383,11 @@ class Http2Stream implements ResponseInfo {
         // DATA frames are subject to flow control and can only be sent when a stream is in the "open" or "half-closed (remote)" state
 
         // todo: synchronise access to the state
-        if (state == State.HALF_CLOSED_LOCAL) {
+        if (state == Http2StreamState.HALF_CLOSED_LOCAL) {
             if (!(frame instanceof Http2WindowUpdate) && !(frame instanceof Http2ResetStreamFrame)) {
                 throw new IllegalStateException("Cannot send data after the stream has been half closed locally. Tried to send " + frame);
             }
-        } else if (state == State.CLOSED) {
+        } else if (state == Http2StreamState.CLOSED) {
             throw new IllegalStateException("Cannot send data after the stream has been closed. Tried to send " + frame);
         }
 
@@ -428,13 +404,9 @@ class Http2Stream implements ResponseInfo {
         WriteTask writeTask = new WriteTask(frame, true);
         connection.write(writeTask);
         if (frame.endStream()) {
-            if (state == State.OPEN) {
-                state = State.HALF_CLOSED_LOCAL;
-            } else if (state == State.HALF_CLOSED_REMOTE) {
-                state = State.CLOSED;
-            }
+            state = state.localEndStream();
         } else if (frame instanceof Http2ResetStreamFrame) {
-            state = State.CLOSED;
+            state = state.reset();
         }
         writeTask.await(2, TimeUnit.HOURS);
     }
