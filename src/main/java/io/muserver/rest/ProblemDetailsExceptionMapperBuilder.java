@@ -1,5 +1,7 @@
 package io.muserver.rest;
 
+import jakarta.ws.rs.WebApplicationException;
+
 /**
  * Builds {@link ProblemDetailsExceptionMapper} instances.
  * <p>
@@ -37,9 +39,17 @@ package io.muserver.rest;
  * }
  * }</pre>
  * <p>Note: all values are optional.</p>
+ * <p>
+ * Generated responses are produced with media type {@code application/problem+json} and do not participate in response
+ * content negotiation.
+ * </p>
+ * <p>
+ * If a {@link WebApplicationException} includes a custom response entity and media type, that response is preserved by the
+ * mapper; no problem-details envelope is applied.
+ * </p>
  */
 public class ProblemDetailsExceptionMapperBuilder {
-    private boolean log4xxProblemDetailsInstanceIds = true;
+    private boolean log4xxProblemDetailsInstanceIds;
     private boolean log5xxProblemDetailsInstanceIds = true;
 
     /**
@@ -58,7 +68,10 @@ public class ProblemDetailsExceptionMapperBuilder {
      * in server logs. See {@link ProblemDetailsExceptionBuilder#withInstance(java.net.URI)} for setting your own
      * instance ID.
      * </p>
-     * <p>This is enabled by default.</p>
+     * <p>
+     * This is disabled by default because client errors can be routine and client-controlled. Enable it when
+     * correlation of individual 4xx responses is worth the additional logging volume.
+     * </p>
      *
      * @param log4xxProblemDetailsInstanceIds {@code true} to log generated instance URIs for 4xx responses.
      * @return This builder.

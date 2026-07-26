@@ -435,7 +435,8 @@ public class FilterTest {
             ).start();
         try (Response resp = call(request().url(server.uri().resolve("/something").toString()))) {
             assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), is("<h1>400 Bad Request</h1><p>Bad!!!</p>"));
+            assertThat(resp.header("content-type"), is("application/problem+json"));
+            assertThat(resp.body().string(), containsString("\"title\":\"Bad!!!\""));
         }
     }
 
@@ -954,7 +955,7 @@ public class FilterTest {
     }
 
     @Test
-    public void responseFilterFailureDoesNotRecursivelyProcessErrorResponse() throws IOException {
+    public void responseFilterFailureOnMappedResponseUsesBoundedServerFallback() throws IOException {
         AtomicInteger responseFilterCalls = new AtomicInteger();
 
         server = httpsServerForTest()
@@ -973,10 +974,13 @@ public class FilterTest {
 
         try (Response response = call(request(server.uri().resolve("/broken")))) {
             assertThat(response.code(), equalTo(500));
-            assertThat(response.body().string(), containsString("500 Internal Server Error"));
+            assertThat(response.header("Content-Type"), containsString("text/html"));
+            assertThat(response.body().string(), allOf(
+                containsString("<h1>500 Internal Server Error</h1>"),
+                containsString("ErrorID=")));
         }
 
-        assertThat(responseFilterCalls.get(), equalTo(1));
+        assertThat(responseFilterCalls.get(), equalTo(2));
     }
 
     @Test
@@ -1036,6 +1040,37 @@ public class FilterTest {
             assertThat(response.code(), equalTo(200));
             assertThat(response.body().string(), is("100 filtered"));
         }
+    }
+
+    @Test
+    public void applicationMappedResponseIsFilteredAfterResponseFilterFailure() throws IOException {
+        AtomicInteger mapperCalls = new AtomicInteger();
+        AtomicInteger responseFilterCalls = new AtomicInteger();
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new BrokenResource())
+                .addExceptionMapper(IllegalStateException.class, exception -> {
+                    mapperCalls.incrementAndGet();
+                    return jakarta.ws.rs.core.Response.status(422)
+                        .entity("mapped")
+                        .type(jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE)
+                        .build();
+                })
+                .addResponseFilter((requestContext, responseContext) -> {
+                    int call = responseFilterCalls.incrementAndGet();
+                    if (call == 1) {
+                        throw new IllegalStateException("first response failed");
+                    }
+                    responseContext.setEntity(responseContext.getEntity() + " filtered");
+                }))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/broken")))) {
+            assertThat(response.code(), equalTo(422));
+            assertThat(response.body().string(), equalTo("mapped filtered"));
+        }
+        assertThat(mapperCalls.get(), equalTo(1));
+        assertThat(responseFilterCalls.get(), equalTo(2));
     }
 
     @Test

@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import java.lang.reflect.Type;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.Path;
@@ -17,7 +18,6 @@ import scaffolding.ServerUtils;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Type;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.CoreMatchers.is;
@@ -80,8 +80,103 @@ public class ExceptionMappingProviderTest {
             .addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(500));
-            assertThat(resp.body().string(), containsString("500 Internal Server Error"));
+            assertThat(resp.header("content-type"), is("application/problem+json"));
+            assertThat(resp.body().string(), containsString("\"status\":500"));
         }
+    }
+
+    @Test
+    public void defaultMapperCanBeReplacedByMoreSpecificThrowableMapping() throws IOException {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get() {
+                throw new IllegalStateException("boom");
+            }
+        }
+        this.server = ServerUtils.httpsServerForTest()
+            .addHandler(
+                restHandler(new Sample())
+                    .addExceptionMapper(Throwable.class, exception -> jakarta.ws.rs.core.Response.status(555)
+                        .entity("replaced")
+                        .type(jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE)
+                        .build())
+            ).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(resp.code(), is(555));
+            assertThat(resp.body().string(), is("replaced"));
+        }
+    }
+
+    @Test
+    public void removingDefaultThrowableMapperRestoresLegacyHtmlHandling() throws IOException {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get() throws ConcurrentUpdateException {
+                throw new ConcurrentUpdateException();
+            }
+        }
+        this.server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Sample()).removeExceptionMapper(Throwable.class)).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(resp.code(), is(500));
+            assertThat(resp.header("content-type"), containsString("text/html"));
+            String body = resp.body().string();
+            assertThat(body, containsString("500 Internal Server Error"));
+            assertThat(body, containsString("ErrorID="));
+        }
+    }
+
+    @Test
+    public void removingAbsentMapperIsNoOp() throws IOException {
+        @Path("samples")
+        class Sample {
+            @GET
+            public String get() {
+                throw new IllegalStateException("boom");
+            }
+        }
+        this.server = ServerUtils.httpsServerForTest()
+            .addHandler(
+                restHandler(new Sample())
+                    .removeExceptionMapper(UnsupportedOperationException.class)
+            ).start();
+        try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(resp.code(), is(500));
+            assertThat(resp.header("content-type"), is("application/problem+json"));
+        }
+    }
+
+    @Test
+    public void addingNullMapperThrowsAndInstructsUseRemoveMapperMethod() throws IOException {
+        try {
+            RestHandlerBuilder
+                .restHandler(new Object())
+                .addExceptionMapper(ConcurrentUpdateException.class, null);
+            throw new AssertionError("Expected IllegalArgumentException");
+        } catch (IllegalArgumentException e) {
+            assertThat(e.getMessage(), containsString("removeExceptionMapper"));
+        }
+
+        try {
+            RestHandlerBuilder
+                .restHandler(new Object())
+                .removeExceptionMapper(null);
+            throw new AssertionError("Expected IllegalArgumentException");
+        } catch (IllegalArgumentException e) {
+            // pass
+        }
+
+        try {
+            RestHandlerBuilder
+                .restHandler(new Object())
+                .addExceptionMapper((Class<IllegalArgumentException>) null, exception -> null);
+            throw new AssertionError("Expected IllegalArgumentException");
+        } catch (IllegalArgumentException e) {
+            assertThat(e.getMessage(), is("exceptionClass cannot be null"));
+        }
+
     }
 
     @Test
