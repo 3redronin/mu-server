@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.Method;
+import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.core.MediaType;
 import org.jspecify.annotations.Nullable;
@@ -8,6 +9,7 @@ import org.jspecify.annotations.Nullable;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Parameter;
 import java.lang.reflect.Type;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -25,9 +27,11 @@ final class ResourceClassIntrospection {
     };
 
     final List<MethodInfo> methods;
+    final List<String> visibilityWarnings;
 
-    private ResourceClassIntrospection(List<MethodInfo> methods) {
+    private ResourceClassIntrospection(List<MethodInfo> methods, List<String> visibilityWarnings) {
         this.methods = Collections.unmodifiableList(new ArrayList<>(methods));
+        this.visibilityWarnings = Collections.unmodifiableList(new ArrayList<>(visibilityWarnings));
     }
 
     static ResourceClassIntrospection forClass(Class<?> resourceClass) {
@@ -78,7 +82,40 @@ final class ResourceClassIntrospection {
                 Arrays.asList(annotationSource.getAnnotations())
             ));
         }
-        return new ResourceClassIntrospection(methods);
+        return new ResourceClassIntrospection(methods, visibilityWarnings(resourceClass));
+    }
+
+    private static List<String> visibilityWarnings(Class<?> resourceClass) {
+        List<String> warnings = new ArrayList<>();
+        try {
+            for (Class<?> current = resourceClass;
+                 current != null && current != Object.class;
+                 current = current.getSuperclass()) {
+                for (java.lang.reflect.Method method : current.getDeclaredMethods()) {
+                    if (!Modifier.isPublic(method.getModifiers()) && isResourceMethodOrLocator(method)) {
+                        warnings.add("The JAX-RS annotated method " + method.toGenericString()
+                            + " cannot itself be exposed as a resource method or sub-resource locator because only public methods may be exposed.");
+                    }
+                }
+            }
+            Collections.sort(warnings);
+        } catch (LinkageError | RuntimeException ignored) {
+            // A best-effort diagnostic must not prevent an otherwise usable resource class from registering.
+            warnings.clear();
+        }
+        return warnings;
+    }
+
+    private static boolean isResourceMethodOrLocator(java.lang.reflect.Method method) {
+        if (method.isAnnotationPresent(Path.class)) {
+            return true;
+        }
+        for (Annotation annotation : method.getDeclaredAnnotations()) {
+            if (annotation.annotationType().isAnnotationPresent(HttpMethod.class)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static final class MethodInfo {

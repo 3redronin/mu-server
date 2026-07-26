@@ -1,9 +1,11 @@
 package io.muserver.rest;
 
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.OPTIONS;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.ext.ParamConverter;
@@ -11,6 +13,10 @@ import jakarta.ws.rs.ext.ParamConverterProvider;
 import org.junit.Test;
 
 import java.lang.annotation.Annotation;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -23,6 +29,7 @@ import java.util.concurrent.Future;
 
 import static java.net.URI.create;
 import static java.util.Collections.emptyList;
+import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.junit.Assert.assertSame;
@@ -155,6 +162,8 @@ public class ResourceClassTest {
             () -> method.methodAnnotations.add(null));
         assertThrows(UnsupportedOperationException.class,
             () -> param.annotations.add(null));
+        assertThrows(UnsupportedOperationException.class,
+            () -> model.visibilityWarnings.add("warning"));
     }
 
     @Test
@@ -179,6 +188,20 @@ public class ResourceClassTest {
             assertThat(expected.methods.get(0).httpMethod, equalTo(io.muserver.Method.GET));
         } finally {
             executor.shutdownNow();
+        }
+    }
+
+    @Test
+    public void warnsAboutNonPublicResourceMethodsAndLocators() {
+        List<String> warnings = ResourceClass.nonPublicResourceMethodWarnings(ResourceWithNonPublicMethods.class);
+
+        assertThat(warnings, hasSize(4));
+        assertThat(warnings.get(0), containsString("ResourceWithNonPublicMethods.packagePrivateResourceMethod()"));
+        assertThat(warnings.get(1), containsString("ResourceWithNonPublicMethods.privateResourceMethod()"));
+        assertThat(warnings.get(2), containsString("ResourceWithNonPublicMethods.protectedLocator()"));
+        assertThat(warnings.get(3), containsString("ResourceWithNonPublicMethods.protectedSubResourceMethod()"));
+        for (String warning : warnings) {
+            assertThat(warning, containsString("cannot itself be exposed as a resource method or sub-resource locator because only public methods may be exposed."));
         }
     }
 
@@ -220,6 +243,32 @@ public class ResourceClassTest {
             }
         };
         return Arrays.asList(provider, new BuiltInParamConverterProvider());
+    }
+
+    @Test
+    public void doesNotWarnAboutPublicOrUnrelatedAnnotatedMethods() {
+        assertThat(ResourceClass.nonPublicResourceMethodWarnings(ResourceWithoutVisibilityProblems.class), empty());
+    }
+
+    @Test
+    public void warnsAboutNonPublicAnnotatedMethodsOnSuperclasses() {
+        assertThat(ResourceClass.nonPublicResourceMethodWarnings(ResourceWithInheritedVisibilityProblem.class),
+            contains(containsString("BaseResourceWithVisibilityProblem.hidden()")));
+    }
+
+    @Test
+    public void warningDoesNotClaimInheritedAnnotationSourceIsIgnored() {
+        ResourceClass resourceClass = ResourceClass.fromObject(new ResourceWithPublicOverride(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
+
+        assertThat(resourceClass.resourceMethods, hasSize(1));
+        assertThat(ResourceClass.nonPublicResourceMethodWarnings(ResourceWithPublicOverride.class),
+            contains(containsString("BaseResourceWithPublicOverride.inherited() cannot itself be exposed")));
+    }
+
+    @Test
+    public void onlyLogsVisibilityWarningsOncePerResourceClass() {
+        assertThat(ResourceClass.shouldLogVisibilityWarnings(ResourceForDeduplicationTest.class), equalTo(true));
+        assertThat(ResourceClass.shouldLogVisibilityWarnings(ResourceForDeduplicationTest.class), equalTo(false));
     }
 
     @Path("/api/fruits")
@@ -365,5 +414,74 @@ public class ResourceClassTest {
             return "ok";
         }
     }
+
+    @Path("/api/non-public")
+    private static class ResourceWithNonPublicMethods {
+        @GET
+        String packagePrivateResourceMethod() {
+            return "";
+        }
+
+        @GET
+        private String privateResourceMethod() {
+            return "";
+        }
+
+        @Path("locator")
+        protected Object protectedLocator() {
+            return new Object();
+        }
+
+        @CustomGET
+        @Path("custom")
+        protected String protectedSubResourceMethod() {
+            return "";
+        }
+    }
+
+    @Path("/api/public")
+    private static class ResourceWithoutVisibilityProblems {
+        @GET
+        public String publicResourceMethod() {
+            return "";
+        }
+
+        @Produces("text/plain")
+        private String helper() {
+            return "";
+        }
+    }
+
+    private static class BaseResourceWithVisibilityProblem {
+        @GET
+        protected String hidden() {
+            return "";
+        }
+    }
+
+    @Path("/api/inherited-problem")
+    private static class ResourceWithInheritedVisibilityProblem extends BaseResourceWithVisibilityProblem { }
+
+    private static class BaseResourceWithPublicOverride {
+        @GET
+        protected String inherited() {
+            return "";
+        }
+    }
+
+    @Path("/api/public-override")
+    private static class ResourceWithPublicOverride extends BaseResourceWithPublicOverride {
+        @Override
+        public String inherited() {
+            return "";
+        }
+    }
+
+    private static class ResourceForDeduplicationTest { }
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @HttpMethod(HttpMethod.GET)
+    private @interface CustomGET { }
 
 }
