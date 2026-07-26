@@ -6,8 +6,8 @@ import java.util.Objects;
 /**
  * Configuration builder for HTTP2 settings.
  *
- * <p>Note that by default, HTTP2 is enabled with recommended settings, so this class generally does not
- * need to be used unless very specific HTTP2 requirements are needed, or if HTTP2 should be disabled.</p>
+ * <p>This builder starts with HTTP2 disabled. It is typically created internally when HTTPS starts, or can be
+ * used directly when you want to explicitly enable or tune HTTP2 behavior.</p>
  *
  * <p>Note that any fields prefixed with &quot;initial&quot; are just that: the initial settings of a connection.
  * These settings may change during the life of an HTTP2 connection.</p>
@@ -33,6 +33,8 @@ public class Http2ConfigBuilder {
     }
 
     /**
+     * Indicates whether this configuration enables HTTP/2 support.
+     *
      * @return <code>true</code> if HTTP2 is enabled for this server; otherwise <code>false</code>.
      */
     public boolean enabled() {
@@ -40,7 +42,9 @@ public class Http2ConfigBuilder {
     }
 
     /**
-     * Controls whether HTTP2 is enabled on this server or not. Defaults to <code>true</code>.
+     * Controls whether HTTP2 is enabled on this server or not.
+     * Defaults to <code>false</code> on a new builder.
+     *
      * @param enabled <code>true</code> to enable HTTP2
      * @return This builder
      */
@@ -265,8 +269,9 @@ public class Http2ConfigBuilder {
     }
 
     /**
-     * Creates the HTTP2 settings object
-     * @return A new Http2Config object
+     * Builds an immutable HTTP/2 configuration from the current builder state.
+     *
+     * @return A new {@link Http2Config} object.
      */
     public Http2Config build() {
 
@@ -277,24 +282,27 @@ public class Http2ConfigBuilder {
     }
 
     /**
-     * Creates a new config where HTTP2 is disabled
-     * @return A new builder
+     * Creates a new HTTP/2 config builder with HTTP/2 disabled.
+     *
+     * @return A new builder.
      */
     public static Http2ConfigBuilder http2Config() {
         return new Http2ConfigBuilder();
     }
 
     /**
-     * Creates a new config where HTTP2 is enabled
-     * @return A new builder
+     * Creates a new HTTP/2 config builder with HTTP/2 enabled.
+     *
+     * @return A new builder.
      */
     public static Http2ConfigBuilder http2Enabled() {
         return new Http2ConfigBuilder().enabled(true);
     }
 
     /**
-     * Creates a new config where HTTP2 is disabled
-     * @return A new builder
+     * Creates a new HTTP/2 config builder with HTTP/2 disabled.
+     *
+     * @return A new builder.
      */
     public static Http2ConfigBuilder http2Disabled() {
         return new Http2ConfigBuilder().enabled(false);

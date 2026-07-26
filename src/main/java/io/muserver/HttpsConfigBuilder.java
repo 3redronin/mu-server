@@ -18,8 +18,11 @@ import java.util.stream.Collectors;
 import static java.util.Arrays.asList;
 
 /**
- * A builder for specifying HTTPS config.
- * <p>To use HTTPS in your server, create an HTTPS Config builder and pass it to {@link MuServerBuilder#withHttpsConfig(HttpsConfigBuilder)}</p>
+ * A builder for specifying HTTPS configuration.
+ * <p>To use HTTPS in your server, create an HTTPS config builder and pass it to
+ * {@link MuServerBuilder#withHttpsConfig(HttpsConfigBuilder)}.</p>
+ * <p>A new builder does not contain a keystore by default; if one is not supplied, mu-server falls back to
+ * {@link #unsignedLocalhost()} when HTTPS starts.</p>
  */
 public class HttpsConfigBuilder {
 
@@ -246,7 +249,9 @@ public class HttpsConfigBuilder {
     }
 
     /**
-     * @return Creates an SSLContext
+     * Builds an {@link SSLContext} from the current HTTPS configuration.
+     *
+     * @return The configured SSL context.
      * @deprecated Pass this builder itself to the HttpsConfig rather than building an SSLContext
      */
     @Deprecated
@@ -406,7 +411,9 @@ public class HttpsConfigBuilder {
 
 
     /**
-     * @return a new HttpsConfig builder
+     * Creates a new HTTPS config builder with no keystore explicitly configured.
+     *
+     * @return A new HTTPS config builder.
      */
     public static HttpsConfigBuilder httpsConfig() {
         return new HttpsConfigBuilder();

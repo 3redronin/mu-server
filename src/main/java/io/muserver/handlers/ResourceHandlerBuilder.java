@@ -106,42 +106,54 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     }
 
     /**
-     * @return The current value of this property
+     * Gets the formatter used for the "Last modified" column in directory listings.
+     *
+     * @return The configured formatter, or <code>null</code> to use the default formatter when directory listing is enabled.
      */
     public @Nullable DateTimeFormatter directoryListingDateFormatter() {
         return directoryListingDateFormatter;
     }
 
     /**
-     * @return The current value of this property
+     * Gets the file-extension-to-resource-type mappings used for static resources.
+     *
+     * @return An unmodifiable view of the configured extension mappings.
      */
     public Map<String, ResourceType> extensionToResourceType() {
         return Collections.unmodifiableMap(extensionToResourceType);
     }
 
     /**
-     * @return The current value of this property
+     * Gets the default file served for directory requests.
+     *
+     * @return The configured default file name, or <code>null</code> if directory requests should not resolve to a default file.
      */
     public @Nullable String defaultFile() {
         return defaultFile;
     }
 
     /**
-     * @return The current value of this property
+     * Indicates whether HTML directory listings are enabled.
+     *
+     * @return <code>true</code> if directory listings are enabled; otherwise <code>false</code>.
      */
     public boolean directoryListingEnabled() {
         return directoryListingEnabled;
     }
 
     /**
-     * @return The current value of this property
+     * Gets the CSS used for HTML directory listings.
+     *
+     * @return The configured CSS, or <code>null</code> to use the built-in stylesheet when directory listing is enabled.
      */
     public @Nullable String directoryListingCss() {
         return directoryListingCss;
     }
 
     /**
-     * @return The current value of this property
+     * Gets the resource customizer that can inspect or alter responses for static resources.
+     *
+     * @return The configured resource customizer, or <code>null</code> if none is set.
      */
     public @Nullable ResourceCustomizer resourceCustomizer() {
         return resourceCustomizer;

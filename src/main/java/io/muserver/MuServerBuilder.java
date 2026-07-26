@@ -46,8 +46,10 @@ public class MuServerBuilder {
     private @Nullable Path tempDirectory;
 
     /**
-     * @param port The HTTP port to use. A value of 0 will have a random port assigned; a value of -1 will
-     *             result in no HTTP connector.
+     * Sets the HTTP port to listen on.
+     *
+     * @param port The HTTP port to use. A value of <code>0</code> asks the operating system to assign an
+     *             available port when the server starts; a value of <code>-1</code> disables the HTTP connector.
      * @return The current Mu Server Builder
      */
     public MuServerBuilder withHttpPort(int port) {
@@ -68,6 +70,8 @@ public class MuServerBuilder {
     }
 
     /**
+     * Sets whether a JVM shutdown hook should stop the server automatically.
+     *
      * @param stopServerOnShutdown If true, then a shutdown hook which stops this server will be added to the JVM Runtime
      * @return The current Mu Server Builder
      */
@@ -112,9 +116,11 @@ public class MuServerBuilder {
     }
 
     /**
-     * Sets the HTTPS config. Defaults to {@link HttpsConfigBuilder#unsignedLocalhost()}}
+     * Sets the HTTPS configuration to use when the HTTPS connector is enabled.
      *
-     * @param httpsConfig An HTTPS Config builder.
+     * @param httpsConfig An HTTPS config builder, or <code>null</code> to use the default HTTPS configuration
+     *                    from {@link HttpsConfigBuilder#unsignedLocalhost()}, which creates a self-signed
+     *                    certificate for localhost development.
      * @return The current Mu Server Builder
      */
     public MuServerBuilder withHttpsConfig(@Nullable HttpsConfigBuilder httpsConfig) {
@@ -142,10 +148,11 @@ public class MuServerBuilder {
 
 
     /**
-     * Sets the HTTPS port to use. To set the SSL certificate config, see {@link #withHttpsConfig(HttpsConfigBuilder)}
+     * Sets the HTTPS port to listen on.
+     * To set the TLS certificate configuration, see {@link #withHttpsConfig(HttpsConfigBuilder)}.
      *
-     * @param port A value of 0 will result in a random port being assigned; a value of -1 will
-     *             disable HTTPS.
+     * @param port A value of <code>0</code> asks the operating system to assign an available port when the server
+     *             starts; a value of <code>-1</code> disables the HTTPS connector.
      * @return The current Mu Server builder
      */
     public MuServerBuilder withHttpsPort(int port) {
@@ -154,9 +161,9 @@ public class MuServerBuilder {
     }
 
     /**
-     * Sets the configuration for HTTP2
+     * Sets the HTTP/2 configuration for this server.
      *
-     * @param http2Config A config
+     * @param http2Config The HTTP/2 configuration to use.
      * @return The current Mu Server builder
      * @see Http2ConfigBuilder
      */
@@ -166,9 +173,9 @@ public class MuServerBuilder {
     }
 
     /**
-     * Sets the configuration for HTTP2
+     * Sets the HTTP/2 configuration for this server from a builder.
      *
-     * @param http2Config A config
+     * @param http2Config A builder for the HTTP/2 configuration, or <code>null</code> to leave the current setting unchanged.
      * @return The current Mu Server builder
      * @see Http2ConfigBuilder
      */
@@ -429,7 +436,9 @@ public class MuServerBuilder {
     }
 
     /**
-     * @return The current value of this property
+     * Gets the configured minimum size for gzip compression.
+     *
+     * @return This method always throws because gzip settings are now exposed via {@link #contentEncoders()}.
      * @deprecated use {@link #contentEncoders()} to find current settings
      */
     @Deprecated
@@ -438,35 +447,47 @@ public class MuServerBuilder {
     }
 
     /**
-     * @return The current value of this property
+     * Gets the configured HTTP port.
+     *
+     * @return The configured HTTP port, where <code>-1</code> means HTTP is disabled and <code>0</code> means an
+     * ephemeral port will be chosen when the server starts.
      */
     public int httpPort() {
         return httpPort;
     }
 
     /**
-     * @return The current value of this property
+     * Gets the configured HTTPS port.
+     *
+     * @return The configured HTTPS port, where <code>-1</code> means HTTPS is disabled and <code>0</code> means an
+     * ephemeral port will be chosen when the server starts.
      */
     public int httpsPort() {
         return httpsPort;
     }
 
     /**
-     * @return The current value of this property
+     * Gets the maximum allowed size of the request headers.
+     *
+     * @return The header size limit in bytes.
      */
     public int maxHeadersSize() {
         return maxHeadersSize;
     }
 
     /**
-     * @return The current value of this property
+     * Gets the maximum allowed URL length.
+     *
+     * @return The URL length limit in characters.
      */
     public int maxUrlSize() {
         return maxUrlSize;
     }
 
     /**
-     * @return returns 0
+     * Gets the configured number of NIO threads.
+     *
+     * @return Always returns <code>0</code> because NIO thread configuration is obsolete.
      * @deprecated There are no long nio threads in use
      */
     @Deprecated
@@ -475,14 +496,18 @@ public class MuServerBuilder {
     }
 
     /**
-     * @return The current value of this property
+     * Gets the request handlers registered with this builder.
+     *
+     * @return An unmodifiable view of the configured handlers in registration order.
      */
     public List<MuHandler> handlers() {
         return Collections.unmodifiableList(handlers);
     }
 
     /**
-     * @return The current value of this property
+     * Indicates whether gzip encoding is currently enabled.
+     *
+     * @return True if the default encoders are in use or a gzip encoder is explicitly configured.
      * @deprecated check {@link #contentEncoders()} to see which encoders are configured
      */
     @Deprecated
@@ -491,7 +516,9 @@ public class MuServerBuilder {
     }
 
     /**
-     * @return The current value of this property
+     * Gets the MIME types configured for gzip compression.
+     *
+     * @return This method always throws because encoder configuration is now exposed via {@link #contentEncoders()}.
      * @deprecated encoders should be configured with {@link #withContentEncoders(List)}
      */
     @Deprecated
@@ -500,21 +527,27 @@ public class MuServerBuilder {
     }
 
     /**
-     * @return The current value of this property
+     * Indicates whether a JVM shutdown hook will be registered for the server.
+     *
+     * @return True if the server should be stopped automatically during JVM shutdown.
      */
     public boolean addShutdownHook() {
         return addShutdownHook;
     }
 
     /**
-     * @return The current value of this property
+     * Gets the network interface host name or address to bind to.
+     *
+     * @return The configured host, or <code>null</code> to use the default bind address.
      */
     public @Nullable String interfaceHost() {
         return host;
     }
 
     /**
-     * @return The current value of this property
+     * Gets the configured HTTPS builder.
+     *
+     * @return The HTTPS configuration builder, or <code>null</code> to use the default HTTPS configuration.
      */
     public @Nullable HttpsConfigBuilder httpsConfigBuilder() {
         return sslContextBuilder;
@@ -528,49 +561,63 @@ public class MuServerBuilder {
     }
 
     /**
-     * @return The current value of this property
+     * Gets the timeout used while reading request bodies.
+     *
+     * @return The request body read timeout in milliseconds, or <code>0</code> if disabled.
      */
     public long requestReadTimeoutMillis() {
         return requestReadTimeoutMillis;
     }
 
     /**
-     * @return The current value of this property
+     * Gets the connection idle timeout.
+     *
+     * @return The idle timeout in milliseconds, or <code>0</code> if disabled.
      */
     public long idleTimeoutMills() {
         return idleTimeoutMills;
     }
 
     /**
-     * @return The current value of this property
+     * Gets the executor used to run request handlers.
+     *
+     * @return The configured executor, or <code>null</code> if the default executor will be used.
      */
     public @Nullable ExecutorService executor() {
         return executor;
     }
 
     /**
-     * @return The current value of this property
+     * Gets the maximum allowed request body size.
+     *
+     * @return The request body size limit in bytes.
      */
     public long maxRequestSize() {
         return maxRequestSize;
     }
 
     /**
-     * @return The current value of this property
+     * Gets the listeners notified after responses complete.
+     *
+     * @return An unmodifiable list of configured response-complete listeners, or an empty list if none were added.
      */
     public List<ResponseCompleteListener> responseCompleteListeners() {
         return responseCompleteListeners == null ? Collections.emptyList() : Collections.unmodifiableList(responseCompleteListeners);
     }
 
     /**
-     * @return The current value of this property
+     * Gets the listeners notified when requests are rejected before normal request handling begins.
+     *
+     * @return An unmodifiable list of configured request reject listeners, or an empty list if none were added.
      */
     public List<RequestRejectListener> requestRejectListeners() {
         return requestRejectListeners == null ? Collections.emptyList() : Collections.unmodifiableList(requestRejectListeners);
     }
 
     /**
-     * @return The current value of this property
+     * Gets the configured rate limiters.
+     *
+     * @return A list of configured rate limiters, or an empty list if none were added.
      */
     public List<RateLimiter> rateLimiters() {
         var rl = rateLimiters;
@@ -581,7 +628,9 @@ public class MuServerBuilder {
     }
 
     /**
-     * @return The current value of this property
+     * Gets the handler for uncaught exceptions from request handlers.
+     *
+     * @return The configured exception handler, or <code>null</code> if the default handling will be used.
      */
     public @Nullable UnhandledExceptionHandler unhandledExceptionHandler() {
         return unhandledExceptionHandler;

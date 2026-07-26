@@ -35,14 +35,18 @@ public class HttpsConfig implements SSLInfo {
     }
 
     /**
-     * @return The SSLContext
+     * Gets the SSL context used by the HTTPS listener.
+     *
+     * @return The active SSL context.
      */
     public SSLContext sslContext() {
         return sslContext;
     }
 
     /**
-     * @return The SSL parameters
+     * Gets the SSL parameters applied to accepted HTTPS connections.
+     *
+     * @return The configured SSL parameters.
      */
     public SSLParameters sslParameters() { return sslParameters; }
 
@@ -51,7 +55,9 @@ public class HttpsConfig implements SSLInfo {
     }
 
     /**
-     * @return An unmodifiable list of ciphers supported, in preference order
+     * Gets the enabled cipher suites in server preference order.
+     *
+     * @return An unmodifiable list of enabled cipher suite names.
      */
     @Override
     public List<String> ciphers() {
@@ -60,7 +66,9 @@ public class HttpsConfig implements SSLInfo {
     }
 
     /**
-     * @return An unmodifiable list of protocols supported, such as <code>TLSv1.2</code>
+     * Gets the enabled TLS protocol versions.
+     *
+     * @return An unmodifiable list of enabled protocols, such as <code>TLSv1.2</code>.
      */
     @Override
     public List<String> protocols() {
@@ -68,7 +76,9 @@ public class HttpsConfig implements SSLInfo {
     }
 
     /**
-     * @return Gets the SSL provider, e.g. <code>SunJSSE</code>
+     * Gets the name of the SSL provider backing this HTTPS configuration.
+     *
+     * @return The SSL provider name, for example <code>SunJSSE</code>.
      */
     @Override
     public String providerName() {
@@ -141,8 +151,10 @@ public class HttpsConfig implements SSLInfo {
     }
 
     /**
-     * @return The trust manager to verify client certs when client certs are requested, or <code>null</code>
-     *         if client certs not used.
+     * Gets the trust manager used to validate optional client certificates.
+     *
+     * @return The trust manager for client-certificate validation, or <code>null</code> if client certificates
+     * are not requested.
      */
     public @Nullable X509TrustManager clientAuthTrustManager() {
         return clientAuthTrustManager;
