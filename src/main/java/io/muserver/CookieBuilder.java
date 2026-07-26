@@ -162,7 +162,7 @@ public class CookieBuilder {
      */
     public CookieBuilder withSameSite(String sameSiteValue) {
         try {
-            Cookie.SameSite sameSite = Cookie.SameSite.valueOf(sameSiteValue.toUpperCase());
+            Cookie.SameSite sameSite = Cookie.SameSite.valueOf(sameSiteValue.toUpperCase(Locale.ROOT));
             return withSameSite(sameSite);
         } catch (IllegalArgumentException e) {
             throw new IllegalArgumentException("Invalid SameSite value. It should be one of: Lax, Strict, None");
@@ -436,7 +436,7 @@ public class CookieBuilder {
                                 if (parameters == null) {
                                     parameters = new LinkedHashMap<>(); // keeps insertion order
                                 }
-                                parameters.put(Objects.requireNonNull(paramName).toLowerCase(), buffer.toString());
+                                parameters.put(Objects.requireNonNull(paramName).toLowerCase(Locale.ROOT), buffer.toString());
                                 buffer.setLength(0);
                                 paramName = null;
                                 state = State.PARAM_NAME;
@@ -459,7 +459,7 @@ public class CookieBuilder {
                     buffer.setLength(0);
                     break;
                 case PARAM_NAME:
-                    paramName = buffer.toString().toLowerCase();
+                    paramName = buffer.toString().toLowerCase(Locale.ROOT);
                     if (!paramName.isBlank()) {
                         if (parameters == null) {
                             parameters = new LinkedHashMap<>(); // keeps insertion order
@@ -471,7 +471,7 @@ public class CookieBuilder {
                     if (parameters == null) {
                         parameters = new LinkedHashMap<>(); // keeps insertion order
                     }
-                    parameters.put(Objects.requireNonNull(paramName).toLowerCase(), buffer.toString());
+                    parameters.put(Objects.requireNonNull(paramName).toLowerCase(Locale.ROOT), buffer.toString());
                     buffer.setLength(0);
                     break;
                 default:

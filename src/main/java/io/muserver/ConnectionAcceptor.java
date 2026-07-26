@@ -178,6 +178,9 @@ class ConnectionAcceptor {
                     }
                 }
                 Thread.sleep(200);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
             } catch (Throwable t) {
                 if (state == State.STARTED) {
                     log.error("Exception while doing timeouts", t);

@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.Locale;
 import java.util.stream.IntStream;
 
 class HeaderString implements CharSequence {
@@ -47,7 +48,7 @@ class HeaderString implements CharSequence {
                 return builtIn;
             }
             if (s instanceof String) {
-                s = ((String) s).toLowerCase();
+                s = ((String) s).toLowerCase(Locale.ROOT);
             }
         }
         return new HeaderString(s);

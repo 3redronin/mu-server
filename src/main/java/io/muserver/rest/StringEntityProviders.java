@@ -23,7 +23,6 @@ import java.nio.charset.CharsetEncoder;
 import java.time.*;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.Temporal;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -141,7 +140,6 @@ class StringEntityProviders {
             byte[] bytes = new byte[bb.remaining()];
             bb.get(bytes);
             entityStream.write(bytes);
-            Arrays.fill(bb.array(), (byte) 0); // if returning char[] arrays, it might be because it's a password etc, so blank it out
         }
     }
 

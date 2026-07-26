@@ -12,6 +12,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Date;
+import java.util.Locale;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 
@@ -283,7 +284,7 @@ public class Mutils {
 
     static boolean isTruthy(@Nullable String val) {
         if (val == null) { return false;}
-        switch (val.toLowerCase()) {
+        switch (val.toLowerCase(Locale.ROOT)) {
             case "true":
             case "on":
             case "yes":

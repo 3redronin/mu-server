@@ -173,8 +173,8 @@ class Mu3Request implements MuRequest {
             if (bodyType == null) {
                 this.form = EmptyForm.VALUE;
             } else {
-                String type = bodyType.getType().toLowerCase();
-                String subtype = bodyType.getSubtype().toLowerCase();
+                String type = bodyType.getType().toLowerCase(Locale.ROOT);
+                String subtype = bodyType.getSubtype().toLowerCase(Locale.ROOT);
                 if ("application".equals(type) && "x-www-form-urlencoded".equals(subtype)) {
                     String text = streamBodyToString(Headtils.bodyCharset(mu3Headers, true));
                     this.form = UrlEncodedMuForm.parse(text);

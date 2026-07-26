@@ -5,6 +5,7 @@ import jakarta.ws.rs.core.MultivaluedMap;
 import org.junit.jupiter.api.Test;
 
 import java.util.Collections;
+import java.util.Locale;
 
 import static java.util.Arrays.asList;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -17,6 +18,18 @@ public class LowercasedMultivaluedHashMapTest {
     public void itIsCaseInsensitive() {
         map.put("Allow", asList("GET", "POST"));
         assertThat(map.get("allow"), contains("GET", "POST"));
+    }
+
+    @Test
+    public void caseInsensitivityDoesNotDependOnTheDefaultLocale() {
+        Locale originalLocale = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.forLanguageTag("tr"));
+            map.put("TITLE", asList("value"));
+            assertThat(map.get("title"), contains("value"));
+        } finally {
+            Locale.setDefault(originalLocale);
+        }
     }
 
     @Test

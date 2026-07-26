@@ -257,7 +257,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         return -1L;
     }
 
+    @SuppressWarnings("WaitNotInLoop")
     private void awaitWriteLoopSignalLocked(long now) throws InterruptedException {
+        // The caller's write loop rechecks the queue, shutdown state, and GOAWAY deadline after every wakeup.
         long waitTime = millisUntilNextWriteActionLocked(now);
         if (waitTime > 0L) {
             boolean wokeBySignal = writeQueueCondition.await(waitTime, TimeUnit.MILLISECONDS);
@@ -675,6 +677,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                         awaitWriteLoopSignalLocked(now);
                     }
                 } catch (Exception e) {
+                    if (e instanceof InterruptedException) {
+                        Thread.currentThread().interrupt();
+                    }
                     log.info("Write loop IO Exception with state=" + writeState);
                     markConnectionErroredLocked();
                     WriteTask task;
@@ -700,6 +705,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                 handleExchange(stream.request, stream.response());
                 stream.cleanup();
             } catch (Throwable e) {
+                if (e instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                }
                 log.info("Unhandled stream exception", e);
                 if (stream.response().hasStartedSendingData() && stream.canSendFrames() && !stream.response().responseState().endState()) {
                     stream.response().setState(ResponseState.ERRORED);

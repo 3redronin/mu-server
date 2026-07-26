@@ -79,6 +79,9 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
                 } else {
                     readListener.onComplete();
                 }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                requestException.set(e);
             } catch (Throwable e) {
                 requestException.set(e);
             }

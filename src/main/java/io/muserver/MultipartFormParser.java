@@ -10,6 +10,7 @@ import java.nio.charset.CharsetDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 
 import static io.muserver.ParseUtils.CR;
 import static io.muserver.ParseUtils.LF;
@@ -242,7 +243,7 @@ class MultipartFormParser {
                     colon = indexOf(bb, (byte)':');
                 }
                 int start = bb.arrayOffset() + bb.position();
-                var headerName = new String(bb.array(), start, colon - start, StandardCharsets.US_ASCII).toLowerCase();
+                var headerName = new String(bb.array(), start, colon - start, StandardCharsets.US_ASCII).toLowerCase(Locale.ROOT);
                 bb.position(colon + 1);
 
                 var cr = indexOf(bb, CR);
@@ -363,5 +364,4 @@ class MultipartFormParser {
     }
 
 }
-
 

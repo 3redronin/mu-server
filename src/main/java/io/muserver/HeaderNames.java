@@ -4,6 +4,7 @@ package io.muserver;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -393,8 +394,7 @@ public final class HeaderNames {
     }
 
     static @Nullable HeaderString findBuiltIn(CharSequence name) {
-        CharSequence search = name instanceof HeaderString ? name :  name.toString().toLowerCase();
+        CharSequence search = name instanceof HeaderString ? name :  name.toString().toLowerCase(Locale.ROOT);
         return builtIn.get(search);
     }
 }
-

@@ -174,7 +174,7 @@ class OpenApiDocumentor implements MuHandler {
 
             String opIdPath = getPathWithoutRegex(root, method, parentResourcePath).replace("{", "_").replace("}", "_");
             String opPath = Mutils.trim(opIdPath, "/").replace("/", "_");
-            String opKey = method.requiredHttpMethod().name().toLowerCase();
+            String opKey = method.requiredHttpMethod().name().toLowerCase(Locale.ROOT);
             Map<String, OperationObject> configuredOperations = operations;
             if (configuredOperations == null) {
                 configuredOperations = new LinkedHashMap<>();
