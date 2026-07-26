@@ -4,6 +4,7 @@ import io.muserver.MuServer;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.InternalServerErrorException;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.QueryParam;
@@ -414,6 +415,12 @@ public class ProblemDetailsExceptionsTest {
                     .header("Retry-After", "30")
                     .build());
             }
+
+            @GET
+            @Path("/server-error")
+            public String serverError() {
+                throw new InternalServerErrorException("Password xyz; database /private/path/customer.db");
+            }
         }
 
         this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
@@ -435,6 +442,17 @@ public class ProblemDetailsExceptionsTest {
             assertThat(resp.code(), is(429));
             assertThat(resp.header("Retry-After"), is("30"));
             assertThat(json.getString("title"), containsString("Too Many Requests"));
+        }
+
+        try (Response resp = call(request().url(server.uri().resolve("/samples/server-error").toString()))) {
+            String body = resp.body().string();
+            JSONObject json = new JSONObject(body);
+            assertThat(resp.code(), is(500));
+            assertThat(json.getString("title"), is("Internal Server Error"));
+            assertThat(json.getString("detail"), is("An unexpected error occurred"));
+            assertThat(body, not(containsString("Password xyz")));
+            assertThat(body, not(containsString("/private/path/customer.db")));
+            assertThat(body, not(containsString("InternalServerErrorException")));
         }
     }
 

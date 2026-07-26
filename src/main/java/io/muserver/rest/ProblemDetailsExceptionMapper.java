@@ -89,12 +89,16 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
                 return response;
             }
             String message = webApplicationException.getMessage();
-            String title = message == null || message.isEmpty() ? defaultTitle(response.getStatus()) : message;
+            boolean serverError = family == Response.Status.Family.SERVER_ERROR;
+            String title = serverError || message == null || message.isEmpty()
+                ? defaultTitle(response.getStatus())
+                : message;
+            String detail = serverError ? "An unexpected error occurred" : null;
             URI instance = newInstance();
             if (shouldLogInstance(response.getStatus())) {
                 log.error("Sending a problem details response with instance={}", instance, exception);
             }
-            return toResponse(Response.fromResponse(response), response.getStatus(), title, null, null, instance, null,
+            return toResponse(Response.fromResponse(response), response.getStatus(), title, detail, null, instance, null,
                 shouldAddNoStoreHeader(response.getStatus()) && response.getHeaderString("Cache-Control") == null && response.getHeaderString("Pragma") == null && response.getHeaderString("Expires") == null);
         }
 
