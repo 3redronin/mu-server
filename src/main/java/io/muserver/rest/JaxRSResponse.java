@@ -251,10 +251,8 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         }
         Object entity = getEntity();
         if (entity instanceof InputStream) {
-            try (InputStream in = (InputStream)entity;
-                ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-                Mutils.copy(in, baos, 8192);
-                inputStreamBuffer = new ByteArrayInputStream(baos.toByteArray());
+            try (InputStream in = (InputStream)entity) {
+                inputStreamBuffer = new ByteArrayInputStream(in.readAllBytes());
                 setEntity(inputStreamBuffer);
             } catch (IOException e) {
                 throw new ProcessingException("Could not buffer entity input stream", e);

@@ -107,10 +107,8 @@ public class HttpsConfigBuilder {
     protected void setKeystoreBytes(InputStream is, boolean closeAfter) {
         sslContext = null;
         keyManagerFactory = null;
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try {
-            Mutils.copy(is, baos, 8192);
-            this.keystoreBytes = baos.toByteArray();
+            this.keystoreBytes = is.readAllBytes();
         } catch (IOException e) {
             throw new MuException("Error while loading keystore", e);
         } finally {
