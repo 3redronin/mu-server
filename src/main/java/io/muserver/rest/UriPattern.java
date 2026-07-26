@@ -47,6 +47,8 @@ public class UriPattern {
     }
 
     /**
+     * Gets the regular expression used for matching.
+     *
      * @return Returns the regular expression used to do the matching
      */
     public String pattern() {
@@ -54,6 +56,8 @@ public class UriPattern {
     }
 
     /**
+     * Gets the named path parameters captured by the pattern.
+     *
      * @return Returns the read-only set of path parameters in this pattern in the order they first appeared
      */
     public List<String> namedGroups() {

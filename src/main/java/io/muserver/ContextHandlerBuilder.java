@@ -14,6 +14,12 @@ public class ContextHandlerBuilder implements MuHandlerBuilder<ContextHandler> {
     private final List<MuHandler> handlers = new ArrayList<>();
 
     /**
+     * Creates an empty context handler builder.
+     */
+    public ContextHandlerBuilder() {
+    }
+
+    /**
      * Sets the path to serve from.
      * <p>If a null or empty path is given, then it is as if the child handlers are not added to a context.</p>
      *

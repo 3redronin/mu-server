@@ -141,6 +141,8 @@ public interface RequestParameters {
     }
 
     /**
+     * Indicates whether any parameters are present.
+     *
      * @return True if there are no values
      */
     default boolean isEmpty() {
@@ -148,6 +150,8 @@ public interface RequestParameters {
     }
 
     /**
+     * Gets the number of distinct parameter names.
+     *
      * @return The number of parameters.
      * <p>Where one parameter has multiple values it is only counted once.</p>
      */

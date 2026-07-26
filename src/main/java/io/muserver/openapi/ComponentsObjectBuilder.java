@@ -22,6 +22,14 @@ public class ComponentsObjectBuilder {
     private @Nullable Map<String, CallbackObject> callbacks;
 
     /**
+     * Creates an empty components object builder.
+     */
+    public ComponentsObjectBuilder() {
+    }
+
+    /**
+     * Sets reusable schema definitions.
+     *
      * @param schemas An object to hold reusable Schema Objects.
      * @return The current builder
      */
@@ -31,6 +39,8 @@ public class ComponentsObjectBuilder {
     }
 
     /**
+     * Sets reusable response definitions.
+     *
      * @param responses An object to hold reusable Response Objects.
      * @return The current builder
      */
@@ -40,6 +50,8 @@ public class ComponentsObjectBuilder {
     }
 
     /**
+     * Sets reusable parameter definitions.
+     *
      * @param parameters An object to hold reusable Parameter Objects.
      * @return The current builder
      */
@@ -49,6 +61,8 @@ public class ComponentsObjectBuilder {
     }
 
     /**
+     * Sets reusable example definitions.
+     *
      * @param examples An object to hold reusable Example Objects.
      * @return The current builder
      */
@@ -58,6 +72,8 @@ public class ComponentsObjectBuilder {
     }
 
     /**
+     * Sets reusable request-body definitions.
+     *
      * @param requestBodies An object to hold reusable Request Body Objects.
      * @return The current builder
      */
@@ -67,6 +83,8 @@ public class ComponentsObjectBuilder {
     }
 
     /**
+     * Sets reusable header definitions.
+     *
      * @param headers An object to hold reusable Header Objects.
      * @return The current builder
      */
@@ -76,6 +94,8 @@ public class ComponentsObjectBuilder {
     }
 
     /**
+     * Sets reusable security-scheme definitions.
+     *
      * @param securitySchemes An object to hold reusable Security Scheme Objects.
      * @return The current builder
      */
@@ -85,6 +105,8 @@ public class ComponentsObjectBuilder {
     }
 
     /**
+     * Sets reusable link definitions.
+     *
      * @param links An object to hold reusable Link Objects.
      * @return The current builder
      */
@@ -94,6 +116,8 @@ public class ComponentsObjectBuilder {
     }
 
     /**
+     * Sets reusable callback definitions.
+     *
      * @param callbacks An object to hold reusable Callback Objects.
      * @return The current builder
      */
@@ -103,6 +127,8 @@ public class ComponentsObjectBuilder {
     }
 
     /**
+     * Creates the configured components object.
+     *
      * @return A new object
      */
     public ComponentsObject build() {

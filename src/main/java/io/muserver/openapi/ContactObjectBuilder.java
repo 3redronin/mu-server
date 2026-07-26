@@ -13,6 +13,14 @@ public class ContactObjectBuilder {
     private @Nullable String email;
 
     /**
+     * Creates an empty contact object builder.
+     */
+    public ContactObjectBuilder() {
+    }
+
+    /**
+     * Sets the contact name.
+     *
      * @param name The identifying name of the contact person/organization.
      * @return The current builder
      */
@@ -22,6 +30,8 @@ public class ContactObjectBuilder {
     }
 
     /**
+     * Sets the contact URL.
+     *
      * @param url The URL pointing to the contact information.
      * @return The current builder
      */
@@ -31,6 +41,8 @@ public class ContactObjectBuilder {
     }
 
     /**
+     * Sets the contact email address.
+     *
      * @param email The email address of the contact person/organization. MUST be in the format of an email address.
      * @return The current builder
      */
@@ -40,6 +52,8 @@ public class ContactObjectBuilder {
     }
 
     /**
+     * Creates the configured contact object.
+     *
      * @return A new object
      */
     public ContactObject build() {

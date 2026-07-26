@@ -35,6 +35,8 @@ public class ForwardedHeader {
     }
 
     /**
+     * Returns the entity that introduced this forwarded header.
+     *
      * @return The interface where the request came in to the proxy server (e.g. the IP address of the reverse
      * proxy that forwarded this request), or <code>null</code> if not specified.
      */
@@ -43,6 +45,8 @@ public class ForwardedHeader {
     }
 
     /**
+     * Returns the client address from the forwarded header.
+     *
      * @return The interface where the request came in to the proxy server, e.g. the IP address of the client
      * that originated the request), or <code>null</code> if not specified.
      */
@@ -51,6 +55,8 @@ public class ForwardedHeader {
     }
 
     /**
+     * Returns the host from the forwarded header.
+     *
      * @return The Host request header field as received by the proxy (e.g. the hostname used on the original
      * request), or <code>null</code> if not specified.
      */
@@ -59,6 +65,8 @@ public class ForwardedHeader {
     }
 
     /**
+     * Returns the protocol from the forwarded header.
+     *
      * @return Indicates which protocol was used to make the request (typically "http" or "https"), or
      * <code>null</code> if not specified.
      */
@@ -67,6 +75,8 @@ public class ForwardedHeader {
     }
 
     /**
+     * Returns the forwarded port.
+     *
      * @return Values not covered by <code>by</code>, <code>for</code>, <code>host</code>, or <code>proto</code>.
      */
     public Map<String, String> extensions() {

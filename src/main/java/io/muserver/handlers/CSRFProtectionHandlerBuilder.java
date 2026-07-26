@@ -21,6 +21,12 @@ public class CSRFProtectionHandlerBuilder implements MuHandlerBuilder<CSRFProtec
     private @Nullable MuHandler rejectionHandler;
 
     /**
+     * Creates a CSRF protection handler builder with no trusted origins.
+     */
+    public CSRFProtectionHandlerBuilder() {
+    }
+
+    /**
      * Adds a trusted origin. Requests with an <code>Origin</code> header exactly matching this value are allowed.
      * @param origin The trusted origin (e.g. <code>https://example.com</code>)
      * @return This builder

@@ -34,6 +34,8 @@ public class PathMatch {
     }
 
     /**
+     * Indicates whether the request URI matches the start of the template.
+     *
      * @return Returns true if the beginning of the checked URI matches this pattern. For example
      * if the pattern is <code>/abc</code> then this will return <code>true</code> for <code>/abc</code>
      * and <code>/abc/def</code> etc.
@@ -42,6 +44,8 @@ public class PathMatch {
         return matches;
     }
     /**
+     * Indicates whether the request URI fully matches the template.
+     *
      * @return Returns true if the checked URI matches this pattern. For example
      * if the pattern is <code>/abc</code> then this will return <code>true</code> for <code>/abc</code>
      * but false for <code>/abc/def</code> etc.
@@ -81,6 +85,8 @@ public class PathMatch {
     }
 
     /**
+     * Gets the regex matcher used for the path match.
+     *
      * @return Returns the regex Matcher that was used
      */
     public Matcher regexMatcher() {

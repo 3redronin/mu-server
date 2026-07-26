@@ -26,6 +26,12 @@ import static java.util.Arrays.asList;
  */
 public class HttpsConfigBuilder {
 
+    /**
+     * Creates an HTTPS configuration builder.
+     */
+    public HttpsConfigBuilder() {
+    }
+
     private static final Logger log = LoggerFactory.getLogger(HttpsConfigBuilder.class);
     private String@Nullable [] protocols = null;
     private String keystoreType = "JKS";

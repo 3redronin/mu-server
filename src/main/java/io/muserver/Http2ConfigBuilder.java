@@ -14,6 +14,12 @@ import java.util.Objects;
  */
 public class Http2ConfigBuilder {
 
+    /**
+     * Creates an HTTP/2 configuration builder.
+     */
+    public Http2ConfigBuilder() {
+    }
+
     private boolean enabled = false;
     private int maxHeaderTableSize = 4096;
     private int maxConcurrentStreams = 200;

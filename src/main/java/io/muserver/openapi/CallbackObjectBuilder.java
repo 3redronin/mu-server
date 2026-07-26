@@ -15,6 +15,14 @@ public class CallbackObjectBuilder {
     private @Nullable Map<String, PathItemObject> callbacks;
 
     /**
+     * Creates an empty callback object builder.
+     */
+    public CallbackObjectBuilder() {
+    }
+
+    /**
+     * Sets the callback path items keyed by runtime expression.
+     *
      * @param callbacks A mapping of runtime expressions to path items.
      *                  See <a href="https://github.com/OAI/OpenAPI-Specification/blob/master/versions/3.0.1.md#callback-object">the spec</a>
      *                  for details.

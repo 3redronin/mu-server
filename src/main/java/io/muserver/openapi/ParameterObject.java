@@ -13,6 +13,8 @@ import static io.muserver.openapi.Jsonizer.append;
 import static java.util.Arrays.asList;
 
 /**
+ * Describes a parameter accepted by an OpenAPI operation.
+ *
  * @see ParameterObjectBuilder
  */
 public class ParameterObject implements JsonWriter {
@@ -74,6 +76,8 @@ public class ParameterObject implements JsonWriter {
     }
 
     /**
+     * Gets the allowed values for the <code>in</code> field.
+     *
      * @return The values allowed to be passed to {@link ParameterObjectBuilder#withIn(String)}
      */
     public static List<String> allowedIns() {
@@ -81,6 +85,8 @@ public class ParameterObject implements JsonWriter {
     }
 
     /**
+     * Gets the allowed values for the <code>style</code> field.
+     *
      * @return The values allowed to be passed to {@link ParameterObjectBuilder#withStyle(String)}
      */
     public static List<String> allowedStyles() {
@@ -119,6 +125,8 @@ public class ParameterObject implements JsonWriter {
     }
 
     /**
+     * Gets the parameter name.
+     *
      * @return the value described by {@link ParameterObjectBuilder#withName}
      */
     public String name() {
@@ -126,84 +134,108 @@ public class ParameterObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link ParameterObjectBuilder#withIn}
+     * Gets where the parameter is located in the request.
+     *
+     * @return the value described by {@link ParameterObjectBuilder#withIn}
      */
     public String in() {
         return in;
     }
 
     /**
-      @return the value described by {@link ParameterObjectBuilder#withDescription}
+     * Gets the parameter description.
+     *
+     * @return the value described by {@link ParameterObjectBuilder#withDescription}
      */
     public @Nullable String description() {
         return description;
     }
 
     /**
-      @return the value described by {@link ParameterObjectBuilder#withRequired}
+     * Indicates whether the parameter is required.
+     *
+     * @return the value described by {@link ParameterObjectBuilder#withRequired}
      */
     public boolean required() {
         return required;
     }
 
     /**
-      @return the value described by {@link ParameterObjectBuilder#withDeprecated}
+     * Indicates whether the parameter is deprecated.
+     *
+     * @return the value described by {@link ParameterObjectBuilder#withDeprecated}
      */
     public boolean deprecated() {
         return actualValue(deprecated, false);
     }
 
     /**
-      @return the value described by {@link ParameterObjectBuilder#withAllowEmptyValue}
+     * Indicates whether the parameter accepts empty values.
+     *
+     * @return the value described by {@link ParameterObjectBuilder#withAllowEmptyValue}
      */
     public boolean allowEmptyValue() {
         return actualValue(allowEmptyValue, false);
     }
 
     /**
-      @return the value described by {@link ParameterObjectBuilder#withStyle}
+     * Gets the parameter serialization style.
+     *
+     * @return the value described by {@link ParameterObjectBuilder#withStyle}
      */
     public @Nullable String style() {
         return style;
     }
 
     /**
-      @return the value described by {@link ParameterObjectBuilder#withExplode}
+     * Indicates whether structured parameter values are exploded.
+     *
+     * @return the value described by {@link ParameterObjectBuilder#withExplode}
      */
     public boolean explode() {
         return actualValue(explode, style == null || "form".equals(style));
     }
 
     /**
-      @return the value described by {@link ParameterObjectBuilder#withAllowReserved}
+     * Indicates whether reserved characters may appear unescaped.
+     *
+     * @return the value described by {@link ParameterObjectBuilder#withAllowReserved}
      */
     public boolean allowReserved() {
         return actualValue(allowReserved, false);
     }
 
     /**
-      @return the value described by {@link ParameterObjectBuilder#withSchema}
+     * Gets the schema used for the parameter.
+     *
+     * @return the value described by {@link ParameterObjectBuilder#withSchema}
      */
     public @Nullable SchemaObject schema() {
         return schema;
     }
 
     /**
-      @return the value described by {@link ParameterObjectBuilder#withExample}
+     * Gets the example value for the parameter.
+     *
+     * @return the value described by {@link ParameterObjectBuilder#withExample}
      */
     public @Nullable Object example() {
         return example;
     }
 
     /**
-      @return the value described by {@link ParameterObjectBuilder#withExamples}
+     * Gets the named examples for the parameter.
+     *
+     * @return the value described by {@link ParameterObjectBuilder#withExamples}
      */
     public @Nullable Map<String, ExampleObject> examples() {
         return examples;
     }
 
     /**
-      @return the value described by {@link ParameterObjectBuilder#withContent}
+     * Gets the content representations for the parameter.
+     *
+     * @return the value described by {@link ParameterObjectBuilder#withContent}
      */
     public @Nullable Map<String, MediaTypeObject> content() {
         return content;

@@ -23,6 +23,8 @@ import java.net.URI;
 public interface MuResponse {
 
     /**
+     * Returns the current HTTP status.
+     *
      * @return The HTTP status of this response.
      */
     HttpStatus status();
@@ -126,6 +128,8 @@ public interface MuResponse {
     boolean hasStartedSendingData();
 
     /**
+     * Returns whether response data has started being sent.
+     *
      * @return The current state of this response
      */
     ResponseState responseState();

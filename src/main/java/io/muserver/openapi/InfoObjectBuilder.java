@@ -17,6 +17,14 @@ public class InfoObjectBuilder {
     private String version = "1.0";
 
     /**
+     * Creates an empty info object builder.
+     */
+    public InfoObjectBuilder() {
+    }
+
+    /**
+     * Sets the API title.
+     *
      * @param title <strong>REQUIRED</strong>. The title of the application. Default value is <code>API Documentation</code>
      * @return The current builder
      */
@@ -26,6 +34,8 @@ public class InfoObjectBuilder {
     }
 
     /**
+     * Sets the API description.
+     *
      * @param description A short description of the application. <a href="http://spec.commonmark.org/">CommonMark syntax</a>
      *                    MAY be used for rich text representation.
      * @return The current builder
@@ -36,6 +46,8 @@ public class InfoObjectBuilder {
     }
 
     /**
+     * Sets the terms of service URI.
+     *
      * @param termsOfService A URL to the Terms of Service for the API.
      * @return The current builder
      */
@@ -45,6 +57,8 @@ public class InfoObjectBuilder {
     }
 
     /**
+     * Sets the API contact details.
+     *
      * @param contact The contact information for the exposed API.
      * @return The current builder
      */
@@ -54,6 +68,8 @@ public class InfoObjectBuilder {
     }
 
     /**
+     * Sets the API license details.
+     *
      * @param license The license information for the exposed API.
      * @return The current builder
      */
@@ -63,6 +79,8 @@ public class InfoObjectBuilder {
     }
 
     /**
+     * Sets the OpenAPI document version string.
+     *
      * @param version <strong>REQUIRED</strong>. The version of the OpenAPI document. Default value is <code>1.0</code>
      * @return The current builder
      */
@@ -72,6 +90,8 @@ public class InfoObjectBuilder {
     }
 
     /**
+     * Builds an info object from the configured values.
+     *
      * @return A new object
      */
     public InfoObject build() {

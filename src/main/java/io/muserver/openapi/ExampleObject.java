@@ -7,6 +7,8 @@ import java.io.Writer;
 import java.net.URI;
 
 /**
+ * Represents an example value for an OpenAPI request or response.
+ *
  * @see ExampleObjectBuilder
  */
 public class ExampleObject implements JsonWriter {
@@ -38,6 +40,8 @@ public class ExampleObject implements JsonWriter {
     }
 
     /**
+     * Returns the short example summary.
+     *
      * @return the value described by {@link ExampleObjectBuilder#withSummary}
      */
     public @Nullable String summary() {
@@ -45,6 +49,8 @@ public class ExampleObject implements JsonWriter {
     }
 
     /**
+     * Returns the example description.
+     *
      * @return the value described by {@link ExampleObjectBuilder#withDescription}
      */
     public @Nullable String description() {
@@ -52,6 +58,8 @@ public class ExampleObject implements JsonWriter {
     }
 
     /**
+     * Returns the embedded example value.
+     *
      * @return the value described by {@link ExampleObjectBuilder#withValue}
      */
     public @Nullable Object value() {
@@ -59,6 +67,8 @@ public class ExampleObject implements JsonWriter {
     }
 
     /**
+     * Returns the URL of an externally stored example.
+     *
      * @return the value described by {@link ExampleObjectBuilder#withExternalValue}
      */
     public @Nullable URI externalValue() {

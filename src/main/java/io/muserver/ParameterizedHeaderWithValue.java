@@ -32,6 +32,8 @@ public class ParameterizedHeaderWithValue {
     }
 
     /**
+     * Gets the main header value.
+     *
      * @return Gets the first value of the header (without parameters), such as the media type in a Content-Type header
      */
     public String value() {
@@ -39,6 +41,8 @@ public class ParameterizedHeaderWithValue {
     }
 
     /**
+     * Gets the parsed header parameters.
+     *
      * @return Gets all the parameters
      */
     public Map<String, String> parameters() {
@@ -46,6 +50,8 @@ public class ParameterizedHeaderWithValue {
     }
 
     /**
+     * Gets a single parameter value.
+     *
      * @param name The name of the parameter to get
      * @return Gets a single parameter, or <code>null</code> if there is no value
      */
@@ -54,6 +60,8 @@ public class ParameterizedHeaderWithValue {
     }
 
     /**
+     * Gets a single parameter value with a fallback.
+     *
      * @param name The name of the parameter to get
      * @param defaultValue The value to return if no parameter was set
      * @return Gets a single parameter, or <code>null</code> if there is no value
