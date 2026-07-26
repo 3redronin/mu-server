@@ -91,7 +91,7 @@ public class CORSConfig {
     }
 
     static String getAllowedMethods(Set<RequestMatcher.MatchedMethod> matchedMethodsForPath) {
-        Set<Method> methods = matchedMethodsForPath.stream().map(m -> m.resourceMethod.httpMethod).collect(toSet());
+        Set<Method> methods = matchedMethodsForPath.stream().map(m -> m.resourceMethod.httpMethod()).collect(toSet());
         return getAllowedString(methods);
     }
 

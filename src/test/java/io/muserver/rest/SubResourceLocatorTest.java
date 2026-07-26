@@ -2,11 +2,15 @@ package io.muserver.rest;
 
 import io.muserver.MuServer;
 import jakarta.ws.rs.*;
+import jakarta.ws.rs.ext.ParamConverter;
+import jakarta.ws.rs.ext.ParamConverterProvider;
 import okhttp3.Response;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Type;
 import java.util.List;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -226,6 +230,112 @@ public class SubResourceLocatorTest {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("content-type"), is("text/dog;charset=utf-8"));
             assertThat(resp.body().string(), equalTo("Oh, hi doggy"));
+        }
+    }
+
+    @Test
+    public void sameSubResourceClassRetainsEachLocatorsPathAndMediaTypeContext() throws Exception {
+        class Child {
+            @GET
+            public String get() {
+                return "child";
+            }
+        }
+        @Path("root")
+        class Root {
+            @Path("plain")
+            @Produces("text/plain")
+            public Child plain() {
+                return new Child();
+            }
+
+            @Path("json")
+            @Produces("application/json")
+            public Child json() {
+                return new Child();
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new Root()).build())
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/root/plain")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
+            assertThat(resp.body().string(), is("child"));
+        }
+        try (Response resp = call(request(server.uri().resolve("/root/json")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("content-type"), is("application/json"));
+            assertThat(resp.body().string(), is("child"));
+        }
+    }
+
+    @Test
+    public void handlersWithDifferentConvertersForTheSameClassRemainIndependent() throws Exception {
+        MuServer first = httpsServerForTest()
+            .addHandler(restHandler(new HandlerConvertedResource())
+                .addCustomParamConverterProvider(prefixingProvider("first:"))
+                .build())
+            .start();
+        MuServer second = httpsServerForTest()
+            .addHandler(restHandler(new HandlerConvertedResource())
+                .addCustomParamConverterProvider(prefixingProvider("second:"))
+                .build())
+            .start();
+        try {
+            try (Response resp = call(request(first.uri().resolve("/convert?value=x")))) {
+                assertThat(resp.code(), is(200));
+                assertThat(resp.body().string(), is("first:x"));
+            }
+            try (Response resp = call(request(second.uri().resolve("/convert?value=x")))) {
+                assertThat(resp.code(), is(200));
+                assertThat(resp.body().string(), is("second:x"));
+            }
+        } finally {
+            MuAssert.stopAndCheck(first);
+            MuAssert.stopAndCheck(second);
+        }
+    }
+
+    private static ParamConverterProvider prefixingProvider(String prefix) {
+        return new ParamConverterProvider() {
+            @Override
+            @SuppressWarnings("unchecked")
+            public <T> ParamConverter<T> getConverter(Class<T> rawType, Type genericType,
+                                                       Annotation[] annotations) {
+                if (rawType != HandlerConvertedValue.class) {
+                    return null;
+                }
+                return (ParamConverter<T>) new ParamConverter<HandlerConvertedValue>() {
+                    @Override
+                    public HandlerConvertedValue fromString(String value) {
+                        return new HandlerConvertedValue(prefix + value);
+                    }
+
+                    @Override
+                    public String toString(HandlerConvertedValue value) {
+                        return value.value;
+                    }
+                };
+            }
+        };
+    }
+
+    private static final class HandlerConvertedValue {
+        private final String value;
+
+        private HandlerConvertedValue(String value) {
+            this.value = value;
+        }
+    }
+
+    @Path("convert")
+    private static final class HandlerConvertedResource {
+        @GET
+        public String get(@QueryParam("value") HandlerConvertedValue value) {
+            return value.value;
         }
     }
 

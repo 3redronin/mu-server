@@ -61,23 +61,23 @@ public class ResourceMethodParamTest {
 
         ResourceMethodParam.RequestBasedParam defaultAndEncoded = (ResourceMethodParam.RequestBasedParam) params.get(0);
         assertThat(defaultAndEncoded.defaultValue(), equalTo("A Default"));
-        assertThat(defaultAndEncoded.encodedRequested, is(true));
-        assertThat(defaultAndEncoded.key, equalTo("dummy1"));
+        assertThat(defaultAndEncoded.encodedRequested(), is(true));
+        assertThat(defaultAndEncoded.key(), equalTo("dummy1"));
 
         ResourceMethodParam.RequestBasedParam defaultAndNotEncoded = (ResourceMethodParam.RequestBasedParam) params.get(1);
         assertThat(defaultAndNotEncoded.defaultValue(), equalTo("Another Default"));
-        assertThat(defaultAndNotEncoded.encodedRequested, is(false));
-        assertThat(defaultAndNotEncoded.key, equalTo("dummy2"));
+        assertThat(defaultAndNotEncoded.encodedRequested(), is(false));
+        assertThat(defaultAndNotEncoded.key(), equalTo("dummy2"));
 
         ResourceMethodParam.RequestBasedParam noDefaultButEncoded = (ResourceMethodParam.RequestBasedParam) params.get(2);
         assertThat(noDefaultButEncoded.defaultValue(), is(nullValue()));
-        assertThat(noDefaultButEncoded.encodedRequested, is(true));
-        assertThat(noDefaultButEncoded.key, equalTo("dummy3"));
+        assertThat(noDefaultButEncoded.encodedRequested(), is(true));
+        assertThat(noDefaultButEncoded.key(), equalTo("dummy3"));
 
         ResourceMethodParam.RequestBasedParam noDefaultAndNoEncoded = (ResourceMethodParam.RequestBasedParam) params.get(3);
         assertThat(noDefaultAndNoEncoded.defaultValue(), is(nullValue()));
-        assertThat(noDefaultAndNoEncoded.encodedRequested, is(false));
-        assertThat(noDefaultAndNoEncoded.key, equalTo("dummy4"));
+        assertThat(noDefaultAndNoEncoded.encodedRequested(), is(false));
+        assertThat(noDefaultAndNoEncoded.key(), equalTo("dummy4"));
 
         assertThat(params.get(4), instanceOf(ResourceMethodParam.MessageBodyParam.class));
     }

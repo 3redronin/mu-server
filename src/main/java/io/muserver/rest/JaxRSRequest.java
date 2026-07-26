@@ -86,7 +86,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
             return muRequest;
         } else if (MuRuntimeDelegate.RESOURCE_INFO_PROPERTY.equals(name)) {
             @Nullable Class<?> resourceInstanceClass = (matchedMethod == null) ? null : matchedMethod.matchedClass.resourceClass.requiredResourceInstance().getClass();
-            java.lang.reflect.@Nullable Method resourceInstanceMethod = (matchedMethod == null) ? null : matchedMethod.resourceMethod.methodHandle;
+            java.lang.reflect.@Nullable Method resourceInstanceMethod = (matchedMethod == null) ? null : matchedMethod.resourceMethod.methodHandle();
             return new MuResourceInfo(resourceInstanceClass, resourceInstanceMethod);
         }
         return muRequest.attribute(name);
@@ -476,7 +476,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     @Override
     public void abortWith(Response response) {
         ensureNotInResponseFilter("abortWith");
-        response = Objects.requireNonNull(response, "response");
+        Objects.requireNonNull(response, "response");
         if (!requestFilterChainRunning) {
             throw new FilterAbortedException(response);
         }

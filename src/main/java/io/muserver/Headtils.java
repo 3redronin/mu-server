@@ -44,7 +44,7 @@ class Headtils {
                 String forValue = includeFor ? fors.get(i) : null;
                 boolean useDefaultPort = port == null || (proto != null &&
                     ((proto.equalsIgnoreCase("http") && "80".equals(port))
-                    || proto.equalsIgnoreCase("https") && "443".equals(port)));
+                    || (proto.equalsIgnoreCase("https") && "443".equals(port))));
                 String hostToUse =
                     includeHost ? host
                     : includePort ? curHost

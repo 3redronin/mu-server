@@ -1,9 +1,7 @@
 package io.muserver.rest;
 
-import io.muserver.Method;
 import io.muserver.openapi.TagObject;
 import jakarta.ws.rs.Consumes;
-import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.NameBinding;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -15,14 +13,11 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedElement;
-import java.lang.reflect.Modifier;
-import java.lang.reflect.Parameter;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -32,12 +27,6 @@ import static java.util.stream.Collectors.toList;
 class ResourceClass {
 
     private static final Logger log = LoggerFactory.getLogger(ResourceClass.class);
-    private static final ClassValue<AtomicBoolean> visibilityWarningsLogged = new ClassValue<AtomicBoolean>() {
-        @Override
-        protected AtomicBoolean computeValue(Class<?> type) {
-            return new AtomicBoolean();
-        }
-    };
 
     final UriPattern pathPattern;
     final Class<?> resourceClass;
@@ -50,6 +39,7 @@ class ResourceClass {
     final TagObject tag;
     final List<Class<? extends Annotation>> nameBindingAnnotations;
     private final SchemaObjectCustomizer schemaObjectCustomizer;
+    final ResourceClassIntrospection introspection;
 
     /**
      * If this class is sub-resource, then this is the locator method. Otherwise null.
@@ -67,6 +57,7 @@ class ResourceClass {
         this.nameBindingAnnotations = nameBindingAnnotations;
         this.schemaObjectCustomizer = schemaObjectCustomizer;
         this.locatorMethod = locatorMethod;
+        this.introspection = ResourceClassIntrospection.forClass(resourceClass);
     }
 
     public boolean matches(URI uri) {
@@ -87,77 +78,32 @@ class ResourceClass {
         }
 
         try {
-            if (shouldLogVisibilityWarnings(resourceClass)) {
-                nonPublicResourceMethodWarnings(resourceClass).forEach(log::warn);
+            if (introspection.shouldLogVisibilityWarnings()) {
+                introspection.visibilityWarnings.forEach(log::warn);
             }
         } catch (LinkageError | RuntimeException ignored) {
             // A best-effort diagnostic must not prevent an otherwise usable resource class from registering.
         }
         List<ResourceMethod> resourceMethods = new ArrayList<>();
-        java.lang.reflect.Method[] methods = this.resourceClass.getMethods();
-        for (java.lang.reflect.Method restMethod : methods) {
-            if (restMethod.isBridge()) {
-                continue;
-            }
-            java.lang.reflect.Method annotationSource = JaxMethodLocator.getMethodThatHasJaxRSAnnotations(restMethod, resourceClass);
-            @Nullable Method httpMethod = ResourceMethod.getMuMethod(annotationSource);
-            restMethod.setAccessible(true);
-            Path methodPath = annotationSource.getAnnotation(Path.class);
-            if (methodPath == null && httpMethod == null) {
-                continue; // after this, only methods that are (sub)resource-methods or resource locators are processed
-            }
-
-            List<Class<? extends Annotation>> methodNameBindingAnnotations = getNameBindingAnnotations(annotationSource);
-
-            @Nullable UriPattern methodPattern = methodPath == null ? null : UriPattern.uriTemplateToRegex(methodPath.value());
-
-
-            List<MediaType> methodProduces = MediaTypeDeterminer.supportedProducesTypes(annotationSource);
-            List<MediaType> methodConsumes = MediaTypeDeterminer.supportedConsumesTypes(annotationSource);
+        for (ResourceClassIntrospection.MethodInfo methodInfo : introspection.methods) {
+            methodInfo.methodHandle.setAccessible(true);
             List<ResourceMethodParam> params = new ArrayList<>();
-            Parameter[] annotationParameters = annotationSource.getParameters();
-            Parameter[] methodParameters = restMethod.getParameters();
-            for (int i = 0; i < annotationParameters.length; i++) {
-                ResourceMethodParam resourceMethodParam = ResourceMethodParam.fromParameter(i, methodParameters[i], annotationParameters[i], resourceClass, paramConverterProviders, methodPattern);
-                params.add(resourceMethodParam);
+            for (ResourceMethodParam.Introspection param : methodInfo.params) {
+                params.add(param.bind(paramConverterProviders));
             }
-            DescriptionData descriptionData = DescriptionData.fromAnnotation(restMethod, null);
-            @Nullable String pathTemplate = methodPath == null ? null : methodPath.value();
-            boolean isDeprecated = annotationSource.isAnnotationPresent(Deprecated.class);
-            resourceMethods.add(new ResourceMethod(this, methodPattern, restMethod, params, httpMethod, pathTemplate, methodProduces, methodConsumes, schemaObjectCustomizer, descriptionData, isDeprecated, methodNameBindingAnnotations, annotationSource.getAnnotations()));
+            resourceMethods.add(new ResourceMethod(
+                this, methodInfo, params, schemaObjectCustomizer));
         }
         this.resourceMethods = Collections.unmodifiableList(resourceMethods);
         this.methodInfoSet = true;
     }
 
     static List<String> nonPublicResourceMethodWarnings(Class<?> resourceClass) {
-        List<String> warnings = new ArrayList<>();
-        for (Class<?> current = resourceClass; current != null && current != Object.class; current = current.getSuperclass()) {
-            for (java.lang.reflect.Method method : current.getDeclaredMethods()) {
-                if (!Modifier.isPublic(method.getModifiers()) && isResourceMethodOrLocator(method)) {
-                    warnings.add("The JAX-RS annotated method " + method.toGenericString()
-                        + " cannot itself be exposed as a resource method or sub-resource locator because only public methods may be exposed.");
-                }
-            }
-        }
-        Collections.sort(warnings);
-        return warnings;
+        return ResourceClassIntrospection.forClass(resourceClass).visibilityWarnings;
     }
 
     static boolean shouldLogVisibilityWarnings(Class<?> resourceClass) {
-        return visibilityWarningsLogged.get(resourceClass).compareAndSet(false, true);
-    }
-
-    private static boolean isResourceMethodOrLocator(java.lang.reflect.Method method) {
-        if (method.isAnnotationPresent(Path.class)) {
-            return true;
-        }
-        for (Annotation annotation : method.getDeclaredAnnotations()) {
-            if (annotation.annotationType().isAnnotationPresent(HttpMethod.class)) {
-                return true;
-            }
-        }
-        return false;
+        return ResourceClassIntrospection.forClass(resourceClass).shouldLogVisibilityWarnings();
     }
 
     static List<Class<? extends Annotation>> getNameBindingAnnotations(AnnotatedElement annotationSource) {
@@ -226,13 +172,13 @@ class ResourceClass {
     }
 
     static ResourceClass forSubResourceLocator(ResourceMethod rm, Class<?> instanceClass, @Nullable Object instance, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders) {
-        @Nullable List<MediaType> existingConsumes = rm.effectiveConsumes.isEmpty() || (rm.directlyConsumes.isEmpty() && rm.effectiveConsumes.size() == 1 && MediaType.WILDCARD_TYPE.equals(rm.effectiveConsumes.get(0))) ? null : rm.effectiveConsumes;
+        @Nullable List<MediaType> existingConsumes = rm.effectiveConsumes.isEmpty() || (rm.directlyConsumes().isEmpty() && rm.effectiveConsumes.size() == 1 && MediaType.WILDCARD_TYPE.equals(rm.effectiveConsumes.get(0))) ? null : rm.effectiveConsumes;
         List<MediaType> consumes = getConsumes(existingConsumes, instanceClass);
-        @Nullable List<MediaType> existingProduces = rm.effectiveProduces.isEmpty() || (rm.directlyProduces.isEmpty() && rm.effectiveProduces.size() == 1 && MediaType.WILDCARD_TYPE.equals(rm.effectiveProduces.get(0))) ? null : rm.effectiveProduces;
+        @Nullable List<MediaType> existingProduces = rm.effectiveProduces.isEmpty() || (rm.directlyProduces().isEmpty() && rm.effectiveProduces.size() == 1 && MediaType.WILDCARD_TYPE.equals(rm.effectiveProduces.get(0))) ? null : rm.effectiveProduces;
         List<MediaType> produces = getProduces(existingProduces, instanceClass);
         ResourceClass resourceClass = new ResourceClass(
-            java.util.Objects.requireNonNull(rm.pathPattern, "Sub-resource locator had no path pattern"),
-            java.util.Objects.requireNonNull(rm.pathTemplate, "Sub-resource locator had no path template"),
+            java.util.Objects.requireNonNull(rm.pathPattern(), "Sub-resource locator had no path pattern"),
+            java.util.Objects.requireNonNull(rm.pathTemplate(), "Sub-resource locator had no path template"),
             instanceClass, instance, consumes, produces, rm.resourceClass.tag,
             rm.resourceClass.nameBindingAnnotations, schemaObjectCustomizer, rm);
         resourceClass.setupMethodInfo(paramConverterProviders);

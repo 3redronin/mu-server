@@ -1,28 +1,41 @@
 package io.muserver.rest;
 
+import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.OPTIONS;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.ext.ParamConverter;
+import jakarta.ws.rs.ext.ParamConverterProvider;
+import jakarta.ws.rs.ext.RuntimeDelegate;
 import org.junit.jupiter.api.Test;
 
+import java.lang.annotation.Annotation;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 import static java.net.URI.create;
 import static java.util.Collections.emptyList;
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.contains;
-import static org.hamcrest.Matchers.empty;
-import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class ResourceClassTest {
 
@@ -69,8 +82,8 @@ public class ResourceClassTest {
 
         assertThat(resourceClass.resourceMethods, hasSize(1));
         ResourceMethod resourceMethod = resourceClass.resourceMethods.get(0);
-        assertThat(resourceMethod.methodHandle.isBridge(), equalTo(false));
-        assertThat(resourceMethod.genericReturnType.getTypeName(), equalTo("java.util.List<java.lang.String>"));
+        assertThat(resourceMethod.methodHandle().isBridge(), equalTo(false));
+        assertThat(resourceMethod.genericReturnType().getTypeName(), equalTo("java.util.List<java.lang.String>"));
     }
 
     @Test
@@ -79,9 +92,9 @@ public class ResourceClassTest {
 
         assertThat(resourceClass.resourceMethods, hasSize(1));
         ResourceMethod resourceMethod = resourceClass.resourceMethods.get(0);
-        assertThat(resourceMethod.methodHandle.isBridge(), equalTo(false));
-        assertThat(resourceMethod.methodHandle.getParameterTypes()[0], equalTo(String.class));
-        assertThat(resourceMethod.params.get(0).source, equalTo(ResourceMethodParam.ValueSource.PATH_PARAM));
+        assertThat(resourceMethod.methodHandle().isBridge(), equalTo(false));
+        assertThat(resourceMethod.methodHandle().getParameterTypes()[0], equalTo(String.class));
+        assertThat(resourceMethod.params.get(0).source(), equalTo(ResourceMethodParam.ValueSource.PATH_PARAM));
     }
 
     @Test
@@ -90,9 +103,9 @@ public class ResourceClassTest {
 
         assertThat(resourceClass.resourceMethods, hasSize(1));
         ResourceMethod resourceMethod = resourceClass.resourceMethods.get(0);
-        assertThat(resourceMethod.methodHandle.isBridge(), equalTo(false));
-        assertThat(resourceMethod.methodHandle.getParameterTypes()[0], equalTo(String.class));
-        assertThat(resourceMethod.params.get(0).source, equalTo(ResourceMethodParam.ValueSource.PATH_PARAM));
+        assertThat(resourceMethod.methodHandle().isBridge(), equalTo(false));
+        assertThat(resourceMethod.methodHandle().getParameterTypes()[0], equalTo(String.class));
+        assertThat(resourceMethod.params.get(0).source(), equalTo(ResourceMethodParam.ValueSource.PATH_PARAM));
     }
 
     @Test
@@ -100,7 +113,84 @@ public class ResourceClassTest {
         ResourceClass resourceClass = ResourceClass.fromObject(new InterfaceResourceWithInheritedImplementation(), ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
 
         assertThat(resourceClass.resourceMethods, hasSize(1));
-        assertThat(resourceClass.resourceMethods.get(0).methodHandle.getDeclaringClass(), equalTo(UnannotatedImplementation.class));
+        assertThat(resourceClass.resourceMethods.get(0).methodHandle().getDeclaringClass(), equalTo(UnannotatedImplementation.class));
+    }
+
+    @Test
+    public void dynamicSubResourcesReuseIntrospectionButRemainBoundToTheirInstances() throws Exception {
+        ResourceClass root = ResourceClass.fromObject(new DynamicRoot(),
+            ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
+        ResourceMethod locator = root.resourceMethods.get(0);
+
+        ResourceClass first = ResourceClass.forSubResourceLocator(locator, DynamicChild.class,
+            new DynamicChild("first"), customizer, ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS);
+        ResourceClass second = ResourceClass.forSubResourceLocator(locator, DynamicChild.class,
+            new DynamicChild("second"), customizer, ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS);
+
+        assertSame(first.introspection, second.introspection);
+        assertThat(first.resourceMethods.get(0).invoke(), equalTo("first"));
+        assertThat(second.resourceMethods.get(0).invoke(), equalTo("second"));
+    }
+
+    @Test
+    public void converterSelectionRemainsBoundToEachHandlerConfiguration() {
+        ResourceClass first = ResourceClass.fromObject(new ConverterResource(),
+            providersWithPrefix("first:"), customizer);
+        ResourceClass second = ResourceClass.fromObject(new ConverterResource(),
+            providersWithPrefix("second:"), customizer);
+
+        assertSame(first.introspection, second.introspection);
+        ResourceMethodParam.RequestBasedParam firstParam =
+            (ResourceMethodParam.RequestBasedParam) first.resourceMethods.get(0).params.get(0);
+        ResourceMethodParam.RequestBasedParam secondParam =
+            (ResourceMethodParam.RequestBasedParam) second.resourceMethods.get(0).params.get(0);
+        assertThat(firstParam.defaultValue(), equalTo(new ConvertedValue("first:value")));
+        assertThat(secondParam.defaultValue(), equalTo(new ConvertedValue("second:value")));
+    }
+
+    @Test
+    public void cachedCollectionsAreImmutable() {
+        ResourceClassIntrospection model = ResourceClassIntrospection.forClass(ConverterResource.class);
+        ResourceClassIntrospection.MethodInfo method = model.methods.get(0);
+        ResourceMethodParam.Introspection param = method.params.get(0);
+
+        assertThrows(UnsupportedOperationException.class, () -> model.methods.add(method));
+        assertThrows(UnsupportedOperationException.class,
+            () -> method.directlyProduces.add(MediaType.APPLICATION_JSON));
+        assertThrows(UnsupportedOperationException.class, () -> method.params.add(param));
+        assertThrows(UnsupportedOperationException.class,
+            () -> method.nameBindingAnnotations.add(Deprecated.class));
+        assertThrows(UnsupportedOperationException.class,
+            () -> method.methodAnnotations.add(null));
+        assertThrows(UnsupportedOperationException.class,
+            () -> param.annotations.add(null));
+        assertThrows(UnsupportedOperationException.class,
+            () -> model.visibilityWarnings.add("warning"));
+    }
+
+    @Test
+    public void concurrentInitialAccessReturnsOneCorrectModel() throws Exception {
+        int threadCount = 16;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<ResourceClassIntrospection>> futures = new ArrayList<>();
+        try {
+            for (int i = 0; i < threadCount; i++) {
+                futures.add(executor.submit(() -> {
+                    start.await();
+                    return ResourceClassIntrospection.forClass(ConcurrentResource.class);
+                }));
+            }
+            start.countDown();
+            ResourceClassIntrospection expected = futures.get(0).get();
+            for (Future<ResourceClassIntrospection> future : futures) {
+                assertSame(expected, future.get());
+            }
+            assertThat(expected.methods, hasSize(1));
+            assertThat(expected.methods.get(0).httpMethod, equalTo(io.muserver.Method.GET));
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test
@@ -115,6 +205,75 @@ public class ResourceClassTest {
         for (String warning : warnings) {
             assertThat(warning, containsString("cannot itself be exposed as a resource method or sub-resource locator because only public methods may be exposed."));
         }
+    }
+
+    @Test
+    public void cachedGenericTypesAreResolvedAgainstTheConcreteClass() {
+        ResourceClassIntrospection classModel =
+            ResourceClassIntrospection.forClass(StringListResource.class);
+        assertThat(classModel.methods.get(0).genericReturnType.getTypeName(),
+            equalTo("java.util.List<java.lang.String>"));
+
+        ResourceClassIntrospection interfaceModel =
+            ResourceClassIntrospection.forClass(StringLookupResource.class);
+        assertThat(interfaceModel.methods.get(0).params.get(0).source,
+            equalTo(ResourceMethodParam.ValueSource.PATH_PARAM));
+    }
+
+    @Test
+    public void methodMediaTypesAreParsedForEachHandlerRuntimeDelegate() {
+        MuRuntimeDelegate.ensureSet();
+        RuntimeDelegate original = RuntimeDelegate.getInstance();
+        try {
+            RuntimeDelegate.setInstance(new MarkingRuntimeDelegate("first"));
+            ResourceClass first = ResourceClass.fromObject(new RuntimeDelegateMediaResource(),
+                ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
+
+            RuntimeDelegate.setInstance(new MarkingRuntimeDelegate("second"));
+            ResourceClass second = ResourceClass.fromObject(new RuntimeDelegateMediaResource(),
+                ResourceMethodParamTest.BUILT_IN_PARAM_PROVIDERS, customizer);
+
+            assertSame(first.introspection, second.introspection);
+            assertThat(first.produces.get(0).getParameters().get("delegate"), equalTo("first"));
+            assertThat(second.produces.get(0).getParameters().get("delegate"), equalTo("second"));
+            assertThat(first.consumes.get(0).getParameters().get("delegate"), equalTo("first"));
+            assertThat(second.consumes.get(0).getParameters().get("delegate"), equalTo("second"));
+            assertThat(first.resourceMethods.get(0).directlyProduces().get(0)
+                .getParameters().get("delegate"), equalTo("first"));
+            assertThat(second.resourceMethods.get(0).directlyProduces().get(0)
+                .getParameters().get("delegate"), equalTo("second"));
+            assertThat(first.resourceMethods.get(0).directlyConsumes().get(0)
+                .getParameters().get("delegate"), equalTo("first"));
+            assertThat(second.resourceMethods.get(0).directlyConsumes().get(0)
+                .getParameters().get("delegate"), equalTo("second"));
+        } finally {
+            RuntimeDelegate.setInstance(original);
+        }
+    }
+
+    private static List<ParamConverterProvider> providersWithPrefix(String prefix) {
+        ParamConverterProvider provider = new ParamConverterProvider() {
+            @Override
+            @SuppressWarnings("unchecked")
+            public <T> ParamConverter<T> getConverter(Class<T> rawType, Type genericType,
+                                                       Annotation[] annotations) {
+                if (rawType != ConvertedValue.class) {
+                    return null;
+                }
+                return (ParamConverter<T>) new ParamConverter<ConvertedValue>() {
+                    @Override
+                    public ConvertedValue fromString(String value) {
+                        return new ConvertedValue(prefix + value);
+                    }
+
+                    @Override
+                    public String toString(ConvertedValue value) {
+                        return value.value;
+                    }
+                };
+            }
+        };
+        return Arrays.asList(provider, new BuiltInParamConverterProvider());
     }
 
     @Test
@@ -230,6 +389,103 @@ public class ResourceClassTest {
 
     @Path("/api/inherited-implementation")
     private static class InterfaceResourceWithInheritedImplementation extends UnannotatedImplementation implements AnnotatedResourceMethod { }
+
+    @Path("/dynamic")
+    private static class DynamicRoot {
+        @Path("{id}")
+        public DynamicChild child() {
+            return new DynamicChild("unused");
+        }
+    }
+
+    private static class DynamicChild {
+        private final String value;
+
+        private DynamicChild(String value) {
+            this.value = value;
+        }
+
+        @GET
+        public String get() {
+            return value;
+        }
+    }
+
+    private static final class ConvertedValue {
+        private final String value;
+
+        private ConvertedValue(String value) {
+            this.value = value;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof ConvertedValue
+                && value.equals(((ConvertedValue) other).value);
+        }
+
+        @Override
+        public int hashCode() {
+            return value.hashCode();
+        }
+    }
+
+    @Path("/converter")
+    private static class ConverterResource {
+        @GET
+        public String get(@QueryParam("value") @jakarta.ws.rs.DefaultValue("value") ConvertedValue value) {
+            return value.value;
+        }
+    }
+
+    @Path("/concurrent")
+    private static class ConcurrentResource {
+        @GET
+        public String get() {
+            return "ok";
+        }
+    }
+
+    @Path("/runtime-delegate-media")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    private static class RuntimeDelegateMediaResource {
+        @GET
+        @Consumes(MediaType.TEXT_PLAIN)
+        @Produces(MediaType.TEXT_PLAIN)
+        public String get() {
+            return "ok";
+        }
+    }
+
+    private static final class MarkingRuntimeDelegate extends MuRuntimeDelegate {
+        private final String marker;
+
+        private MarkingRuntimeDelegate(String marker) {
+            this.marker = marker;
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <T> HeaderDelegate<T> createHeaderDelegate(Class<T> type) {
+            if (type != MediaType.class) {
+                return super.createHeaderDelegate(type);
+            }
+            return (HeaderDelegate<T>) new HeaderDelegate<MediaType>() {
+                @Override
+                public MediaType fromString(String value) {
+                    String[] typeAndSubtype = value.split("/", 2);
+                    return new MediaType(typeAndSubtype[0], typeAndSubtype[1],
+                        Collections.singletonMap("delegate", marker));
+                }
+
+                @Override
+                public String toString(MediaType value) {
+                    return value.getType() + "/" + value.getSubtype();
+                }
+            };
+        }
+    }
 
     @Path("/api/non-public")
     private static class ResourceWithNonPublicMethods {

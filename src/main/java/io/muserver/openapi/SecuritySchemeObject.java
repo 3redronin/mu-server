@@ -28,7 +28,7 @@ public class SecuritySchemeObject implements JsonWriter {
 
     SecuritySchemeObject(@Nullable String type, @Nullable String description, @Nullable String name, @Nullable String in, @Nullable String scheme, @Nullable String bearerFormat, @Nullable OAuthFlowsObject flows, @Nullable URI openIdConnectUrl) {
         notNull("type", type);
-        type = java.util.Objects.requireNonNull(type);
+        java.util.Objects.requireNonNull(type);
         if (!validTypes.contains(type)) {
             throw new IllegalArgumentException("'type' must be one of " + validTypes + " but was " + type);
         }
