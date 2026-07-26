@@ -42,6 +42,42 @@ public class ResourceMethodArrayParamTest {
 
     private MuServer server;
 
+    private enum ArrayEnum {
+        FIRST, SECOND
+    }
+
+    public static class ConstructedValue {
+        private final String value;
+
+        public ConstructedValue(String value) {
+            this.value = "constructor-" + value;
+        }
+    }
+
+    public static class FromStringValue {
+        private final String value;
+
+        private FromStringValue(String value) {
+            this.value = value;
+        }
+
+        public static FromStringValue fromString(String value) {
+            return new FromStringValue("fromString-" + value);
+        }
+    }
+
+    public static class ValueOfValue {
+        private final String value;
+
+        private ValueOfValue(String value) {
+            this.value = value;
+        }
+
+        public static ValueOfValue valueOf(String value) {
+            return new ValueOfValue("valueOf-" + value);
+        }
+    }
+
     @Test
     public void arraysReceiveValuesFromAllSupportedParameterAnnotations() throws IOException {
         @Path("arrays")
@@ -191,6 +227,35 @@ public class ResourceMethodArrayParamTest {
 
         try (Response response = call(request(server.uri().resolve("/arrays?number=10&number=21")))) {
             assertThat(response.body().string(), is("20|42"));
+        }
+    }
+
+    @Test
+    public void standardObjectConversionRulesAreAppliedToArrayElements() throws IOException {
+        @Path("arrays")
+        class ArrayResource {
+            @GET
+            public String get(@QueryParam("enum") ArrayEnum[] enums,
+                              @QueryParam("constructor") ConstructedValue[] constructed,
+                              @QueryParam("fromString") FromStringValue[] fromStrings,
+                              @QueryParam("valueOf") ValueOfValue[] valueOfs) {
+                return Arrays.stream(enums).map(Enum::name).collect(Collectors.joining("|")) + ";"
+                    + Arrays.stream(constructed).map(value -> value.value).collect(Collectors.joining("|")) + ";"
+                    + Arrays.stream(fromStrings).map(value -> value.value).collect(Collectors.joining("|")) + ";"
+                    + Arrays.stream(valueOfs).map(value -> value.value).collect(Collectors.joining("|"));
+            }
+        }
+        server = httpsServerForTest().addHandler(restHandler(new ArrayResource())).start();
+
+        try (Response response = call(request(server.uri().resolve("/arrays"
+            + "?enum=FIRST&enum=SECOND"
+            + "&constructor=one&constructor=two"
+            + "&fromString=one&fromString=two"
+            + "&valueOf=one&valueOf=two")))) {
+            assertThat(response.body().string(), is("FIRST|SECOND;"
+                + "constructor-one|constructor-two;"
+                + "fromString-one|fromString-two;"
+                + "valueOf-one|valueOf-two"));
         }
     }
 
