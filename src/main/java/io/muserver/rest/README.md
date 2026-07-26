@@ -51,7 +51,7 @@ N/A Not applicable as only singletons supported
 #### 3.3.1 Visibility 
 
 - [x] Implemented
-- [ ] Warn about mis-configured methods.
+- [x] Warn about mis-configured methods.
 
 #### 3.3.2 Parameters 
 

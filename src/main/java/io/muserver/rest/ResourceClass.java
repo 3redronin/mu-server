@@ -3,21 +3,26 @@ package io.muserver.rest;
 import io.muserver.Method;
 import io.muserver.openapi.TagObject;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.HttpMethod;
 import jakarta.ws.rs.NameBinding;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.ext.ParamConverterProvider;
 import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.AnnotatedElement;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -25,6 +30,14 @@ import static java.util.Arrays.asList;
 import static java.util.stream.Collectors.toList;
 
 class ResourceClass {
+
+    private static final Logger log = LoggerFactory.getLogger(ResourceClass.class);
+    private static final ClassValue<AtomicBoolean> visibilityWarningsLogged = new ClassValue<AtomicBoolean>() {
+        @Override
+        protected AtomicBoolean computeValue(Class<?> type) {
+            return new AtomicBoolean();
+        }
+    };
 
     final UriPattern pathPattern;
     final Class<?> resourceClass;
@@ -73,6 +86,13 @@ class ResourceClass {
             throw new IllegalStateException("Cannot call setupMethodInfo twice");
         }
 
+        try {
+            if (shouldLogVisibilityWarnings(resourceClass)) {
+                nonPublicResourceMethodWarnings(resourceClass).forEach(log::warn);
+            }
+        } catch (LinkageError | RuntimeException ignored) {
+            // A best-effort diagnostic must not prevent an otherwise usable resource class from registering.
+        }
         List<ResourceMethod> resourceMethods = new ArrayList<>();
         java.lang.reflect.Method[] methods = this.resourceClass.getMethods();
         for (java.lang.reflect.Method restMethod : methods) {
@@ -108,6 +128,36 @@ class ResourceClass {
         }
         this.resourceMethods = Collections.unmodifiableList(resourceMethods);
         this.methodInfoSet = true;
+    }
+
+    static List<String> nonPublicResourceMethodWarnings(Class<?> resourceClass) {
+        List<String> warnings = new ArrayList<>();
+        for (Class<?> current = resourceClass; current != null && current != Object.class; current = current.getSuperclass()) {
+            for (java.lang.reflect.Method method : current.getDeclaredMethods()) {
+                if (!Modifier.isPublic(method.getModifiers()) && isResourceMethodOrLocator(method)) {
+                    warnings.add("The JAX-RS annotated method " + method.toGenericString()
+                        + " cannot itself be exposed as a resource method or sub-resource locator because only public methods may be exposed.");
+                }
+            }
+        }
+        Collections.sort(warnings);
+        return warnings;
+    }
+
+    static boolean shouldLogVisibilityWarnings(Class<?> resourceClass) {
+        return visibilityWarningsLogged.get(resourceClass).compareAndSet(false, true);
+    }
+
+    private static boolean isResourceMethodOrLocator(java.lang.reflect.Method method) {
+        if (method.isAnnotationPresent(Path.class)) {
+            return true;
+        }
+        for (Annotation annotation : method.getDeclaredAnnotations()) {
+            if (annotation.annotationType().isAnnotationPresent(HttpMethod.class)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     static List<Class<? extends Annotation>> getNameBindingAnnotations(AnnotatedElement annotationSource) {
