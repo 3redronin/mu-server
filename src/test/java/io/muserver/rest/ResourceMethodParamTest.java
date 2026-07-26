@@ -357,13 +357,13 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), equalTo("chihuahua / null / big_hairy"));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples?breedOne=BAD_DOG").toString()))) {
-            assertThat(resp.code(), is(404));
+            assertThat(resp.code(), is(400));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples/matrix;breed=BAD_DOG").toString()))) {
-            assertThat(resp.code(), is(404));
+            assertThat(resp.code(), is(400));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples/path/BAD_DOG").toString()))) {
-            assertThat(resp.code(), is(404));
+            assertThat(resp.code(), is(400));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples/headers").toString())
             .header("breedOne", "BAD_DOG"))) {
@@ -380,7 +380,7 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), equalTo("empty list"));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples/multiple?breeds=CHIHUAHUA&breeds=INVALID&breeds=YELPER").toString()))) {
-            assertThat(resp.code(), is(404));
+            assertThat(resp.code(), is(400));
         }
     }
 
@@ -412,7 +412,7 @@ public class ResourceMethodParamTest {
     }
 
     @Test
-    public void inheritedGenericUriParameterConversionFailuresStayNotFound() throws IOException {
+    public void inheritedGenericUriParameterConversionFailuresAreBadRequests() throws IOException {
         class BaseResource<T> {
             @GET
             @Path("{breed}")
@@ -429,7 +429,7 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), is("chihuahua"));
         }
         try (Response resp = call(request(server.uri().resolve("/inherited-breeds/BAD_DOG")))) {
-            assertThat(resp.code(), is(404));
+            assertThat(resp.code(), is(400));
         }
     }
 
@@ -867,7 +867,7 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), equalTo(""));
         }
         try (Response resp = call(request(server.uri().resolve("/time?value=invalid-date")))) {
-            assertThat(resp.code(), is(404));
+            assertThat(resp.code(), is(400));
         }
     }
 
@@ -897,7 +897,7 @@ public class ResourceMethodParamTest {
             assertThat(resp.body().string(), equalTo(""));
         }
         try (Response resp = call(request(server.uri().resolve("/time?value=invalid-date")))) {
-            assertThat(resp.code(), is(404));
+            assertThat(resp.code(), is(400));
         }
     }
 

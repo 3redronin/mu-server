@@ -134,7 +134,8 @@ public class AsynchronousProcessingTest {
         this.server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request().url(server.uri().resolve("/samples").toString()))) {
             assertThat(resp.code(), is(400));
-            assertThat(resp.body().string(), equalTo("<h1>400 Bad Request</h1><p>Bad bad bad request</p>"));
+            assertThat(resp.header("content-type"), is("application/problem+json"));
+            assertThat(resp.body().string(), containsString("\"title\":\"Bad bad bad request\""));
         }
     }
 
@@ -300,7 +301,7 @@ public class AsynchronousProcessingTest {
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(400));
-            assertThat(resp.body().string(), containsString("400 Bad Request"));
+            assertThat(resp.body().string(), containsString("\"status\":400"));
         }
         assertThat("Invalid request, but method was called", methodCalled.get(), is(false));
     }

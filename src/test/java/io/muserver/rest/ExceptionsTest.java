@@ -44,14 +44,14 @@ public class ExceptionsTest {
         try (Response resp = call(request().url(server.uri().resolve("/samples/custom-message").toString()))) {
             assertThat(resp.code(), is(404));
             assertThat(resp.body().string(), allOf(
-                containsString("<h1>404 Not Found</h1>"),
-                containsString("<p>This is a custom error message</p>")));
+                containsString("\"status\":404"),
+                containsString("\"title\":\"This is a custom error message\"")));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples/default-message").toString()))) {
             assertThat(resp.code(), is(404));
             assertThat(resp.body().string(), allOf(
-                containsString("<h1>404 Not Found</h1>"),
-                containsString("<p>HTTP 404 Not Found</p>")));
+                containsString("\"status\":404"),
+                containsString("\"title\":\"HTTP 404 Not Found\"")));
         }
     }
 
@@ -146,14 +146,14 @@ public class ExceptionsTest {
         try (Response resp = call(request().url(server.uri().resolve("/samples/custom-message").toString()))) {
             assertThat(resp.code(), is(400));
             assertThat(resp.body().string(), allOf(
-                containsString("<h1>400 Bad Request</h1>"),
-                containsString("<p>This is custom client error</p>")));
+                containsString("\"status\":400"),
+                containsString("\"title\":\"This is custom client error\"")));
         }
         try (Response resp = call(request().url(server.uri().resolve("/samples/default-message").toString()))) {
             assertThat(resp.code(), is(400));
             assertThat(resp.body().string(), allOf(
-                containsString("<h1>400 Bad Request</h1>"),
-                containsString("<p>HTTP 400 Bad Request</p>")));
+                containsString("\"status\":400"),
+                containsString("\"title\":\"HTTP 400 Bad Request\"")));
         }
     }
 

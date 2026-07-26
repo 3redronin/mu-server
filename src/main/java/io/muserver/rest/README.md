@@ -88,12 +88,12 @@ item above is specifically for extracting a named part from a multipart body.
 
 - [x] Use a registered exception mapping provider if available
 - [x] Use the response carried by a `WebApplicationException` when no application mapper handles it
-- [ ] Register the Jakarta REST 3.1 default `ExceptionMapper<Throwable>`. It should turn otherwise-unmapped
-  exceptions into a plain 500 response while preserving the response carried by a `WebApplicationException`;
-  application mappers must take precedence.
+- [x] Register the Jakarta REST 3.1 default `ExceptionMapper<Throwable>` (`ProblemDetailsExceptionMapper`).
+  It turns otherwise-unmapped exceptions into RFC-9457 problem-details JSON, and more-specific registered mappers
+  take precedence.
 
-Currently, ordinary unchecked exceptions with no mapper are rethrown to Mu Server. This is historical behavior,
-not the Jakarta REST 3.1 default-mapper behavior.
+Default registrations can be replaced (for example, via `Throwable.class`) and removed to restore Mu Server's
+standard HTML fallback with `removeExceptionMapper(Throwable.class)`.
 
 #### 3.3.5 HEAD and OPTIONS 
 
@@ -226,7 +226,7 @@ No plan to implement as it would add another dependency.
 
 - [x] Implemented, except as per Mu-Server conventions, no automatic registering is used, so a `@Provider` annotation is ignored.
 Call `RestHandlerBuilder.addExceptionMapper` to register mappers.
-- [ ] The required Jakarta REST 3.1 default `ExceptionMapper<Throwable>` is not yet registered.
+- [x] The required Jakarta REST 3.1 default `ExceptionMapper<Throwable>` is registered.
 
 ### 4.5 Exceptions 
 

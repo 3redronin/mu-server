@@ -30,6 +30,7 @@ import static io.muserver.Mutils.htmlEncode;
 import static java.util.Arrays.asList;
 import static java.util.Collections.singletonMap;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
 import static scaffolding.ClientUtils.call;
@@ -140,7 +141,8 @@ public class BasicAuthTest {
             .header(HttpHeaders.AUTHORIZATION, "Basic " + base64Encode("Frank:password123"))
         )) {
             assertThat(resp.code(), is(403));
-            assertThat(resp.body().string(), is("<h1>403 Forbidden</h1><p>This requires an Admin role</p>"));
+            assertThat(resp.header("content-type"), is("application/problem+json"));
+            assertThat(resp.body().string(), containsString("\"title\":\"This requires an Admin role\""));
         }
     }
 

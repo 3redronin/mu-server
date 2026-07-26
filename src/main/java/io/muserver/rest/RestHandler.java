@@ -69,18 +69,20 @@ public class RestHandler implements MuHandler {
         if (documentor != null && documentor.handle(muRequest, muResponse)) {
             return true;
         }
-        List<MediaType> acceptHeaders;
-        try {
-            acceptHeaders = MediaTypeDeterminer.parseAcceptHeaders(muRequest.headers().getAll(HeaderNames.ACCEPT));
-        } catch (IllegalArgumentException e) {
-            throw new ClientErrorException(e.getMessage(), 400);
-        }
+        List<MediaType> acceptHeadersForException = emptyList();
         List<MediaType> producesRef = null;
         List<MediaType> directlyProducesRef = null;
         SecurityContext securityContext = muRequest.uri().getScheme().equals("https") ? MuSecurityContext.notLoggedInHttpsContext : MuSecurityContext.notLoggedInHttpContext;
 
         JaxRSRequest requestContext = new JaxRSRequest(muRequest, muResponse, new LazyAccessInputStream(muRequest), Mutils.trim(muRequest.relativePath(), "/"), securityContext, readerInterceptors, entityProviders);
         try {
+            final List<MediaType> acceptHeaders;
+            try {
+                acceptHeaders = MediaTypeDeterminer.parseAcceptHeaders(muRequest.headers().getAll(HeaderNames.ACCEPT));
+                acceptHeadersForException = acceptHeaders;
+            } catch (IllegalArgumentException e) {
+                throw new ClientErrorException(e.getMessage(), 400);
+            }
             filterManagerThing.onPreMatch(requestContext);
             if (requestContext.getAbortResponse() != null) {
                 sendResponse(0, requestContext, muResponse, acceptHeaders, emptyList(), emptyList(), JaxRSResponse.Builder.EMPTY_ANNOTATIONS, requestContext.getAbortResponse());
@@ -169,7 +171,7 @@ public class RestHandler implements MuHandler {
         } catch (Exception ex) {
             if (producesRef == null) producesRef = emptyList();
             if (directlyProducesRef == null) directlyProducesRef = emptyList();
-            dealWithUnhandledException(0, requestContext, muResponse, ex, acceptHeaders, producesRef, directlyProducesRef);
+            dealWithUnhandledException(0, requestContext, muResponse, ex, acceptHeadersForException, producesRef, directlyProducesRef);
             if (muRequest.isAsync()) {
                 muRequest.handleAsync().complete();
             }

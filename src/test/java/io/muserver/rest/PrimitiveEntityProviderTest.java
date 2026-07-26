@@ -205,7 +205,7 @@ public class PrimitiveEntityProviderTest {
             .url(server.uri().resolve("/samples").toString())
         )) {
             assertThat(resp.code(), equalTo(400));
-            assertThat(resp.body().string(), containsString("400 Bad Request"));
+            assertThat(resp.body().string(), containsString("\"status\":400"));
         }
     }
 

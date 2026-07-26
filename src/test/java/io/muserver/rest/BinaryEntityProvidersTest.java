@@ -153,7 +153,7 @@ public class BinaryEntityProvidersTest {
         try (Response resp = call(request(server.uri().resolve("/samples")))) {
             assertThat(resp.code(), equalTo(400));
             assertThat(resp.body().string(), containsString("Some plain text"));
-            assertThat(resp.headers("content-type"), contains(ContentTypes.TEXT_HTML_UTF8.toString()));
+            assertThat(resp.headers("content-type"), contains("application/problem+json"));
         }
     }
 
