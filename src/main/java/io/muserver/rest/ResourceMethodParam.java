@@ -304,7 +304,14 @@ abstract class ResourceMethodParam {
         public @Nullable Object getValue(JaxRSRequest jaxRequest, RequestMatcher.MatchedMethod matchedMethod, CollectionParameterStrategy cps) throws IOException {
             MuRequest muRequest = jaxRequest.muRequest;
             Class<?> paramClass = type();
-            if (UploadedFile.class.isAssignableFrom(paramClass)) {
+            if (array && UploadedFile.class.isAssignableFrom(convertedValueType)) {
+                List<UploadedFile> uploadedFiles = muRequest.uploadedFiles(key());
+                Object uploadedFileArray = Array.newInstance(convertedValueType, uploadedFiles.size());
+                for (int i = 0; i < uploadedFiles.size(); i++) {
+                    Array.set(uploadedFileArray, i, uploadedFiles.get(i));
+                }
+                return uploadedFileArray;
+            } else if (UploadedFile.class.isAssignableFrom(paramClass)) {
                 return muRequest.uploadedFile(key());
             } else if (File.class.isAssignableFrom(paramClass)) {
                 UploadedFile uf = muRequest.uploadedFile(key());
