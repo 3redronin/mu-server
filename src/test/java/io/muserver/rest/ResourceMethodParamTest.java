@@ -50,8 +50,6 @@ public class ResourceMethodParamTest {
                                           @MatrixParam("dummy2") @DefaultValue("Another Default") String defaultAndNotEncoded,
                                           @FormParam("dummy3") @Encoded String noDefaultButEncoded,
                                           @HeaderParam("dummy4") String noDefaultAndNoEncoded,
-                                          @jakarta.ws.rs.core.Context Object context,
-                                          @jakarta.ws.rs.container.Suspended Object suspended,
                                           String messageBasedParam) {
             }
         }
@@ -81,11 +79,7 @@ public class ResourceMethodParamTest {
         assertThat(noDefaultAndNoEncoded.encodedRequested(), is(false));
         assertThat(noDefaultAndNoEncoded.key(), equalTo("dummy4"));
 
-        assertThat(params.get(4), instanceOf(ResourceMethodParam.ContextParam.class));
-        assertThat(params.get(4).isRequired(), is(true));
-        assertThat(params.get(5), instanceOf(ResourceMethodParam.SuspendedParam.class));
-        assertThat(params.get(5).isRequired(), is(true));
-        assertThat(params.get(6), instanceOf(ResourceMethodParam.MessageBodyParam.class));
+        assertThat(params.get(4), instanceOf(ResourceMethodParam.MessageBodyParam.class));
     }
 
     @Test

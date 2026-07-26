@@ -88,10 +88,7 @@ abstract class ResourceMethodParam {
         boolean requestBased = source != ValueSource.MESSAGE_BODY
             && source != ValueSource.CONTEXT
             && source != ValueSource.SUSPENDED;
-        boolean isRequired = source == ValueSource.PATH_PARAM
-            || source == ValueSource.CONTEXT
-            || source == ValueSource.SUSPENDED
-            || hasDeclared(annotationSource, Required.class);
+        boolean isRequired = source == ValueSource.PATH_PARAM || hasDeclared(annotationSource, Required.class);
         boolean encodedRequested = requestBased && hasDeclared(annotationSource, Encoded.class);
         boolean isDeprecated = requestBased && hasDeclared(annotationSource, Deprecated.class);
         String key = requestBased ? parameterName(source, annotationSource) : "";
