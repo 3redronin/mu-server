@@ -28,7 +28,7 @@ class ParseUtils {
     }
 
     static boolean isTChar(byte b) {
-        return (b >= (byte)'a' && b <= (byte)'z') || (b >= (byte)'A' && b <= (byte)'Z') || (b >= (byte)'0' && b <= (byte)'9' || b == (byte)'!' ||
+        return (b >= (byte)'a' && b <= (byte)'z') || (b >= (byte)'A' && b <= (byte)'Z') || ((b >= (byte)'0' && b <= (byte)'9') || b == (byte)'!' ||
             b == (byte)'#' || b == (byte)'$' || b == (byte)'%' || b == (byte)'&' || b == (byte)'\'' || b == (byte)'*' || b == (byte)'+' ||
             b == (byte)'-' || b == (byte)'.' || b == (byte)'^' || b == (byte)'_' || b == (byte)'`' || b == (byte)'|' || b == (byte)'~');
     }
