@@ -1,11 +1,13 @@
 package io.muserver.rest;
 
 import io.muserver.MuServer;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import okhttp3.Request;
 import okhttp3.Response;
+import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.MuAssert;
@@ -13,6 +15,7 @@ import scaffolding.ServerUtils;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.Arrays.asList;
@@ -131,10 +134,42 @@ public class MediaTypesTest {
         .header("accept", "text")
         )) {
             assertThat(resp.code(), is(400));
-            assertThat(resp.header("Content-Type"), is("text/html;charset=utf-8"));
-            assertThat(resp.body().string(), containsString("Media types must be in the format &#x27;type&#x2F;subtype&#x27;; this is inavlid: &#x27;text&#x27;"));
+            assertThat(resp.header("Content-Type"), is("application/problem+json"));
+            JSONObject problem = new JSONObject(resp.body().string());
+            assertThat(problem.getInt("status"), is(400));
+            assertThat(problem.getString("title"), is("Media types must be in the format 'type/subtype'; this is inavlid: 'text'"));
         }
 
+    }
+
+    @Test
+    public void invalidAcceptHeadersUseRegisteredExceptionMapper() throws IOException {
+        @Path("things")
+        class Widget {
+            @GET
+            @Produces("application/json")
+            public String json() {
+                return "[]";
+            }
+        }
+        AtomicInteger mapperCalls = new AtomicInteger();
+        this.server = ServerUtils.httpsServerForTest()
+            .addHandler(restHandler(new Widget())
+                .addExceptionMapper(ClientErrorException.class, exception -> {
+                    mapperCalls.incrementAndGet();
+                    return jakarta.ws.rs.core.Response.status(499)
+                        .entity("mapped")
+                        .type(jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE)
+                        .build();
+                }))
+            .start();
+
+        try (Response resp = call(request().url(server.uri().resolve("/things").toString())
+            .header("Accept", "text"))) {
+            assertThat(resp.code(), is(499));
+            assertThat(resp.body().string(), is("mapped"));
+        }
+        assertThat(mapperCalls.get(), is(1));
     }
 
     @Test
