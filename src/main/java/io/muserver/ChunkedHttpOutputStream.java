@@ -27,6 +27,7 @@ class ChunkedHttpOutputStream extends OutputStream {
         response.exchange().block(() -> response.writeAndFlush(Unpooled.wrappedBuffer(b, off, len)));
     }
 
+    @Override
     public void close() {
         isClosed = true;
     }

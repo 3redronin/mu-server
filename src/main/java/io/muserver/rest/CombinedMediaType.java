@@ -10,7 +10,7 @@ import java.util.Objects;
  */
 class CombinedMediaType implements Comparable<CombinedMediaType> {
 
-    public static CombinedMediaType NONMATCH = new CombinedMediaType(null, null, 1.0, 1.0, 0, null);
+    public static final CombinedMediaType NONMATCH = new CombinedMediaType(null, null, 1.0, 1.0, 0, null);
 
     public final @Nullable String type;
     public final @Nullable String subType;

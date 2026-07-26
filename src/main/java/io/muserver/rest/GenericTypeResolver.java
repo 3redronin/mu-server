@@ -130,7 +130,7 @@ final class GenericTypeResolver {
             Type resolvedOwner = owner == null ? null : resolve(owner, typeArguments);
             Type[] arguments = parameterizedType.getActualTypeArguments();
             Type[] resolvedArguments = resolve(arguments, typeArguments);
-            if (resolvedOwner == owner && Arrays.equals(arguments, resolvedArguments)) {
+            if (Objects.equals(resolvedOwner, owner) && Arrays.equals(arguments, resolvedArguments)) {
                 return type;
             }
             return new ResolvedParameterizedType(resolvedOwner, parameterizedType.getRawType(), resolvedArguments);

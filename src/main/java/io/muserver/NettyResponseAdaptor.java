@@ -113,10 +113,12 @@ abstract class NettyResponseAdaptor implements MuResponse {
         this.headers.set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
     }
 
+    @Override
     public int status() {
         return status;
     }
 
+    @Override
     public void status(int value) {
         if (state != ResponseState.NOTHING && !state.completedWithError()) {
             throw new IllegalStateException("Cannot set the status after the headers have already been sent");
@@ -211,6 +213,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
 
     abstract ChannelFuture writeAndFlushToChannel(boolean isLast, ByteBuf content);
 
+    @Override
     public void sendChunk(String text) {
         throwIfAsync();
         exchange().block(() -> {
@@ -228,14 +231,17 @@ abstract class NettyResponseAdaptor implements MuResponse {
         return Unpooled.copiedBuffer(text, charset);
     }
 
+    @Override
     public void redirect(String newLocation) {
         redirect(URI.create(newLocation));
     }
 
+    @Override
     public Headers headers() {
         return headers;
     }
 
+    @Override
     public void contentType(@Nullable CharSequence contentType) {
         if (contentType == null) {
             headers.remove(HeaderNames.CONTENT_TYPE);
@@ -244,6 +250,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
         }
     }
 
+    @Override
     public void addCookie(Cookie cookie) {
         headers.add(HeaderNames.SET_COOKIE, ServerCookieEncoder.LAX.encode(cookie.nettyCookie));
     }
@@ -271,6 +278,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
         }
     }
 
+    @Override
     public PrintWriter writer() {
         throwIfAsync();
         if (this.writer == null) {
@@ -353,6 +361,7 @@ abstract class NettyResponseAdaptor implements MuResponse {
 
     protected abstract ChannelFuture writeLastContentMarker();
 
+    @Override
     public final void redirect(URI newLocation) {
         HttpExchange exchange = exchange();
         if (!exchange.inLoop()) {

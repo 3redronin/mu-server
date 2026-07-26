@@ -83,14 +83,17 @@ public class Cookie {
         return nettyCookie.isHttpOnly();
     }
 
+    @Override
     public int hashCode() {
         return nettyCookie.hashCode();
     }
 
+    @Override
     public boolean equals(@Nullable Object o) {
         return (this == o) || ((o instanceof Cookie) && nettyCookie.equals(o));
     }
 
+    @Override
     public String toString() {
         return nettyCookie.toString();
     }

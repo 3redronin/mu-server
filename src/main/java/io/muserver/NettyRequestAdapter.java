@@ -62,6 +62,7 @@ class NettyRequestAdapter implements MuRequest {
         this.method = method;
     }
 
+    @Override
     public boolean isAsync() {
         return asyncHandle != null;
     }
@@ -109,21 +110,25 @@ class NettyRequestAdapter implements MuRequest {
         return exchange().startTime();
     }
 
+    @Override
     public Method method() {
         return method;
     }
 
 
+    @Override
     public URI uri() {
         return uri;
     }
 
 
+    @Override
     public URI serverURI() {
         return serverUri;
     }
 
 
+    @Override
     public Headers headers() {
         return headers;
     }
@@ -132,6 +137,7 @@ class NettyRequestAdapter implements MuRequest {
         return server().maxRequestSize();
     }
 
+    @Override
     public Optional<InputStream> inputStream() {
         if (!headers().hasBody()) {
             return Optional.empty();
@@ -158,6 +164,7 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
+    @Override
     public String readBodyAsString() throws IOException {
         if (headers.hasBody()) {
             RequestBodyReader.StringRequestBodyReader reader = createStringRequestBodyReader(maxRequestBytes(), headers());
@@ -358,6 +365,7 @@ class NettyRequestAdapter implements MuRequest {
         }
     }
 
+    @Override
     public String toString() {
         return method().name() + " " + uri();
     }

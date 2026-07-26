@@ -50,10 +50,12 @@ class PrimitiveEntityProvider<T> implements MessageBodyWriter<T>, MessageBodyRea
         this.stringToValue = stringToValue;
     }
 
+    @Override
     public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
         return primitiveClass.equals(type) || boxedClass.equals(type);
     }
 
+    @Override
     public T readFrom(Class<T> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
         Charset charset = EntityProviders.charsetFor(mediaType);
         byte[] bytes = Mutils.toByteArray(entityStream, 2048);
@@ -64,14 +66,17 @@ class PrimitiveEntityProvider<T> implements MessageBodyWriter<T>, MessageBodyRea
         return stringToValue.apply(stringVal);
     }
 
+    @Override
     public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
         return primitiveClass.equals(type) || boxedClass.equals(type);
     }
 
+    @Override
     public long getSize(T content, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
         return toBytes(content, mediaType).length;
     }
 
+    @Override
     public void writeTo(T content, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
         entityStream.write(toBytes(content, mediaType));
     }
