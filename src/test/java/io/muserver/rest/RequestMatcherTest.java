@@ -178,9 +178,9 @@ public class RequestMatcherTest {
         ResourceClass resourcePeopleBelts = ResourceClass.fromObject(new Fruit(), paramConverterProviders, customizer);
         RequestMatcher rm = new RequestMatcher(singletonList(resourcePeopleBelts));
         ResourceMethod getAll = findResourceMethod(rm, Method.GET, "api/fruits", emptyList(), null).resourceMethod;
-        assertThat(getAll.methodHandle.getName(), equalTo("getAll"));
+        assertThat(getAll.methodHandle().getName(), equalTo("getAll"));
         RequestMatcher.MatchedMethod mm = findResourceMethod(rm, Method.GET, "api/fruits/orange", emptyList(), null);
-        assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
+        assertThat(mm.resourceMethod.methodHandle().getName(), equalTo("get"));
         assertThat(mm.pathParams.get("name").getPath(), equalTo("orange"));
     }
 
@@ -204,7 +204,7 @@ public class RequestMatcherTest {
         }
 
         RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new OptionsDefault(), paramConverterProviders, customizer)));
-        assertThat(findResourceMethod(rm, Method.OPTIONS, "foo", emptyList(), null).resourceMethod.methodHandle.getName(), equalTo("options"));
+        assertThat(findResourceMethod(rm, Method.OPTIONS, "foo", emptyList(), null).resourceMethod.methodHandle().getName(), equalTo("options"));
 
         RequestMatcher rm2 = new RequestMatcher(asList(ResourceClass.fromObject(new Foo(), paramConverterProviders, customizer), ResourceClass.fromObject(new OptionsDefault(), paramConverterProviders, customizer)));
         try {
@@ -230,7 +230,7 @@ public class RequestMatcherTest {
 
         RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new Fruit(), paramConverterProviders, customizer)));
         RequestMatcher.MatchedMethod mm = findResourceMethod(rm, Method.GET, "api/citrus/orange", emptyList(), null);
-        assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
+        assertThat(mm.resourceMethod.methodHandle().getName(), equalTo("get"));
         assertThat(mm.pathParams.get("fruitType").getPath(), equalTo("orange"));
         assertThat(mm.pathParams.get("fruitFamily").getPath(), equalTo("citrus"));
     }
@@ -254,7 +254,7 @@ public class RequestMatcherTest {
 
         RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new FruitImpl(), paramConverterProviders, customizer)));
         RequestMatcher.MatchedMethod mm = findResourceMethod(rm, Method.GET, "api/citrus/orange", emptyList(), null);
-        assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
+        assertThat(mm.resourceMethod.methodHandle().getName(), equalTo("get"));
         assertThat(mm.pathParams.get("fruitType").getPath(), equalTo("orange"));
         assertThat(mm.pathParams.get("fruitFamily").getPath(), equalTo("citrus"));
     }
@@ -352,7 +352,7 @@ public class RequestMatcherTest {
         }
 
         RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new PictureThat(), paramConverterProviders, customizer)));
-        assertThat(findResourceMethod(rm, Method.POST, "pictures", emptyList(), null).resourceMethod.methodHandle.getName(), equalTo("text"));
+        assertThat(findResourceMethod(rm, Method.POST, "pictures", emptyList(), null).resourceMethod.methodHandle().getName(), equalTo("text"));
     }
 
     @Test
@@ -369,7 +369,7 @@ public class RequestMatcherTest {
 
         RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new PictureThat(), paramConverterProviders, customizer)));
         RequestMatcher.MatchedMethod match = findResourceMethod(rm, Method.POST, "pictures", emptyList(), null, true);
-        assertThat(match.resourceMethod.methodHandle.getName(), equalTo("html"));
+        assertThat(match.resourceMethod.methodHandle().getName(), equalTo("html"));
     }
 
     @Test
@@ -396,7 +396,7 @@ public class RequestMatcherTest {
         }
 
         RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new PictureThat(), paramConverterProviders, customizer)));
-        assertThat(findResourceMethod(rm, Method.POST, "pictures", emptyList(), null).resourceMethod.methodHandle.getName(), equalTo("concrete"));
+        assertThat(findResourceMethod(rm, Method.POST, "pictures", emptyList(), null).resourceMethod.methodHandle().getName(), equalTo("concrete"));
     }
 
     @Test
@@ -418,11 +418,11 @@ public class RequestMatcherTest {
         }
 
         RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new PictureThat(), paramConverterProviders, customizer)));
-        assertThat(findResourceMethod(rm, Method.POST, "pictures", emptyList(), null).resourceMethod.methodHandle.getName(), equalTo("concreteAndWildcard"));
+        assertThat(findResourceMethod(rm, Method.POST, "pictures", emptyList(), null).resourceMethod.methodHandle().getName(), equalTo("concreteAndWildcard"));
     }
 
     private static String nameOf(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) throws NotMatchedException {
-        return findResourceMethod(rm, Method.GET, "pictures", acceptHeaders, requestBodyContentType).resourceMethod.methodHandle.getName();
+        return findResourceMethod(rm, Method.GET, "pictures", acceptHeaders, requestBodyContentType).resourceMethod.methodHandle().getName();
     }
 
     private static void assertNotAcceptable(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) {
