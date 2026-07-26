@@ -955,7 +955,7 @@ public class FilterTest {
     }
 
     @Test
-    public void responseFilterFailureDoesNotRecursivelyProcessErrorResponse() throws IOException {
+    public void responseFilterFailureOnMappedResponseUsesBoundedServerFallback() throws IOException {
         AtomicInteger responseFilterCalls = new AtomicInteger();
 
         server = httpsServerForTest()
@@ -974,10 +974,13 @@ public class FilterTest {
 
         try (Response response = call(request(server.uri().resolve("/broken")))) {
             assertThat(response.code(), equalTo(500));
-            assertThat(response.body().string(), containsString("\"status\":500"));
+            assertThat(response.header("Content-Type"), containsString("text/html"));
+            assertThat(response.body().string(), allOf(
+                containsString("<h1>500 Internal Server Error</h1>"),
+                containsString("ErrorID=")));
         }
 
-        assertThat(responseFilterCalls.get(), equalTo(1));
+        assertThat(responseFilterCalls.get(), equalTo(2));
     }
 
     @Test
