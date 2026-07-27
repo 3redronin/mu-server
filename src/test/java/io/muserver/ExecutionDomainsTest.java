@@ -179,6 +179,35 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void oneWriterThreadCanServeMultipleLiveHttp2Connections() throws Exception {
+        var connectionExecutor = track(Executors.newFixedThreadPool(2, namedThreads("connection-")));
+        var writerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("h2-writer-")));
+
+        server = httpServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .withConnectionExecutor(connectionExecutor)
+            .withHttp2WriterExecutor(writerExecutor)
+            .start();
+
+        try (var client = new H2Client();
+             var first = client.connectClearText(server);
+             var second = client.connectClearText(server)) {
+            first.handshake();
+            second.handshake();
+            first.socket().setSoTimeout(5000);
+            second.socket().setSoTimeout(5000);
+
+            byte[] firstPing = {0, 1, 2, 3, 4, 5, 6, 7};
+            byte[] secondPing = {7, 6, 5, 4, 3, 2, 1, 0};
+            first.writeFrame(new Http2Ping(false, firstPing)).flush();
+            second.writeFrame(new Http2Ping(false, secondPing)).flush();
+
+            assertThat(first.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, firstPing)));
+            assertThat(second.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, secondPing)));
+        }
+    }
+
+    @Test
     void idleTimeoutIsNotStarvedByAConnectionReader() throws Exception {
         var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
         var writerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("h2-writer-")));
