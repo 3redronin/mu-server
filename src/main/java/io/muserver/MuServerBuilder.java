@@ -39,6 +39,7 @@ public class MuServerBuilder {
     private long requestReadTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(20);
     private @Nullable ExecutorService executor;
+    private @Nullable ExecutorService asyncExecutor;
     private @Nullable ExecutorService connectionExecutor;
     private @Nullable ExecutorService http2WriterExecutor;
     private @Nullable ExecutorService connectionMaintenanceExecutor;
@@ -219,6 +220,30 @@ public class MuServerBuilder {
      */
     public MuServerBuilder withHandlerExecutor(@Nullable ExecutorService executor) {
         this.executor = executor;
+        return this;
+    }
+
+    /**
+     * Sets the executor used for asynchronous request body reads, asynchronous response
+     * writes, and deprecated asynchronous WebSocket compatibility methods.
+     *
+     * <p>These operations adapt blocking I/O to callback-based APIs and must not use an
+     * executor whose workers can all be retained by connection readers, request handlers,
+     * HTTP/2 writers, or timed maintenance. A single-thread executor is supported:
+     * asynchronous request body delivery releases the worker while waiting for its
+     * {@link DoneCallback}.</p>
+     *
+     * <p>By default, a server-owned virtual-thread-per-task executor is used when the
+     * runtime supports virtual threads, otherwise a cached thread pool is used. A
+     * caller-supplied executor remains owned by the caller and is not shut down when
+     * the server stops.</p>
+     *
+     * @param asyncExecutor The executor for callback-based asynchronous I/O, or
+     *                      <code>null</code> to use the default
+     * @return The current Mu Server builder
+     */
+    public MuServerBuilder withAsyncExecutor(@Nullable ExecutorService asyncExecutor) {
+        this.asyncExecutor = asyncExecutor;
         return this;
     }
 
@@ -718,6 +743,15 @@ public class MuServerBuilder {
      */
     public @Nullable ExecutorService executor() {
         return executor;
+    }
+
+    /**
+     * Gets the executor used for callback-based asynchronous I/O.
+     *
+     * @return The configured executor, or <code>null</code> if the default executor will be used.
+     */
+    public @Nullable ExecutorService asyncExecutor() {
+        return asyncExecutor;
     }
 
     /**

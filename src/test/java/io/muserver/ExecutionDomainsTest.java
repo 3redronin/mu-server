@@ -1,8 +1,11 @@
 package io.muserver;
 
 import okhttp3.Response;
+import okhttp3.MediaType;
+import okhttp3.RequestBody;
 import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
+import okio.BufferedSink;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.RepeatedTest;
@@ -19,6 +22,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -33,6 +37,8 @@ import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.WebSocketHandlerBuilder.webSocketHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.startsWith;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -224,6 +230,124 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void oneAsyncWorkerCanReadAndEchoARequestBody() throws Exception {
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var callbackThreads = new CopyOnWriteArrayList<String>();
+        byte[] payload = new byte[20_000];
+        for (int i = 0; i < payload.length; i++) {
+            payload[i] = (byte) ('a' + (i % 26));
+        }
+        server = httpServer()
+            .withAsyncExecutor(asyncExecutor)
+            .addHandler(Method.POST, "/", (request, response, pathParams) -> {
+                AsyncHandle handle = request.handleAsync();
+                handle.setReadListener(new RequestBodyListener() {
+                    @Override
+                    public void onDataReceived(ByteBuffer data, DoneCallback doneCallback) {
+                        callbackThreads.add(Thread.currentThread().getName());
+                        handle.write(data, error -> {
+                            callbackThreads.add(Thread.currentThread().getName());
+                            doneCallback.onComplete(error);
+                        });
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        callbackThreads.add(Thread.currentThread().getName());
+                        handle.complete();
+                    }
+
+                    @Override
+                    public void onError(Throwable t) {
+                        handle.complete(t);
+                    }
+                });
+            })
+            .start();
+
+        RequestBody body = new RequestBody() {
+            @Override
+            public MediaType contentType() {
+                return null;
+            }
+
+            @Override
+            public void writeTo(BufferedSink sink) throws IOException {
+                sink.write(payload);
+            }
+        };
+        try (Response response = call(request(server.uri()).post(body))) {
+            assertThat(response.body().bytes(), equalTo(payload));
+        }
+        assertThat(callbackThreads.size(), greaterThanOrEqualTo(3));
+        for (String callbackThread : callbackThreads) {
+            assertThat(callbackThread, startsWith("async-"));
+        }
+    }
+
+    @Test
+    void rejectedAsyncWritesFailTheRequestAndInvokeTheCallback() throws Exception {
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        asyncExecutor.shutdown();
+        var callbackFailure = new CompletableFuture<Throwable>();
+        server = httpServer()
+            .withAsyncExecutor(asyncExecutor)
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                AsyncHandle handle = request.handleAsync();
+                handle.write(ByteBuffer.wrap(new byte[]{1}), error -> {
+                    if (error != null) {
+                        callbackFailure.complete(error);
+                    }
+                });
+            })
+            .start();
+
+        try (Response response = call(request(server.uri()))) {
+            assertThat(response.code(), is(500));
+        }
+        assertThat(callbackFailure.get(5, TimeUnit.SECONDS), instanceOf(RejectedExecutionException.class));
+    }
+
+    @SuppressWarnings("deprecation")
+    @Test
+    void deprecatedWebSocketAdaptersUseTheAsyncExecutorWithoutSelfDeadlock() throws Exception {
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var callbackThreads = new CopyOnWriteArrayList<String>();
+        var clientMessage = new CompletableFuture<String>();
+        server = httpServer()
+            .withAsyncExecutor(asyncExecutor)
+            .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
+                @Override
+                public void onText(String message, boolean isLast, DoneCallback onComplete) {
+                    callbackThreads.add(Thread.currentThread().getName());
+                    session().sendText(message, error -> {
+                        callbackThreads.add(Thread.currentThread().getName());
+                        onComplete.onComplete(error);
+                    });
+                }
+            }))
+            .start();
+
+        String websocketUrl = "ws" + server.uri().toString().substring(4);
+        WebSocket webSocket = client.newWebSocket(
+            request().url(websocketUrl).build(),
+            new WebSocketListener() {
+                @Override
+                public void onMessage(WebSocket webSocket, String text) {
+                    clientMessage.complete(text);
+                }
+            }
+        );
+        webSocket.send("hello");
+        assertThat(clientMessage.get(5, TimeUnit.SECONDS), equalTo("hello"));
+        webSocket.close(1000, "Done");
+        assertThat(callbackThreads.size(), is(2));
+        for (String callbackThread : callbackThreads) {
+            assertThat(callbackThread, startsWith("async-"));
+        }
+    }
+
+    @Test
     void oneWriterThreadCanServeMultipleLiveHttp2Connections() throws Exception {
         var connectionExecutor = track(Executors.newFixedThreadPool(2, namedThreads("connection-")));
         var writerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("h2-writer-")));
@@ -278,6 +402,7 @@ class ExecutionDomainsTest {
     @Test
     void configuredExecutorsStayCallerOwnedAndHttp1UsesTheHandlerExecutor() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
         var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
         var writerExecutor = track(Executors.newCachedThreadPool(namedThreads("h2-writer-")));
         var maintenanceExecutor = track(Executors.newCachedThreadPool(namedThreads("maintenance-")));
@@ -285,6 +410,7 @@ class ExecutionDomainsTest {
 
         var builder = httpServer()
             .withHandlerExecutor(handlerExecutor)
+            .withAsyncExecutor(asyncExecutor)
             .withConnectionExecutor(connectionExecutor)
             .withHttp2WriterExecutor(writerExecutor)
             .withConnectionMaintenanceExecutor(maintenanceExecutor)
@@ -292,6 +418,7 @@ class ExecutionDomainsTest {
             .addHandler(Method.GET, "/", (request, response, pathParams) ->
                 response.write(Thread.currentThread().getName()));
         assertThat(builder.connectionExecutor(), is(connectionExecutor));
+        assertThat(builder.asyncExecutor(), is(asyncExecutor));
         assertThat(builder.http2WriterExecutor(), is(writerExecutor));
         assertThat(builder.connectionMaintenanceExecutor(), is(maintenanceExecutor));
         assertThat(builder.timerExecutor(), is(timerExecutor));
@@ -308,6 +435,7 @@ class ExecutionDomainsTest {
         assertThat(writerExecutor.isShutdown(), is(false));
         assertThat(maintenanceExecutor.isShutdown(), is(false));
         assertThat(handlerExecutor.isShutdown(), is(false));
+        assertThat(asyncExecutor.isShutdown(), is(false));
         assertThat(timerExecutor.isShutdown(), is(false));
     }
 
@@ -317,6 +445,7 @@ class ExecutionDomainsTest {
         var serverImpl = (Mu3ServerImpl) server;
         List<ExecutorService> serverOwnedExecutors = List.of(
             getField(serverImpl, "handlerExecutor", ExecutorService.class),
+            getField(serverImpl, "asyncExecutor", ExecutorService.class),
             getField(serverImpl, "connectionExecutor", ExecutorService.class),
             getField(serverImpl, "http2WriterExecutor", ExecutorService.class),
             getField(serverImpl, "connectionMaintenanceExecutor", ExecutorService.class),
@@ -334,6 +463,7 @@ class ExecutionDomainsTest {
     @Test
     void rejectedTimerSchedulingRollsBackStartupWithoutTakingCallerExecutors() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
         var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
         var writerExecutor = track(Executors.newCachedThreadPool(namedThreads("h2-writer-")));
         var maintenanceExecutor = track(Executors.newCachedThreadPool(namedThreads("maintenance-")));
@@ -344,6 +474,7 @@ class ExecutionDomainsTest {
         assertThrows(RejectedExecutionException.class, () -> httpServer()
             .withHttpPort(port)
             .withHandlerExecutor(handlerExecutor)
+            .withAsyncExecutor(asyncExecutor)
             .withConnectionExecutor(connectionExecutor)
             .withHttp2WriterExecutor(writerExecutor)
             .withConnectionMaintenanceExecutor(maintenanceExecutor)
@@ -351,6 +482,7 @@ class ExecutionDomainsTest {
             .start());
 
         assertThat(handlerExecutor.isShutdown(), is(false));
+        assertThat(asyncExecutor.isShutdown(), is(false));
         assertThat(connectionExecutor.isShutdown(), is(false));
         assertThat(writerExecutor.isShutdown(), is(false));
         assertThat(maintenanceExecutor.isShutdown(), is(false));
@@ -362,6 +494,7 @@ class ExecutionDomainsTest {
     @Test
     void listenerCreationFailureRollsBackEarlierListenersWithoutTakingCallerExecutors() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
         var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
         var writerExecutor = track(Executors.newCachedThreadPool(namedThreads("h2-writer-")));
         var maintenanceExecutor = track(Executors.newCachedThreadPool(namedThreads("maintenance-")));
@@ -373,6 +506,7 @@ class ExecutionDomainsTest {
                 .withHttpsPort(firstPort)
                 .withHttpPort(occupiedListener.getLocalPort())
                 .withHandlerExecutor(handlerExecutor)
+                .withAsyncExecutor(asyncExecutor)
                 .withConnectionExecutor(connectionExecutor)
                 .withHttp2WriterExecutor(writerExecutor)
                 .withConnectionMaintenanceExecutor(maintenanceExecutor)
@@ -381,6 +515,7 @@ class ExecutionDomainsTest {
         }
 
         assertThat(handlerExecutor.isShutdown(), is(false));
+        assertThat(asyncExecutor.isShutdown(), is(false));
         assertThat(connectionExecutor.isShutdown(), is(false));
         assertThat(writerExecutor.isShutdown(), is(false));
         assertThat(maintenanceExecutor.isShutdown(), is(false));

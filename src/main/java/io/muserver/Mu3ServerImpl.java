@@ -38,6 +38,8 @@ class Mu3ServerImpl implements MuServer {
     final Path tempDir;
     private final ExecutorService handlerExecutor;
     private final boolean ownsHandlerExecutor;
+    private final ExecutorService asyncExecutor;
+    private final boolean ownsAsyncExecutor;
     private final ExecutorService connectionExecutor;
     private final boolean ownsConnectionExecutor;
     private final ExecutorService http2WriterExecutor;
@@ -48,7 +50,7 @@ class Mu3ServerImpl implements MuServer {
     private final boolean ownsTimerExecutor;
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
 
-    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService handlerExecutor, boolean ownsHandlerExecutor, ExecutorService connectionExecutor, boolean ownsConnectionExecutor, ExecutorService http2WriterExecutor, boolean ownsHttp2WriterExecutor, ExecutorService connectionMaintenanceExecutor, boolean ownsConnectionMaintenanceExecutor, ScheduledExecutorService timerExecutor, boolean ownsTimerExecutor) {
+    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService handlerExecutor, boolean ownsHandlerExecutor, ExecutorService asyncExecutor, boolean ownsAsyncExecutor, ExecutorService connectionExecutor, boolean ownsConnectionExecutor, ExecutorService http2WriterExecutor, boolean ownsHttp2WriterExecutor, ExecutorService connectionMaintenanceExecutor, boolean ownsConnectionMaintenanceExecutor, ScheduledExecutorService timerExecutor, boolean ownsTimerExecutor) {
         this.acceptors = acceptors;
         this.handlers = handlers;
         this.responseCompleteListeners = responseCompleteListeners;
@@ -64,6 +66,8 @@ class Mu3ServerImpl implements MuServer {
         this.tempDir = tempDir;
         this.handlerExecutor = handlerExecutor;
         this.ownsHandlerExecutor = ownsHandlerExecutor;
+        this.asyncExecutor = asyncExecutor;
+        this.ownsAsyncExecutor = ownsAsyncExecutor;
         this.connectionExecutor = connectionExecutor;
         this.ownsConnectionExecutor = ownsConnectionExecutor;
         this.http2WriterExecutor = http2WriterExecutor;
@@ -124,7 +128,14 @@ class Mu3ServerImpl implements MuServer {
         if (ownsHandlerExecutor) {
             handlerExecutor.shutdown();
         }
+        if (ownsAsyncExecutor) {
+            asyncExecutor.shutdown();
+        }
         return stoppedCleanly;
+    }
+
+    ExecutorService asyncExecutor() {
+        return asyncExecutor;
     }
 
     @Override
@@ -342,6 +353,11 @@ class Mu3ServerImpl implements MuServer {
         if (handlerExecutor == null) {
             handlerExecutor = MuServerBuilder.defaultExecutor();
         }
+        ExecutorService asyncExecutor = builder.asyncExecutor();
+        boolean ownsAsyncExecutor = asyncExecutor == null;
+        if (asyncExecutor == null) {
+            asyncExecutor = MuServerBuilder.defaultExecutor();
+        }
         ExecutorService connectionExecutor = builder.connectionExecutor();
         boolean ownsConnectionExecutor = connectionExecutor == null;
         if (connectionExecutor == null) {
@@ -379,6 +395,8 @@ class Mu3ServerImpl implements MuServer {
             tempDir,
             handlerExecutor,
             ownsHandlerExecutor,
+            asyncExecutor,
+            ownsAsyncExecutor,
             connectionExecutor,
             ownsConnectionExecutor,
             http2WriterExecutor,
