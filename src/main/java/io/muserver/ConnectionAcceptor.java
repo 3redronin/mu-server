@@ -206,7 +206,9 @@ class ConnectionAcceptor {
         log.info("Closing server with " + active.size() + " connected connections");
         if (gracefulShutdownDeadlineNanos == Long.MAX_VALUE) {
             gracefulShutdownDeadlineNanos =
-                deadlineAfterMillis(gracefulShutdownTimeoutMillis);
+                MonotonicTime.deadlineAfterMillis(
+                    gracefulShutdownTimeoutMillis
+                );
         }
         for (BaseHttpConnection connection : active) {
             try {
@@ -259,7 +261,9 @@ class ConnectionAcceptor {
         lifecycleLock.lock();
         try {
             while (!connections.isEmpty()) {
-                long remaining = nanosUntil(gracefulShutdownDeadlineNanos);
+                long remaining = MonotonicTime.nanosUntil(
+                    gracefulShutdownDeadlineNanos
+                );
                 if (remaining <= 0L) {
                     return false;
                 }
@@ -281,9 +285,12 @@ class ConnectionAcceptor {
             return;
         }
         try {
-            long cutoff = System.currentTimeMillis() - server.idleTimeoutMillis();
+            long nowNanos = System.nanoTime();
+            long idleTimeoutNanos = TimeUnit.MILLISECONDS.toNanos(
+                server.idleTimeoutMillis()
+            );
             for (BaseHttpConnection con : connectionSnapshot()) {
-                if (con.lastIO() < cutoff) {
+                if (con.hasBeenIdleFor(nowNanos, idleTimeoutNanos)) {
                     log.info("Timing out {}", con);
                     con.abortWithTimeout();
                 }
@@ -549,7 +556,9 @@ class ConnectionAcceptor {
 
     public boolean stop(long timeoutMillis) {
         long stopTimeoutMillis = Math.max(0L, timeoutMillis);
-        long callerDeadlineNanos = deadlineAfterMillis(stopTimeoutMillis);
+        long callerDeadlineNanos = MonotonicTime.deadlineAfterMillis(
+            stopTimeoutMillis
+        );
         lifecycleLock.lock();
         try {
             if (state == State.STOPPED) {
@@ -560,7 +569,10 @@ class ConnectionAcceptor {
                 gracefulShutdownTimeoutMillis = stopTimeoutMillis;
                 gracefulShutdownDeadlineNanos = callerDeadlineNanos;
                 state = State.STOPPING;
-            } else if (callerDeadlineNanos > gracefulShutdownDeadlineNanos) {
+            } else if (MonotonicTime.isAfter(
+                callerDeadlineNanos,
+                gracefulShutdownDeadlineNanos
+            )) {
                 // A callback-local stop can have a shorter deadline than a concurrent
                 // external stop. Preserve the longer opportunity to drain.
                 gracefulShutdownDeadlineNanos = callerDeadlineNanos;
@@ -597,7 +609,7 @@ class ConnectionAcceptor {
 
     private void joinAcceptorUntil(long deadlineNanos) {
         while (acceptorThread.isAlive()) {
-            long remaining = nanosUntil(deadlineNanos);
+            long remaining = MonotonicTime.nanosUntil(deadlineNanos);
             if (remaining <= 0L) {
                 return;
             }
@@ -612,22 +624,6 @@ class ConnectionAcceptor {
                 return;
             }
         }
-    }
-
-    private static long deadlineAfterMillis(long timeoutMillis) {
-        long now = System.nanoTime();
-        long duration = TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
-        long deadline = now + duration;
-        if (duration > 0L && deadline < now) {
-            return Long.MAX_VALUE;
-        }
-        return deadline;
-    }
-
-    private static long nanosUntil(long deadlineNanos) {
-        return deadlineNanos == Long.MAX_VALUE
-            ? Long.MAX_VALUE
-            : deadlineNanos - System.nanoTime();
     }
 
     private static void closeQuietly(Socket socket) {

@@ -461,7 +461,7 @@ class ExecutionDomainsTest {
         assertThat(
             Mu3ServerImpl.awaitDetachedApplicationTasks(
                 tasks,
-                System.currentTimeMillis() + 100
+                MonotonicTime.deadlineAfterMillis(100)
             ),
             is(true)
         );

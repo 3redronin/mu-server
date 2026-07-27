@@ -164,6 +164,8 @@ mutating protocol state on the timer thread. The writer registers each local
 SETTINGS frame in the acknowledgement FIFO before writing any of its bytes, so
 a fast ACK cannot be missed, but arms its deadline only after the frame is
 flushed, so blocked output does not consume the peer's acknowledgement period.
+Connection idle expiry and graceful-stop budgets also use monotonic elapsed
+time, so wall-clock adjustments cannot shorten or extend them.
 
 Request-body read deadlines are intentionally not server timer tasks. They
 bound an application thread's blocking read on `Http2BodyInputStream`, so the

@@ -31,7 +31,7 @@ abstract class BaseHttpConnection implements HttpConnection {
     protected final long connectionStartTime = System.currentTimeMillis();
     protected final InetSocketAddress remoteAddress;
     protected final InetSocketAddress localAddress;
-    protected volatile long lastIO = connectionStartTime;
+    protected volatile long lastIONanos = System.nanoTime();
     protected final AtomicLong completedRequests = new AtomicLong(0);
     protected final AtomicLong invalidHttpRequests = new AtomicLong(0);
     protected final AtomicLong rejectedDueToOverload = new AtomicLong(0);
@@ -114,7 +114,10 @@ abstract class BaseHttpConnection implements HttpConnection {
 
     @Override
     public long idleTimeMillis() {
-        return System.currentTimeMillis() - lastIO;
+        long idleNanos = MonotonicTime.elapsedNanosSince(lastIONanos);
+        return idleNanos <= 0L
+            ? 0L
+            : java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(idleNanos);
     }
     @Override
     public boolean isHttps() {
@@ -197,11 +200,11 @@ abstract class BaseHttpConnection implements HttpConnection {
     }
 
     private void onIO() {
-        lastIO = System.currentTimeMillis();
+        lastIONanos = System.nanoTime();
     }
 
-    public long lastIO() {
-        return lastIO;
+    boolean hasBeenIdleFor(long nowNanos, long timeoutNanos) {
+        return nowNanos - lastIONanos >= timeoutNanos;
     }
 
     @Override
