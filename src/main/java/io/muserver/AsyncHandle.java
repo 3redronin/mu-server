@@ -40,6 +40,8 @@ public interface AsyncHandle {
      * <p>Writes data to the response asynchronously.</p>
      * <p>Note that even in async mode it is possible to use the blocking write methods on the {@link MuResponse}</p>
      * <p>See {@link #write(ByteBuffer)} for an alternative that returns a future.</p>
+     * <p>If {@link #complete()} or {@link #complete(Throwable)} has already been called, the callback is
+     * invoked with an {@link IllegalStateException}.</p>
      * @param data The data to write
      * @param callback The callback when the write succeeds or fails
      */
@@ -49,6 +51,8 @@ public interface AsyncHandle {
      * <p>Writes data to the response asynchronously.</p>
      * <p>Note that even in async mode it is possible to use the blocking write methods on the {@link MuResponse}</p>
      * <p>See {@link #write(ByteBuffer, DoneCallback)} for an alternative that uses a callback.</p>
+     * <p>If {@link #complete()} or {@link #complete(Throwable)} has already been called, the returned future
+     * fails with an {@link IllegalStateException}.</p>
      * @param data The data to write
      * @return A future that is resolved when the write succeeds or fails.
      */
