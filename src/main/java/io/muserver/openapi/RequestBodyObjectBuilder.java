@@ -15,6 +15,14 @@ public class RequestBodyObjectBuilder {
     private boolean required;
 
     /**
+     * Creates an empty request body object builder.
+     */
+    public RequestBodyObjectBuilder() {
+    }
+
+    /**
+     * Sets the request body description.
+     *
      * @param description A brief description of the request body. This could contain examples of use.
      *                    <a href="http://spec.commonmark.org/">CommonMark syntax</a> MAY be used for rich text representation.
      * @return The current builder
@@ -25,6 +33,8 @@ public class RequestBodyObjectBuilder {
     }
 
     /**
+     * Sets the content definitions for the request body.
+     *
      * @param content <strong>REQUIRED</strong>. The content of the request body. The key is a media type or
      *                <a href="https://tools.ietf.org/html/rfc7231#appendix-D">media type range</a> and the value describes it.
      *                For requests that match multiple keys, only the most specific key is applicable. e.g. text/plain overrides text/*
@@ -36,6 +46,8 @@ public class RequestBodyObjectBuilder {
     }
 
     /**
+     * Sets whether the request body is required.
+     *
      * @param required Determines if the request body is required in the request. Defaults to <code>false</code>.
      * @return The current builder
      */
@@ -45,6 +57,8 @@ public class RequestBodyObjectBuilder {
     }
 
     /**
+     * Builds a request body object from the configured values.
+     *
      * @return A new object
      */
     public RequestBodyObject build() {

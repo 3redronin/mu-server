@@ -10,6 +10,8 @@ import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Maps response status codes to OpenAPI response descriptions.
+ *
  * @see ResponsesObjectBuilder
  */
 public class ResponsesObject implements JsonWriter {
@@ -39,6 +41,8 @@ public class ResponsesObject implements JsonWriter {
     }
 
     /**
+     * Gets the default response definition.
+     *
      * @return the value described by {@link ResponsesObjectBuilder#withDefaultValue}
      */
     public @Nullable ResponseObject defaultValue() {
@@ -46,7 +50,9 @@ public class ResponsesObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link ResponsesObjectBuilder#withHttpStatusCodes}
+     * Gets the response definitions keyed by status code.
+     *
+     * @return the value described by {@link ResponsesObjectBuilder#withHttpStatusCodes}
      */
     public Map<String, ResponseObject> httpStatusCodes() {
         return httpStatusCodes;

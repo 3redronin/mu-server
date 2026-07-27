@@ -10,6 +10,8 @@ import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Describes a variable used in a server URL.
+ *
  * @see ServerVariableObjectBuilder
  */
 public class ServerVariableObject implements JsonWriter {
@@ -35,6 +37,8 @@ public class ServerVariableObject implements JsonWriter {
     }
 
     /**
+     * Gets the allowed values for the server variable.
+     *
      * @return the value described by {@link ServerVariableObjectBuilder#withEnumValues}
      */
     public @Nullable List<String> enumValues() {
@@ -42,14 +46,18 @@ public class ServerVariableObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link ServerVariableObjectBuilder#withDefaultValue}
+     * Gets the default value for the server variable.
+     *
+     * @return the value described by {@link ServerVariableObjectBuilder#withDefaultValue}
      */
     public String defaultValue() {
         return defaultValue;
     }
 
     /**
-      @return the value described by {@link ServerVariableObjectBuilder#withDescription}
+     * Gets the server variable description.
+     *
+     * @return the value described by {@link ServerVariableObjectBuilder#withDescription}
      */
     public @Nullable String description() {
         return description;

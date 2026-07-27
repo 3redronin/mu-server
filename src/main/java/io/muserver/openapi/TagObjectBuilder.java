@@ -12,6 +12,14 @@ public class TagObjectBuilder {
     private @Nullable ExternalDocumentationObject externalDocs;
 
     /**
+     * Creates an empty tag object builder.
+     */
+    public TagObjectBuilder() {
+    }
+
+    /**
+     * Sets the tag name.
+     *
      * @param name REQUIRED. The name of the tag.
      * @return The current builder
      */
@@ -21,6 +29,8 @@ public class TagObjectBuilder {
     }
 
     /**
+     * Sets the tag description.
+     *
      * @param description A short description for the tag. CommonMark syntax MAY be used for rich text representation.
      * @return The current builder
      */
@@ -30,6 +40,8 @@ public class TagObjectBuilder {
     }
 
     /**
+     * Sets the tag external documentation.
+     *
      * @param externalDocs Additional external documentation for this tag.
      * @return The current builder
      */
@@ -39,6 +51,8 @@ public class TagObjectBuilder {
     }
 
     /**
+     * Builds a tag object from the configured values.
+     *
      * @return A new object
      */
     public TagObject build() {

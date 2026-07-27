@@ -34,6 +34,8 @@ public class SchemaObjectCustomizerContext {
     }
 
     /**
+     * Gets the schema customization target.
+     *
      * @return The type of object being described, e.g. a request body or response body.
      */
     public SchemaObjectCustomizerTarget target() {
@@ -41,6 +43,8 @@ public class SchemaObjectCustomizerContext {
     }
 
     /**
+     * Gets the resource instance associated with the schema.
+     *
      * For normal resources, this is the instance passed to the {@link RestHandlerBuilder}. Note that for sub-resources
      * returned by a sub-resource-locator, this will be null.
      * @return The rest resource that creates or consumes the object being described
@@ -50,6 +54,8 @@ public class SchemaObjectCustomizerContext {
     }
 
     /**
+     * Gets the Java method associated with the schema.
+     *
      * @return The java method that builds or consumes the object being described
      */
     public Optional<Method> methodHandle() {
@@ -57,6 +63,8 @@ public class SchemaObjectCustomizerContext {
     }
 
     /**
+     * Gets the relevant parameter name when applicable.
+     *
      * @return Where {@link #target()} is {@link SchemaObjectCustomizerTarget#FORM_PARAM}, this returns the form
      * parameter name.
      */
@@ -65,6 +73,8 @@ public class SchemaObjectCustomizerContext {
     }
 
     /**
+     * Gets the Java type described by the schema.
+     *
      * @return The java type of the object being described
      */
     public Class<?> type() {
@@ -72,6 +82,8 @@ public class SchemaObjectCustomizerContext {
     }
 
     /**
+     * Gets the parameterized type when available.
+     *
      * @return For generic types, this is the generic type parameter
      */
     public Optional<Type> parameterizedType() {
@@ -79,6 +91,8 @@ public class SchemaObjectCustomizerContext {
     }
 
     /**
+     * Gets the media type associated with the schema.
+     *
      * @return The media type of the schema being described
      */
     public MediaType mediaType() {

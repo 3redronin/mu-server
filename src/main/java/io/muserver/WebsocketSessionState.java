@@ -60,6 +60,8 @@ public enum WebsocketSessionState {
     }
 
     /**
+     * Indicates whether the websocket session has ended.
+     *
      * @return True if the websocket session has ended for any reason
      */
     public boolean endState() {
@@ -67,6 +69,8 @@ public enum WebsocketSessionState {
     }
 
     /**
+     * Indicates whether the websocket shutdown handshake has started.
+     *
      * @return True if the shutdown handshake has started (but not completed)
      */
     public boolean closing() {

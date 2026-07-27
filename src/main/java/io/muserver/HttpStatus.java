@@ -24,6 +24,8 @@ public class HttpStatus {
     }
 
     /**
+     * Gets the numeric HTTP status code.
+     *
      * @return the 3 digit status code, for example <code>200</code>
      */
     public int code() {
@@ -31,6 +33,8 @@ public class HttpStatus {
     }
 
     /**
+     * Gets the reason phrase associated with the status code.
+     *
      * @return a description of the status, e.g. for <code>200</code> the reason phrase is <code>OK</code>
      */
     public String reasonPhrase() {
@@ -38,30 +42,40 @@ public class HttpStatus {
     }
 
     /**
+     * Indicates whether this status code is informational.
+     *
      * @return True if the code is between 100 and 199
      */
     public boolean isInformational() {
         return code / 100 == 1;
     }
     /**
+     * Indicates whether this status code is successful.
+     *
      * @return True if the code is between 200 and 299
      */
     public boolean isSuccessful() {
         return code / 100 == 2;
     }
     /**
+     * Indicates whether this status code is a redirection.
+     *
      * @return True if the code is between 300 and 399
      */
     public boolean isRedirection() {
         return code / 100 == 3;
     }
     /**
+     * Indicates whether this status code is a client error.
+     *
      * @return True if the code is between 400 and 499
      */
     public boolean isClientError() {
         return code / 100 == 4;
     }
     /**
+     * Indicates whether this status code is a server error.
+     *
      * @return True if the code is between 500 and 599
      */
     public boolean isServerError() {
@@ -88,6 +102,8 @@ public class HttpStatus {
     }
 
     /**
+     * Compares this status code with another status code.
+     *
      * @param other A status code to compare
      * @return <code>true</code> if the code of the two status codes match (even if the reason phrases are different)
      * @throws IllegalArgumentException if <code>other</code> is null

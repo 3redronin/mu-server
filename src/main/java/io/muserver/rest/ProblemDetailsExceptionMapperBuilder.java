@@ -53,6 +53,12 @@ public class ProblemDetailsExceptionMapperBuilder {
     private boolean log5xxProblemDetailsInstanceIds = true;
 
     /**
+     * Creates an empty problem-details exception mapper builder.
+     */
+    public ProblemDetailsExceptionMapperBuilder() {
+    }
+
+    /**
      * Creates a builder for a {@link ProblemDetailsExceptionMapper}.
      *
      * @return A new builder.
@@ -82,6 +88,8 @@ public class ProblemDetailsExceptionMapperBuilder {
     }
 
     /**
+     * Indicates whether generated problem instance URIs are logged for 4xx responses.
+     *
      * @return Whether generated problem {@code instance} URIs will be logged for 4xx responses.
      */
     public boolean log4xxProblemDetailsInstanceIds() {
@@ -106,6 +114,8 @@ public class ProblemDetailsExceptionMapperBuilder {
     }
 
     /**
+     * Indicates whether generated problem instance URIs are logged for 5xx responses.
+     *
      * @return Whether generated problem {@code instance} URIs will be logged for 5xx responses.
      */
     public boolean log5xxProblemDetailsInstanceIds() {

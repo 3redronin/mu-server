@@ -10,6 +10,8 @@ import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Describes the license under which the API is available.
+ *
  * @see LicenseObjectBuilder
  */
 public class LicenseObject implements JsonWriter {
@@ -33,6 +35,8 @@ public class LicenseObject implements JsonWriter {
     }
 
     /**
+     * Gets the license name.
+     *
      * @return the value described by {@link LicenseObjectBuilder#withName}
      */
     public String name() {
@@ -40,7 +44,9 @@ public class LicenseObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link LicenseObjectBuilder#withUrl}
+     * Gets the license URL.
+     *
+     * @return the value described by {@link LicenseObjectBuilder#withUrl}
      */
     public @Nullable URI url() {
         return url;

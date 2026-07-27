@@ -60,6 +60,12 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     }
 
     /**
+     * Creates an empty REST handler builder.
+     */
+    public RestHandlerBuilder() {
+    }
+
+    /**
      * Adds one or more rest resources to this handler
      *
      * @param resources One or more instances of classes that are decorated with {@link jakarta.ws.rs.Path} annotations.

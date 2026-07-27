@@ -15,6 +15,14 @@ public class ServerVariableObjectBuilder {
     private @Nullable String description;
 
     /**
+     * Creates an empty server variable object builder.
+     */
+    public ServerVariableObjectBuilder() {
+    }
+
+    /**
+     * Sets the allowed values for the server variable.
+     *
      * @param enumValues An enumeration of string values to be used if the substitution options are from a limited set.
      * @return The current builder
      */
@@ -24,6 +32,8 @@ public class ServerVariableObjectBuilder {
     }
 
     /**
+     * Sets the default value for the server variable.
+     *
      * @param defaultValue <b>REQUIRED.</b> The default value to use for substitution, and to send, if an alternate value is not supplied. Unlike the
      * Schema Object's default, this value MUST be provided by the consumer.
      * @return The current builder
@@ -34,6 +44,8 @@ public class ServerVariableObjectBuilder {
     }
 
     /**
+     * Sets the server variable description.
+     *
      * @param description An optional description for the server variable. CommonMark syntax MAY be used for rich text representation.
      * @return The current builder
      */
@@ -43,6 +55,8 @@ public class ServerVariableObjectBuilder {
     }
 
     /**
+     * Builds a server variable object from the configured values.
+     *
      * @return A new object
      */
     public ServerVariableObject build() {

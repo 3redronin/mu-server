@@ -10,6 +10,8 @@ import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Describes a server hosting the API.
+ *
  * @see ServerObjectBuilder
  */
 public class ServerObject implements JsonWriter {
@@ -35,6 +37,8 @@ public class ServerObject implements JsonWriter {
     }
 
     /**
+     * Gets the server URL template.
+     *
      * @return the value described by {@link ServerObjectBuilder#withUrl}
      */
     public String url() {
@@ -42,14 +46,18 @@ public class ServerObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link ServerObjectBuilder#withDescription}
+     * Gets the server description.
+     *
+     * @return the value described by {@link ServerObjectBuilder#withDescription}
      */
     public @Nullable String description() {
         return description;
     }
 
     /**
-      @return the value described by {@link ServerObjectBuilder#withVariables}
+     * Gets the server URL variables.
+     *
+     * @return the value described by {@link ServerObjectBuilder#withVariables}
      */
     public @Nullable Map<String, ServerVariableObject> variables() {
         return variables;

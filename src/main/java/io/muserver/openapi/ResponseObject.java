@@ -10,6 +10,8 @@ import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Describes an OpenAPI response.
+ *
  * @see ResponseObjectBuilder
  */
 public class ResponseObject implements JsonWriter {
@@ -39,6 +41,8 @@ public class ResponseObject implements JsonWriter {
     }
 
     /**
+     * Gets the response description.
+     *
      * @return the value described by {@link ResponseObjectBuilder#withDescription}
      */
     public String description() {
@@ -46,21 +50,27 @@ public class ResponseObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link ResponseObjectBuilder#withHeaders}
+     * Gets the response headers.
+     *
+     * @return the value described by {@link ResponseObjectBuilder#withHeaders}
      */
     public @Nullable Map<String, HeaderObject> headers() {
         return headers;
     }
 
     /**
-      @return the value described by {@link ResponseObjectBuilder#withContent}
+     * Gets the response content definitions.
+     *
+     * @return the value described by {@link ResponseObjectBuilder#withContent}
      */
     public @Nullable Map<String, MediaTypeObject> content() {
         return content;
     }
 
     /**
-      @return the value described by {@link ResponseObjectBuilder#withLinks}
+     * Gets the links that can be followed from the response.
+     *
+     * @return the value described by {@link ResponseObjectBuilder#withLinks}
      */
     public @Nullable Map<String, LinkObject> links() {
         return links;

@@ -10,6 +10,8 @@ import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Specifies the security schemes required for an operation.
+ *
  * @see SecurityRequirementObjectBuilder
  */
 public class SecurityRequirementObject implements JsonWriter {
@@ -32,6 +34,8 @@ public class SecurityRequirementObject implements JsonWriter {
     }
 
     /**
+     * Gets the required security schemes and scopes.
+     *
      * @return the value described by {@link SecurityRequirementObjectBuilder#withRequirements}
      */
     public Map<String, List<String>> requirements() {

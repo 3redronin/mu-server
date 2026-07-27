@@ -10,6 +10,8 @@ import static io.muserver.openapi.ParameterObject.actualValue;
 import static io.muserver.openapi.ParameterObject.allowedStyles;
 
 /**
+ * Describes encoding details for a media type property.
+ *
  * @see EncodingObjectBuilder
  */
 public class EncodingObject implements JsonWriter {
@@ -44,6 +46,8 @@ public class EncodingObject implements JsonWriter {
     }
 
     /**
+     * Returns the content type.
+     *
      * @return The value described by {@link EncodingObjectBuilder#withContentType}
      */
     public @Nullable String contentType() {
@@ -51,6 +55,8 @@ public class EncodingObject implements JsonWriter {
     }
 
     /**
+     * Returns the encoding headers.
+     *
      * @return The value described by {@link EncodingObjectBuilder#withHeaders}
      */
     public @Nullable Map<String, HeaderObject> headers() {
@@ -58,6 +64,8 @@ public class EncodingObject implements JsonWriter {
     }
 
     /**
+     * Returns the encoding style.
+     *
      * @return The value described by {@link EncodingObjectBuilder#withStyle}
      */
     public @Nullable String style() {
@@ -65,6 +73,8 @@ public class EncodingObject implements JsonWriter {
     }
 
     /**
+     * Indicates whether the encoding is exploded.
+     *
      * @return The value described by {@link EncodingObjectBuilder#withExplode}
      */
     public boolean explode() {
@@ -72,6 +82,8 @@ public class EncodingObject implements JsonWriter {
     }
 
     /**
+     * Indicates whether the encoding allows reserved characters.
+     *
      * @return The value described by {@link EncodingObjectBuilder#withAllowReserved}
      */
     public boolean allowReserved() {

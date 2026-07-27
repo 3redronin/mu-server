@@ -11,6 +11,8 @@ import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Represents the root OpenAPI document.
+ *
  * @see OpenAPIObjectBuilder
  */
 public class OpenAPIObject implements JsonWriter {
@@ -55,6 +57,8 @@ public class OpenAPIObject implements JsonWriter {
     }
 
     /**
+     * Gets the OpenAPI specification version for this document.
+     *
      * @return The OpenAPI spec version this document conforms to
      */
     public String openApi() {
@@ -62,6 +66,8 @@ public class OpenAPIObject implements JsonWriter {
     }
 
     /**
+     * Gets the API metadata section.
+     *
      * @return the value described in {@link OpenAPIObjectBuilder#withInfo}
      */
     public InfoObject info() {
@@ -69,42 +75,54 @@ public class OpenAPIObject implements JsonWriter {
     }
 
     /**
-      @return the value described in {@link OpenAPIObjectBuilder#withServers}
+     * Gets the servers declared for the API.
+     *
+     * @return the value described in {@link OpenAPIObjectBuilder#withServers}
      */
     public @Nullable List<ServerObject> servers() {
         return servers;
     }
 
     /**
-      @return the value described in {@link OpenAPIObjectBuilder#withPaths}
+     * Gets the documented paths.
+     *
+     * @return the value described in {@link OpenAPIObjectBuilder#withPaths}
      */
     public PathsObject paths() {
         return paths;
     }
 
     /**
-      @return the value described in {@link OpenAPIObjectBuilder#withComponents}
+     * Gets the reusable components section.
+     *
+     * @return the value described in {@link OpenAPIObjectBuilder#withComponents}
      */
     public @Nullable ComponentsObject components() {
         return components;
     }
 
     /**
-      @return the value described in {@link OpenAPIObjectBuilder#withSecurity}
+     * Gets the top-level security requirements.
+     *
+     * @return the value described in {@link OpenAPIObjectBuilder#withSecurity}
      */
     public @Nullable List<SecurityRequirementObject> security() {
         return security;
     }
 
     /**
-      @return the value described in {@link OpenAPIObjectBuilder#withTags}
+     * Gets the top-level tags.
+     *
+     * @return the value described in {@link OpenAPIObjectBuilder#withTags}
      */
     public @Nullable List<TagObject> tags() {
         return tags;
     }
 
     /**
-      @return the value described in {@link OpenAPIObjectBuilder#withExternalDocs}
+     * Gets the external documentation section.
+     *
+     * @return the value described in {@link OpenAPIObjectBuilder#withExternalDocs}
      */
     public @Nullable ExternalDocumentationObject externalDocs() {
         return externalDocs;

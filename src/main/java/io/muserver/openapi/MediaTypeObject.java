@@ -7,6 +7,8 @@ import java.io.Writer;
 import java.util.Map;
 
 /**
+ * Describes the representation of a resource for a media type.
+ *
  * @see MediaTypeObjectBuilder
  */
 public class MediaTypeObject implements JsonWriter {
@@ -38,6 +40,8 @@ public class MediaTypeObject implements JsonWriter {
     }
 
     /**
+     * Gets the schema for the media type.
+     *
      * @return the value described by {@link MediaTypeObjectBuilder#withSchema}
      */
     public @Nullable SchemaObject schema() {
@@ -45,21 +49,27 @@ public class MediaTypeObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link MediaTypeObjectBuilder#withExample}
+     * Gets the example value for the media type.
+     *
+     * @return the value described by {@link MediaTypeObjectBuilder#withExample}
      */
     public @Nullable Object example() {
         return example;
     }
 
     /**
-      @return the value described by {@link MediaTypeObjectBuilder#withExamples}
+     * Gets the named examples for the media type.
+     *
+     * @return the value described by {@link MediaTypeObjectBuilder#withExamples}
      */
     public @Nullable Map<String, ExampleObject> examples() {
         return examples;
     }
 
     /**
-      @return the value described by {@link MediaTypeObjectBuilder#withEncoding}
+     * Gets the encoding metadata for the media type.
+     *
+     * @return the value described by {@link MediaTypeObjectBuilder#withEncoding}
      */
     public @Nullable Map<String, EncodingObject> encoding() {
         return encoding;

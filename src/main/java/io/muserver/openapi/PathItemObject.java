@@ -12,6 +12,8 @@ import static io.muserver.openapi.Jsonizer.append;
 import static java.util.stream.Collectors.toSet;
 
 /**
+ * Describes the operations and metadata associated with an OpenAPI path.
+ *
  * @see PathItemObjectBuilder
  */
 public class PathItemObject implements JsonWriter {
@@ -54,6 +56,8 @@ public class PathItemObject implements JsonWriter {
     }
 
     /**
+     * Gets the summary that applies to operations on this path.
+     *
      * @return the value described by {@link PathItemObjectBuilder#withSummary}
      */
     public @Nullable String summary() {
@@ -61,28 +65,36 @@ public class PathItemObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link PathItemObjectBuilder#withDescription}
+     * Gets the description that applies to operations on this path.
+     *
+     * @return the value described by {@link PathItemObjectBuilder#withDescription}
      */
     public @Nullable String description() {
         return description;
     }
 
     /**
-      @return the value described by {@link PathItemObjectBuilder#withOperations}
+     * Gets the operations declared for this path.
+     *
+     * @return the value described by {@link PathItemObjectBuilder#withOperations}
      */
     public @Nullable Map<String, OperationObject> operations() {
         return operations;
     }
 
     /**
-      @return the value described by {@link PathItemObjectBuilder#withServers}
+     * Gets the servers that can service this path.
+     *
+     * @return the value described by {@link PathItemObjectBuilder#withServers}
      */
     public @Nullable List<ServerObject> servers() {
         return servers;
     }
 
     /**
-      @return the value described by {@link PathItemObjectBuilder#withParameters}
+     * Gets the parameters that apply to all operations on this path.
+     *
+     * @return the value described by {@link PathItemObjectBuilder#withParameters}
      */
     public @Nullable List<ParameterObject> parameters() {
         return parameters;

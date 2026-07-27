@@ -12,6 +12,14 @@ public class OAuthFlowsObjectBuilder {
     private @Nullable OAuthFlowObject authorizationCode;
 
     /**
+     * Creates an empty OAuth flows object builder.
+     */
+    public OAuthFlowsObjectBuilder() {
+    }
+
+    /**
+     * Sets the implicit OAuth flow configuration.
+     *
      * @param implicit Configuration for the OAuth Implicit flow
      * @return The current builder
      */
@@ -21,6 +29,8 @@ public class OAuthFlowsObjectBuilder {
     }
 
     /**
+     * Sets the resource-owner-password OAuth flow configuration.
+     *
      * @param password Configuration for the OAuth Resource Owner Password flow
      * @return The current builder
      */
@@ -30,6 +40,8 @@ public class OAuthFlowsObjectBuilder {
     }
 
     /**
+     * Sets the client-credentials OAuth flow configuration.
+     *
      * @param clientCredentials Configuration for the OAuth Client Credentials flow. Previously called <code>application</code> in OpenAPI 2.0.
      * @return The current builder
      */
@@ -39,6 +51,8 @@ public class OAuthFlowsObjectBuilder {
     }
 
     /**
+     * Sets the authorization-code OAuth flow configuration.
+     *
      * @param authorizationCode Configuration for the OAuth Authorization Code flow. Previously called <code>accessCode</code> in OpenAPI 2.0.
      * @return The current builder
      */
@@ -48,6 +62,8 @@ public class OAuthFlowsObjectBuilder {
     }
 
     /**
+     * Builds an OAuth flows object from the configured values.
+     *
      * @return A new object
      */
     public OAuthFlowsObject build() {

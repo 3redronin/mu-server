@@ -39,6 +39,8 @@ public interface HttpConnection {
     long idleTimeMillis();
 
     /**
+     * Indicates whether this connection uses HTTPS.
+     *
      * @return <code>true</code> if the connection is secured over HTTPS, otherwise <code>false</code>
      */
     boolean isHttps();
@@ -51,12 +53,16 @@ public interface HttpConnection {
     String httpsProtocol();
 
     /**
+     * Returns the HTTPS cipher suite.
+     *
      * @return The HTTPS cipher used on this connection, or <code>null</code> if this connection is not over HTTPS.
      */
     @Nullable
     String cipher();
 
     /**
+     * Returns the time this connection was established.
+     *
      * @return The time that this connection was established.
      */
     Instant startTime();
@@ -69,27 +75,37 @@ public interface HttpConnection {
     long handshakeDurationMillis();
 
     /**
+     * Returns the remote client address.
+     *
      * @return The socket address of the client.
      */
     InetSocketAddress remoteAddress();
 
     /**
+     * Returns the number of completed requests.
+     *
      * @return The number of completed requests on this connection.
      */
     long completedRequests();
 
     /**
+     * Returns the number of malformed HTTP requests.
+     *
      * @return The number of requests received that were not valid HTTP messages.
      */
     long invalidHttpRequests();
 
     /**
+     * Returns the number of requests rejected due to executor overload.
+     *
      * @return The number of requests rejected because the executor passed to {@link MuServerBuilder#withHandlerExecutor(ExecutorService)}
      * rejected a new response.
      */
     long rejectedDueToOverload();
 
     /**
+     * Returns the requests currently in progress.
+     *
      * @return A readonly connection of requests that are in progress on this connection
      */
     Set<MuRequest> activeRequests();
@@ -98,11 +114,15 @@ public interface HttpConnection {
      * The websockets on this connection.
      * <p>Note that in Mu Server websockets are only on HTTP/1.1 connections and there is a 1:1 mapping between
      * a websocket and an HTTP Connection. This means the returned set is either empty or has a size of 1.</p>
+     * Returns the websockets currently active on this connection.
+     *
      * @return A readonly set of active websockets being used on this connection
      */
     Set<MuWebSocket> activeWebsockets();
 
     /**
+     * Returns the server owning this connection.
+     *
      * @return The server that this connection belongs to
      */
     MuServer server();

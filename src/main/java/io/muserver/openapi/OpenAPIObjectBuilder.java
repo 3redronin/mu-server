@@ -20,6 +20,14 @@ public class OpenAPIObjectBuilder {
     private @Nullable ExternalDocumentationObject externalDocs;
 
     /**
+     * Creates an empty OpenAPI document builder.
+     */
+    public OpenAPIObjectBuilder() {
+    }
+
+    /**
+     * Sets the API metadata section.
+     *
      * @param info <strong>REQUIRED</strong>. Provides metadata about the API. The metadata MAY be used by tooling as required.
      * @return The current builder
      */
@@ -29,6 +37,8 @@ public class OpenAPIObjectBuilder {
     }
 
     /**
+     * Sets the server list for the API.
+     *
      * @param servers An array of Server Objects, which provide connectivity information to a target server. If the <code>servers</code>
      *                property is not provided, or is an empty array, the default value would be a {@link ServerObject} with a
      *                <code>url</code> value of <code>/</code>.
@@ -40,6 +50,8 @@ public class OpenAPIObjectBuilder {
     }
 
     /**
+     * Sets the path definitions for the API.
+     *
      * @param paths <strong>REQUIRED</strong>. The available paths and operations for the API.
      * @return The current builder
      */
@@ -49,6 +61,8 @@ public class OpenAPIObjectBuilder {
     }
 
     /**
+     * Sets the reusable components section.
+     *
      * @param components An element to hold various schemas for the specification.
      * @return The current builder
      */
@@ -58,6 +72,8 @@ public class OpenAPIObjectBuilder {
     }
 
     /**
+     * Sets the top-level security requirements.
+     *
      * @param security A declaration of which security mechanisms can be used across the API. The list of values includes
      *                 alternative security requirement objects that can be used. Only one of the security requirement
      *                 objects need to be satisfied to authorize a request. Individual operations can override this definition.
@@ -69,6 +85,8 @@ public class OpenAPIObjectBuilder {
     }
 
     /**
+     * Sets the top-level tags.
+     *
      * @param tags A list of tags used by the specification with additional metadata. The order of the tags can be used
      *             to reflect on their order by the parsing tools. Not all tags that are used by the {@link OperationObject} must
      *             be declared. The tags that are not declared MAY be organized randomly or based on the tools' logic.
@@ -81,6 +99,8 @@ public class OpenAPIObjectBuilder {
     }
 
     /**
+     * Sets the external documentation section.
+     *
      * @param externalDocs Additional external documentation.
      * @return The current builder
      */
@@ -90,6 +110,8 @@ public class OpenAPIObjectBuilder {
     }
 
     /**
+     * Builds an OpenAPI document from the configured values.
+     *
      * @return A new object
      */
     public OpenAPIObject build() {

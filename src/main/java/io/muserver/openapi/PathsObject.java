@@ -8,6 +8,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
+ * Maps OpenAPI path templates to their path item descriptions.
+ *
  * @see PathsObjectBuilder
  */
 public class PathsObject implements JsonWriter {
@@ -59,6 +61,8 @@ public class PathsObject implements JsonWriter {
     }
 
     /**
+     * Gets the path-item mappings in this collection.
+     *
      * @return the value described by {@link PathsObjectBuilder#withPathItemObjects}
      */
     public @Nullable Map<String, PathItemObject> pathItemObjects() {
