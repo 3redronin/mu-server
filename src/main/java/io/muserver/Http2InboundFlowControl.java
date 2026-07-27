@@ -11,9 +11,10 @@ import java.util.concurrent.locks.ReentrantLock;
  * Atomically accounts for the connection and stream receive windows.
  *
  * <p>The socket reader is the only caller that reserves credit, while request-body
- * consumers can return credit from application threads. A single short-held lock
- * keeps those two windows in one transaction without making input progress depend
- * on the independently scheduled, potentially blocking socket writer.</p>
+ * consumers can report freed capacity from application threads. The socket writer
+ * publishes that capacity immediately before writing its WINDOW_UPDATE. A single
+ * short-held lock keeps those transitions consistent without making DATA debits
+ * wait for the independently scheduled, potentially blocking socket writer.</p>
  */
 final class Http2InboundFlowControl {
 
@@ -55,8 +56,12 @@ final class Http2InboundFlowControl {
     private static final class Window {
         private final int streamId;
         private final int updateThreshold;
+        // Credit advertised to the peer and therefore available to the reader.
         private int credit;
+        // Freed credit not yet large enough to advertise.
         private int pendingCredit;
+        // Credit selected for a WINDOW_UPDATE that the writer has not begun writing.
+        private int updateInFlight;
 
         private Window(int streamId, int initialCredit) {
             this.streamId = streamId;
@@ -73,11 +78,13 @@ final class Http2InboundFlowControl {
         }
 
         private int returnCredit(int amount) throws Http2Exception {
-            final int newCredit;
             final int newPendingCredit;
             try {
-                newCredit = Math.addExact(credit, amount);
                 newPendingCredit = Math.addExact(pendingCredit, amount);
+                Math.addExact(
+                    credit,
+                    Math.addExact(newPendingCredit, updateInFlight)
+                );
             } catch (ArithmeticException e) {
                 throw streamId == 0
                     ? Http2Exception.connection(Http2ErrorCode.FLOW_CONTROL_ERROR, "Credit overflow")
@@ -87,14 +94,25 @@ final class Http2InboundFlowControl {
                         streamId
                     );
             }
-            credit = newCredit;
             pendingCredit = newPendingCredit;
             if (pendingCredit >= updateThreshold) {
                 int update = pendingCredit;
                 pendingCredit = 0;
+                updateInFlight = Math.addExact(updateInFlight, update);
                 return update;
             }
             return 0;
+        }
+
+        private void updateWritten(int amount) {
+            if (amount <= 0 || amount > updateInFlight) {
+                throw new IllegalStateException(
+                    "Unexpected HTTP/2 window update acknowledgement for stream "
+                        + streamId + ": " + amount
+                );
+            }
+            updateInFlight -= amount;
+            credit = Math.addExact(credit, amount);
         }
     }
 
@@ -212,6 +230,24 @@ final class Http2InboundFlowControl {
                 );
             } catch (Http2Exception streamError) {
                 return new Result(streamId, connectionUpdate, 0, streamError);
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    // Called by the socket writer immediately before it writes the WINDOW_UPDATE.
+    void windowUpdateWriting(int streamId, int amount) {
+        if (streamId < 0) {
+            throw new IllegalArgumentException("A window update stream ID cannot be negative");
+        }
+        lock.lock();
+        try {
+            Window window = streamId == 0
+                ? connectionWindow
+                : streamWindows.get(streamId);
+            if (window != null) {
+                window.updateWritten(amount);
             }
         } finally {
             lock.unlock();

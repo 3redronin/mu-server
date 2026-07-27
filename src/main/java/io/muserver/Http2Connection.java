@@ -590,6 +590,16 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     ? candidate.frame()
                     : prepareCoordinatorErrorFrame(protocolError);
                 log.info("Writing {}", frame);
+                if (frame instanceof Http2WindowUpdate) {
+                    var update = (Http2WindowUpdate) frame;
+                    // OutputStream writes can make a complete frame visible
+                    // before flush() returns. Publish the matching receive
+                    // credit first so the reader accepts DATA enabled by it.
+                    inboundFlowControl.windowUpdateWriting(
+                        update.streamId(),
+                        update.windowSizeIncrement()
+                    );
+                }
                 frame.writeTo(this, clientOut);
                 if (frame instanceof Http2Settings) {
                     var settings = (Http2Settings) frame;
@@ -1097,7 +1107,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         }
     }
 
-    private Future<?> startWriteLoop(OutputStream clientOut) {
+    Future<?> startWriteLoop(OutputStream clientOut) {
         writerOutput = clientOut;
         requestWriteRun();
         return writeLoopEnded;

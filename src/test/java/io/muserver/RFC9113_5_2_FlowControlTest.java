@@ -5,19 +5,83 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.lang.reflect.Field;
+import java.time.Instant;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.nullValue;
 import static scaffolding.MuAssert.assertNotTimedOut;
 
 @DisplayName("RFC 9113 5.2 Flow Control")
 class RFC9113_5_2_FlowControlTest {
 
     private @Nullable MuServer server;
+
+    @Test
+    void peerCanUseConnectionCreditBeforeWindowUpdateFlushReturns() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake();
+            var liveConnection =
+                (Http2Connection) server.activeConnections().iterator().next();
+            var executor = Executors.newSingleThreadExecutor();
+            try {
+                var writerConnection = new Http2Connection(
+                    liveConnection.server,
+                    liveConnection.creator,
+                    liveConnection.clientSocket,
+                    liveConnection.clientCertificate,
+                    Instant.now(),
+                    Http2Settings.DEFAULT_CLIENT_SETTINGS,
+                    5000,
+                    executor,
+                    executor
+                );
+                Http2InboundFlowControl flow = getField(
+                    writerConnection,
+                    "inboundFlowControl",
+                    Http2InboundFlowControl.class
+                );
+                flow.openStream(1, 100_000);
+                assertThat(flow.reserve(1, 65_535).error(), nullValue());
+
+                writerConnection.returnInboundCredit(1, 32_768, false);
+
+                var flushEntered = new CountDownLatch(1);
+                var debitObservedDuringFlush =
+                    new AtomicReference<Http2InboundFlowControl.Result>();
+                var output = new ByteArrayOutputStream() {
+                    @Override
+                    public void flush() {
+                        debitObservedDuringFlush.set(flow.reserve(1, 1));
+                        flushEntered.countDown();
+                    }
+                };
+
+                writerConnection.startWriteLoop(output);
+                assertNotTimedOut("waiting for WINDOW_UPDATE flush", flushEntered);
+                assertThat(
+                    debitObservedDuringFlush.get().error(),
+                    nullValue()
+                );
+            } finally {
+                executor.shutdownNow();
+            }
+        }
+    }
 
     @Test
     void earlyResponseDiscardsTheRemainingRequestWithoutExhaustingConnectionCredit() throws Exception {
@@ -60,7 +124,13 @@ class RFC9113_5_2_FlowControlTest {
                 .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
                 .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
                 .writeFrame(new Http2DataFrame(1, true, lastChunk, 0, lastChunk.length))
-                .writeFrame(new Http2HeadersFrame(3, false, postHelloHeaders(getPort())))
+                .flush();
+
+            Http2WindowUpdate reusableConnectionCredit =
+                readConnectionWindowUpdateIgnoringStreamOneResets(con);
+            assertThat(reusableConnectionCredit.streamId(), equalTo(0));
+
+            con.writeFrame(new Http2HeadersFrame(3, false, postHelloHeaders(getPort())))
                 .writeFrame(RFCTestUtils.utf8DataFrame(3, true, "x"))
                 .flush();
 
@@ -143,7 +213,7 @@ class RFC9113_5_2_FlowControlTest {
     }
 
     @Test
-    void cancellingAStreamWithUnreadQueuedDataRefundsConnectionCredit() throws Exception {
+    void cancellingAStreamWithUnreadQueuedDataAdvertisesRefundedConnectionCredit() throws Exception {
         var holdLatch = new CountDownLatch(1);
         var holdStarted = new CountDownLatch(1);
 
@@ -182,7 +252,14 @@ class RFC9113_5_2_FlowControlTest {
 
             assertNotTimedOut("waiting for held request to start", holdStarted);
             con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()))
-                .writeFrame(new Http2HeadersFrame(
+                .flush();
+
+            assertThat(
+                con.readLogicalFrame(),
+                equalTo(new Http2WindowUpdate(0, 65535))
+            );
+
+            con.writeFrame(new Http2HeadersFrame(
                     3,
                     false,
                     postHelloHeaders(getPort())
@@ -257,10 +334,13 @@ class RFC9113_5_2_FlowControlTest {
             );
             failRequest.countDown();
 
-            var reset =
-                readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
+            var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
             assertThat(reset.streamId(), equalTo(1));
             assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.INTERNAL_ERROR));
+            assertThat(
+                readConnectionWindowUpdateIgnoringStreamOneResets(con),
+                equalTo(new Http2WindowUpdate(0, 65_535))
+            );
 
             con.writeFrame(new Http2HeadersFrame(
                     3,
@@ -300,7 +380,9 @@ class RFC9113_5_2_FlowControlTest {
              var con = client.connect(server)) {
 
             byte[] sixteenKb = repeated('a', 16384);
-            byte[] lastChunk = repeated('b', 16383);
+            // The first request body used two bytes that were consumed below the
+            // update threshold, so the peer still has 65,533 advertised bytes.
+            byte[] lastChunk = repeated('b', 16381);
 
             con.handshake()
                 .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
@@ -317,7 +399,14 @@ class RFC9113_5_2_FlowControlTest {
                 .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
                 .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
                 .writeFrame(new Http2DataFrame(1, false, lastChunk, 0, lastChunk.length))
-                .writeFrame(new Http2HeadersFrame(3, false, postHelloHeaders(getPort())))
+                .flush();
+
+            assertThat(
+                readConnectionWindowUpdateIgnoringStreamOneResets(con).streamId(),
+                equalTo(0)
+            );
+
+            con.writeFrame(new Http2HeadersFrame(3, false, postHelloHeaders(getPort())))
                 .writeFrame(RFCTestUtils.utf8DataFrame(3, true, "x"))
                 .flush();
 
@@ -490,6 +579,28 @@ class RFC9113_5_2_FlowControlTest {
         }
     }
 
+    private static Http2WindowUpdate readConnectionWindowUpdateIgnoringStreamOneResets(
+        H2ClientConnection con
+    ) throws Exception {
+        while (true) {
+            LogicalHttp2Frame frame = con.readLogicalFrame();
+            if (frame instanceof Http2WindowUpdate) {
+                var update = (Http2WindowUpdate) frame;
+                if (update.streamId() == 0) {
+                    return update;
+                }
+                continue;
+            }
+            if (frame instanceof Http2ResetStreamFrame
+                && frame.streamId() == 1) {
+                continue;
+            }
+            throw new IllegalStateException(
+                "Expected a connection WINDOW_UPDATE, got " + frame
+            );
+        }
+    }
+
     private static void assertHelloArrivesOneByteAtATime(H2ClientConnection con, int streamId, int windowUpdateStreamId) throws Exception {
         for (char expected : "hello".toCharArray()) {
             var data = readIgnoringWindowUpdates(con, Http2DataFrame.class);
@@ -512,6 +623,14 @@ class RFC9113_5_2_FlowControlTest {
 
     private int getPort() {
         return server.uri().getPort();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T getField(Object target, String name, Class<T> type)
+        throws Exception {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return (T) type.cast(field.get(target));
     }
 
     @AfterEach

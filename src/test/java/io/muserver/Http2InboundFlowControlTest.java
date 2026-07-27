@@ -21,9 +21,14 @@ class Http2InboundFlowControlTest {
         assertThat(streamError.errorType(), equalTo(Http2Level.STREAM));
         assertThat(streamError.errorCode(), equalTo(Http2ErrorCode.FLOW_CONTROL_ERROR));
 
-        // The failed stream reservation restored the connection reservation.
+        // The invalid frame still counts against the connection window until
+        // the discarded byte is advertised again in a WINDOW_UPDATE.
         flow.openStream(3, 10);
-        assertThat(flow.reserve(3, 6).error(), nullValue());
+        assertThat(flow.reserve(3, 5).error(), nullValue());
+        assertThat(
+            error(flow.reserve(3, 1)).errorType(),
+            equalTo(Http2Level.CONNECTION)
+        );
     }
 
     @Test
@@ -61,6 +66,25 @@ class Http2InboundFlowControlTest {
         assertThat(returned.error(), nullValue());
         assertThat(returned.connectionUpdate(), equalTo(40_000));
         assertThat(returned.streamUpdate(), equalTo(40_000));
+    }
+
+    @Test
+    void returnedCreditIsUnavailableUntilItsWindowUpdateIsBeingWritten() {
+        var flow = new Http2InboundFlowControl(4);
+        flow.openStream(1, 4);
+        assertThat(flow.reserve(1, 4).error(), nullValue());
+
+        var returned = flow.returnCredit(1, 4, true);
+        assertThat(returned.connectionUpdate(), equalTo(4));
+        assertThat(returned.streamUpdate(), equalTo(4));
+
+        Http2Exception beforeUpdate = error(flow.reserve(1, 1));
+        assertThat(beforeUpdate.errorType(), equalTo(Http2Level.CONNECTION));
+        assertThat(beforeUpdate.errorCode(), equalTo(Http2ErrorCode.FLOW_CONTROL_ERROR));
+
+        flow.windowUpdateWriting(0, 4);
+        flow.windowUpdateWriting(1, 4);
+        assertThat(flow.reserve(1, 4).error(), nullValue());
     }
 
     @Test
