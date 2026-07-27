@@ -139,6 +139,15 @@ class ExecutionDomainsTest {
             assertThat(server.stats().completedRequests(), equalTo(0L));
             assertThat(completedResponses.get(), equalTo(0));
 
+            var connection =
+                (Http2Connection) server.activeConnections().iterator().next();
+            Http2StreamRegistry streamRegistry =
+                getField(connection, "streamRegistry", Http2StreamRegistry.class);
+            assertThat(
+                streamRegistry.lookup(1).rejectedRequestBody(),
+                is(true)
+            );
+
             var rejection = rejectedRequest.get(5, TimeUnit.SECONDS);
             assertThat(rejection.status(), equalTo(503));
             assertThat(rejection.reason(), equalTo("503 Service Unavailable"));
@@ -152,6 +161,10 @@ class ExecutionDomainsTest {
                 .writeFrame(new Http2Ping(false, secondPing))
                 .flush();
             assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, secondPing)));
+            assertThat(
+                streamRegistry.lookup(1).rejectedRequestBody(),
+                is(false)
+            );
             releaseRejectListener.countDown();
 
             releaseBlocker.countDown();

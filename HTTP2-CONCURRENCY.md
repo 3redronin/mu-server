@@ -26,11 +26,12 @@ credit, the HPACK encoder limit, and the ACK) are applied in order by the
 coordinator. Connection and stream inbound flow-control accounting is also
 centralized in one component with a short-held lock. The reader atomically
 debits both receive windows without depending on the blocking-output executor,
-and body consumers return credit through the same component. Still to be
-implemented are migration of the stream registry and request-body read
-deadlines. The reader and coordinator have separate execution capacity from
-handlers, but do not yet have all of the final ownership boundaries described
-below.
+and body consumers return credit through the same component. Live stream
+identity publication is similarly centralized in one short-held registry lock,
+while the coordinator remains the sole owner of RFC stream-state transitions.
+Still to be implemented are request-body read deadlines. The reader and
+coordinator have separate execution capacity from handlers, but do not yet have
+all of the final ownership boundaries described below.
 
 ## Goals
 
@@ -145,7 +146,9 @@ local blocking deadlines for now.
 | State or resource | Owner |
 | --- | --- |
 | Socket input, input buffer, HPACK decoder | Connection reader |
-| Stream map and stream protocol state | Coordinator |
+| RFC stream protocol state | Coordinator |
+| Live application/rejected stream identity index | `Http2StreamRegistry` lock |
+| Inbound END_STREAM and reset-seen fences | Connection reader, with monotonic publication where another domain reads them |
 | Peer settings snapshot after decoding | Connection reader (volatile publication) |
 | Outbound effects of peer settings and local settings lifecycle | Coordinator |
 | Connection and stream outbound flow-control credit | Coordinator |
@@ -160,6 +163,13 @@ Coordinator-owned state uses ordinary collections and fields. It must not use
 concurrent collections, volatile fields, or locks as substitutes for ownership.
 Published diagnostic snapshots may use volatile or atomic fields, but they are
 not authoritative protocol state.
+
+The live identity index is not a second stream state machine. It answers whether
+a live peer stream currently names an application exchange, a rejected request
+body that still needs draining, or nothing. A single registry operation
+atomically converts an accepted stream to a rejected-body stream when handler
+submission is refused; connection shutdown and diagnostics cannot observe an
+artificially empty gap between those identities.
 
 ## Coordinator commands
 
@@ -316,17 +326,19 @@ Permitted cross-thread primitives are deliberately narrow:
 * a small promise backed by a latch and a result or error;
 * one short-held lock for atomic connection-and-stream inbound flow-control
   accounting;
+* one short-held lock for the live stream identity index;
 * the existing request-body buffer lock and condition;
 * an application-side lock that orders async response submissions; and
 * a thread-confined FIFO that drains nested application work without recursive
   calls or executor resubmission; and
 * atomics for idempotent resource closure.
 
-Protocol state, stream maps, outbound flow-control windows, and pending-write
-queues are not protected by independent locks because they have a single owner.
-Inbound receive windows are the deliberate exception: DATA debits happen on
-the reader while credit is returned by body-consumer threads, so both windows
-share the one lock described above.
+RFC stream state, outbound flow-control windows, and pending-write queues are
+not protected by independent locks because they have a single owner. The live
+identity index is cross-thread publication rather than RFC stream state, and
+therefore uses its explicit registry lock. Inbound receive windows are the
+other deliberate lock-based boundary: DATA debits happen on the reader while
+credit is returned by body-consumer threads, so both windows share one lock.
 
 No lock is held while:
 
@@ -343,7 +355,8 @@ execution-domain phases identified above.
 1. Inbound frame events from the reader are processed in wire order.
 2. Every protocol state mutation has an explicit linearization point: the
    coordinator for stream and output state, and the inbound-flow lock for
-   receive-window accounting.
+   receive-window accounting. Live stream identity changes linearize at the
+   registry lock.
 3. No frame other than permitted priority information or a permitted additional
    `RST_STREAM` is emitted after `RST_STREAM`.
 4. No DATA is emitted unless both connection and stream credit were reserved.
