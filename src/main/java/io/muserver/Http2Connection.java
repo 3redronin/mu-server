@@ -598,6 +598,13 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     }
                 }
                 clientOut.flush();
+                if (frame instanceof Http2WindowUpdate) {
+                    var update = (Http2WindowUpdate) frame;
+                    inboundFlowControl.windowUpdateWritten(
+                        update.streamId(),
+                        update.windowSizeIncrement()
+                    );
+                }
                 if (GO_AWAY_WARNING.equals(frame)) {
                     recordInitialGoAwayWritten();
                 }

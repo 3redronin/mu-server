@@ -25,9 +25,11 @@ credit, the HPACK encoder limit, and the ACK) are applied in order by the
 coordinator. Connection and stream inbound flow-control accounting is also
 centralized in one component with a short-held lock. The reader atomically
 debits both receive windows without depending on the blocking-output executor,
-and body consumers return credit through the same component. Live stream
-identity publication is similarly centralized in one short-held registry lock,
-while the coordinator remains the sole owner of RFC stream-state transitions.
+body consumers return freed credit through the same component, and the writer
+publishes that credit as available only after the corresponding `WINDOW_UPDATE`
+is flushed. Live stream identity publication is similarly centralized in one
+short-held registry lock, while the coordinator remains the sole owner of RFC
+stream-state transitions.
 Request-body read deadlines are monotonic timed waits owned by the body buffer:
 they do not require a scheduled task or coordinator round trip. The reader,
 coordinator, application executors, and timer now have separate execution
@@ -263,7 +265,12 @@ reset command is processed remain validly ordered before the reset.
 Applying a peer reset can close protocol state, error the request-body buffer,
 mark the response cancelled, and signal an async handler waiter on the
 coordinator because none of those operations invokes user code. Completion
-listeners and other application callbacks continue on the handler task.
+listeners and other application callbacks continue on the handler task. Unread
+DATA is returned to the connection window and advertised with `WINDOW_UPDATE`;
+the peer cannot reuse that credit until it receives the update. RFC 9113
+Section 6.9.1 requires a sender not to exceed the space advertised by the
+receiver and states that the connection window can only change through
+`WINDOW_UPDATE`.
 
 Reader-detected connection errors are also ordered coordinator commands. The
 command closes every protocol stream, fails pending writes, and makes the error
@@ -289,22 +296,25 @@ the reader does not wait for the coordinator to validate the command.
 
 Inbound DATA is charged before the reader exposes its payload to the
 request-body buffer. One short-held lock makes the connection and stream debit
-atomic with credit returned by body-consumer threads. This is intentionally not
-a write-coordinator round trip: the socket writer can block, and input must
-continue reading and processing HTTP/2 frames promptly as required by RFC 9113
-Section 5.2.2. A body consumer commits its buffer offset and releases the body
-lock before returning credit to the inbound component or queuing WINDOW_UPDATE
-output. Coordinator contention therefore cannot prevent the reader from
-publishing the next DATA frame to that body.
+atomic with credit returned by body-consumer threads and its later publication
+by the writer. Debiting does not require a write-coordinator round trip: the
+socket writer can block, and input must continue reading and processing HTTP/2
+frames promptly as required by RFC 9113 Section 5.2.2. Freed credit is not
+available for another DATA debit until its `WINDOW_UPDATE` has been flushed,
+because Section 6.9.1 defines the sender's limit in terms of the window
+advertised by the receiver. A body consumer commits its buffer offset and
+releases the body lock before returning credit to the inbound component or
+queuing `WINDOW_UPDATE` output. Coordinator contention therefore cannot retain
+the body-buffer lock.
 
-Credit is returned exactly once when bytes are consumed or discarded. The
-inbound component batches WINDOW_UPDATE increments at half of the advertised
-window and keeps connection-level accounting synchronized even when DATA is
-rejected with a stream error, as required by RFC 9113 Section 6.9.
+Freed credit is recorded exactly once when bytes are consumed or discarded.
+The inbound component batches `WINDOW_UPDATE` increments at half of the
+advertised window and keeps connection-level accounting synchronized even when
+DATA is rejected with a stream error, as required by RFC 9113 Section 6.9.
 When the server resets one stream, unread queued body data is discarded and
-returned to the reusable connection window; the closed stream does not receive
-a WINDOW_UPDATE. A stream-local failure therefore cannot consume connection
-credit needed by unrelated streams.
+queued for return to the connection window; the closed stream does not receive
+a `WINDOW_UPDATE`. Once the connection update is written, a stream-local
+failure cannot consume credit needed by unrelated streams.
 
 ## Exchange lifecycle
 
