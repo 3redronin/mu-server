@@ -125,7 +125,9 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
                     }
                 });
             } catch (Throwable t) {
-                fail(t, false);
+                // onDataReceived runs in the async application domain, so its
+                // documented error callback belongs to the same turn.
+                fail(t, true);
             }
         }
 

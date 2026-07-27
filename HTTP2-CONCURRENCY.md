@@ -118,6 +118,9 @@ callbacks, request-rejection notifications, and deprecated asynchronous
 WebSocket adapters. Handler-oriented detached callbacks may use it as a
 fallback when the handler executor rejects them. Operations whose contract
 specifically requires the async executor fail when that executor rejects them.
+A failure thrown by a request-body data listener is reported through its
+`onError` callback in the same async application turn before the exchange is
+failed.
 A response write rejected by the async-completion terminal gate still dispatches
 its failure callback to this executor; if the executor itself rejects that
 notification, the caller delivers the required failure callback rather than

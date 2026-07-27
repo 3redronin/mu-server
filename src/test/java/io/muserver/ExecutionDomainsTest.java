@@ -1006,6 +1006,60 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void asyncBodyListenerFailuresAreReportedOnTheAsyncExecutor() throws Exception {
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var dataThread = new CompletableFuture<String>();
+        var errorThread = new CompletableFuture<String>();
+        var reportedFailure = new CompletableFuture<Throwable>();
+        var completed = new AtomicBoolean();
+        var listenerFailure = new IllegalStateException("deliberate request-body listener failure");
+        server = httpServer()
+            .withAsyncExecutor(asyncExecutor)
+            .addHandler(Method.POST, "/", (request, response, pathParams) -> {
+                AsyncHandle handle = request.handleAsync();
+                handle.setReadListener(new RequestBodyListener() {
+                    @Override
+                    public void onDataReceived(ByteBuffer data, DoneCallback doneCallback) {
+                        dataThread.complete(Thread.currentThread().getName());
+                        throw listenerFailure;
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        completed.set(true);
+                    }
+
+                    @Override
+                    public void onError(Throwable failure) {
+                        errorThread.complete(Thread.currentThread().getName());
+                        reportedFailure.complete(failure);
+                    }
+                });
+            })
+            .start();
+
+        RequestBody body = new RequestBody() {
+            @Override
+            public @Nullable MediaType contentType() {
+                return null;
+            }
+
+            @Override
+            public void writeTo(BufferedSink sink) throws IOException {
+                sink.writeUtf8("body");
+            }
+        };
+        try (Response response = call(request(server.uri()).post(body))) {
+            assertThat(response.code(), is(500));
+        }
+
+        assertThat(reportedFailure.get(5, TimeUnit.SECONDS), is(listenerFailure));
+        assertThat(dataThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
+        assertThat(errorThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
+        assertThat(completed.get(), is(false));
+    }
+
+    @Test
     void oneSharedNonQueueingWorkerCanReadAndEchoARequestBody() throws Exception {
         var applicationExecutor = track(new ThreadPoolExecutor(
             1,
