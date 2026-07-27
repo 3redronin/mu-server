@@ -48,9 +48,9 @@ final class Http2WriteCoordinator {
             return protocolError;
         }
 
-        void publishBeforeWrite(LogicalHttp2Frame frameToWrite) {
-            if (frameToWrite.endStream()) {
-                Http2Stream stream = applicationStreams.get(frameToWrite.streamId());
+        void publishAfterWrite(LogicalHttp2Frame frameWritten) {
+            if (frameWritten.endStream()) {
+                Http2Stream stream = applicationStreams.get(frameWritten.streamId());
                 if (stream != null) {
                     stream.onLocalEndStreamPublished();
                 }

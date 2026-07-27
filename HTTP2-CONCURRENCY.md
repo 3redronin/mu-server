@@ -311,9 +311,12 @@ frames promptly as required by RFC 9113 Section 5.2.2. Freed credit is not
 available for another DATA debit while its `WINDOW_UPDATE` is merely queued,
 because Section 6.9.1 defines the sender's limit in terms of the window
 advertised by the receiver. The writer publishes the credit immediately before
-writing the frame: publishing after `flush()` is too late because the complete
-frame can reach the peer before `flush()` returns, while a write failure closes
-the connection. A body consumer commits its buffer offset and
+`flush()`, after the complete frame has been handed to the output stream.
+Publishing before the first output write could release credit indefinitely while
+that write is blocked and the peer has received nothing; publishing after
+`flush()` is too late because the complete frame can reach the peer before
+`flush()` returns. A failure after publication closes the connection. A body
+consumer commits its buffer offset and
 releases the body lock before returning credit to the inbound component or
 queuing `WINDOW_UPDATE` output. Coordinator contention therefore cannot retain
 the body-buffer lock.
@@ -344,12 +347,13 @@ The following are distinct events:
 
 A handler finishing does not remove the stream.
 
-The writer publishes the reader-facing local `END_STREAM` fence immediately
-before emitting the terminal frame. A complete frame can reach the peer before
-`flush()` returns, so publishing only after flush could make the reader
-temporarily count a stream that the peer already knows is closed. Protocol
-closure, write promises, and successful response completion still advance only
-after the write succeeds; a failed terminal write closes the connection.
+The writer publishes the reader-facing local `END_STREAM` fence after handing
+the complete terminal frame to the output stream and before flushing it. This
+keeps the stream counted while an output write is blocked before making any
+progress, while avoiding a flush-time interval in which the peer can observe the
+frame before the reader sees the fence. Protocol closure, write promises, and
+successful response completion still advance only after the flush succeeds; a
+failed terminal write closes the connection.
 
 If a handler completes a response while the peer request side is still open,
 the input enters discard mode. Already-buffered and future request DATA is

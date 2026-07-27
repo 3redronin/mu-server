@@ -721,7 +721,7 @@ class ExecutionDomainsTest {
             .withConnectionExecutor(connectionExecutor)
             .addResponseCompleteListener(info -> {
                 events.add("server-failing");
-                throw new IllegalStateException("deliberate server listener failure");
+                throw new AssertionError("deliberate server listener failure");
             })
             .addResponseCompleteListener(info -> {
                 events.add("server-second");
@@ -733,7 +733,7 @@ class ExecutionDomainsTest {
                     response.addCompletionListener(nested ->
                         events.add("response-nested")
                     );
-                    throw new IllegalStateException("deliberate response listener failure");
+                    throw new AssertionError("deliberate response listener failure");
                 });
                 response.addCompletionListener(info ->
                     events.add("response-second")
