@@ -58,9 +58,11 @@ public interface AsyncHandle {
      * Executes an application continuation for this exchange.
      *
      * <p>Handles supplied by Mu Server dispatch the task to the request-handler
-     * execution domain and never run it on the calling thread. This is useful when an
-     * asynchronous result becomes available on an executor that should not perform
-     * response serialization or invoke application callbacks.</p>
+     * execution domain when called from outside a Mu Server application callback.
+     * Tasks submitted by an application callback stay in the same execution turn and
+     * run after the current callback returns. This is useful when an asynchronous
+     * result becomes available on an executor that should not perform response
+     * serialization or invoke application callbacks.</p>
      *
      * <p>The default implementation runs the task immediately to retain compatibility
      * with custom implementations of this interface.</p>

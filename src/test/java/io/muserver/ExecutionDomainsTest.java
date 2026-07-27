@@ -746,6 +746,70 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void oneSharedNonQueueingWorkerCanReadAndEchoARequestBody() throws Exception {
+        var applicationExecutor = track(new ThreadPoolExecutor(
+            1,
+            1,
+            0,
+            TimeUnit.MILLISECONDS,
+            new SynchronousQueue<>(),
+            namedThreads("application-")
+        ));
+        var callbackThreads = new CopyOnWriteArrayList<String>();
+        byte[] payload = new byte[20_000];
+        for (int i = 0; i < payload.length; i++) {
+            payload[i] = (byte) ('a' + (i % 26));
+        }
+        server = httpServer()
+            .withHandlerExecutor(applicationExecutor)
+            .withAsyncExecutor(applicationExecutor)
+            .addHandler(Method.POST, "/", (request, response, pathParams) -> {
+                AsyncHandle handle = request.handleAsync();
+                handle.setReadListener(new RequestBodyListener() {
+                    @Override
+                    public void onDataReceived(ByteBuffer data, DoneCallback doneCallback) {
+                        callbackThreads.add(Thread.currentThread().getName());
+                        handle.write(data, error -> {
+                            callbackThreads.add(Thread.currentThread().getName());
+                            doneCallback.onComplete(error);
+                        });
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        callbackThreads.add(Thread.currentThread().getName());
+                        handle.complete();
+                    }
+
+                    @Override
+                    public void onError(Throwable t) {
+                        handle.complete(t);
+                    }
+                });
+            })
+            .start();
+
+        RequestBody body = new RequestBody() {
+            @Override
+            public MediaType contentType() {
+                return null;
+            }
+
+            @Override
+            public void writeTo(BufferedSink sink) throws IOException {
+                sink.write(payload);
+            }
+        };
+        try (Response response = call(request(server.uri()).post(body))) {
+            assertThat(response.body().bytes(), equalTo(payload));
+        }
+        assertThat(callbackThreads.size(), greaterThanOrEqualTo(3));
+        for (String callbackThread : callbackThreads) {
+            assertThat(callbackThread, startsWith("application-"));
+        }
+    }
+
+    @Test
     void rejectedAsyncWritesFailTheRequestAndInvokeTheCallback() throws Exception {
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
         asyncExecutor.shutdown();
@@ -943,6 +1007,104 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void http2CompletionOnTheAsyncWorkerDoesNotResubmitWhenHandlersAreSaturated() throws Exception {
+        var handlerExecutor = track(new ThreadPoolExecutor(
+            1,
+            1,
+            0,
+            TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(1),
+            namedThreads("handler-")
+        ));
+        var asyncExecutor = track(new ThreadPoolExecutor(
+            1,
+            1,
+            0,
+            TimeUnit.MILLISECONDS,
+            new SynchronousQueue<>(),
+            namedThreads("async-")
+        ));
+        var writeCallbackEntered = new CountDownLatch(1);
+        var releaseWriteCallback = new CountDownLatch(1);
+        var blockerStarted = new CountDownLatch(1);
+        var releaseBlockers = new CountDownLatch(1);
+        var completionThread = new CompletableFuture<String>();
+        server = httpServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .withHandlerExecutor(handlerExecutor)
+            .withAsyncExecutor(asyncExecutor)
+            .addResponseCompleteListener(info ->
+                completionThread.complete(Thread.currentThread().getName())
+            )
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                AsyncHandle handle = request.handleAsync();
+                handle.write(ByteBuffer.wrap(new byte[]{1}), error -> {
+                    if (error != null) {
+                        handle.complete(error);
+                        return;
+                    }
+                    writeCallbackEntered.countDown();
+                    releaseWriteCallback.await();
+                    handle.complete();
+                });
+            })
+            .start();
+
+        Future<?> blocker = null;
+        Future<?> queuedBlocker = null;
+        try (var h2Client = new H2Client();
+             var connection = h2Client.connectClearText(server)) {
+            connection.handshake();
+            connection.socket().setSoTimeout(2000);
+            connection.writeFrame(new Http2HeadersFrame(
+                1,
+                true,
+                RFCTestUtils.getHelloHeaders("http", server.uri().getPort())
+            )).flush();
+
+            assertThat(writeCallbackEntered.await(5, TimeUnit.SECONDS), is(true));
+            blocker = handlerExecutor.submit(() -> {
+                blockerStarted.countDown();
+                try {
+                    releaseBlockers.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            assertThat(blockerStarted.await(5, TimeUnit.SECONDS), is(true));
+            queuedBlocker = handlerExecutor.submit(() -> {
+                try {
+                    releaseBlockers.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            releaseWriteCallback.countDown();
+
+            Http2HeadersFrame responseHeaders =
+                RFCTestUtils.readIgnoringWindowUpdates(connection, Http2HeadersFrame.class);
+            assertThat(responseHeaders.headers().get(":status"), equalTo("200"));
+            Http2DataFrame responseData =
+                RFCTestUtils.readIgnoringWindowUpdates(connection, Http2DataFrame.class);
+            assertThat(responseData.payloadLength(), is(1));
+            assertThat(
+                RFCTestUtils.readIgnoringWindowUpdates(connection, Http2DataFrame.class).endStream(),
+                is(true)
+            );
+            assertThat(completionThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
+        } finally {
+            releaseWriteCallback.countDown();
+            releaseBlockers.countDown();
+            if (blocker != null) {
+                blocker.get(5, TimeUnit.SECONDS);
+            }
+            if (queuedBlocker != null) {
+                queuedBlocker.get(5, TimeUnit.SECONDS);
+            }
+        }
+    }
+
+    @Test
     void rejectedHandlerDispatchesHttp2AsyncCompletionToTheAsyncExecutor() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
@@ -964,8 +1126,8 @@ class ExecutionDomainsTest {
                 handle.addResponseCompleteHandler(info ->
                     completionThread.complete(Thread.currentThread().getName())
                 );
-                suspendedHandle.complete(handle);
                 handlerExecutor.shutdown();
+                suspendedHandle.complete(handle);
                 return true;
             })
             .start();
@@ -979,7 +1141,9 @@ class ExecutionDomainsTest {
                 true,
                 RFCTestUtils.getHelloHeaders("http", server.uri().getPort())
             )).flush();
-            suspendedHandle.get(5, TimeUnit.SECONDS).complete(new IOException("async failure"));
+            AsyncHandle handle = suspendedHandle.get(5, TimeUnit.SECONDS);
+            assertThat(handlerExecutor.awaitTermination(5, TimeUnit.SECONDS), equalTo(true));
+            handle.complete(new IOException("async failure"));
 
             Http2HeadersFrame responseHeaders =
                 RFCTestUtils.readIgnoringWindowUpdates(connection, Http2HeadersFrame.class);

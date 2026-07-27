@@ -19,13 +19,13 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
     private final CompletableFuture<@Nullable Void> completionFuture = new CompletableFuture<>();
     private final Lock lock = new ReentrantLock();
     private final Mu3ServerImpl server;
-    private final ExecutorService asyncExecutor;
+    private final Executor asyncExecutor;
 
     Mu3AsyncHandleImpl(Mu3Request request, BaseResponse response, Mu3ServerImpl server) {
         this.request = request;
         this.response = response;
         this.server = server;
-        this.asyncExecutor = server.asyncExecutor();
+        this.asyncExecutor = server::executeAsyncApplicationTask;
     }
 
     CompletableFuture<@Nullable Void> exchangeCompletion() {
@@ -73,9 +73,9 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
                 return;
             }
             try {
-                asyncExecutor.execute(this::readNext);
-            } catch (RuntimeException t) {
-                fail(t, false);
+                server.executeAsyncApplicationTask(this::readNext);
+            } catch (RejectedExecutionException rejected) {
+                fail(rejected, false);
             }
         }
 

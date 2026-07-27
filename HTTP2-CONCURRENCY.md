@@ -10,13 +10,13 @@ this model.
 
 The outbound coordinator, outbound flow-control ownership, stream-state
 transitions, reset ordering, and separation of protocol lifetime from
-application exchange lifetime are implemented. Connection setup and the two
-long-lived HTTP/2 I/O tasks now use a connection executor that is independent
-of `MuServerBuilder.withHandlerExecutor`. Handler-executor rejection is handled
-as a 503 response on the affected stream while the connection remains usable.
-Scheduled connection maintenance and connection idle-timeout scans now use a
-server timer that is independent of both executors; when work becomes due, the
-timer dispatches it to the connection executor.
+application exchange lifetime are implemented. Connection setup and HTTP/2
+readers use a connection executor that is independent of
+`MuServerBuilder.withHandlerExecutor`; serialized HTTP/2 writer drains use
+their own executor. Handler-executor rejection is handled as a 503 response on
+the affected stream while the connection remains usable. Scheduled connection
+maintenance and connection idle-timeout scans use a server timer that dispatches
+due work to a separate maintenance executor.
 
 SETTINGS acknowledgement expiry now runs on the server timer and is serialized
 as a coordinator connection-error command; it no longer changes the socket
@@ -40,11 +40,18 @@ The model must:
 
 ## Execution domains
 
-The executor allocation in this section is implemented. Routing every
-application callback to the application executor and some finer-grained
-ownership rules remain the target for later phases, as called out below.
+The executor allocation and application-turn rules in this section are
+implemented. Some finer-grained protocol ownership rules remain the target for
+later phases, as called out below.
 
-There are two execution domains and one timer facility.
+There are five execution domains and one timer facility:
+
+* connection input;
+* HTTP/2 output;
+* connection maintenance;
+* request handling and application continuations;
+* asynchronous application I/O; and
+* timer scheduling.
 
 ### Connection I/O
 
@@ -53,51 +60,71 @@ Each HTTP/2 connection has:
 * one blocking socket reader; and
 * one protocol coordinator that also owns socket writes.
 
-These tasks run independently of request handlers. The connection reader owns
-the input stream, read buffer, and HPACK decoder. The target end state is for it
-to turn every logical frame into a coordinator command without mutating
-connection or stream protocol state; migration of the remaining reader-owned
-protocol mutations is not complete.
+These tasks run independently of request handlers and independently of each
+other. The connection reader is a long-lived task on the executor configured
+by `MuServerBuilder.withConnectionExecutor`. It owns the input stream, read
+buffer, and HPACK decoder. The target end state is for it to turn every logical
+frame into a coordinator command without mutating connection or stream protocol
+state; migration of the remaining reader-owned protocol mutations is not
+complete.
 
 The coordinator already serializes outbound protocol state and is the only code
-that writes to the socket. It will become the sole owner of all connection and
-stream protocol state as the remaining state is migrated.
+that writes to the socket. It schedules short serialized drains on the executor
+configured by `MuServerBuilder.withHttp2WriterExecutor`; an idle or
+flow-control-blocked connection does not retain a writer worker. The coordinator
+will become the sole owner of all connection and stream protocol state as the
+remaining state is migrated.
 
-Connection I/O uses a server-owned executor whose default provides prompt
-execution for long-lived tasks: virtual threads where available, otherwise a
-separate cached thread pool. A custom executor can be supplied through
-`MuServerBuilder.withConnectionExecutor`; it must provide independent progress
-for both long-lived tasks of every active HTTP/2 connection, plus short
-connection setup and timed maintenance tasks. Supplying a bounded executor
-without that capacity can starve connection work.
+Timed connection work runs on
+`MuServerBuilder.withConnectionMaintenanceExecutor`, not on a reader or writer.
+The three executors have independent defaults. Sharing a bounded executor
+between long-lived readers and work needed to make output or maintenance
+progress can starve the latter and is unsupported.
 
 ### Application work
 
-The executor configured by `MuServerBuilder.withHandlerExecutor` runs user and
-application work:
+The executor configured by `MuServerBuilder.withHandlerExecutor` runs:
 
 * request handlers;
-* asynchronous request-body listeners;
-* asynchronous response work and callbacks;
 * exception handlers; and
-* response-completion listeners.
+* response-completion listeners;
+* serialized WebSocket callbacks; and
+* application continuations such as JAX-RS asynchronous response processing.
 
-It never runs a connection reader or coordinator. Rejection by this executor is
-handled as rejection of an individual request, not failure of the HTTP/2
-connection.
+The executor configured by `MuServerBuilder.withAsyncExecutor` runs
+asynchronous request-body listeners, asynchronous response writes and their
+callbacks, request-rejection notifications, and deprecated asynchronous
+WebSocket adapters. Handler-oriented detached callbacks may use it as a
+fallback when the handler executor rejects them. Operations whose contract
+specifically requires the async executor fail when that executor rejects them.
 
-Callback routing is not yet complete: in particular, some request-rejection and
-connection-timeout notifications can still be made from connection work. Those
-paths must move to the application executor without making protocol progress
-depend on callback completion.
+Neither application executor runs a connection reader, writer, or timer
+callback. Rejection of a new handler is handled as rejection of that individual
+request, not failure of the HTTP/2 connection. Rejection of continuation work
+for an already accepted exchange completes or aborts that exchange explicitly;
+it must not silently strand the stream.
+
+Application callbacks execute in a per-server application turn. A turn records
+both the requested executor and any fallback executor that actually accepted
+the task. Work submitted from that turn to either occupied executor is appended
+to a thread-confined FIFO and drained before the worker is released. It is not
+recursively invoked and is not submitted back to an executor whose only worker
+may be the current thread. Work targeting a distinct required executor is still
+dispatched there.
+
+This rule makes a shared single-worker non-queueing executor usable without
+collapsing the handler and async domains when separate executors are configured.
+The turn marker is installed only around application work and is always removed
+before returning a caller-owned worker to its executor.
 
 ### Timers
 
-A single server timer determines when scheduled connection work is due. The
-default is one server-owned platform thread, and a custom
+A single server timer determines when scheduled work is due. The default is one
+server-owned platform thread, and a custom
 `ScheduledExecutorService` can be supplied through
-`MuServerBuilder.withTimerExecutor`. Timer callbacks dispatch due work to the
-connection executor; periodic dispatch is coalesced so a delayed connection
+`MuServerBuilder.withTimerExecutor`. Timer callbacks dispatch due connection
+work to the maintenance executor and due application work to an application
+executor. Periodic connection dispatch is coalesced so a delayed maintenance
 executor does not accumulate duplicate work. Timer threads do not mutate
 protocol state, perform socket I/O, or invoke user code.
 
@@ -272,6 +299,8 @@ Permitted cross-thread primitives are deliberately narrow:
 * a small promise backed by a latch and a result or error;
 * the existing request-body buffer lock and condition;
 * an application-side lock that orders async response submissions; and
+* a thread-confined FIFO that drains nested application work without recursive
+  calls or executor resubmission; and
 * atomics for idempotent resource closure.
 
 Protocol state, stream maps, flow-control windows, and pending-write queues are

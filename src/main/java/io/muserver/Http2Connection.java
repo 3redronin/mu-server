@@ -1170,7 +1170,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
         onRequestStarted(stream.request);
         try {
-            handlerExecutor.submit(() -> startHandledStream(stream));
+            handlerExecutor.submit(server.handlerApplicationTask(() -> startHandledStream(stream)));
         } catch (RejectedExecutionException e) {
             server.onRequestSubmissionRejected(stream.request);
             rejectRequestDueToHandlerOverload(frame, stream);
@@ -1221,7 +1221,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             }
             stream.abandonApplicationExchange();
         } finally {
-            onExchangeEnded(stream, false);
+            onExchangeEnded(stream);
         }
     }
 
@@ -1249,7 +1249,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                 stream.cancel(new IOException("Unhandled stream exception", e), false);
             }
         } finally {
-            onExchangeEnded(stream, true);
+            onExchangeEnded(stream);
         }
     }
 
@@ -1385,21 +1385,15 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     @Override
     protected void onExchangeEnded(ResponseInfo exchange) {
-        onExchangeEnded((Http2Stream) exchange, false);
+        onExchangeEnded((Http2Stream) exchange);
     }
 
-    private void onExchangeEnded(
-        Http2Stream stream,
-        boolean alreadyOnApplicationExecutor
-    ) {
+    private void onExchangeEnded(Http2Stream stream) {
         stream.onApplicationExchangeEnded();
         applicationExchangeEndedForWrites(stream.id);
         signalWriteLoop();
         recordExchangeEnded(stream);
-        server.executeResponseCompletionTask(
-            () -> notifyExchangeEnded(stream),
-            alreadyOnApplicationExecutor
-        );
+        server.executeResponseCompletionTask(() -> notifyExchangeEnded(stream));
     }
 
     void removeProtocolStream(Http2Stream stream) {
