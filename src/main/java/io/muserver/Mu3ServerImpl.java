@@ -167,8 +167,11 @@ class Mu3ServerImpl implements MuServer {
         return true;
     }
 
-    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
     void executeResponseCompletionTask(Runnable task) {
+        executeResponseCompletionTask(task, false);
+    }
+
+    void executeResponseCompletionTask(Runnable task, boolean alreadyOnApplicationExecutor) {
         responseCompletionTasks.register();
         Runnable trackedTask = () -> {
             try {
@@ -177,6 +180,10 @@ class Mu3ServerImpl implements MuServer {
                 responseCompletionTasks.arriveAndDeregister();
             }
         };
+        if (alreadyOnApplicationExecutor) {
+            trackedTask.run();
+            return;
+        }
         RejectedExecutionException rejected = tryExecuteHandlerTask(trackedTask);
         if (rejected != null) {
             responseCompletionTasks.arriveAndDeregister();
