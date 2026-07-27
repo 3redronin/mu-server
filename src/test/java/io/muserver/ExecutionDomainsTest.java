@@ -311,6 +311,50 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void gracefulStopWaitsForDispatchedHttp1CompletionListeners() throws Exception {
+        var handlerExecutor = track(Executors.newFixedThreadPool(2, namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
+        var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
+        var completionStarted = new CountDownLatch(1);
+        var releaseCompletion = new CountDownLatch(1);
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addResponseCompleteListener(info -> {
+                completionStarted.countDown();
+                try {
+                    releaseCompletion.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            })
+            .addHandler(Method.GET, "/", (request, response, pathParams) ->
+                response.write("done")
+            )
+            .start();
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/").flushHeaders();
+            assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
+            assertThat(client.readBody(client.readHeaders()), equalTo("done"));
+            assertThat(completionStarted.await(5, TimeUnit.SECONDS), is(true));
+
+            MuServer runningServer = Objects.requireNonNull(server);
+            Future<Boolean> stopped = clientExecutor.submit(() ->
+                runningServer.stop(2, TimeUnit.SECONDS)
+            );
+            assertThrows(TimeoutException.class, () ->
+                stopped.get(100, TimeUnit.MILLISECONDS)
+            );
+            releaseCompletion.countDown();
+            assertThat(stopped.get(5, TimeUnit.SECONDS), is(true));
+            server = null;
+        } finally {
+            releaseCompletion.countDown();
+        }
+    }
+
+    @Test
     void oneAsyncWorkerCanReadAndEchoARequestBody() throws Exception {
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
         var callbackThreads = new CopyOnWriteArrayList<String>();
