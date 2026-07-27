@@ -69,7 +69,7 @@ class ProviderWrapper<T> implements Comparable<ProviderWrapper<T>> {
     }
 
     public boolean supports(MediaType mediaType) {
-        return mediaTypes.isEmpty() || mediaTypes.stream().anyMatch(mt -> mt.isCompatible(mediaType));
+        return mediaTypes.isEmpty() || mediaTypes.stream().anyMatch(mt -> MediaTypeHeaderDelegate.isCompatible(mt, mediaType));
     }
 
     @Override
