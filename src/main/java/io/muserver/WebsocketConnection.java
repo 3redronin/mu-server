@@ -590,12 +590,14 @@ class WebsocketConnection implements MuWebSocketSession {
 
     @Override
     public void sendPing(ByteBuffer payload) throws IOException {
+        requireControlPayloadSize(payload.remaining());
         payload = arrayBuffer(payload);
         writeFragment((byte)0b10001001, payload.array(), payload.arrayOffset() + payload.position(), payload.remaining(), null, null);
     }
 
     @Override
     public void sendPong(ByteBuffer payload) throws IOException {
+        requireControlPayloadSize(payload.remaining());
         payload = arrayBuffer(payload);
         writeFragment((byte)0b10001010, payload.array(), payload.arrayOffset() + payload.position(), payload.remaining(), null, null);
     }
@@ -619,27 +621,32 @@ class WebsocketConnection implements MuWebSocketSession {
         if (statusCode < 1000 || statusCode > 4999) {
             throw new IllegalArgumentException("Websocket closure codes must be between 1000 and 4999 (inclusive)");
         }
+        byte[] reasonBytes = reason == null || reason.isEmpty()
+            ? new byte[0]
+            : reason.getBytes(StandardCharsets.UTF_8);
+        requireControlPayloadSize(reasonBytes.length + 2);
+        var payload = new byte[reasonBytes.length + 2];
+        payload[0] = (byte) ((statusCode >> 8) & 0xFF);
+        payload[1] = (byte) (statusCode & 0xFF);
+        System.arraycopy(reasonBytes, 0, payload, 2, reasonBytes.length);
+
         writeLock.lock();
         try {
             lifecycle.onServerCloseStarted();
-            if (reason == null || reason.isEmpty()) {
-                byte[] closeCodeBytes = new byte[2];
-                closeCodeBytes[0] = (byte) ((statusCode >> 8) & 0xFF);
-                closeCodeBytes[1] = (byte) (statusCode & 0xFF);
-                writeFragment((byte)0b10001000, closeCodeBytes, 0, 2, null, null);
-            } else {
-                var reasonBytes = reason.getBytes(StandardCharsets.UTF_8);
-                var payload = new byte[reasonBytes.length + 2];
-                payload[0] = (byte) ((statusCode >> 8) & 0xFF);
-                payload[1] = (byte) (statusCode & 0xFF);
-                System.arraycopy(reasonBytes, 0, payload, 2, reasonBytes.length);
-                writeFragment((byte)0b10001000, payload, 0, payload.length, null, null);
-            }
+            writeFragment((byte)0b10001000, payload, 0, payload.length, null, null);
             if (!closeSent) {
                 closeSent = true;
             }
         } finally {
             writeLock.unlock();
+        }
+    }
+
+    private static void requireControlPayloadSize(int payloadLength) {
+        if (payloadLength > 125) {
+            throw new IllegalArgumentException(
+                "WebSocket control frame payload cannot exceed 125 bytes"
+            );
         }
     }
 
@@ -653,6 +660,9 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     private void writeFragment(byte firstByte, byte@Nullable[] payload, int payloadOffset, int payloadLen, @Nullable MessageWritingState expectedState, @Nullable MessageWritingState endState) throws IOException {
+        if ((firstByte & 0x08) != 0) {
+            requireControlPayloadSize(payloadLen);
+        }
         var header = header(firstByte, payloadLen);
         OutputStream output = java.util.Objects.requireNonNull(outputStream);
         IOException failure = null;
