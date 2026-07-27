@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
@@ -63,7 +64,7 @@ class ExecutionDomainsTest {
             1,
             0,
             TimeUnit.MILLISECONDS,
-            new SynchronousQueue<>(),
+            new ArrayBlockingQueue<>(1),
             namedThreads("handler-")
         ));
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
@@ -83,6 +84,13 @@ class ExecutionDomainsTest {
             }
         });
         assertThat(blockerStarted.await(5, TimeUnit.SECONDS), is(true));
+        Future<?> queuedBlocker = handlerExecutor.submit(() -> {
+            try {
+                releaseBlocker.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
 
         server = httpServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
@@ -148,6 +156,7 @@ class ExecutionDomainsTest {
 
             releaseBlocker.countDown();
             blocker.get(5, TimeUnit.SECONDS);
+            queuedBlocker.get(5, TimeUnit.SECONDS);
 
             con.writeFrame(new Http2HeadersFrame(
                     3,
