@@ -55,6 +55,24 @@ class Http1Connection extends BaseHttpConnection {
         }
     }
 
+    private static final class HandlerExecution {
+        private final boolean accepted;
+        private final @Nullable CompletableFuture<@Nullable Void> asyncCompletion;
+
+        private HandlerExecution(boolean accepted, @Nullable CompletableFuture<@Nullable Void> asyncCompletion) {
+            this.accepted = accepted;
+            this.asyncCompletion = asyncCompletion;
+        }
+
+        private static HandlerExecution accepted(@Nullable CompletableFuture<@Nullable Void> asyncCompletion) {
+            return new HandlerExecution(true, asyncCompletion);
+        }
+
+        private static HandlerExecution rejected() {
+            return new HandlerExecution(false, null);
+        }
+    }
+
     Http1Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket,
                     @Nullable Certificate clientCertificate, Instant handshakeStartTime,
                     ExecutorService handlerExecutor, boolean handlersRunOnConnectionTask) {
@@ -152,7 +170,12 @@ class Http1Connection extends BaseHttpConnection {
 
                     boolean rejectedByHandlerExecutor = false;
                     try {
-                        if (handleExchangeOnHandlerExecutor(muRequest, muResponse)) {
+                        HandlerExecution execution = handleExchangeOnHandlerExecutor(muRequest, muResponse);
+                        if (execution.accepted) {
+                            CompletableFuture<@Nullable Void> asyncCompletion = execution.asyncCompletion;
+                            if (asyncCompletion != null) {
+                                awaitAsyncCompletion(asyncCompletion, muRequest, muResponse);
+                            }
                             closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest);
                         } else {
                             rejectedByHandlerExecutor = true;
@@ -187,27 +210,64 @@ class Http1Connection extends BaseHttpConnection {
         }
     }
 
-    private boolean handleExchangeOnHandlerExecutor(Mu3Request request, Http1Response response) throws Throwable {
+    private HandlerExecution handleExchangeOnHandlerExecutor(Mu3Request request, Http1Response response) throws Throwable {
         if (handlersRunOnConnectionTask) {
-            handleExchange(request, response);
-            return true;
+            return HandlerExecution.accepted(handleExchange(request, response));
         }
-        CompletableFuture<@Nullable Void> completion = new CompletableFuture<>();
+        CompletableFuture<@Nullable CompletableFuture<@Nullable Void>> completion = new CompletableFuture<>();
         try {
             handlerExecutor.execute(() -> {
                 try {
-                    handleExchange(request, response);
-                    completion.complete(null);
+                    completion.complete(handleExchange(request, response));
                 } catch (Throwable t) {
                     completion.completeExceptionally(t);
                 }
             });
         } catch (RejectedExecutionException rejected) {
-            return false;
+            return HandlerExecution.rejected();
         }
         try {
+            return HandlerExecution.accepted(completion.get());
+        } catch (ExecutionException e) {
+            throw e.getCause();
+        }
+    }
+
+    private void awaitAsyncCompletion(CompletableFuture<@Nullable Void> completion, Mu3Request request,
+                                      Http1Response response) throws Throwable {
+        try {
             completion.get();
-            return true;
+        } catch (ExecutionException e) {
+            Throwable failure = e.getCause();
+            if (!(failure instanceof Exception)) {
+                throw failure;
+            }
+            handleAsyncExceptionOnHandler(request, response, (Exception) failure);
+        }
+    }
+
+    private void handleAsyncExceptionOnHandler(Mu3Request request, Http1Response response,
+                                               Exception failure) throws Throwable {
+        if (handlersRunOnConnectionTask) {
+            handleExchangeException(request, response, failure);
+            return;
+        }
+        CompletableFuture<@Nullable Void> handled = new CompletableFuture<>();
+        Runnable task = () -> {
+            try {
+                handleExchangeException(request, response, failure);
+                handled.complete(null);
+            } catch (Throwable t) {
+                handled.completeExceptionally(t);
+            }
+        };
+        try {
+            handlerExecutor.execute(task);
+        } catch (RejectedExecutionException rejected) {
+            task.run();
+        }
+        try {
+            handled.get();
         } catch (ExecutionException e) {
             throw e.getCause();
         }

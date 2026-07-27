@@ -308,6 +308,94 @@ class ExecutionDomainsTest {
         assertThat(callbackFailure.get(5, TimeUnit.SECONDS), instanceOf(RejectedExecutionException.class));
     }
 
+    @Test
+    void aSuspendedHttp1ExchangeDoesNotRetainAHandlerWorker() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
+        var suspendedHandle = new CompletableFuture<AsyncHandle>();
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .addHandler((request, response) -> {
+                if (request.relativePath().equals("/suspend")) {
+                    suspendedHandle.complete(request.handleAsync());
+                } else {
+                    response.write(Thread.currentThread().getName());
+                }
+                return true;
+            })
+            .start();
+
+        try (var first = Http1Client.connect(server);
+             var second = Http1Client.connect(server)) {
+            first.writeRequestLine(Method.GET, "/suspend").flushHeaders();
+            AsyncHandle handle = suspendedHandle.get(5, TimeUnit.SECONDS);
+            try {
+                Future<String> secondResponse = clientExecutor.submit(() -> {
+                    second.writeRequestLine(Method.GET, "/second").flushHeaders();
+                    assertThat(second.readLine(), equalTo("HTTP/1.1 200 OK"));
+                    return second.readBody(second.readHeaders());
+                });
+                assertThat(secondResponse.get(2, TimeUnit.SECONDS), startsWith("handler-"));
+            } finally {
+                handle.complete();
+            }
+
+            assertThat(first.readLine(), equalTo("HTTP/1.1 200 OK"));
+            assertThat(first.readBody(first.readHeaders()), equalTo(""));
+        }
+    }
+
+    @Test
+    void aSuspendedHttp2ExchangeDoesNotRetainAHandlerWorker() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var suspendedHandle = new CompletableFuture<AsyncHandle>();
+        var completionThread = new CompletableFuture<String>();
+        server = httpServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .withHandlerExecutor(handlerExecutor)
+            .addHandler((request, response) -> {
+                if (request.relativePath().equals("/suspend")) {
+                    AsyncHandle handle = request.handleAsync();
+                    handle.addResponseCompleteHandler(info ->
+                        completionThread.complete(Thread.currentThread().getName())
+                    );
+                    suspendedHandle.complete(handle);
+                } else {
+                    response.write(Thread.currentThread().getName());
+                }
+                return true;
+            })
+            .start();
+
+        try (var h2Client = new H2Client();
+             var connection = h2Client.connectClearText(server)) {
+            connection.handshake();
+            connection.socket().setSoTimeout(2000);
+            int port = server.uri().getPort();
+            FieldBlock firstHeaders = RFCTestUtils.getHelloHeaders("http", port);
+            firstHeaders.set(":path", "/suspend");
+            connection.writeFrame(new Http2HeadersFrame(1, true, firstHeaders)).flush();
+            AsyncHandle handle = suspendedHandle.get(5, TimeUnit.SECONDS);
+            try {
+                FieldBlock secondHeaders = RFCTestUtils.getHelloHeaders("http", port);
+                secondHeaders.set(":path", "/second");
+                connection.writeFrame(new Http2HeadersFrame(3, true, secondHeaders)).flush();
+
+                Http2HeadersFrame responseHeaders =
+                    RFCTestUtils.readIgnoringWindowUpdates(connection, Http2HeadersFrame.class);
+                assertThat(responseHeaders.streamId(), is(3));
+                assertThat(responseHeaders.headers().get(":status"), equalTo("200"));
+                Http2DataFrame responseData =
+                    RFCTestUtils.readIgnoringWindowUpdates(connection, Http2DataFrame.class);
+                assertThat(responseData.streamId(), is(3));
+                assertThat(responseData.toUTF8(), startsWith("handler-"));
+            } finally {
+                handle.complete();
+            }
+            assertThat(completionThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
+        }
+    }
+
     @SuppressWarnings("deprecation")
     @Test
     void deprecatedWebSocketAdaptersUseTheAsyncExecutorWithoutSelfDeadlock() throws Exception {

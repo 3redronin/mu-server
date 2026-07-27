@@ -34,18 +34,12 @@ class RFC9113_6_4_RstStreamTest {
         var requestStarted = new CountDownLatch(1);
         var completedStreams = new LinkedBlockingQueue<ResponseInfo>(1);
         var handleRef = new AtomicReference<AsyncHandle>();
-        var handlerThread = new AtomicReference<Thread>();
-        var completionThread = new AtomicReference<Thread>();
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
-                handlerThread.set(Thread.currentThread());
                 AsyncHandle handle = request.handleAsync();
                 handleRef.set(handle);
-                handle.addResponseCompleteHandler(info -> {
-                    completionThread.set(Thread.currentThread());
-                    completedStreams.add(info);
-                });
+                handle.addResponseCompleteHandler(completedStreams::add);
                 requestStarted.countDown();
             })
             .start();
@@ -73,7 +67,6 @@ class RFC9113_6_4_RstStreamTest {
         assertThat("Resetting the HTTP/2 stream did not complete the suspended request", completedStream, is(notNullValue()));
         assertThat(completedStream.completedSuccessfully(), is(false));
         assertThat(completedStream.response().responseState(), is(ResponseState.CLIENT_CANCELLED));
-        assertThat(completionThread.get(), sameInstance(handlerThread.get()));
     }
 
     @Test
