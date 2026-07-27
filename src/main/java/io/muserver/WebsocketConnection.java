@@ -12,6 +12,7 @@ import java.net.ProtocolException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -62,6 +63,10 @@ class WebsocketConnection implements MuWebSocketSession {
 
     MuWebSocket webSocket() {
         return webSocket;
+    }
+
+    ExecutorService asyncExecutor() {
+        return httpConnection.serverImpl().asyncExecutor();
     }
 
 

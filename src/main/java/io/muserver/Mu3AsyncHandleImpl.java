@@ -3,10 +3,11 @@ package io.muserver;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -16,10 +17,12 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
     private CompletableFuture<@Nullable Void> responseFuture = CompletableFuture.completedFuture(null);
     private final CompletableFuture<@Nullable Void> completionFuture = new CompletableFuture<>();
     private final Lock lock = new ReentrantLock();
+    private final ExecutorService asyncExecutor;
 
-    Mu3AsyncHandleImpl(Mu3Request request, BaseResponse response) {
+    Mu3AsyncHandleImpl(Mu3Request request, BaseResponse response, ExecutorService asyncExecutor) {
         this.request = request;
         this.response = response;
+        this.asyncExecutor = asyncExecutor;
     }
 
     public void waitForCompletion(long timeoutMillis) throws Throwable {
@@ -42,58 +45,106 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
 
     @Override
     public void setReadListener(RequestBodyListener readListener) {
-        var requestFuture = CompletableFuture.runAsync(() -> {
-            AtomicReference<@Nullable Throwable> requestException = new AtomicReference<>();
-            try (var clientIn = request.body()) {
-                var buffer = new byte[8192];
-                int read;
-                while (requestException.get() == null) {
-                    try {
-                        read = clientIn.read(buffer);
-                    } catch (Throwable e) {
-                        requestException.set(e);
-                        readListener.onError(e);
-                        break;
-                    }
-                    if (read == -1) {
-                        break;
-                    }
-                    if (read > 0) {
-                        var latch = new CountDownLatch(1);
-                        DoneCallback dc = error -> {
-                            if (error != null) {
-                                requestException.set(error);
-                            }
-                            latch.countDown();
-                        };
-                        readListener.onDataReceived(ByteBuffer.wrap(buffer, 0, read), dc);
-                        // TODO set proper timeout
-                        if (!latch.await(24, TimeUnit.HOURS)) {
-                            requestException.set(new TimeoutException("Timed out in read callback " + readListener));
-                        }
-                    }
-                }
-                var toThrow = requestException.get();
-                if (toThrow != null) {
-                    throw toThrow;
-                } else {
-                    readListener.onComplete();
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                requestException.set(e);
-            } catch (Throwable e) {
-                requestException.set(e);
+        new AsyncBodyReader(readListener).scheduleNextRead();
+    }
+
+    private final class AsyncBodyReader {
+        private final RequestBodyListener readListener;
+        private final byte[] buffer = new byte[8192];
+        private final AtomicBoolean finished = new AtomicBoolean();
+        private @Nullable InputStream clientIn;
+
+        private AsyncBodyReader(RequestBodyListener readListener) {
+            this.readListener = readListener;
+        }
+
+        private void scheduleNextRead() {
+            if (finished.get()) {
+                return;
             }
-            var e = requestException.get();
-            if (e != null) {
-                throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException("Error while reading body", e);
+            try {
+                asyncExecutor.execute(this::readNext);
+            } catch (RuntimeException t) {
+                fail(t, false);
             }
-        });
-        requestFuture.exceptionally( t -> {
-            complete(t);
-            return null;
-        });
+        }
+
+        private void readNext() {
+            if (finished.get()) {
+                return;
+            }
+            InputStream input = clientIn;
+            if (input == null) {
+                try {
+                    input = request.body();
+                    clientIn = input;
+                } catch (Throwable t) {
+                    fail(t, false);
+                    return;
+                }
+            }
+
+            final int read;
+            try {
+                read = input.read(buffer);
+            } catch (Throwable t) {
+                fail(t, true);
+                return;
+            }
+            if (read == -1) {
+                finishReading();
+                return;
+            }
+            if (read == 0) {
+                scheduleNextRead();
+                return;
+            }
+
+            var callbackUsed = new AtomicBoolean();
+            try {
+                readListener.onDataReceived(ByteBuffer.wrap(buffer, 0, read), error -> {
+                    if (!callbackUsed.compareAndSet(false, true)) {
+                        return;
+                    }
+                    if (error == null) {
+                        scheduleNextRead();
+                    } else {
+                        fail(error, false);
+                    }
+                });
+            } catch (Throwable t) {
+                fail(t, false);
+            }
+        }
+
+        private void finishReading() {
+            if (!finished.compareAndSet(false, true)) {
+                return;
+            }
+            try {
+                readListener.onComplete();
+            } catch (Throwable t) {
+                complete(t);
+            } finally {
+                Mutils.closeSilently(clientIn);
+            }
+        }
+
+        private void fail(Throwable failure, boolean notifyListener) {
+            if (!finished.compareAndSet(false, true)) {
+                return;
+            }
+            try {
+                if (notifyListener) {
+                    readListener.onError(failure);
+                }
+            } catch (Throwable listenerFailure) {
+                addSuppressedIfDifferent(failure, listenerFailure);
+            } finally {
+                Mutils.closeSilently(clientIn);
+            }
+            complete(failure);
+        }
     }
 
     @Override
@@ -116,42 +167,87 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
 
     @Override
     public void write(ByteBuffer data, DoneCallback callback) {
+        var taskStarted = new AtomicBoolean();
+        CompletableFuture<@Nullable Void> writeFuture;
         lock.lock();
         try {
             responseFuture = responseFuture.thenRunAsync(() -> {
+                taskStarted.set(true);
                 try {
                     copyBufferToResponseOutput(data);
-                    callback.onComplete(null);
                 } catch (Throwable e) {
                     try {
                         callback.onComplete(e);
-                    } catch (Exception ignored) {
+                    } catch (Throwable callbackFailure) {
+                        addSuppressedIfDifferent(e, callbackFailure);
                     }
                     complete(e);
                     throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException("Error while writing body", e);
                 }
-            }).thenApply(ignored -> null);
+                try {
+                    callback.onComplete(null);
+                } catch (Throwable e) {
+                    complete(e);
+                    throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException("Error in write callback", e);
+                }
+            }, asyncExecutor).thenApply(ignored -> null);
+            writeFuture = responseFuture;
         } finally {
             lock.unlock();
         }
+        writeFuture.whenComplete((ignored, failure) -> {
+            if (failure != null && !taskStarted.get()) {
+                Throwable cause = completionCause(failure);
+                try {
+                    callback.onComplete(cause);
+                } catch (Throwable callbackFailure) {
+                    addSuppressedIfDifferent(cause, callbackFailure);
+                }
+                complete(cause);
+            }
+        });
     }
 
     @Override
     public Future<@Nullable Void> write(ByteBuffer data) {
+        var taskStarted = new AtomicBoolean();
+        CompletableFuture<@Nullable Void> writeFuture;
         lock.lock();
         try {
-            CompletableFuture<@Nullable Void> writeFuture = responseFuture.thenRunAsync(() -> {
+            writeFuture = responseFuture.thenRunAsync(() -> {
+                taskStarted.set(true);
                 try {
                     copyBufferToResponseOutput(data);
                 } catch (Throwable e) {
                     complete(e);
                     throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException("Error while writing body", e);
                 }
-            }).thenApply(ignored -> null);
+            }, asyncExecutor).thenApply(ignored -> null);
             responseFuture = writeFuture;
-            return writeFuture;
         } finally {
             lock.unlock();
+        }
+        writeFuture.whenComplete((ignored, failure) -> {
+            if (failure != null && !taskStarted.get()) {
+                complete(completionCause(failure));
+            }
+        });
+        return writeFuture;
+    }
+
+    private static Throwable completionCause(Throwable failure) {
+        Throwable cause = failure;
+        while ((cause instanceof CompletionException || cause instanceof ExecutionException)
+            && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause;
+    }
+
+    @SuppressWarnings("ReferenceEquality") // Throwable forbids suppressing itself; identity is required.
+    private static void addSuppressedIfDifferent(Throwable failure, Throwable suppressed) {
+        if (failure != suppressed) {
+            failure.addSuppressed(suppressed);
         }
     }
 

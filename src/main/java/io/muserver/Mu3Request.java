@@ -254,7 +254,8 @@ class Mu3Request implements MuRequest {
     public synchronized AsyncHandle handleAsync() {
         if (asyncHandle == null) {
             asyncHandle = new Mu3AsyncHandleImpl(this,
-                Objects.requireNonNull(response, "The response has not been initialized"));
+                Objects.requireNonNull(response, "The response has not been initialized"),
+                ((Mu3ServerImpl) connection.server()).asyncExecutor());
         }
         if (clientCancelled) {
             asyncHandle.complete();

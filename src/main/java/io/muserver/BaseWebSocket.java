@@ -7,7 +7,9 @@ import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
@@ -79,19 +81,23 @@ public abstract class BaseWebSocket implements MuWebSocket {
         // This calls the old-style methods in a new thread and blocks until the done callback is invoked.
         // Overriders of this base class should just override this method and block until the data is finished with.
         CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
-        CompletableFuture.runAsync(() -> {
-            try {
-                onText(message, true, error -> {
-                    if (error == null) {
-                        result.complete(null);
-                    } else {
-                        result.completeExceptionally(error);
-                    }
-                });
-            } catch (Exception e) {
-                result.completeExceptionally(e);
-            }
-        });
+        try {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    onText(message, true, error -> {
+                        if (error == null) {
+                            result.complete(null);
+                        } else {
+                            result.completeExceptionally(error);
+                        }
+                    });
+                } catch (Exception e) {
+                    result.completeExceptionally(e);
+                }
+            }, asyncExecutor());
+        } catch (RuntimeException failure) {
+            result.completeExceptionally(failure);
+        }
         blockUntilDone(result);
     }
 
@@ -167,20 +173,31 @@ public abstract class BaseWebSocket implements MuWebSocket {
         // This calls the old-style methods in a new thread and blocks until the done callback is invoked.
         // Overriders of this base class should just override this method and block until the data is finished with.
         CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
-        CompletableFuture.runAsync(() -> {
-            try {
-                onBinary(buffer, true, error -> {
-                    if (error == null) {
-                        result.complete(null);
-                    } else {
-                        result.completeExceptionally(error);
-                    }
-                }, () -> {});
-            } catch (Exception e) {
-                result.completeExceptionally(e);
-            }
-        });
+        try {
+            CompletableFuture.runAsync(() -> {
+                try {
+                    onBinary(buffer, true, error -> {
+                        if (error == null) {
+                            result.complete(null);
+                        } else {
+                            result.completeExceptionally(error);
+                        }
+                    }, () -> {});
+                } catch (Exception e) {
+                    result.completeExceptionally(e);
+                }
+            }, asyncExecutor());
+        } catch (RuntimeException failure) {
+            result.completeExceptionally(failure);
+        }
         blockUntilDone(result);
+    }
+
+    private Executor asyncExecutor() {
+        MuWebSocketSession currentSession = session;
+        return currentSession instanceof WebsocketConnection
+            ? ((WebsocketConnection) currentSession).asyncExecutor()
+            : ForkJoinPool.commonPool();
     }
 
     private static void blockUntilDone(CompletableFuture<@Nullable Void> result) throws Exception {

@@ -7,6 +7,8 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -14,6 +16,20 @@ import java.util.concurrent.TimeUnit;
  * <p>The simplest way to get a reference to a session is to extend {@link BaseWebSocket} and use the {@link BaseWebSocket#session()} method.</p>
  */
 public interface MuWebSocketSession {
+
+    private void runAsync(Runnable task, DoneCallback doneCallback) {
+        Executor executor = this instanceof WebsocketConnection
+            ? ((WebsocketConnection) this).asyncExecutor()
+            : ForkJoinPool.commonPool();
+        try {
+            CompletableFuture.runAsync(task, executor);
+        } catch (RuntimeException failure) {
+            try {
+                doneCallback.onComplete(failure);
+            } catch (Exception ignored) {
+            }
+        }
+    }
 
     /**
      * Specifies whether a close frame sent from the client has been received
@@ -54,7 +70,7 @@ public interface MuWebSocketSession {
      */
     @Deprecated
     default void sendText(String message, DoneCallback doneCallback) {
-        CompletableFuture.runAsync(() -> {
+        runAsync(() -> {
             try {
                 sendText(message);
                 doneCallback.onComplete(null);
@@ -64,7 +80,7 @@ public interface MuWebSocketSession {
                 } catch (Exception ignored) {
                 }
             }
-        });
+        }, doneCallback);
     }
 
 
@@ -79,7 +95,7 @@ public interface MuWebSocketSession {
      */
     @Deprecated
     default void sendText(String message, boolean isLastFragment, DoneCallback doneCallback) {
-        CompletableFuture.runAsync(() -> {
+        runAsync(() -> {
             try {
                 sendTextFragment(ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8)), isLastFragment);
                 doneCallback.onComplete(null);
@@ -89,7 +105,7 @@ public interface MuWebSocketSession {
                 } catch (Exception ignored) {
                 }
             }
-        });
+        }, doneCallback);
     }
 
 
@@ -111,7 +127,7 @@ public interface MuWebSocketSession {
      */
     @Deprecated
     default void sendBinary(ByteBuffer message, DoneCallback doneCallback) {
-        CompletableFuture.runAsync(() -> {
+        runAsync(() -> {
             try {
                 sendBinary(message);
                 doneCallback.onComplete(null);
@@ -121,7 +137,7 @@ public interface MuWebSocketSession {
                 } catch (Exception ignored) {
                 }
             }
-        });
+        }, doneCallback);
     }
 
     /**
@@ -144,7 +160,7 @@ public interface MuWebSocketSession {
      */
     @Deprecated
     default void sendBinary(ByteBuffer message, boolean isLastFragment, DoneCallback doneCallback) {
-        CompletableFuture.runAsync(() -> {
+        runAsync(() -> {
             try {
                 sendBinaryFragment(message, isLastFragment);
                 doneCallback.onComplete(null);
@@ -154,7 +170,7 @@ public interface MuWebSocketSession {
                 } catch (Exception ignored) {
                 }
             }
-        });
+        }, doneCallback);
     }
 
     /**
@@ -174,7 +190,7 @@ public interface MuWebSocketSession {
      */
     @Deprecated
     default void sendPing(ByteBuffer payload, DoneCallback doneCallback) {
-        CompletableFuture.runAsync(() -> {
+        runAsync(() -> {
             try {
                 sendPing(payload);
                 doneCallback.onComplete(null);
@@ -184,7 +200,7 @@ public interface MuWebSocketSession {
                 } catch (Exception ignored) {
                 }
             }
-        });
+        }, doneCallback);
     }
 
     /**
@@ -204,7 +220,7 @@ public interface MuWebSocketSession {
      */
     @Deprecated
     default void sendPong(ByteBuffer payload, DoneCallback doneCallback) {
-        CompletableFuture.runAsync(() -> {
+        runAsync(() -> {
             try {
                 sendPong(payload);
                 doneCallback.onComplete(null);
@@ -214,7 +230,7 @@ public interface MuWebSocketSession {
                 } catch (Exception ignored) {
                 }
             }
-        });
+        }, doneCallback);
     }
 
     /**
