@@ -90,12 +90,9 @@ class FieldBlockDecoder {
 
                     totalLen += name.length() + value.length();
 
-                    var line = new FieldLine(name, value);
+                    var line = new FieldLine(name, value, litNever);
                     if (totalLen <= maxHeadersSize) {
                         fb.add(line);
-                        if (litNever) {
-                            table.neverIndex(line);
-                        }
                     }
                     if (litWith) {
                         table.indexField(line);

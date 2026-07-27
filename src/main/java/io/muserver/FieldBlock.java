@@ -214,14 +214,14 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
 
     @Override
     public String toString(@Nullable Collection<String> toSuppress) {
-        // TODO keep track of what to suppress based on never-index in the hpack
         var sup = toSuppress == null ? Set.of("authorization", "cookie", "set-cookie") : toSuppress;
         var sb = new StringBuilder("HttpHeaders[");
         var first = true;
         for (var line : lines) {
             if (!first) sb.append(", ");
             var name = line.name().toString();
-            var suppress = sup.stream().anyMatch(v -> v.equalsIgnoreCase(name));
+            var suppress = (toSuppress == null && line.neverIndexed())
+                || sup.stream().anyMatch(v -> v.equalsIgnoreCase(name));
             String value = suppress ? "(hidden)" : line.value().toString();
             sb.append(name).append(": ").append(value);
             first = false;
