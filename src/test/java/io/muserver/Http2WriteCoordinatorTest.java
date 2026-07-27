@@ -369,6 +369,39 @@ class Http2WriteCoordinatorTest {
     }
 
     @Test
+    void windowUpdatesForRetainedProtocolClosedStreamsAreIgnored() {
+        var coordinator = coordinator(100, 1, Integer.MAX_VALUE - 1);
+        var endStream = task(new Http2HeadersFrame(1, true, new FieldBlock()));
+        coordinator.remoteEndStream(1);
+        coordinator.submit(endStream);
+        coordinator.processAvailableCommands();
+        coordinator.pollWritable().complete();
+        assertThat(coordinator.streamState(1), equalTo(Http2StreamState.CLOSED));
+
+        coordinator.applyStreamWindowUpdate(1, 2);
+        coordinator.processAvailableCommands();
+
+        assertThat(coordinator.pollWritable(), nullValue());
+        assertThat(coordinator.streamState(1), equalTo(Http2StreamState.CLOSED));
+    }
+
+    @Test
+    void windowUpdatesStillUnblockPendingEndStreamOnProtocolClosedStreams() {
+        var coordinator = coordinator(100, 1, 0);
+        var endStream = task(new Http2DataFrame(1, true, new byte[]{1}, 0, 1));
+        coordinator.remoteEndStream(1);
+        coordinator.submit(endStream);
+        coordinator.processAvailableCommands();
+        assertThat(coordinator.streamState(1), equalTo(Http2StreamState.CLOSED));
+        assertThat(coordinator.pollWritable(), nullValue());
+
+        coordinator.applyStreamWindowUpdate(1, 1);
+        coordinator.processAvailableCommands();
+
+        assertThat(coordinator.pollWritable().frame(), equalTo(endStream.frame()));
+    }
+
+    @Test
     void dataForAnUnopenedStreamCannotBypassStreamFlowControl() {
         var coordinator = new Http2WriteCoordinator(100);
         var data = task(data(1, "blocked"));

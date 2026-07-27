@@ -466,7 +466,9 @@ final class Http2WriteCoordinator {
         } else if (command instanceof StreamWindowUpdate) {
             StreamWindowUpdate update = (StreamWindowUpdate) command;
             Integer currentCredit = streamCredits.get(update.streamId);
-            if (currentCredit != null) {
+            Http2StreamState state = streamStates.get(update.streamId);
+            if (currentCredit != null
+                && (state != Http2StreamState.CLOSED || hasPendingEndStreamWrite(update.streamId))) {
                 try {
                     streamCredits.put(update.streamId, addCredit(currentCredit, update.increment, update.streamId));
                 } catch (Http2Exception e) {
