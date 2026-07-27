@@ -50,7 +50,7 @@ class Mu3ServerImpl implements MuServer {
     private final boolean ownsConnectionMaintenanceExecutor;
     private final ScheduledExecutorService timerExecutor;
     private final boolean ownsTimerExecutor;
-    private final Phaser responseCompletionTasks = new Phaser() {
+    private final Phaser detachedApplicationTasks = new Phaser() {
         @Override
         protected boolean onAdvance(int phase, int registeredParties) {
             // Keep accepting tasks after an idle phase. Server.stop() can also be called
@@ -123,7 +123,7 @@ class Mu3ServerImpl implements MuServer {
                 stoppedCleanly = false;
             }
         }
-        if (!awaitResponseCompletionTasks(deadline)) {
+        if (!awaitDetachedApplicationTasks(deadline)) {
             stoppedCleanly = false;
         }
         if (ownsTimerExecutor) {
@@ -147,12 +147,12 @@ class Mu3ServerImpl implements MuServer {
         return stoppedCleanly;
     }
 
-    private boolean awaitResponseCompletionTasks(long deadline) {
-        while (responseCompletionTasks.getRegisteredParties() > 0) {
-            int phase = responseCompletionTasks.getPhase();
+    private boolean awaitDetachedApplicationTasks(long deadline) {
+        while (detachedApplicationTasks.getRegisteredParties() > 0) {
+            int phase = detachedApplicationTasks.getPhase();
             long remaining = Math.max(0L, deadline - System.currentTimeMillis());
             try {
-                responseCompletionTasks.awaitAdvanceInterruptibly(
+                detachedApplicationTasks.awaitAdvanceInterruptibly(
                     phase,
                     remaining,
                     TimeUnit.MILLISECONDS
@@ -167,20 +167,29 @@ class Mu3ServerImpl implements MuServer {
         return true;
     }
 
-    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
     void executeResponseCompletionTask(Runnable task) {
-        responseCompletionTasks.register();
+        executeTrackedApplicationTask(task, true, "response completion callback");
+    }
+
+    private void executeTrackedApplicationTask(
+        Runnable task,
+        boolean preferHandlerExecutor,
+        String description
+    ) {
+        detachedApplicationTasks.register();
         Runnable trackedTask = () -> {
             try {
                 task.run();
             } finally {
-                responseCompletionTasks.arriveAndDeregister();
+                detachedApplicationTasks.arriveAndDeregister();
             }
         };
-        RejectedExecutionException rejected = tryExecuteHandlerTask(trackedTask);
+        RejectedExecutionException rejected = preferHandlerExecutor
+            ? tryExecuteHandlerTask(trackedTask)
+            : tryExecuteAsyncTask(trackedTask);
         if (rejected != null) {
-            responseCompletionTasks.arriveAndDeregister();
-            log.warn("Dropping response completion callback because its application executors rejected it", rejected);
+            detachedApplicationTasks.arriveAndDeregister();
+            log.warn("Dropping {} because its application executors rejected it", description, rejected);
         }
     }
 
@@ -189,22 +198,34 @@ class Mu3ServerImpl implements MuServer {
      * The async executor is the secondary application domain when handler dispatch
      * is unavailable; the returned rejection means neither domain can accept work.
      */
-    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
     @Nullable RejectedExecutionException tryExecuteHandlerTask(Runnable task) {
+        return tryExecuteApplicationTask(task, handlerExecutor, asyncExecutor);
+    }
+
+    private @Nullable RejectedExecutionException tryExecuteAsyncTask(Runnable task) {
+        return tryExecuteApplicationTask(task, asyncExecutor, handlerExecutor);
+    }
+
+    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
+    private static @Nullable RejectedExecutionException tryExecuteApplicationTask(
+        Runnable task,
+        ExecutorService primaryExecutor,
+        ExecutorService fallbackExecutor
+    ) {
         try {
-            handlerExecutor.execute(task);
+            primaryExecutor.execute(task);
             return null;
-        } catch (RejectedExecutionException handlerRejected) {
-            if (asyncExecutor != handlerExecutor) {
+        } catch (RejectedExecutionException primaryRejected) {
+            if (fallbackExecutor != primaryExecutor) {
                 try {
-                    asyncExecutor.execute(task);
+                    fallbackExecutor.execute(task);
                     return null;
-                } catch (RejectedExecutionException asyncRejected) {
-                    asyncRejected.addSuppressed(handlerRejected);
-                    return asyncRejected;
+                } catch (RejectedExecutionException fallbackRejected) {
+                    fallbackRejected.addSuppressed(primaryRejected);
+                    return fallbackRejected;
                 }
             }
-            return handlerRejected;
+            return primaryRejected;
         }
     }
 
@@ -388,29 +409,15 @@ class Mu3ServerImpl implements MuServer {
         }
     }
 
-    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
     void onRequestRejected(RejectedRequest info) {
         if (requestRejectListeners.isEmpty()) {
             return;
         }
-        Runnable notification = () -> notifyRequestRejected(info);
-        try {
-            asyncExecutor.execute(notification);
-        } catch (RejectedExecutionException asyncRejected) {
-            // Keep user callbacks off protocol readers even if a caller-supplied async
-            // executor is unavailable. The handler executor is the remaining application
-            // domain; if both reject, there is no safe executor on which to deliver this.
-            if (handlerExecutor == asyncExecutor) {
-                log.error("Request rejection notification was not delivered because the application executor rejected it", asyncRejected);
-                return;
-            }
-            try {
-                handlerExecutor.execute(notification);
-            } catch (RejectedExecutionException handlerRejected) {
-                handlerRejected.addSuppressed(asyncRejected);
-                log.error("Request rejection notification was not delivered because both application executors rejected it", handlerRejected);
-            }
-        }
+        executeTrackedApplicationTask(
+            () -> notifyRequestRejected(info),
+            false,
+            "request rejection notification"
+        );
     }
 
     private void notifyRequestRejected(RejectedRequest info) {

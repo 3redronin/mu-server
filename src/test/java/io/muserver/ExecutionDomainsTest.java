@@ -279,6 +279,52 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void gracefulStopWaitsForDispatchedRequestRejectionListeners() throws Exception {
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
+        var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
+        var listenerEntered = new CountDownLatch(1);
+        var releaseListener = new CountDownLatch(1);
+        server = httpServer()
+            .withMaxHeadersSize(1024)
+            .withAsyncExecutor(asyncExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addRequestRejectListener(info -> {
+                listenerEntered.countDown();
+                try {
+                    releaseListener.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            })
+            .start();
+
+        try {
+            try (var client = Http1Client.connect(server)) {
+                client.writeRequestLine(Method.GET, "/")
+                    .writeHeader("x-big", "a".repeat(2000))
+                    .flushHeaders();
+                assertThat(client.readLine(), startsWith("HTTP/1.1 431"));
+                client.readBody(client.readHeaders());
+                assertThat(listenerEntered.await(5, TimeUnit.SECONDS), is(true));
+            }
+
+            MuServer runningServer = Objects.requireNonNull(server);
+            Future<Boolean> stopped = clientExecutor.submit(() ->
+                runningServer.stop(2, TimeUnit.SECONDS)
+            );
+            assertThrows(TimeoutException.class, () ->
+                stopped.get(100, TimeUnit.MILLISECONDS)
+            );
+            releaseListener.countDown();
+            assertThat(stopped.get(5, TimeUnit.SECONDS), is(true));
+            server = null;
+        } finally {
+            releaseListener.countDown();
+        }
+    }
+
+    @Test
     void anIdleHttp1ConnectionDoesNotRetainAHandlerWorker() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
