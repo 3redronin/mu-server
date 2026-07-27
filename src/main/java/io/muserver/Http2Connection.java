@@ -611,20 +611,23 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                         pendingSettingsAck = registerPendingSettingsAck();
                     }
                 }
-                frame.writeTo(this, clientOut);
-                // Publish reader-facing monotonic output fences after the
-                // complete frame has been handed to the OutputStream, but
-                // before flush can expose it and block. Publishing before the
-                // first write would release state while output had made no
-                // progress. Protocol completion still occurs only after flush.
-                candidate.publishAfterWrite(frame);
                 if (frame instanceof Http2WindowUpdate) {
                     var update = (Http2WindowUpdate) frame;
+                    // Raw socket output can expose the complete frame while
+                    // writeTo is still inside its blocking write call. Publish
+                    // the advertised credit first so a compliant peer cannot
+                    // race the local receive-window accounting.
                     inboundFlowControl.windowUpdateWriting(
                         update.streamId(),
                         update.windowSizeIncrement()
                     );
                 }
+                frame.writeTo(this, clientOut);
+                // Releasing a local END_STREAM fence before output makes any
+                // progress can over-admit peer streams indefinitely. Publish
+                // it after the complete frame has been handed to the output,
+                // while protocol completion still waits for a successful flush.
+                candidate.publishAfterWrite(frame);
                 clientOut.flush();
                 if (pendingSettingsAck != null) {
                     // The peer cannot be late until the SETTINGS frame has
