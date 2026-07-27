@@ -168,13 +168,31 @@ class Mu3ServerImpl implements MuServer {
     }
 
     void executeResponseCompletionTask(Runnable task) {
-        executeTrackedApplicationTask(task, true, "response completion callback");
+        executeResponseCompletionTask(task, false);
+    }
+
+    void executeResponseCompletionTask(Runnable task, boolean alreadyOnApplicationExecutor) {
+        executeTrackedApplicationTask(
+            task,
+            true,
+            "response completion callback",
+            alreadyOnApplicationExecutor
+        );
     }
 
     private void executeTrackedApplicationTask(
         Runnable task,
         boolean preferHandlerExecutor,
         String description
+    ) {
+        executeTrackedApplicationTask(task, preferHandlerExecutor, description, false);
+    }
+
+    private void executeTrackedApplicationTask(
+        Runnable task,
+        boolean preferHandlerExecutor,
+        String description,
+        boolean alreadyOnApplicationExecutor
     ) {
         detachedApplicationTasks.register();
         Runnable trackedTask = () -> {
@@ -184,6 +202,10 @@ class Mu3ServerImpl implements MuServer {
                 detachedApplicationTasks.arriveAndDeregister();
             }
         };
+        if (alreadyOnApplicationExecutor) {
+            trackedTask.run();
+            return;
+        }
         RejectedExecutionException rejected = preferHandlerExecutor
             ? tryExecuteHandlerTask(trackedTask)
             : tryExecuteAsyncTask(trackedTask);
