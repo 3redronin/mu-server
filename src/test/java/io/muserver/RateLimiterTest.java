@@ -5,8 +5,14 @@ import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.RateLimitBuilder.rateLimit;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -19,19 +25,104 @@ public class RateLimiterTest {
 
 
     @Test
-    public void returnsActionIfLimitExceeded() throws InterruptedException {
+    public void returnsActionIfLimitExceeded() {
+        var nowNanos = new AtomicLong(100L);
         RateLimiterImpl limiter = new RateLimiterImpl(
             request -> rateLimit().withBucket("blah")
                 .withRate(3)
                 .withRejectionAction(RateLimitRejectionAction.SEND_429)
-                .withWindow(100, TimeUnit.MILLISECONDS).build());
+                .withWindow(100, TimeUnit.MILLISECONDS).build(),
+            nowNanos::get
+        );
         assertThat(limiter.record(null), nullValue());
         assertThat(limiter.record(null), nullValue());
         assertThat(limiter.record(null), nullValue());
         assertThat(limiter.record(null), equalTo(RateLimitRejectionAction.SEND_429));
-        Thread.sleep(250);
+        nowNanos.addAndGet(TimeUnit.MILLISECONDS.toNanos(101L));
         assertThat(limiter.record(null), nullValue());
-        assertEventually(() -> limiter.currentBuckets().keySet(), is(empty()));
+        nowNanos.addAndGet(TimeUnit.MILLISECONDS.toNanos(101L));
+        assertThat(limiter.currentBuckets().keySet(), is(empty()));
+    }
+
+    @Test
+    void windowsExpireAcrossSignedNanoTimeWraparound() {
+        var nowNanos = new AtomicLong(Long.MAX_VALUE - 50_000_000L);
+        RateLimiterImpl limiter = new RateLimiterImpl(
+            request -> rateLimit().withBucket("wrap")
+                .withRate(1)
+                .withWindow(100, TimeUnit.MILLISECONDS)
+                .build(),
+            nowNanos::get
+        );
+
+        assertThat(limiter.record(null), nullValue());
+        nowNanos.addAndGet(TimeUnit.MILLISECONDS.toNanos(99L));
+        assertThat(
+            limiter.record(null),
+            is(RateLimitRejectionAction.SEND_429)
+        );
+        nowNanos.addAndGet(TimeUnit.MILLISECONDS.toNanos(2L));
+        assertThat(limiter.record(null), nullValue());
+    }
+
+    @Test
+    void currentBucketsRemovesMultipleExpiredBucketsInOneSnapshot() {
+        var nowNanos = new AtomicLong(1L);
+        var bucket = new AtomicReference<>("first");
+        RateLimiterImpl limiter = new RateLimiterImpl(
+            request -> rateLimit().withBucket(bucket.get())
+                .withRate(1)
+                .withWindow(1, TimeUnit.MILLISECONDS)
+                .build(),
+            nowNanos::get
+        );
+        limiter.record(null);
+        bucket.set("second");
+        limiter.record(null);
+
+        nowNanos.addAndGet(TimeUnit.MILLISECONDS.toNanos(2L));
+
+        assertThat(limiter.currentBuckets(), anEmptyMap());
+    }
+
+    @Test
+    void concurrentDecisionsRemainAtomic() throws Exception {
+        var start = new CountDownLatch(1);
+        RateLimiterImpl limiter = new RateLimiterImpl(
+            request -> rateLimit().withBucket("shared")
+                .withRate(1)
+                .withWindow(1, TimeUnit.MINUTES)
+                .build(),
+            () -> 1L
+        );
+        var executor = Executors.newFixedThreadPool(8);
+        try {
+            var decisions =
+                new ArrayList<Future<RateLimitRejectionAction>>();
+            for (int i = 0; i < 16; i++) {
+                decisions.add(executor.submit(() -> {
+                    start.await();
+                    return limiter.record(null);
+                }));
+            }
+
+            start.countDown();
+
+            long allowed = 0L;
+            long rejected = 0L;
+            for (var decision : decisions) {
+                if (decision.get() == null) {
+                    allowed++;
+                } else {
+                    rejected++;
+                }
+            }
+            assertThat(allowed, is(1L));
+            assertThat(rejected, is(15L));
+            assertThat(limiter.currentBuckets().get("shared"), is(1L));
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test
