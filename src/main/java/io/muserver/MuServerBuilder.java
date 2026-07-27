@@ -41,6 +41,7 @@ public class MuServerBuilder {
     private @Nullable ExecutorService executor;
     private @Nullable ExecutorService connectionExecutor;
     private @Nullable ExecutorService http2WriterExecutor;
+    private @Nullable ExecutorService connectionMaintenanceExecutor;
     private @Nullable ScheduledExecutorService timerExecutor;
     private long maxRequestSize = 24 * 1024 * 1024;
     private @Nullable List<ResponseCompleteListener> responseCompleteListeners;
@@ -261,11 +262,37 @@ public class MuServerBuilder {
     }
 
     /**
+     * Sets the executor used for timed connection maintenance, including idle timeout
+     * checks and automatic WebSocket pings.
+     *
+     * <p>Timer threads only determine when work is due and dispatch it to this executor.
+     * This executor must be independent from bounded executors containing long-lived
+     * connection tasks, otherwise those tasks can prevent timeouts and pings from
+     * running.</p>
+     *
+     * <p>By default, a server-owned virtual-thread-per-task executor is used when the
+     * runtime supports virtual threads, otherwise a cached thread pool is used. A
+     * caller-supplied executor remains owned by the caller and is not shut down when
+     * the server stops.</p>
+     *
+     * @param connectionMaintenanceExecutor The executor for timed connection work, or
+     *                                      <code>null</code> to use the default
+     * @return The current Mu Server builder
+     */
+    public MuServerBuilder withConnectionMaintenanceExecutor(
+        @Nullable ExecutorService connectionMaintenanceExecutor
+    ) {
+        this.connectionMaintenanceExecutor = connectionMaintenanceExecutor;
+        return this;
+    }
+
+    /**
      * Sets the executor used to schedule server connection timers.
      *
      * <p>Timer threads only determine when work is due. Connection work is dispatched
-     * to the executor configured by {@link #withConnectionExecutor(ExecutorService)}
-     * so that timer threads do not perform socket I/O or invoke application handlers.</p>
+     * to the executor configured by
+     * {@link #withConnectionMaintenanceExecutor(ExecutorService)}
+     * so that timer threads do not perform socket I/O or invoke application callbacks.</p>
      *
      * <p>The supplied scheduled executor must remain able to execute brief scheduling
      * callbacks promptly. It should not be shared with an executor that can be occupied
@@ -694,6 +721,15 @@ public class MuServerBuilder {
     }
 
     /**
+     * Gets the executor used for timed connection maintenance.
+     *
+     * @return The configured executor, or <code>null</code> if the default executor will be used.
+     */
+    public @Nullable ExecutorService connectionMaintenanceExecutor() {
+        return connectionMaintenanceExecutor;
+    }
+
+    /**
      * Gets the executor used to schedule server connection timers.
      *
      * @return The configured executor, or <code>null</code> if the default executor will be used.
@@ -812,6 +848,7 @@ public class MuServerBuilder {
             ", executor=" + executor +
             ", connectionExecutor=" + connectionExecutor +
             ", http2WriterExecutor=" + http2WriterExecutor +
+            ", connectionMaintenanceExecutor=" + connectionMaintenanceExecutor +
             ", timerExecutor=" + timerExecutor +
             ", maxRequestSize=" + maxRequestSize +
             ", responseCompleteListeners=" + responseCompleteListeners +
