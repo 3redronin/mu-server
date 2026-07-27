@@ -33,19 +33,21 @@ class WebsocketConnection implements MuWebSocketSession {
     final WebSocketHandlerBuilder.Settings settings;
 
     private volatile WebsocketSessionState state = WebsocketSessionState.NOT_STARTED;
-    private final BaseHttpConnection httpConnection;
+    private final Http1Connection httpConnection;
     private final MuWebSocket webSocket;
     private final ExecutorService handlerExecutor;
     private final boolean eventsRunOnConnectionTask;
     private final Queue<ApplicationEventTask> applicationEvents = new ConcurrentLinkedQueue<>();
     private final AtomicBoolean applicationEventRunnerScheduled = new AtomicBoolean();
     private final AtomicBoolean errorEventQueued = new AtomicBoolean();
+    private final AtomicBoolean serverShutdownRequested = new AtomicBoolean();
     private boolean closeReceived = false;
     private boolean closeSent = false;
     private final Lock writeLock = new ReentrantLock();
     private final @Nullable ByteBuffer pingBuffer;
     private ReadState readState = ReadState.NONE;
     private volatile @Nullable ScheduledFuture<?> pingFuture;
+    private volatile @Nullable Thread connectionTaskThread;
 
     private enum ReadState {
         NONE, TEXT, BINARY,
@@ -128,6 +130,7 @@ class WebsocketConnection implements MuWebSocketSession {
         this.inputStream = inputStream;
         this.outputStream = outputStream;
         this.buffer = ByteBuffer.wrap(readBuffer).flip();
+        connectionTaskThread = Thread.currentThread();
 
         try {
             state = WebsocketSessionState.OPEN;
@@ -279,7 +282,9 @@ class WebsocketConnection implements MuWebSocketSession {
 
             // it's finished - the TCP connection will be closed
         } catch (Throwable e) {
-            if (!errorEventQueued.get() && state != WebsocketSessionState.TIMED_OUT) {
+            if (!serverShutdownRequested.get()
+                && !errorEventQueued.get()
+                && state != WebsocketSessionState.TIMED_OUT) {
                 WebsocketSessionState errorState =
                     e instanceof TimeoutException || e instanceof SocketTimeoutException
                         ? WebsocketSessionState.TIMED_OUT
@@ -295,6 +300,7 @@ class WebsocketConnection implements MuWebSocketSession {
                 currentPing.cancel(false);
                 pingFuture = null;
             }
+            connectionTaskThread = null;
         }
     }
 
@@ -384,12 +390,27 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     void onServerShuttingDown() throws Exception {
-        invokeApplicationEvent(webSocket::onServerShuttingDown);
+        if (!serverShutdownRequested.compareAndSet(false, true)) {
+            return;
+        }
+        enqueueApplicationEvent(webSocket::onServerShuttingDown)
+            .whenComplete((ignored, failure) -> {
+                if (failure != null) {
+                    log.info("Error while shutting down WebSocket", failure);
+                    httpConnection.forceShutdown();
+                }
+            });
     }
 
     private void invokeApplicationEvent(ApplicationEvent event) throws Exception {
         if (eventsRunOnConnectionTask) {
-            event.run();
+            try {
+                event.run();
+            } finally {
+                // A terminal event can be queued by a write attempted inside a callback.
+                // Drain it before returning to the blocking socket read.
+                drainApplicationEvents();
+            }
             return;
         }
         CompletableFuture<@Nullable Void> completion = enqueueApplicationEvent(event);
@@ -432,25 +453,51 @@ class WebsocketConnection implements MuWebSocketSession {
         };
     }
 
+    @SuppressWarnings("ReferenceEquality") // Connection-task ownership belongs to the exact thread instance.
     private CompletableFuture<@Nullable Void> enqueueApplicationEvent(ApplicationEvent event) {
         var task = new ApplicationEventTask(event);
         applicationEvents.add(task);
-        if (!eventsRunOnConnectionTask) {
+        if (eventsRunOnConnectionTask) {
+            if (Thread.currentThread() != connectionTaskThread) {
+                // A shared single-thread executor cannot run another task while its
+                // connection reader is blocked. Terminal external events wake that reader,
+                // which drains this mailbox from its finally block.
+                httpConnection.wakeWebSocketReader();
+            }
+        } else {
             scheduleApplicationEventRunner();
         }
         return task.completion;
     }
 
+    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
     private void scheduleApplicationEventRunner() {
         if (!applicationEventRunnerScheduled.compareAndSet(false, true)) {
             return;
         }
         try {
             handlerExecutor.execute(this::runApplicationEvents);
-        } catch (RejectedExecutionException rejected) {
-            // These events belong to an already-accepted WebSocket. Preserve delivery and
-            // serialization during shutdown or a transient capacity rejection.
-            runApplicationEvents();
+        } catch (RejectedExecutionException handlerRejected) {
+            ExecutorService fallbackExecutor = asyncExecutor();
+            if (fallbackExecutor != handlerExecutor) {
+                try {
+                    fallbackExecutor.execute(this::runApplicationEvents);
+                    return;
+                } catch (RejectedExecutionException asyncRejected) {
+                    asyncRejected.addSuppressed(handlerRejected);
+                    failApplicationEvents(asyncRejected);
+                    return;
+                }
+            }
+            failApplicationEvents(handlerRejected);
+        }
+    }
+
+    private void failApplicationEvents(RejectedExecutionException failure) {
+        applicationEventRunnerScheduled.set(false);
+        ApplicationEventTask task;
+        while ((task = applicationEvents.poll()) != null) {
+            task.completion.completeExceptionally(failure);
         }
     }
 

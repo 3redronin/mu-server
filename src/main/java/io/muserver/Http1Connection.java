@@ -290,14 +290,7 @@ class Http1Connection extends BaseHttpConnection {
             notifyExchangeEnded(response);
             return;
         }
-        Runnable task = () -> notifyExchangeEnded(response);
-        try {
-            handlerExecutor.execute(task);
-        } catch (RejectedExecutionException rejected) {
-            // Internal exchange accounting is already complete. Preserve application
-            // notifications during shutdown or a transient capacity rejection.
-            task.run();
-        }
+        server.executeResponseCompletionTask(() -> notifyExchangeEnded(response));
     }
 
     private boolean rejectRequestDueToHandlerOverload(Mu3Request request, OutputStream outputStream) throws IOException {
@@ -473,6 +466,14 @@ class Http1Connection extends BaseHttpConnection {
 
     ExecutorService webSocketHandlerExecutor() {
         return handlerExecutor;
+    }
+
+    void wakeWebSocketReader() {
+        try {
+            clientSocket.shutdownInput();
+        } catch (IOException e) {
+            log.debug("Could not wake WebSocket reader", e);
+        }
     }
 
     boolean webSocketEventsRunOnConnectionTask() {
