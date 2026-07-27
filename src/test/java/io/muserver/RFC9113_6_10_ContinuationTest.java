@@ -86,6 +86,29 @@ class RFC9113_6_10_ContinuationTest {
         }
     }
 
+    @Test
+    void aContinuationSequenceCannotGrowTheFieldBlockWithoutBound() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            byte[] fullFrame = new byte[16384];
+            Arrays.fill(fullFrame, (byte) 0x82);
+
+            con.handshake()
+                .writeRaw(headersFrame(1, true, false, fullFrame))
+                .writeRaw(continuationFrame(1, true, new byte[]{(byte) 0x82}))
+                .flush();
+
+            assertThat(
+                con.readLogicalFrame(),
+                equalTo(goAway(0, Http2ErrorCode.COMPRESSION_ERROR))
+            );
+            assertThrows(IOException.class, con::readFrameHeader);
+        }
+    }
+
     private byte[] priorityFrame(int streamId) {
         return new byte[] {
             0, 0, 5,

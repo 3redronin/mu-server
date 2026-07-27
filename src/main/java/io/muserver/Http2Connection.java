@@ -1008,7 +1008,16 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID " + fh.streamId());
         }
         try {
-            var headerFragment = Http2HeadersFrame.readLogicalFrame(fh, fieldBlockDecoder, buffer, clientIn);
+            var headerFragment = Http2HeadersFrame.readLogicalFrame(
+                fh,
+                fieldBlockDecoder,
+                buffer,
+                clientIn,
+                Math.max(
+                    server.maxRequestHeadersSize(),
+                    serverSettings.maxFrameSize
+                )
+            );
             log.info("Got headers " + headerFragment);
             Http2StreamRegistry.Lookup registered =
                 streamRegistry.lookup(headerFragment.streamId());
