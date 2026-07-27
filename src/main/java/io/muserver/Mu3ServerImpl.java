@@ -640,8 +640,8 @@ class Mu3ServerImpl implements MuServer {
         for (var listener : requestRejectListeners) {
             try {
                 listener.onRejected(info);
-            } catch (Exception e) {
-                log.error("Error from request reject listener", e);
+            } catch (Throwable failure) {
+                log.error("Error from request reject listener", failure);
             }
         }
     }
