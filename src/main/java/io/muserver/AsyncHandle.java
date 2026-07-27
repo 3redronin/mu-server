@@ -3,7 +3,10 @@ package io.muserver;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.ByteBuffer;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 /**
  * <p>A class to handle the request and response handling when using asynchronous request handling.</p>
@@ -50,6 +53,50 @@ public interface AsyncHandle {
      * @return A future that is resolved when the write succeeds or fails.
      */
     Future<@Nullable Void> write(ByteBuffer data);
+
+    /**
+     * Executes an application continuation for this exchange.
+     *
+     * <p>Handles supplied by Mu Server dispatch the task to the request-handler
+     * execution domain and never run it on the calling thread. This is useful when an
+     * asynchronous result becomes available on an executor that should not perform
+     * response serialization or invoke application callbacks.</p>
+     *
+     * <p>The default implementation runs the task immediately to retain compatibility
+     * with custom implementations of this interface.</p>
+     *
+     * @param task The application continuation to execute
+     */
+    default void executeApplicationTask(Runnable task) {
+        Objects.requireNonNull(task, "task").run();
+    }
+
+    /**
+     * Executes an application continuation after a delay.
+     *
+     * <p>Handles supplied by Mu Server use the server timer only to determine when the
+     * task is due, then dispatch the task to the request-handler execution domain. The
+     * returned future can be cancelled before the delay expires to prevent dispatch.
+     * Completion of the future does not guarantee that the application task has
+     * finished.</p>
+     *
+     * <p>The default implementation uses the JDK delayed executor and delegates to
+     * {@link #executeApplicationTask(Runnable)} to retain compatibility with custom implementations of
+     * this interface.</p>
+     *
+     * @param task The application continuation to execute
+     * @param delay The delay before execution
+     * @param unit The unit of {@code delay}
+     * @return A future representing the delayed execution
+     */
+    default Future<?> scheduleApplicationTask(Runnable task, long delay, TimeUnit unit) {
+        Objects.requireNonNull(task, "task");
+        Objects.requireNonNull(unit, "unit");
+        return CompletableFuture.runAsync(
+            () -> executeApplicationTask(task),
+            CompletableFuture.delayedExecutor(delay, unit)
+        );
+    }
 
     /**
      * Add a listener for when request processing is complete. One use of this is to detect early client disconnects

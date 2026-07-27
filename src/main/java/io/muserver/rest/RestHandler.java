@@ -22,7 +22,9 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.net.URI;
 import java.util.*;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 
 import static io.muserver.rest.CORSConfig.getAllowedMethods;
@@ -150,15 +152,30 @@ public class RestHandler implements MuHandler {
 
             if (!muRequest.isAsync()) {
                 if (result instanceof CompletionStage) {
-                    AsyncHandle asyncHandle1 = muRequest.handleAsync();
+                    AsyncHandle asyncHandle = muRequest.handleAsync();
                     CompletionStage cs = (CompletionStage) result;
-                    cs.thenAccept(o -> {
+                    cs.whenComplete((value, stageFailure) -> {
+                        Runnable continuation = () -> {
+                            @Nullable Throwable failure = stageFailure == null
+                                ? null
+                                : completionCause((Throwable) stageFailure);
+                            if (failure != null && !(failure instanceof Exception)) {
+                                asyncHandle.complete(failure);
+                                return;
+                            }
+                            @Nullable Object response = failure == null ? value : failure;
+                            try {
+                                sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, response,
+                                    completionStageResultType(methodReturnType));
+                                asyncHandle.complete();
+                            } catch (Throwable responseFailure) {
+                                asyncHandle.complete(responseFailure);
+                            }
+                        };
                         try {
-                            sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, o,
-                                completionStageResultType(methodReturnType));
-                            asyncHandle1.complete();
-                        } catch (Exception e) {
-                            asyncHandle1.complete(e);
+                            asyncHandle.executeApplicationTask(continuation);
+                        } catch (Throwable dispatchFailure) {
+                            asyncHandle.complete(dispatchFailure);
                         }
                     });
                 } else {
@@ -181,6 +198,15 @@ public class RestHandler implements MuHandler {
 
     private static @Nullable Type completionStageResultType(@Nullable Type returnType) {
         return GenericTypeResolver.resolveTypeArgument(returnType, CompletionStage.class, 0);
+    }
+
+    private static Throwable completionCause(Throwable failure) {
+        Throwable cause = failure;
+        while ((cause instanceof CompletionException || cause instanceof ExecutionException)
+            && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause;
     }
 
     static @Nullable Object invokeResourceMethod(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, Function<ResourceMethod, @Nullable Object> suspendedParamCallback, EntityProviders entityProviders, CollectionParameterStrategy collectionParameterStrategy) throws Exception {

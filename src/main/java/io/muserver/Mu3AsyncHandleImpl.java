@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.Objects;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
@@ -17,12 +18,14 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
     private CompletableFuture<@Nullable Void> responseFuture = CompletableFuture.completedFuture(null);
     private final CompletableFuture<@Nullable Void> completionFuture = new CompletableFuture<>();
     private final Lock lock = new ReentrantLock();
+    private final Mu3ServerImpl server;
     private final ExecutorService asyncExecutor;
 
-    Mu3AsyncHandleImpl(Mu3Request request, BaseResponse response, ExecutorService asyncExecutor) {
+    Mu3AsyncHandleImpl(Mu3Request request, BaseResponse response, Mu3ServerImpl server) {
         this.request = request;
         this.response = response;
-        this.asyncExecutor = asyncExecutor;
+        this.server = server;
+        this.asyncExecutor = server.asyncExecutor();
     }
 
     CompletableFuture<@Nullable Void> exchangeCompletion() {
@@ -240,6 +243,28 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
             }
         });
         return writeFuture;
+    }
+
+    @Override
+    public void executeApplicationTask(Runnable task) {
+        Objects.requireNonNull(task, "task");
+        RejectedExecutionException rejected = server.tryExecuteHandlerTask(task);
+        if (rejected != null) {
+            throw rejected;
+        }
+    }
+
+    @Override
+    public Future<?> scheduleApplicationTask(Runnable task, long delay, TimeUnit unit) {
+        Objects.requireNonNull(task, "task");
+        Objects.requireNonNull(unit, "unit");
+        return server.scheduleTimerCallback(() -> {
+            try {
+                executeApplicationTask(task);
+            } catch (RejectedExecutionException rejected) {
+                complete(rejected);
+            }
+        }, delay, unit);
     }
 
     private static Throwable completionCause(Throwable failure) {
