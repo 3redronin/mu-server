@@ -591,7 +591,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                     }
                     throw e;
                 } catch (EOFException e) {
-                    boolean noActiveStreams = streams.isEmpty();
+                    boolean noActiveStreams = noProtocolStreamsAreActive();
                     if (readingFrameHeader && noActiveStreams) {
                         log.info("Client closed HTTP/2 connection while waiting for the next frame");
                         setReadStateIfActiveAndSignal(HState.COMPLETED);
@@ -605,7 +605,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                         }
                     }
                 } catch (SocketException e) {
-                    boolean noActiveStreams = streams.isEmpty();
+                    boolean noActiveStreams = noProtocolStreamsAreActive();
                     if (noActiveStreams) {
                         log.info("Socket closed while reading HTTP/2 frames at read state {} writeState={}: {}", readState, writeState, e.getMessage());
                         setReadStateIfActiveAndSignal(HState.COMPLETED);
@@ -789,6 +789,11 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         }
     }
 
+    private boolean noProtocolStreamsAreActive() {
+        return streams.values().stream()
+            .noneMatch(Http2Stream::countsTowardsMaxConcurrentStreams);
+    }
+
     private void readHeaders(InputStream clientIn, Http2FrameHeader fh, FieldBlockDecoder fieldBlockDecoder) throws Http2Exception, IOException {
         if (fh.streamId() == 0 || (fh.streamId() % 2) == 0) {
             throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID " + fh.streamId());
@@ -851,6 +856,29 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             // The header block could not be decoded (for example a 431 rejected during HPACK
             // decoding), so the method and target are not available here.
             String rejectReason = e.getMessage() != null ? e.getMessage() : e.status().toString();
+            var existing = streams.get(fh.streamId());
+            if (existing != null) {
+                if (existing.peerResetWasRead()) {
+                    throw new Http2Exception(
+                        Http2ErrorCode.STREAM_CLOSED,
+                        "Received headers after RST_STREAM",
+                        fh.streamId()
+                    );
+                }
+                if (!existing.protocolStateClosed()) {
+                    // This is a rejected trailer section on an established request.
+                    // Reopening the stream would replace its coordinator state and detach
+                    // the application exchange. RFC 9113 8.1.1 permits resetting a
+                    // malformed request without first sending an HTTP error response.
+                    throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, rejectReason, fh.streamId());
+                }
+            }
+            if (fh.streamId() <= lastStreamId) {
+                throw Http2Exception.connection(
+                    Http2ErrorCode.PROTOCOL_ERROR,
+                    "Invalid stream ID " + fh.streamId()
+                );
+            }
             server.onRequestRejected(new RejectedRequestImpl(e.status().code(), rejectReason, null, null, this));
             FieldBlock errorHeaders = new FieldBlock();
             errorHeaders.add(HeaderNames.PSEUDO_STATUS, e.status());

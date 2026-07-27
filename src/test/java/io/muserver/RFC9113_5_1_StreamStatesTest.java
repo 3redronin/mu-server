@@ -13,8 +13,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 
+import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.goAway;
+import static io.muserver.RFCTestUtils.readIgnoringWindowUpdates;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
@@ -477,6 +479,59 @@ class RFC9113_5_1_StreamStatesTest {
         } finally {
             releaseHandler.countDown();
         }
+    }
+
+    @Test
+    public void cleanEofDoesNotFailAProtocolClosedStreamRetainedForApplicationCleanup() throws Exception {
+        var responseEnded = new CountDownLatch(1);
+        var releaseHandler = new CountDownLatch(1);
+        var exchangeCompleted = new CountDownLatch(1);
+
+        server = httpServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addResponseCompleteListener(info -> exchangeCompleted.countDown())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                try (var output = response.outputStream(1)) {
+                    output.write('x');
+                }
+                responseEnded.countDown();
+                releaseHandler.await(5, TimeUnit.SECONDS);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connectClearText(server)) {
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(
+                    1,
+                    true,
+                    RFCTestUtils.getHelloHeaders(
+                        "http",
+                        java.util.Objects.requireNonNull(server.httpUri()).getPort()
+                    )
+                ))
+                .flush();
+
+            assertThat(responseEnded.await(5, TimeUnit.SECONDS), equalTo(true));
+            readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            readIgnoringWindowUpdates(con, Http2DataFrame.class);
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).endStream(), equalTo(true));
+
+            var connection = (Http2Connection) server.activeConnections().iterator().next();
+            Map<?, ?> streams = getField(connection, "streams", Map.class);
+            var stream = (Http2Stream) streams.get(1);
+            assertEventually(stream::protocolStateClosed, equalTo(true));
+
+            con.socket().shutdownOutput();
+            assertEventually(
+                () -> getField(connection, "readState", Object.class).toString(),
+                equalTo("COMPLETED")
+            );
+        } finally {
+            releaseHandler.countDown();
+        }
+
+        assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
     }
 
     @Test

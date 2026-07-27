@@ -6,6 +6,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -13,7 +14,9 @@ import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.*;
 import static io.muserver.FieldBlockEncoderTest.hexToByteArray;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.anEmptyMap;
 import static org.hamcrest.Matchers.equalTo;
+import static scaffolding.MuAssert.assertEventually;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @DisplayName("RFC 9113 6.2 Frame Definitions: HEADERS")
@@ -332,6 +335,47 @@ class RFC9113_6_2_HeadersTest {
     }
 
     @Test
+    void oversizedTrailersResetAndRetireTheExistingStream() throws Exception {
+        var handlerStarted = new CountDownLatch(1);
+        var releaseHandler = new CountDownLatch(1);
+        var exchangeCompleted = new CountDownLatch(1);
+        server = httpsServer()
+            .withMaxHeadersSize(512)
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addResponseCompleteListener(info -> exchangeCompleted.countDown())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                handlerStarted.countDown();
+                releaseHandler.await(5, TimeUnit.SECONDS);
+                response.status(202);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .flush();
+            assertThat(handlerStarted.await(5, TimeUnit.SECONDS), equalTo(true));
+
+            var connection = (Http2Connection) server.activeConnections().iterator().next();
+            Map<?, ?> streams = getField(connection, "streams", Map.class);
+            var trailers = new FieldBlock();
+            trailers.add("checksum", "x".repeat(1024));
+            con.writeFrame(new Http2HeadersFrame(1, true, trailers)).flush();
+
+            var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+
+            releaseHandler.countDown();
+            assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
+            assertEventually(() -> streams, anEmptyMap());
+        } finally {
+            releaseHandler.countDown();
+        }
+    }
+
+    @Test
     void trailingHeadersMustEndTheStream() throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
@@ -392,6 +436,12 @@ class RFC9113_6_2_HeadersTest {
 
     private int getPort() {
         return server.uri().getPort();
+    }
+
+    private static <T> T getField(Object target, String name, Class<T> type) throws Exception {
+        var field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return type.cast(field.get(target));
     }
 
     @AfterEach
