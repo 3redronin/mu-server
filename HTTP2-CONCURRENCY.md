@@ -146,6 +146,10 @@ continues processing control frames and other streams. A reset removes pending
 DATA for that stream and fails its promise. A later `WINDOW_UPDATE` cannot make
 discarded DATA writable.
 
+Flow-control commands from the reader are one-way. If a window increment
+overflows, the coordinator queues the required `RST_STREAM` or `GOAWAY` itself;
+the reader does not wait for the coordinator to validate the command.
+
 Inbound DATA is charged when its frame command is processed. Credit is returned
 exactly once when bytes are consumed or discarded. Body consumers post
 credit-return commands rather than mutating flow controllers directly.

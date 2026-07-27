@@ -32,9 +32,8 @@ class Http2WriteCoordinatorTest {
         assertThat(writableReset.frame(), equalTo(reset.frame()));
         writableReset.complete();
 
-        var credit = coordinator.applyConnectionWindowUpdate(100);
+        coordinator.applyConnectionWindowUpdate(100, 1);
         coordinator.processAvailableCommands();
-        credit.await();
         assertThat(coordinator.pollWritable(), nullValue());
 
         var lateData = task(data(1, "also not sent"));
@@ -84,9 +83,8 @@ class Http2WriteCoordinatorTest {
             equalTo(streamThreeHeaders.frame())
         );
 
-        var credit = coordinator.applyConnectionWindowUpdate(100);
+        coordinator.applyConnectionWindowUpdate(100, 3);
         coordinator.processAvailableCommands();
-        credit.await();
         assertThat(
             coordinator.pollWritable().frame(),
             equalTo(streamOneData.frame())
@@ -150,9 +148,8 @@ class Http2WriteCoordinatorTest {
             assertThat(writable.frame().endStream(), equalTo(expected == 'o'));
             writable.complete();
             if (expected != 'o') {
-                var credit = coordinator.applyStreamWindowUpdate(1, 1);
+                coordinator.applyStreamWindowUpdate(1, 1);
                 coordinator.processAvailableCommands();
-                credit.await();
             }
         }
 
@@ -170,9 +167,8 @@ class Http2WriteCoordinatorTest {
         assertThat(coordinator.pollWritable(), nullValue());
 
         var ack = task(Http2Settings.ACK);
-        var settingsApplied = coordinator.applyInitialWindowSizeChange("newly writable".length(), ack);
+        coordinator.applyInitialWindowSizeChange("newly writable".length(), ack, 1);
         coordinator.processAvailableCommands();
-        settingsApplied.await();
 
         assertThat(
             coordinator.pollWritable().frame(),
@@ -192,9 +188,8 @@ class Http2WriteCoordinatorTest {
         coordinator.processAvailableCommands();
         coordinator.pollWritable().complete();
 
-        var settingsApplied = coordinator.applyInitialWindowSizeChange(-800, task(Http2Settings.ACK));
+        coordinator.applyInitialWindowSizeChange(-800, task(Http2Settings.ACK), 1);
         coordinator.processAvailableCommands();
-        settingsApplied.await();
         assertThat(coordinator.pollWritable().frame(), equalTo(Http2Settings.ACK));
 
         var blocked = task(data(1, repeat('b', 100)));
@@ -202,14 +197,12 @@ class Http2WriteCoordinatorTest {
         coordinator.processAvailableCommands();
         assertThat(coordinator.pollWritable(), nullValue());
 
-        var firstUpdate = coordinator.applyStreamWindowUpdate(1, 200);
+        coordinator.applyStreamWindowUpdate(1, 200);
         coordinator.processAvailableCommands();
-        firstUpdate.await();
         assertThat(coordinator.pollWritable(), nullValue());
 
-        var secondUpdate = coordinator.applyStreamWindowUpdate(1, 200);
+        coordinator.applyStreamWindowUpdate(1, 200);
         coordinator.processAvailableCommands();
-        secondUpdate.await();
         assertThat(coordinator.pollWritable().frame(), equalTo(blocked.frame()));
     }
 
@@ -217,19 +210,19 @@ class Http2WriteCoordinatorTest {
     void connectionWindowUpdateOverflowIsAConnectionFlowControlErrorAndStopsNormalWrites() {
         var coordinator = coordinator(Integer.MAX_VALUE - 1, 1, 100);
         coordinator.submit(task(data(1, "must not be sent")));
-        var update = coordinator.applyConnectionWindowUpdate(2);
+        coordinator.applyConnectionWindowUpdate(2, 7);
         coordinator.processAvailableCommands();
 
-        Http2Exception failure = assertThrows(Http2Exception.class, update::await);
+        var writable = coordinator.pollWritable();
+        Http2Exception failure = writable.protocolError();
         assertThat(failure.errorType(), equalTo(Http2Level.CONNECTION));
         assertThat(failure.errorCode(), equalTo(Http2ErrorCode.FLOW_CONTROL_ERROR));
         assertThat(failure.getMessage(), containsString("Credit overflow"));
-        assertThat(coordinator.pollWritable(), nullValue());
-
-        var goAway = task(new Http2GoAway(1, Http2ErrorCode.FLOW_CONTROL_ERROR.code(), null));
-        coordinator.submit(goAway);
-        coordinator.processAvailableCommands();
-        assertThat(coordinator.pollWritable().frame(), equalTo(goAway.frame()));
+        assertThat(
+            writable.frame(),
+            equalTo(new Http2GoAway(7, Http2ErrorCode.FLOW_CONTROL_ERROR.code(), null))
+        );
+        writable.complete();
         assertThat(coordinator.pollWritable(), nullValue());
     }
 
@@ -238,40 +231,46 @@ class Http2WriteCoordinatorTest {
         var coordinator = coordinator(100, 1, Integer.MAX_VALUE - 1);
         var data = task(data(1, "must not be sent"));
         coordinator.submit(data);
-        var update = coordinator.applyStreamWindowUpdate(1, 2);
+        coordinator.applyStreamWindowUpdate(1, 2);
         coordinator.processAvailableCommands();
 
-        Http2Exception failure = assertThrows(Http2Exception.class, update::await);
+        var writable = coordinator.pollWritable();
+        Http2Exception failure = writable.protocolError();
         assertThat(failure.errorType(), equalTo(Http2Level.STREAM));
         assertThat(failure.errorCode(), equalTo(Http2ErrorCode.FLOW_CONTROL_ERROR));
         assertThat(failure.getMessage(), containsString("Credit overflow"));
+        assertThat(
+            writable.frame(),
+            equalTo(new Http2ResetStreamFrame(1, Http2ErrorCode.FLOW_CONTROL_ERROR.code()))
+        );
+        writable.complete();
         assertThat(coordinator.pollWritable(), nullValue());
-
-        var reset = task(new Http2ResetStreamFrame(1, Http2ErrorCode.FLOW_CONTROL_ERROR.code()));
-        coordinator.submit(reset);
-        coordinator.processAvailableCommands();
-        assertThat(coordinator.pollWritable().frame(), equalTo(reset.frame()));
         assertThrows(IOException.class, () -> data.await(1, TimeUnit.SECONDS));
     }
 
     @Test
     void settingsWindowOverflowIsAConnectionFlowControlErrorAndIsNotAcknowledged() {
         var coordinator = coordinator(0, 1, Integer.MAX_VALUE - 1);
-        var settingsApplied = coordinator.applyInitialWindowSizeChange(2, task(Http2Settings.ACK));
+        coordinator.applyInitialWindowSizeChange(2, task(Http2Settings.ACK), 5);
         coordinator.processAvailableCommands();
 
-        Http2Exception failure = assertThrows(Http2Exception.class, settingsApplied::await);
+        var writable = coordinator.pollWritable();
+        Http2Exception failure = writable.protocolError();
         assertThat(failure.errorType(), equalTo(Http2Level.CONNECTION));
         assertThat(failure.errorCode(), equalTo(Http2ErrorCode.FLOW_CONTROL_ERROR));
+        assertThat(
+            writable.frame(),
+            equalTo(new Http2GoAway(5, Http2ErrorCode.FLOW_CONTROL_ERROR.code(), null))
+        );
+        writable.complete();
         assertThat(coordinator.pollWritable(), nullValue());
     }
 
     @Test
     void windowUpdatesForClosedStreamsAreIgnored() throws Exception {
         var coordinator = new Http2WriteCoordinator(0);
-        var update = coordinator.applyStreamWindowUpdate(1, 1);
+        coordinator.applyStreamWindowUpdate(1, 1);
         coordinator.processAvailableCommands();
-        update.await();
 
         assertThat(coordinator.isIdle(), is(true));
     }
@@ -296,9 +295,8 @@ class Http2WriteCoordinatorTest {
         coordinator.processAvailableCommands();
         assertThat(coordinator.pollWritable(), nullValue());
 
-        var update = coordinator.applyStreamWindowUpdate(1, 5);
+        coordinator.applyStreamWindowUpdate(1, 5);
         coordinator.processAvailableCommands();
-        update.await();
 
         assertThat(coordinator.pollWritable().frame(), equalTo(data.frame()));
         assertThat(coordinator.isIdle(), is(true));
