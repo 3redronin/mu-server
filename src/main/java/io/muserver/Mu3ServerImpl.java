@@ -40,11 +40,13 @@ class Mu3ServerImpl implements MuServer {
     private final boolean ownsConnectionExecutor;
     private final ExecutorService http2WriterExecutor;
     private final boolean ownsHttp2WriterExecutor;
+    private final ExecutorService connectionMaintenanceExecutor;
+    private final boolean ownsConnectionMaintenanceExecutor;
     private final ScheduledExecutorService timerExecutor;
     private final boolean ownsTimerExecutor;
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
 
-    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService connectionExecutor, boolean ownsConnectionExecutor, ExecutorService http2WriterExecutor, boolean ownsHttp2WriterExecutor, ScheduledExecutorService timerExecutor, boolean ownsTimerExecutor) {
+    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService connectionExecutor, boolean ownsConnectionExecutor, ExecutorService http2WriterExecutor, boolean ownsHttp2WriterExecutor, ExecutorService connectionMaintenanceExecutor, boolean ownsConnectionMaintenanceExecutor, ScheduledExecutorService timerExecutor, boolean ownsTimerExecutor) {
         this.acceptors = acceptors;
         this.handlers = handlers;
         this.responseCompleteListeners = responseCompleteListeners;
@@ -62,6 +64,8 @@ class Mu3ServerImpl implements MuServer {
         this.ownsConnectionExecutor = ownsConnectionExecutor;
         this.http2WriterExecutor = http2WriterExecutor;
         this.ownsHttp2WriterExecutor = ownsHttp2WriterExecutor;
+        this.connectionMaintenanceExecutor = connectionMaintenanceExecutor;
+        this.ownsConnectionMaintenanceExecutor = ownsConnectionMaintenanceExecutor;
         this.timerExecutor = timerExecutor;
         this.ownsTimerExecutor = ownsTimerExecutor;
     }
@@ -109,6 +113,9 @@ class Mu3ServerImpl implements MuServer {
         }
         if (ownsHttp2WriterExecutor) {
             http2WriterExecutor.shutdown();
+        }
+        if (ownsConnectionMaintenanceExecutor) {
+            connectionMaintenanceExecutor.shutdown();
         }
         return stoppedCleanly;
     }
@@ -313,6 +320,11 @@ class Mu3ServerImpl implements MuServer {
         if (http2WriterExecutor == null) {
             http2WriterExecutor = MuServerBuilder.defaultExecutor();
         }
+        ExecutorService connectionMaintenanceExecutor = builder.connectionMaintenanceExecutor();
+        boolean ownsConnectionMaintenanceExecutor = connectionMaintenanceExecutor == null;
+        if (connectionMaintenanceExecutor == null) {
+            connectionMaintenanceExecutor = MuServerBuilder.defaultExecutor();
+        }
         ScheduledExecutorService timerExecutor = builder.timerExecutor();
         boolean ownsTimerExecutor = timerExecutor == null;
         if (timerExecutor == null) {
@@ -360,6 +372,8 @@ class Mu3ServerImpl implements MuServer {
             ownsConnectionExecutor,
             http2WriterExecutor,
             ownsHttp2WriterExecutor,
+            connectionMaintenanceExecutor,
+            ownsConnectionMaintenanceExecutor,
             timerExecutor,
             ownsTimerExecutor
             );
@@ -457,10 +471,10 @@ class Mu3ServerImpl implements MuServer {
 
     private boolean tryDispatchConnectionTask(Runnable task) {
         try {
-            connectionExecutor.execute(task);
+            connectionMaintenanceExecutor.execute(task);
             return true;
         } catch (RejectedExecutionException e) {
-            log.debug("Connection executor rejected timed work because the server is stopping or overloaded");
+            log.debug("Connection maintenance executor rejected timed work because the server is stopping or overloaded");
             return false;
         }
     }

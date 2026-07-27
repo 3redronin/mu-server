@@ -9,6 +9,7 @@ import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.nio.ByteBuffer;
@@ -207,21 +208,47 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void idleTimeoutIsNotStarvedByAConnectionReader() throws Exception {
+        var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
+        var writerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("h2-writer-")));
+        var maintenanceExecutor = track(Executors.newSingleThreadExecutor(namedThreads("maintenance-")));
+
+        server = httpServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .withConnectionExecutor(connectionExecutor)
+            .withHttp2WriterExecutor(writerExecutor)
+            .withConnectionMaintenanceExecutor(maintenanceExecutor)
+            .withIdleTimeout(100, TimeUnit.MILLISECONDS)
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connectClearText(server)) {
+            con.handshake();
+            con.socket().setSoTimeout(2000);
+
+            assertThrows(EOFException.class, con::readLogicalFrame);
+        }
+    }
+
+    @Test
     void configuredExecutorsStayCallerOwnedAndHttp1UsesTheHandlerExecutor() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
         var writerExecutor = track(Executors.newCachedThreadPool(namedThreads("h2-writer-")));
+        var maintenanceExecutor = track(Executors.newCachedThreadPool(namedThreads("maintenance-")));
         var timerExecutor = track(Executors.newSingleThreadScheduledExecutor(namedThreads("timer-")));
 
         var builder = httpServer()
             .withHandlerExecutor(handlerExecutor)
             .withConnectionExecutor(connectionExecutor)
             .withHttp2WriterExecutor(writerExecutor)
+            .withConnectionMaintenanceExecutor(maintenanceExecutor)
             .withTimerExecutor(timerExecutor)
             .addHandler(Method.GET, "/", (request, response, pathParams) ->
                 response.write(Thread.currentThread().getName()));
         assertThat(builder.connectionExecutor(), is(connectionExecutor));
         assertThat(builder.http2WriterExecutor(), is(writerExecutor));
+        assertThat(builder.connectionMaintenanceExecutor(), is(maintenanceExecutor));
         assertThat(builder.timerExecutor(), is(timerExecutor));
 
         server = builder.start();
@@ -234,6 +261,7 @@ class ExecutionDomainsTest {
         server = null;
         assertThat(connectionExecutor.isShutdown(), is(false));
         assertThat(writerExecutor.isShutdown(), is(false));
+        assertThat(maintenanceExecutor.isShutdown(), is(false));
         assertThat(handlerExecutor.isShutdown(), is(false));
         assertThat(timerExecutor.isShutdown(), is(false));
     }
@@ -243,6 +271,7 @@ class ExecutionDomainsTest {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
         var writerExecutor = track(Executors.newCachedThreadPool(namedThreads("h2-writer-")));
+        var maintenanceExecutor = track(Executors.newCachedThreadPool(namedThreads("maintenance-")));
         var timerExecutor = track(Executors.newSingleThreadScheduledExecutor(namedThreads("timer-")));
         timerExecutor.shutdown();
         int port = availablePort();
@@ -252,12 +281,14 @@ class ExecutionDomainsTest {
             .withHandlerExecutor(handlerExecutor)
             .withConnectionExecutor(connectionExecutor)
             .withHttp2WriterExecutor(writerExecutor)
+            .withConnectionMaintenanceExecutor(maintenanceExecutor)
             .withTimerExecutor(timerExecutor)
             .start());
 
         assertThat(handlerExecutor.isShutdown(), is(false));
         assertThat(connectionExecutor.isShutdown(), is(false));
         assertThat(writerExecutor.isShutdown(), is(false));
+        assertThat(maintenanceExecutor.isShutdown(), is(false));
         try (var replacementListener = new ServerSocket(port)) {
             assertThat(replacementListener.isBound(), is(true));
         }
@@ -267,6 +298,7 @@ class ExecutionDomainsTest {
     void timedConnectionWorkIsNotStarvedByTheHandlerExecutor() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
+        var maintenanceExecutor = track(Executors.newSingleThreadExecutor(namedThreads("maintenance-")));
         var pongReceived = new CountDownLatch(1);
         var serverSocket = new SimpleWebSocket() {
             @Override
@@ -287,6 +319,7 @@ class ExecutionDomainsTest {
         server = httpServer()
             .withHandlerExecutor(handlerExecutor)
             .withConnectionExecutor(connectionExecutor)
+            .withConnectionMaintenanceExecutor(maintenanceExecutor)
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
                 .withPingInterval(10, TimeUnit.MILLISECONDS))
             .start();
