@@ -35,6 +35,7 @@ class Mu3Request implements MuRequest {
     private boolean inputStreamAccessed;
     @Nullable private volatile Mu3AsyncHandleImpl asyncHandle;
     private boolean clientCancelled;
+    private volatile boolean rateLimitRejected;
 
     Mu3Request(HttpConnection connection,
                Method method,
@@ -73,6 +74,14 @@ class Mu3Request implements MuRequest {
     @Override
     public long startTime() {
         return startTime;
+    }
+
+    void onRateLimitRejected() {
+        rateLimitRejected = true;
+    }
+
+    boolean wasRateLimitRejected() {
+        return rateLimitRejected;
     }
 
     long startNanos() {

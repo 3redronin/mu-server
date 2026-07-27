@@ -3,14 +3,19 @@ package io.muserver;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.ServerUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -122,6 +127,196 @@ public class RateLimiterTest {
             assertThat(limiter.currentBuckets().get("shared"), is(1L));
         } finally {
             executor.shutdownNow();
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"http", "h2"})
+    void rateLimitsHaveTheSameObservableBehaviorAcrossHttpVersions(
+        String protocol
+    ) throws Exception {
+        var handlerCalls = new AtomicInteger();
+        var rejected = new CompletableFuture<RejectedRequest>();
+        try (MuServer limitedServer = ServerUtils.httpsServerForTest(protocol)
+            .withRateLimiter(request -> rateLimit()
+                .withBucket("shared")
+                .withRate(1)
+                .withWindow(1, TimeUnit.MINUTES)
+                .build())
+            .addRequestRejectListener(rejected::complete)
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                handlerCalls.incrementAndGet();
+                response.write("allowed");
+            })
+            .start()) {
+            try (Response allowed = call(request(limitedServer.uri()))) {
+                assertThat(allowed.code(), is(200));
+                assertThat(allowed.body().string(), is("allowed"));
+            }
+            try (Response denied = call(request(limitedServer.uri())
+                .header("x-client-only", "secret"))) {
+                assertThat(denied.code(), is(429));
+                assertThat(
+                    denied.body().string(),
+                    is("429 Too Many Requests")
+                );
+                assertThat(
+                    denied.header("retry-after"),
+                    matchesPattern("\\d+")
+                );
+                assertThat(denied.header("x-client-only"), nullValue());
+            }
+
+            RejectedRequest rejection = rejected.get(2, TimeUnit.SECONDS);
+            assertThat(rejection.status(), is(429));
+            assertThat(rejection.method().orElseThrow(), is("GET"));
+            assertThat(handlerCalls.get(), is(1));
+            assertEventually(
+                () -> limitedServer.stats().completedRequests(),
+                is(1L)
+            );
+            assertThat(limitedServer.stats().rejectedDueToOverload(), is(1L));
+            assertThat(limitedServer.stats().activeRequests(), empty());
+        }
+    }
+
+    @Test
+    void rateLimitedHttp2StreamDiscardsItsRemainingRequestBody() throws Exception {
+        try (MuServer limitedServer = ServerUtils.httpsServerForTest("h2")
+            .withRateLimiter(request -> rateLimit()
+                .withBucket("shared")
+                .withRate(1)
+                .withWindow(1, TimeUnit.MINUTES)
+                .build())
+            .addHandler((request, response) -> {
+                response.write("allowed");
+                return true;
+            })
+            .start();
+             H2Client client = new H2Client();
+             H2ClientConnection connection = client.connect(limitedServer)) {
+            int port = limitedServer.uri().getPort();
+            connection.handshake()
+                .writeFrame(new Http2HeadersFrame(
+                    1,
+                    true,
+                    RFCTestUtils.getHelloHeaders(port)
+                ))
+                .flush();
+
+            assertThat(
+                RFCTestUtils.readIgnoringWindowUpdates(
+                    connection,
+                    Http2HeadersFrame.class
+                ).headers().get(":status"),
+                is("200")
+            );
+            assertThat(
+                RFCTestUtils.readIgnoringWindowUpdates(
+                    connection,
+                    Http2DataFrame.class
+                ).toUTF8(),
+                is("allowed")
+            );
+            assertThat(
+                RFCTestUtils.readIgnoringWindowUpdates(
+                    connection,
+                    Http2DataFrame.class
+                ).endStream(),
+                is(true)
+            );
+
+            connection.writeFrame(new Http2HeadersFrame(
+                    3,
+                    false,
+                    RFCTestUtils.postHeaders(port, "/limited")
+                ))
+                .flush();
+            Http2HeadersFrame rejected =
+                RFCTestUtils.readIgnoringWindowUpdates(
+                    connection,
+                    Http2HeadersFrame.class
+                );
+            assertThat(rejected.streamId(), is(3));
+            assertThat(rejected.headers().get(":status"), is("429"));
+            assertThat(
+                RFCTestUtils.readIgnoringWindowUpdates(
+                    connection,
+                    Http2DataFrame.class
+                ).toUTF8(),
+                is("429 Too Many Requests")
+            );
+            assertThat(
+                RFCTestUtils.readIgnoringWindowUpdates(
+                    connection,
+                    Http2DataFrame.class
+                ).endStream(),
+                is(true)
+            );
+
+            byte[] pingPayload = {0, 1, 2, 3, 4, 5, 6, 7};
+            connection
+                .writeFrame(RFCTestUtils.utf8DataFrame(
+                    3,
+                    true,
+                    "discarded after response"
+                ))
+                .writeFrame(new Http2Ping(false, pingPayload))
+                .flush();
+            assertThat(
+                RFCTestUtils.readIgnoringWindowUpdates(
+                    connection,
+                    Http2Ping.class
+                ),
+                is(new Http2Ping(true, pingPayload))
+            );
+
+            connection.writeFrame(new Http2HeadersFrame(
+                    5,
+                    true,
+                    RFCTestUtils.getHelloHeaders(port)
+                ))
+                .flush();
+            Http2HeadersFrame nextResponse =
+                RFCTestUtils.readIgnoringWindowUpdates(
+                    connection,
+                    Http2HeadersFrame.class
+                );
+            assertThat(nextResponse.streamId(), is(5));
+            assertThat(nextResponse.headers().get(":status"), is("429"));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"http", "h2"})
+    void selectorsRunOnTheHandlerDomain(String protocol) throws Exception {
+        ExecutorService handlerExecutor = Executors.newSingleThreadExecutor(
+            task -> new Thread(task, "rate-handler")
+        );
+        ExecutorService connectionExecutor = Executors.newSingleThreadExecutor(
+            task -> new Thread(task, "rate-connection")
+        );
+        var selectorThread = new AtomicReference<String>();
+        try (MuServer domainServer = ServerUtils.httpsServerForTest(protocol)
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .withRateLimiter(request -> {
+                selectorThread.set(Thread.currentThread().getName());
+                return rateLimit()
+                    .withBucket("domain")
+                    .withRate(2)
+                    .build();
+            })
+            .addHandler(Method.GET, "/", (request, response, pathParams) ->
+                response.write("okay")
+            )
+            .start();
+             Response ignored = call(request(domainServer.uri()))) {
+            assertThat(ignored.body().string(), is("okay"));
+            assertThat(selectorThread.get(), is("rate-handler"));
+        } finally {
+            handlerExecutor.shutdownNow();
+            connectionExecutor.shutdownNow();
         }
     }
 

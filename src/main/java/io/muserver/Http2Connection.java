@@ -1295,6 +1295,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private void startHandledStream(Http2Stream stream) {
         try {
             CompletableFuture<@Nullable Void> asyncCompletion = handleExchange(stream.request, stream.response());
+            if (stream.request.wasRateLimitRejected()) {
+                finishRateLimitedStream(stream, null);
+                return;
+            }
             if (asyncCompletion == null) {
                 finishHandledStream(stream, null, false);
             } else {
@@ -1303,7 +1307,11 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 );
             }
         } catch (Throwable failure) {
-            finishHandledStream(stream, failure, false);
+            if (stream.request.wasRateLimitRejected()) {
+                finishRateLimitedStream(stream, failure);
+            } else {
+                finishHandledStream(stream, failure, false);
+            }
         }
     }
 
@@ -1341,6 +1349,23 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
 
     private void finishHandledStream(Http2Stream stream, @Nullable Throwable failure,
                                      boolean handleAsyncFailure) {
+        finishApplicationStream(stream, failure, handleAsyncFailure, true);
+    }
+
+    private void finishRateLimitedStream(
+        Http2Stream stream,
+        @Nullable Throwable failure
+    ) {
+        finishApplicationStream(stream, failure, false, false);
+        server.onRequestRejected(rateLimitRejection(stream.request));
+    }
+
+    private void finishApplicationStream(
+        Http2Stream stream,
+        @Nullable Throwable failure,
+        boolean handleAsyncFailure,
+        boolean completedApplicationExchange
+    ) {
         try {
             if (failure != null) {
                 if (handleAsyncFailure && failure instanceof Exception) {
@@ -1368,7 +1393,11 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 stream.cancel(new IOException("Unhandled stream exception", e));
             }
         } finally {
-            onExchangeEnded(stream);
+            if (completedApplicationExchange) {
+                onExchangeEnded(stream);
+            } else {
+                onRejectedApplicationExchangeEnded(stream);
+            }
         }
     }
 
@@ -1513,6 +1542,13 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         signalWriteLoop();
         recordExchangeEnded(stream);
         server.executeResponseCompletionTask(() -> notifyExchangeEnded(stream));
+    }
+
+    private void onRejectedApplicationExchangeEnded(Http2Stream stream) {
+        server.onRequestSubmissionRejected(stream.request);
+        stream.onApplicationExchangeEnded();
+        applicationExchangeEndedForWrites(stream.id);
+        signalWriteLoop();
     }
 
     void removeProtocolStream(Http2Stream stream) {
