@@ -314,12 +314,16 @@ frames promptly as required by RFC 9113 Section 5.2.2. Freed credit is not
 available for another DATA debit while its `WINDOW_UPDATE` is merely queued,
 because Section 6.9.1 defines the sender's limit in terms of the window
 advertised by the receiver. The writer publishes the credit immediately before
-`flush()`, after the complete frame has been handed to the output stream.
-Publishing before the first output write could release credit indefinitely while
-that write is blocked and the peer has received nothing; publishing after
-`flush()` is too late because the complete frame can reach the peer before
-`flush()` returns. A failure after publication closes the connection. A body
-consumer commits its buffer offset and
+writing the frame. Raw JDK socket output can expose the frame to the peer while
+the blocking write call is still in progress, so publication after that call
+can incorrectly reject DATA from a compliant peer. Conversely, the socket API
+provides no local boundary that distinguishes such DATA from premature DATA
+sent before the peer observed the update. The implementation chooses
+interoperability at that unavoidable boundary: early availability is bounded by
+credit the application has actually freed, and a write failure closes the
+connection. This differs from the local `END_STREAM` fence, whose early
+publication can independently over-admit new peer streams. A body consumer
+commits its buffer offset and
 releases the body lock before returning credit to the inbound component or
 queuing `WINDOW_UPDATE` output. Coordinator contention therefore cannot retain
 the body-buffer lock.
