@@ -66,7 +66,7 @@ class Http2WriteCoordinatorTest {
         IOException pendingFailure = assertThrows(IOException.class, () -> pending.await(1, TimeUnit.SECONDS));
         assertThat(pendingFailure.getMessage(), equalTo("peer reset stream 1"));
         IOException lateFailure = assertThrows(IOException.class, () -> late.await(1, TimeUnit.SECONDS));
-        assertThat(lateFailure.getMessage(), containsString("was reset"));
+        assertThat(lateFailure.getMessage(), containsString("was not open"));
         assertThat(coordinator.pollWritable(), nullValue());
         assertThat(coordinator.streamState(1), nullValue());
     }
@@ -369,7 +369,9 @@ class Http2WriteCoordinatorTest {
         coordinator.applyStreamWindowUpdate(1, 5);
         coordinator.processAvailableCommands();
 
-        assertThat(coordinator.pollWritable().frame(), equalTo(data.frame()));
+        var writable = coordinator.pollWritable();
+        assertThat(writable.frame(), equalTo(data.frame()));
+        writable.complete();
         assertThat(coordinator.streamState(1), nullValue());
         assertThat(coordinator.isIdle(), is(true));
     }

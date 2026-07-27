@@ -6,6 +6,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.*;
@@ -17,6 +18,62 @@ import static scaffolding.MuAssert.assertNotTimedOut;
 class RFC9113_5_2_FlowControlTest {
 
     private @Nullable MuServer server;
+
+    @Test
+    void earlyResponseDiscardsTheRemainingRequestWithoutExhaustingConnectionCredit() throws Exception {
+        var exchangeCompleted = new CountDownLatch(1);
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addResponseCompleteListener(info -> exchangeCompleted.countDown())
+            .addHandler(Method.POST, "/early", (request, response, pathParams) -> {
+                response.status(204);
+            })
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                response.write(request.readBodyAsString());
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            var earlyHeaders = new FieldBlock();
+            earlyHeaders.add(":scheme", "https");
+            earlyHeaders.add(":authority", "localhost:" + getPort());
+            earlyHeaders.add(":method", "POST");
+            earlyHeaders.add(":path", "/early");
+            earlyHeaders.add("content-type", "text/plain; charset=utf-8");
+
+            byte[] sixteenKb = repeated('a', 16384);
+            byte[] lastChunk = repeated('b', 16383);
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, earlyHeaders))
+                .flush();
+
+            var earlyResponse = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(earlyResponse.streamId(), equalTo(1));
+            assertThat(earlyResponse.headers().get(":status"), equalTo("204"));
+            assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
+
+            con.writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
+                .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
+                .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
+                .writeFrame(new Http2DataFrame(1, true, lastChunk, 0, lastChunk.length))
+                .writeFrame(new Http2HeadersFrame(3, false, postHelloHeaders(getPort())))
+                .writeFrame(RFCTestUtils.utf8DataFrame(3, true, "x"))
+                .flush();
+
+            var headers = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(3));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+
+            var data = readIgnoringWindowUpdates(con, Http2DataFrame.class);
+            assertThat(data.streamId(), equalTo(3));
+            assertThat(data.toUTF8(), equalTo("x"));
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class), equalTo(Http2DataFrame.eos(3)));
+        }
+    }
 
     @Test
     void cancellingAStreamWithUnreadQueuedDataRefundsConnectionCredit() throws Exception {
@@ -307,8 +364,6 @@ class RFC9113_5_2_FlowControlTest {
         if (server != null) server.stop();
     }
 }
-
-
 
 
 

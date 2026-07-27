@@ -195,9 +195,23 @@ A handler finishing does not remove the stream.
 
 If a handler completes a response while the peer request side is still open,
 the input enters discard mode. Already-buffered and future request DATA is
-discarded with credit returned. The stream remains active until peer END_STREAM
-or reset. This matches the `ResponseInfo.completedSuccessfully()` contract that
-the request was fully read and the response was fully sent.
+discarded with connection credit returned. Stream credit is not returned: this
+bounds the amount of additional data that the peer can send on an abandoned
+request while preserving connection capacity for other streams. The stream
+remains in the protocol registry until peer END_STREAM or reset.
+
+RFC 9113 Section 8.1 permits a server to complete a response before receiving
+the entire request and permits, but does not require, a subsequent
+`RST_STREAM(NO_ERROR)`. The current policy retains the stream instead of
+resetting it, allowing already-in-flight request frames to be processed while
+the withheld stream credit bounds further transmission on that abandoned
+request.
+
+Application-active request reporting is independent of that registry. A
+half-closed stream still counts towards `SETTINGS_MAX_CONCURRENT_STREAMS` after
+its handler ends; a closed stream does not count while its handler or completion
+work finishes. RFC 9113 Section 5.1.2 defines the limit in terms of open and
+half-closed protocol streams, not handler tasks.
 
 Completion listeners are notified exactly once, outside the coordinator, after
 the outcome is known. A successful outcome requires the request to have reached

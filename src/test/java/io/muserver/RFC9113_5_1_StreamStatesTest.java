@@ -16,6 +16,8 @@ import static io.muserver.RFCTestUtils.goAway;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.empty;
+import static scaffolding.MuAssert.assertEventually;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @DisplayName("RFC 9113 5.1 Stream States")
@@ -305,6 +307,130 @@ class RFC9113_5_1_StreamStatesTest {
             con.writeFrame(goAway(5, Http2ErrorCode.NO_ERROR)).flush();
         }
 
+    }
+
+    @Test
+    public void halfClosedLocalStreamsCountTowardsMaxConcurrentStreamsAfterTheHandlerEnds() throws Exception {
+        var exchangeCompleted = new CountDownLatch(1);
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder
+                .http2Enabled()
+                .withMaxConcurrentStreams(1)
+            )
+            .addResponseCompleteListener(info -> exchangeCompleted.countDown())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                response.status(204);
+            })
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                response.status(202);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            var requestHeaders = RFCTestUtils.postHelloHeaders(server.uri().getPort());
+            requestHeaders.add("content-length", "0");
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, requestHeaders))
+                .flush();
+
+            var earlyResponse = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(earlyResponse.streamId(), equalTo(1));
+            assertThat(earlyResponse.headers().get(":status"), equalTo("204"));
+            assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
+            assertThat(server.stats().activeRequests().size(), equalTo(0));
+
+            con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders()))
+                .flush();
+
+            var refused = con.readLogicalFrame(Http2ResetStreamFrame.class);
+            assertThat(refused.streamId(), equalTo(3));
+            assertThat(refused.errorCodeEnum(), equalTo(Http2ErrorCode.REFUSED_STREAM));
+
+            byte[] opaqueData = new byte[] {1, 2, 3, 4, 5, 6, 7, 8};
+            con.writeFrame(Http2DataFrame.eos(1))
+                .writeFrame(new Http2Ping(false, opaqueData))
+                .flush();
+            assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, opaqueData)));
+
+            con.writeFrame(new Http2HeadersFrame(5, true, getHelloHeaders()))
+                .flush();
+            var accepted = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(accepted.streamId(), equalTo(5));
+            assertThat(accepted.headers().get(":status"), equalTo("202"));
+        }
+    }
+
+    @Test
+    public void closedStreamsDoNotCountTowardsMaxConcurrentStreamsWhileTheirHandlerFinishes() throws Exception {
+        var handlerStarted = new CountDownLatch(1);
+        var releaseHandler = new CountDownLatch(1);
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder
+                .http2Enabled()
+                .withMaxConcurrentStreams(1)
+            )
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                handlerStarted.countDown();
+                releaseHandler.await(5, TimeUnit.SECONDS);
+            })
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                response.status(202);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, RFCTestUtils.postHelloHeaders(server.uri().getPort())))
+                .flush();
+            assertThat(handlerStarted.await(5, TimeUnit.SECONDS), equalTo(true));
+
+            byte[] opaqueData = new byte[] {1, 2, 3, 4, 5, 6, 7, 8};
+            con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()))
+                .writeFrame(new Http2Ping(false, opaqueData))
+                .flush();
+            assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, opaqueData)));
+
+            con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders()))
+                .flush();
+            var accepted = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(accepted.streamId(), equalTo(3));
+            assertThat(accepted.headers().get(":status"), equalTo("202"));
+        } finally {
+            releaseHandler.countDown();
+        }
+    }
+
+    @Test
+    public void clientDisconnectRetiresAnEarlyResponseStreamWithoutEndStream() throws Exception {
+        var exchangeCompleted = new CountDownLatch(1);
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addResponseCompleteListener(info -> exchangeCompleted.countDown())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                response.status(204);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, RFCTestUtils.postHelloHeaders(server.uri().getPort())))
+                .flush();
+
+            var response = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(response.headers().get(":status"), equalTo("204"));
+            assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
+        }
+
+        assertEventually(() -> server.activeConnections(), empty());
     }
 
     private @NonNull FieldBlock getHelloHeaders() {

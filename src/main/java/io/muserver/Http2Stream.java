@@ -29,6 +29,8 @@ class Http2Stream implements ResponseInfo {
     // A monotonic published fence used to stop input delivery and to avoid
     // starting new response work after any thread has initiated a reset.
     private volatile boolean resetInitiated;
+    private volatile boolean applicationExchangeEnded;
+    private volatile boolean protocolStateClosed;
     private long endTime = 0;
     private final InputStream bodyInputStream;
     private final @Nullable Long declaredRequestBodyLength;
@@ -82,6 +84,29 @@ class Http2Stream implements ResponseInfo {
 
     boolean resetWasInitiated() {
         return resetInitiated;
+    }
+
+    void onApplicationExchangeEnded() {
+        applicationExchangeEnded = true;
+        if (bodyInputStream instanceof Http2BodyInputStream) {
+            ((Http2BodyInputStream) bodyInputStream).discardRemaining();
+        }
+    }
+
+    boolean applicationExchangeEnded() {
+        return applicationExchangeEnded;
+    }
+
+    void onProtocolStateClosed() {
+        protocolStateClosed = true;
+    }
+
+    boolean countsTowardsMaxConcurrentStreams() {
+        return !protocolStateClosed;
+    }
+
+    void onProtocolStreamRetired() {
+        connection.removeProtocolStream(this);
     }
 
     /**
@@ -310,7 +335,9 @@ class Http2Stream implements ResponseInfo {
 
         var incomingFlowControl = new Http2IncomingFlowController(id, serverSettings.initialWindowSize);
 
-        InputStream body = BodySize.NONE.equals(bodySize) ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(
+        // A content-length of zero describes the message body, but it does not close the
+        // remote side of the HTTP/2 stream. Keep a protocol-aware input until END_STREAM.
+        InputStream body = headerFrame.endStream() ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(
             connection.server.requestIdleTimeoutMillis(),
             read -> {
                 var update = incomingFlowControl.incrementCredit(read);

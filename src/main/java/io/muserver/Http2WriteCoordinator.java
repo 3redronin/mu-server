@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 final class Http2WriteCoordinator {
 
-    static final class WritableFrame {
+    final class WritableFrame {
         private final LogicalHttp2Frame frame;
         private final WriteTask task;
         private final boolean completesTask;
@@ -51,6 +51,7 @@ final class Http2WriteCoordinator {
 
         void complete() {
             if (completesTask) {
+                onWriteCompleted(frame);
                 task.complete();
             }
         }
@@ -124,6 +125,14 @@ final class Http2WriteCoordinator {
         }
     }
 
+    private static final class ApplicationExchangeEnded implements Command {
+        private final int streamId;
+
+        private ApplicationExchangeEnded(int streamId) {
+            this.streamId = streamId;
+        }
+    }
+
     private static final class ConnectionWindowUpdate implements Command {
         private final int increment;
         private final int lastStreamId;
@@ -175,7 +184,7 @@ final class Http2WriteCoordinator {
     private final Set<Integer> peerResetStreams = new HashSet<>();
     private final Set<Integer> retainedLocalResetStreams = new HashSet<>();
     private final Set<Integer> localResetsPendingWrite = new HashSet<>();
-    private final Set<Integer> forgottenStreams = new HashSet<>();
+    private final Set<Integer> streamsPendingRemoval = new HashSet<>();
     private final Map<Integer, Integer> streamCredits = new HashMap<>();
     private final Map<Integer, Http2StreamState> streamStates = new HashMap<>();
     private final Map<Integer, Http2Stream> applicationStreams = new HashMap<>();
@@ -246,6 +255,13 @@ final class Http2WriteCoordinator {
             throw new IllegalArgumentException("A forgotten stream ID must be positive");
         }
         mailbox.add(new ForgetStream(streamId));
+    }
+
+    void applicationExchangeEnded(int streamId) {
+        if (streamId <= 0) {
+            throw new IllegalArgumentException("An ended application exchange stream ID must be positive");
+        }
+        mailbox.add(new ApplicationExchangeEnded(streamId));
     }
 
     void applyConnectionWindowUpdate(int increment, int lastStreamId) {
@@ -340,11 +356,12 @@ final class Http2WriteCoordinator {
 
             if (!(frame instanceof Http2DataFrame) || frame.flowControlSize() == 0) {
                 iterator.remove();
-                removeCreditIfForgottenAndDrained(streamId);
-                if (frame instanceof Http2ResetStreamFrame && !hasPendingReset(streamId)) {
-                    localResetsPendingWrite.remove(streamId);
-                }
-                return new WritableFrame(frame, task, true, pending.protocolError);
+                return new WritableFrame(
+                    frame,
+                    task,
+                    true,
+                    pending.protocolError
+                );
             }
             Http2DataFrame data = (Http2DataFrame) frame;
             int remaining = data.payloadLength() - pending.dataBytesWritten;
@@ -364,9 +381,13 @@ final class Http2WriteCoordinator {
                 pending.dataBytesWritten += reserved;
                 if (completesTask) {
                     iterator.remove();
-                    removeCreditIfForgottenAndDrained(streamId);
                 }
-                return new WritableFrame(writableData, task, completesTask, pending.protocolError);
+                return new WritableFrame(
+                    writableData,
+                    task,
+                    completesTask,
+                    pending.protocolError
+                );
             }
 
             if (streamId != 0) {
@@ -398,22 +419,20 @@ final class Http2WriteCoordinator {
         } else if (command instanceof ResetStream) {
             ResetStream reset = (ResetStream) command;
             peerResetStreams.add(reset.streamId);
-            boolean forgotten = forgottenStreams.remove(reset.streamId);
             streamCredits.remove(reset.streamId);
             applyResetState(reset.streamId);
+            markProtocolStateClosed(reset.streamId);
             failPendingStreamWrites(reset.streamId, reset.reason, true);
             if (reset.stream != null) {
                 reset.stream.applyPeerReset(reset.resetFrame);
             }
-            if (forgotten) {
-                removeStream(reset.streamId);
-            }
+            removeStreamIfReady(reset.streamId);
         } else if (command instanceof RemoteEndStream) {
             applyRemoteEndStream(((RemoteEndStream) command).streamId);
         } else if (command instanceof OpenStream) {
             OpenStream open = (OpenStream) command;
             forgetResetState(open.streamId);
-            forgottenStreams.remove(open.streamId);
+            streamsPendingRemoval.remove(open.streamId);
             streamCredits.put(open.streamId, open.initialCredit);
             streamStates.put(open.streamId, open.initialState);
             if (open.stream == null) {
@@ -423,12 +442,12 @@ final class Http2WriteCoordinator {
             }
         } else if (command instanceof ForgetStream) {
             int streamId = ((ForgetStream) command).streamId;
-            forgetResetState(streamId);
-            if (hasPendingWrite(streamId)) {
-                forgottenStreams.add(streamId);
-            } else {
-                removeStream(streamId);
-            }
+            streamsPendingRemoval.add(streamId);
+            removeStreamIfReady(streamId);
+        } else if (command instanceof ApplicationExchangeEnded) {
+            int streamId = ((ApplicationExchangeEnded) command).streamId;
+            streamsPendingRemoval.add(streamId);
+            removeStreamIfReady(streamId);
         } else if (command instanceof ConnectionWindowUpdate) {
             ConnectionWindowUpdate update = (ConnectionWindowUpdate) command;
             if (connectionErrorPendingGoAway) {
@@ -500,7 +519,6 @@ final class Http2WriteCoordinator {
             task.fail(connectionFailureReason);
         } else if (frame instanceof Http2ResetStreamFrame) {
             IOException resetReason = new IOException("Stream " + streamId + " was locally reset");
-            boolean forgotten = forgottenStreams.remove(streamId);
             streamCredits.remove(streamId);
             applyResetState(streamId);
             localResetsPendingWrite.add(streamId);
@@ -511,10 +529,8 @@ final class Http2WriteCoordinator {
             // continue arriving on a closed stream. Preserve those resets while discarding
             // every other unsent frame for the stream.
             failPendingStreamWrites(streamId, resetReason, false);
-            if (forgotten) {
-                removeStream(streamId);
-            }
             addPending(task, first, protocolError);
+            removeStreamIfReady(streamId);
         } else if (streamId != 0 && (peerResetStreams.contains(streamId)
             || retainedLocalResetStreams.contains(streamId)
             || localResetsPendingWrite.contains(streamId))) {
@@ -549,7 +565,19 @@ final class Http2WriteCoordinator {
         if (state == null || state == Http2StreamState.CLOSED) {
             return;
         }
-        streamStates.put(streamId, state.remoteEndStream());
+        Http2StreamState newState = state.remoteEndStream();
+        streamStates.put(streamId, newState);
+        if (newState == Http2StreamState.CLOSED && !hasPendingEndStreamWrite(streamId)) {
+            markProtocolStateClosed(streamId);
+        }
+        removeStreamIfReady(streamId);
+    }
+
+    private void markProtocolStateClosed(int streamId) {
+        Http2Stream stream = applicationStreams.get(streamId);
+        if (stream != null) {
+            stream.onProtocolStateClosed();
+        }
     }
 
     private void applyResetState(int streamId) {
@@ -640,17 +668,48 @@ final class Http2WriteCoordinator {
         return false;
     }
 
-    private void removeCreditIfForgottenAndDrained(int streamId) {
-        if (forgottenStreams.contains(streamId) && !hasPendingWrite(streamId)) {
-            removeStream(streamId);
+    private boolean hasPendingEndStreamWrite(int streamId) {
+        for (PendingWrite pending : pendingWrites) {
+            LogicalHttp2Frame frame = pending.task.frame();
+            if (frame.streamId() == streamId && frame.endStream()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void onWriteCompleted(LogicalHttp2Frame frame) {
+        int streamId = frame.streamId();
+        if (frame instanceof Http2ResetStreamFrame
+            || (frame.endStream() && streamStates.get(streamId) == Http2StreamState.CLOSED)) {
+            markProtocolStateClosed(streamId);
+        }
+        removeStreamIfReady(streamId);
+        if (frame instanceof Http2ResetStreamFrame && !hasPendingReset(streamId)) {
+            localResetsPendingWrite.remove(streamId);
         }
     }
 
+    private void removeStreamIfReady(int streamId) {
+        if (!streamsPendingRemoval.contains(streamId) || hasPendingWrite(streamId)) {
+            return;
+        }
+        if (applicationStreams.containsKey(streamId)
+            && streamStates.get(streamId) != Http2StreamState.CLOSED) {
+            return;
+        }
+        removeStream(streamId);
+    }
+
     private void removeStream(int streamId) {
-        forgottenStreams.remove(streamId);
+        streamsPendingRemoval.remove(streamId);
         streamCredits.remove(streamId);
         streamStates.remove(streamId);
-        applicationStreams.remove(streamId);
+        forgetResetState(streamId);
+        Http2Stream stream = applicationStreams.remove(streamId);
+        if (stream != null) {
+            stream.onProtocolStreamRetired();
+        }
     }
 
     @Nullable Http2StreamState streamState(int streamId) {

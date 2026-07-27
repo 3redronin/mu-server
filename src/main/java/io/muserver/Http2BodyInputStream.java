@@ -37,6 +37,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
     private final Queue<Object> frames = new LinkedList<>();
     private final Condition hasData = lock.newCondition();
     private boolean requestBodyComplete;
+    private boolean discarding;
     private @org.jspecify.annotations.Nullable FieldBlock trailers;
 
     private static final class EndOfStreamMarker {
@@ -44,7 +45,13 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
         }
     }
 
+    private static final class DiscardingMarker {
+        private DiscardingMarker() {
+        }
+    }
+
     private static final EndOfStreamMarker END_OF_STREAM = new EndOfStreamMarker();
+    private static final DiscardingMarker DISCARDING = new DiscardingMarker();
 
     Http2BodyInputStream(long readTimeoutMillis, CreditAvailableListener onDataReadCallback, CreditAvailableListener onDataDiscardedCallback) {
         this.readTimeoutMillis = readTimeoutMillis;
@@ -120,7 +127,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
                         throw new IOException("Http2 error updating flow control", e);
                     }
                     return readAmount;
-                } else if (frame == END_OF_STREAM) {
+                } else if (frame == END_OF_STREAM || frame == DISCARDING) {
                     return -1;
                 } else if (frame instanceof IOException) {
                     throw (IOException) frame;
@@ -139,18 +146,46 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
     }
 
     public void onData(Http2DataFrame dataFrame, int flowControlSize) {
-        if (dataFrame.payloadLength() > 0 || dataFrame.endStream()) {
-            lock.lock();
-            try {
+        int discardedCredit = 0;
+        lock.lock();
+        try {
+            if (discarding) {
+                discardedCredit = flowControlSize;
+                if (dataFrame.endStream()) {
+                    requestBodyComplete = true;
+                }
+            } else if (dataFrame.payloadLength() > 0 || dataFrame.endStream()) {
                 frames.add(new PendingDataFrame(dataFrame, flowControlSize));
                 if (dataFrame.endStream()) {
                     requestBodyComplete = true;
                 }
                 hasData.signal();
-            } finally {
-                lock.unlock();
             }
+        } finally {
+            lock.unlock();
         }
+        refundDiscardedCredit(discardedCredit);
+    }
+
+    void discardRemaining() {
+        int discardedCredit = 0;
+        lock.lock();
+        try {
+            if (!discarding && !isErrored()) {
+                discarding = true;
+                for (Object frame : frames) {
+                    if (frame instanceof PendingDataFrame) {
+                        discardedCredit += ((PendingDataFrame) frame).unreadCredit();
+                    }
+                }
+                frames.clear();
+                frames.add(DISCARDING);
+                hasData.signalAll();
+            }
+        } finally {
+            lock.unlock();
+        }
+        refundDiscardedCredit(discardedCredit);
     }
 
     void onTrailers(FieldBlock trailers) {
@@ -158,8 +193,10 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
         try {
             this.trailers = trailers;
             this.requestBodyComplete = true;
-            frames.add(END_OF_STREAM);
-            hasData.signal();
+            if (!discarding) {
+                frames.add(END_OF_STREAM);
+                hasData.signal();
+            }
         } finally {
             lock.unlock();
         }
@@ -192,6 +229,10 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
         } finally {
             lock.unlock();
         }
+        refundDiscardedCredit(discardedCredit);
+    }
+
+    private void refundDiscardedCredit(int discardedCredit) {
         if (discardedCredit > 0) {
             try {
                 onDataDiscardedCallback.creditAvailable(discardedCredit);

@@ -201,6 +201,17 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         }
     }
 
+    private void applicationExchangeEndedForWrites(int streamId) {
+        stateLock.lock();
+        try {
+            if (writeState.canSendFrames) {
+                writeCoordinator.applicationExchangeEnded(streamId);
+            }
+        } finally {
+            stateLock.unlock();
+        }
+    }
+
     private void applyConnectionWindowUpdate(int increment) throws Http2Exception {
         stateLock.lock();
         try {
@@ -308,6 +319,19 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         if (changed) {
             signalWriteLoop();
         }
+    }
+
+    private void failAfterUnexpectedInputEnd(IOException reason) {
+        stateLock.lock();
+        try {
+            markConnectionErroredLocked();
+        } finally {
+            stateLock.unlock();
+        }
+        for (Http2Stream stream : streams.values()) {
+            stream.cancel(reason, false);
+        }
+        signalWriteLoop();
     }
 
     private void markPeerShutdownInitiatedLocked() {
@@ -571,7 +595,11 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                     } else {
                         String frameDetails = readingFrameHeader ? "frame header" : "frame payload for " + currentFrameHeader;
                         log.warn("EOF while reading {} at read state {} writeState={}", frameDetails, readState, writeState, e);
-                        setReadStateIfActiveAndSignal(noActiveStreams ? HState.COMPLETED : HState.ERRORED);
+                        if (noActiveStreams) {
+                            setReadStateIfActiveAndSignal(HState.COMPLETED);
+                        } else {
+                            failAfterUnexpectedInputEnd(new IOException("Client closed an active HTTP/2 connection", e));
+                        }
                     }
                 } catch (SocketException e) {
                     boolean noActiveStreams = streams.isEmpty();
@@ -580,7 +608,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                         setReadStateIfActiveAndSignal(HState.COMPLETED);
                     } else {
                         log.warn("Socket exception while reading HTTP/2 frames at read state {} writeState={}", readState, writeState, e);
-                        setReadStateIfActiveAndSignal(HState.ERRORED);
+                        failAfterUnexpectedInputEnd(new IOException("Socket closed with active HTTP/2 streams", e));
                     }
                 }
                 // TODO: end if pending settings ack not received
@@ -788,7 +816,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                     log.info("Refusing stream {} because graceful shutdown no longer allows new streams", headerFragment.streamId());
                     write(new Http2ResetStreamFrame(headerFragment.streamId(), Http2ErrorCode.REFUSED_STREAM.code()));
                     startRequest = false;
-                } else if (activeRequests().size() >= serverSettings.maxConcurrentStreams) {
+                } else if (streams.values().stream()
+                    .filter(Http2Stream::countsTowardsMaxConcurrentStreams)
+                    .count() >= serverSettings.maxConcurrentStreams) {
                     log.info("Max concurrent streams reached");
                     write(new Http2ResetStreamFrame(headerFragment.streamId(), Http2ErrorCode.REFUSED_STREAM.code()));
                     startRequest = false;
@@ -989,7 +1019,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     @Override
     public Set<MuRequest> activeRequests() {
-        return streams.values().stream().map(s -> s.request).collect(Collectors.toSet());
+        return streams.values().stream()
+            .filter(stream -> !stream.applicationExchangeEnded())
+            .map(stream -> stream.request)
+            .collect(Collectors.toSet());
     }
 
     @Override
@@ -1005,10 +1038,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     @Override
     protected void onExchangeEnded(ResponseInfo exchange) {
         var stream = (Http2Stream) exchange;
-        streams.remove(stream.id);
-        forgetStreamForWrites(stream.id);
+        stream.onApplicationExchangeEnded();
+        applicationExchangeEndedForWrites(stream.id);
         signalWriteLoop();
         super.onExchangeEnded(exchange);
+    }
+
+    void removeProtocolStream(Http2Stream stream) {
+        streams.remove(stream.id, stream);
     }
 }
 
