@@ -1075,8 +1075,8 @@ class ExecutionDomainsTest {
                 handle.addResponseCompleteHandler(info ->
                     completionThread.complete(Thread.currentThread().getName())
                 );
-                suspendedHandle.complete(handle);
                 handlerExecutor.shutdown();
+                suspendedHandle.complete(handle);
                 return true;
             })
             .start();
@@ -1090,7 +1090,9 @@ class ExecutionDomainsTest {
                 true,
                 RFCTestUtils.getHelloHeaders("http", server.uri().getPort())
             )).flush();
-            suspendedHandle.get(5, TimeUnit.SECONDS).complete(new IOException("async failure"));
+            AsyncHandle handle = suspendedHandle.get(5, TimeUnit.SECONDS);
+            assertThat(handlerExecutor.awaitTermination(5, TimeUnit.SECONDS), equalTo(true));
+            handle.complete(new IOException("async failure"));
 
             Http2HeadersFrame responseHeaders =
                 RFCTestUtils.readIgnoringWindowUpdates(connection, Http2HeadersFrame.class);
