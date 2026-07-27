@@ -485,7 +485,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             stateLock.unlock();
         }
         for (Http2Stream stream : streamRegistry.applicationStreams()) {
-            stream.onConnectionTerminated(reason);
+            stream.onConnectionTerminated(reason, ResponseState.CLIENT_DISCONNECTED);
         }
         signalWriteLoop();
     }
@@ -830,14 +830,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     // work triggered by cancellation is then rejected behind this command.
                     failConnection(writeTask, connectionError);
                     for (var stream : streamRegistry.applicationStreams()) {
-                        stream.onConnectionTerminated(connectionError);
+                        stream.onConnectionTerminated(connectionError, ResponseState.ERRORED);
                     }
                     writeTask.await(30, TimeUnit.SECONDS);
                     setReadStateAndSignal(HState.ERRORED);
                     writeEndedFuture.get(1, TimeUnit.MINUTES);
                 } else {
                     for (var stream : streamRegistry.applicationStreams()) {
-                        stream.onConnectionTerminated(connectionError);
+                        stream.onConnectionTerminated(connectionError, ResponseState.ERRORED);
                     }
                     goAway.writeTo(this, clientOut);
                     clientOut.flush();
@@ -1496,7 +1496,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         forceShutdown(new IOException(
             "HTTP/2 connection idle timeout exceeded",
             new TimeoutException("Idle timeout exceeded")
-        ));
+        ), ResponseState.TIMED_OUT);
     }
 
     @Override
@@ -1511,10 +1511,13 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
 
     @Override
     void forceShutdown() {
-        forceShutdown(new IOException("HTTP/2 connection was shut down"));
+        forceShutdown(
+            new IOException("HTTP/2 connection was shut down"),
+            ResponseState.ERRORED
+        );
     }
 
-    private void forceShutdown(IOException reason) {
+    private void forceShutdown(IOException reason, ResponseState terminalState) {
         stateLock.lock();
         try {
             if (writeState.canSendFrames) {
@@ -1524,7 +1527,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             stateLock.unlock();
         }
         for (Http2Stream stream : streamRegistry.applicationStreams()) {
-            stream.onConnectionTerminated(reason);
+            stream.onConnectionTerminated(reason, terminalState);
         }
         signalWriteLoop();
         closeSocketQuietly();

@@ -73,6 +73,7 @@ class RFC9113_5_4_3_ConnectionTerminationTest {
 
             ResponseInfo responseInfo = completed.get(5, TimeUnit.SECONDS);
             assertThat(responseInfo.completedSuccessfully(), equalTo(false));
+            assertThat(responseInfo.response().responseState(), equalTo(ResponseState.CLIENT_DISCONNECTED));
             assertThat(server.stats().activeRequests().isEmpty(), equalTo(true));
         }
     }
@@ -106,6 +107,7 @@ class RFC9113_5_4_3_ConnectionTerminationTest {
 
             ResponseInfo responseInfo = completed.get(5, TimeUnit.SECONDS);
             assertThat(responseInfo.completedSuccessfully(), equalTo(false));
+            assertThat(responseInfo.response().responseState(), equalTo(ResponseState.TIMED_OUT));
             assertThat(server.stats().activeRequests().isEmpty(), equalTo(true));
         }
     }

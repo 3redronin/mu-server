@@ -153,11 +153,11 @@ class Http2Stream implements ResponseInfo {
         }
     }
 
-    void onConnectionTerminated(IOException reason) {
+    void onConnectionTerminated(IOException reason, ResponseState terminalState) {
         cancel(reason, false);
         Http2Response currentResponse = requiredResponse();
         if (!currentResponse.responseState().endState()) {
-            currentResponse.setState(ResponseState.CLIENT_CANCELLED);
+            currentResponse.setState(terminalState);
         }
         // Complete the private async-exchange future. Its continuation is
         // dispatched to the handler executor before application cleanup runs.
