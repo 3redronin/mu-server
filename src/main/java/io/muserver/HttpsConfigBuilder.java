@@ -34,6 +34,7 @@ public class HttpsConfigBuilder {
     private @Nullable CipherSuiteFilter nettyCipherSuiteFilter;
     private @Nullable KeyManagerFactory keyManagerFactory;
     private @Nullable String defaultAlias;
+    private @Nullable ClientCertificateAuthentication clientCertificateAuthentication;
 
     /**
      * Only used by HttpsConfigBuilder
@@ -327,8 +328,9 @@ public class HttpsConfigBuilder {
     SslContext toNettySslContext(boolean http2) throws Exception {
         CipherSuiteFilter cipherFilter = nettyCipherSuiteFilter != null ? nettyCipherSuiteFilter : IdentityCipherSuiteFilter.INSTANCE;
 
+        validateClientCertificateAuthentication();
         SslContextBuilder builder;
-        ClientAuth clientAuthSetting = trustManager == null ? ClientAuth.NONE : ClientAuth.OPTIONAL;
+        ClientAuth clientAuthSetting = toNettyClientAuth(effectiveClientCertificateAuthentication());
         if (sslContext != null) {
             return new JdkSslContext(sslContext, false, null, cipherFilter, ApplicationProtocolConfig.DISABLED, clientAuthSetting, getHttpsProtocolsArray(), false);
         } else if (keystoreBytes != null) {
@@ -396,6 +398,44 @@ public class HttpsConfigBuilder {
             .build();
     }
 
+    private ClientCertificateAuthentication effectiveClientCertificateAuthentication() {
+        ClientCertificateAuthentication authentication = clientCertificateAuthentication;
+        if (authentication != null) {
+            return authentication;
+        }
+        return trustManager == null
+            ? ClientCertificateAuthentication.NONE
+            : ClientCertificateAuthentication.OPTIONAL;
+    }
+
+    private void validateClientCertificateAuthentication() {
+        ClientCertificateAuthentication authentication = clientCertificateAuthentication;
+        if (authentication == null) {
+            return;
+        }
+        if (authentication == ClientCertificateAuthentication.NONE && trustManager != null) {
+            throw new IllegalStateException(
+                "A client-certificate trust manager cannot be used when authentication is NONE");
+        }
+        if (sslContext == null
+            && authentication != ClientCertificateAuthentication.NONE
+            && trustManager == null) {
+            throw new IllegalStateException(
+                "A client-certificate trust manager is required when the SSLContext is built by mu-server");
+        }
+    }
+
+    private static ClientAuth toNettyClientAuth(ClientCertificateAuthentication authentication) {
+        switch (authentication) {
+            case OPTIONAL:
+                return ClientAuth.OPTIONAL;
+            case MANDATORY:
+                return ClientAuth.REQUIRE;
+            default:
+                return ClientAuth.NONE;
+        }
+    }
+
     private String[] getHttpsProtocolsArray() throws NoSuchAlgorithmException {
         List<String> supportedProtocols = asList(SSLContext.getDefault().getSupportedSSLParameters().getProtocols());
         List<String> protocolsToUse = new ArrayList<>();
@@ -426,16 +466,43 @@ public class HttpsConfigBuilder {
         return new HttpsConfigBuilder();
     }
 
+    /**
+     * Sets how HTTPS clients are authenticated with client certificates.
+     *
+     * <p>If this method is not called, setting a trust manager with
+     * {@link #withClientCertificateTrustManager(TrustManager)} enables optional authentication, preserving
+     * historical behaviour. An explicitly configured authentication policy takes precedence.</p>
+     *
+     * <p>When this builder creates the SSL context from a keystore or key manager factory, optional and
+     * mandatory authentication require a client-certificate trust manager. When
+     * {@link #withSSLContext(SSLContext)} is used, the pre-built context's embedded trust managers are used.</p>
+     * <p>{@link ClientCertificateAuthentication#NONE NONE} cannot be combined with a non-null
+     * client-certificate trust manager.</p>
+     *
+     * @param authentication The client-certificate authentication policy.
+     * @return This builder.
+     */
+    public HttpsConfigBuilder withClientCertificateAuthentication(
+        ClientCertificateAuthentication authentication) {
+        Mutils.notNull("authentication", authentication);
+        this.clientCertificateAuthentication = authentication;
+        return this;
+    }
+
 
     /**
      * Sets the trust manager that is used to validate client certificates.
-     * <p>Setting the trust manager will make client certificates optional. The trust manager should
-     * contain the public keys of certificate authorities that you want to allow client certificates
-     * from.
+     * <p>Unless an explicit policy is set with
+     * {@link #withClientCertificateAuthentication(ClientCertificateAuthentication)}, setting a non-null trust
+     * manager makes client certificates optional, preserving historical behaviour. The trust manager should
+     * contain the public keys of certificate authorities that you want to allow client certificates from.
      * Certificates will be available for request handlers at {@link HttpConnection#clientCertificate()}
      * (note that the connection of a request is available on {@link MuRequest#connection()}).</p>
      * <p><strong>Important note:</strong> if no certificate is set then the client certificate will be
      * <code>null</code>. If an invalid certificate is sent then the TLS connection will be rejected.</p>
+     * <p>When {@link #withSSLContext(SSLContext)} is used, that context's embedded trust managers perform
+     * validation. For compatibility, a non-null value supplied here still enables optional authentication when
+     * no explicit authentication policy is set.</p>
      * @param trustManager The trust manager to use to validate client certificates
      * @return This builder.
      */

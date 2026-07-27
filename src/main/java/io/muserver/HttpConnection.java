@@ -2,7 +2,6 @@ package io.muserver;
 
 import org.jspecify.annotations.Nullable;
 
-import javax.net.ssl.TrustManager;
 import java.net.InetSocketAddress;
 import java.security.cert.Certificate;
 import java.time.Instant;
@@ -86,10 +85,11 @@ public interface HttpConnection {
      * <p>The returned certificate will be {@link Optional#empty()} when:</p>
      * <ul>
      *     <li>The client did not send a certificate, or</li>
-     *     <li>The client sent a certificate that failed verification with the client trust manager, or</li>
-     *     <li>No client trust manager was set with {@link HttpsConfigBuilder#withClientCertificateTrustManager(TrustManager)}, or</li>
+     *     <li>The server did not request client authentication, or</li>
      *     <li>The request was not sent over HTTPS</li>
      * </ul>
+     * <p>A client certificate that fails trust validation causes the TLS handshake to fail, so no request is
+     * delivered to a handler.</p>
      * @return The client certificate, or <code>empty</code> if no certificate is available
      */
     Optional<Certificate> clientCertificate();

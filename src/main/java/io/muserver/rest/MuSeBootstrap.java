@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import io.muserver.ClientCertificateAuthentication;
 import io.muserver.ContextHandlerBuilder;
 import io.muserver.HttpsConfigBuilder;
 import io.muserver.MuServer;
@@ -48,12 +49,11 @@ final class MuSeBootstrap {
             if ("HTTP".equalsIgnoreCase(protocol)) {
                 serverBuilder.withHttpPort(port);
             } else if ("HTTPS".equalsIgnoreCase(protocol)) {
-                if (requested.sslClientAuthentication()
-                    != SeBootstrap.Configuration.SSLClientAuthentication.NONE) {
-                    throw new UnsupportedOperationException("SEBootstrap TLS client authentication is not supported");
-                }
                 serverBuilder.withHttpsPort(port)
-                    .withHttpsConfig(new HttpsConfigBuilder().withSSLContext(requested.sslContext()));
+                    .withHttpsConfig(new HttpsConfigBuilder()
+                        .withSSLContext(requested.sslContext())
+                        .withClientCertificateAuthentication(clientCertificateAuthentication(
+                            requested.sslClientAuthentication())));
             } else {
                 throw new IllegalArgumentException("Unsupported protocol: " + protocol);
             }
@@ -76,6 +76,18 @@ final class MuSeBootstrap {
             CompletableFuture<SeBootstrap.Instance> failed = new CompletableFuture<>();
             failed.completeExceptionally(failure);
             return failed;
+        }
+    }
+
+    private static ClientCertificateAuthentication clientCertificateAuthentication(
+        SeBootstrap.Configuration.SSLClientAuthentication authentication) {
+        switch (authentication) {
+            case OPTIONAL:
+                return ClientCertificateAuthentication.OPTIONAL;
+            case MANDATORY:
+                return ClientCertificateAuthentication.MANDATORY;
+            default:
+                return ClientCertificateAuthentication.NONE;
         }
     }
 
