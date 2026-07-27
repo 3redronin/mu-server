@@ -39,4 +39,14 @@ class MonotonicTimeTest {
 
         assertThat(latest.get(), is(Long.MIN_VALUE + 4L));
     }
+
+    @Test
+    void anAbsoluteDeadlineRetainsASubMillisecondRemainder() {
+        long deadline = MonotonicTime.deadlineAfter(100L, 1_000_000L);
+
+        assertThat(
+            MonotonicTime.nanosUntil(deadline, 101L),
+            is(999_999L)
+        );
+    }
 }

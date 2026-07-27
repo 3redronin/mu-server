@@ -121,13 +121,7 @@ class Mu3ServerImpl implements MuServer {
         long deadlineNanos = MonotonicTime.deadlineAfterMillis(timeoutMillis);
         boolean stoppedCleanly = true;
         for (var acceptor : acceptors) {
-            long remainingNanos = Math.max(
-                0L,
-                MonotonicTime.nanosUntil(deadlineNanos)
-            );
-            if (!acceptor.stop(
-                TimeUnit.NANOSECONDS.toMillis(remainingNanos)
-            )) {
+            if (!acceptor.stopUntil(deadlineNanos)) {
                 stoppedCleanly = false;
             }
         }
