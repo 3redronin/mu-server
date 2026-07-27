@@ -398,6 +398,14 @@ class Http2Stream implements ResponseInfo {
         }
     }
 
+    void abandonApplicationExchange() {
+        try {
+            request.cleanup();
+        } finally {
+            endTime = System.currentTimeMillis();
+        }
+    }
+
     private Http2Response requiredResponse() {
         return java.util.Objects.requireNonNull(response, "The HTTP/2 response has not been initialized");
     }

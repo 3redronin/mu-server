@@ -595,6 +595,38 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void rejectedHandlerDispatchesHttp1AsyncFailureHandlingToTheAsyncExecutor() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var suspendedHandle = new CompletableFuture<AsyncHandle>();
+        var exceptionThread = new CompletableFuture<String>();
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withAsyncExecutor(asyncExecutor)
+            .withExceptionHandler((request, response, exception) -> {
+                exceptionThread.complete(Thread.currentThread().getName());
+                response.status(500);
+                response.write("handled");
+                return true;
+            })
+            .addHandler((request, response) -> {
+                suspendedHandle.complete(request.handleAsync());
+                handlerExecutor.shutdown();
+                return true;
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/").flushHeaders();
+            suspendedHandle.get(5, TimeUnit.SECONDS).complete(new IOException("async failure"));
+
+            assertThat(client.readLine(), equalTo("HTTP/1.1 500 Internal Server Error"));
+            assertThat(client.readBody(client.readHeaders()), equalTo("handled"));
+            assertThat(exceptionThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
+        }
+    }
+
+    @Test
     void aSuspendedHttp2ExchangeDoesNotRetainAHandlerWorker() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var suspendedHandle = new CompletableFuture<AsyncHandle>();
@@ -642,6 +674,90 @@ class ExecutionDomainsTest {
                 handle.complete();
             }
             assertThat(completionThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
+        }
+    }
+
+    @Test
+    void rejectedHandlerDispatchesHttp2AsyncCompletionToTheAsyncExecutor() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var suspendedHandle = new CompletableFuture<AsyncHandle>();
+        var exceptionThread = new CompletableFuture<String>();
+        var completionThread = new CompletableFuture<String>();
+        server = httpServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .withHandlerExecutor(handlerExecutor)
+            .withAsyncExecutor(asyncExecutor)
+            .withExceptionHandler((request, response, exception) -> {
+                exceptionThread.complete(Thread.currentThread().getName());
+                response.status(500);
+                response.write("handled");
+                return true;
+            })
+            .addHandler((request, response) -> {
+                AsyncHandle handle = request.handleAsync();
+                handle.addResponseCompleteHandler(info ->
+                    completionThread.complete(Thread.currentThread().getName())
+                );
+                suspendedHandle.complete(handle);
+                handlerExecutor.shutdown();
+                return true;
+            })
+            .start();
+
+        try (var h2Client = new H2Client();
+             var connection = h2Client.connectClearText(server)) {
+            connection.handshake();
+            connection.socket().setSoTimeout(2000);
+            connection.writeFrame(new Http2HeadersFrame(
+                1,
+                true,
+                RFCTestUtils.getHelloHeaders("http", server.uri().getPort())
+            )).flush();
+            suspendedHandle.get(5, TimeUnit.SECONDS).complete(new IOException("async failure"));
+
+            Http2HeadersFrame responseHeaders =
+                RFCTestUtils.readIgnoringWindowUpdates(connection, Http2HeadersFrame.class);
+            assertThat(responseHeaders.headers().get(":status"), equalTo("500"));
+            Http2DataFrame responseData =
+                RFCTestUtils.readIgnoringWindowUpdates(connection, Http2DataFrame.class);
+            assertThat(responseData.toUTF8(), equalTo("handled"));
+            assertThat(exceptionThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
+            assertThat(completionThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
+        }
+    }
+
+    @Test
+    void rejectedApplicationExecutorsAbortAnAcceptedHttp2AsyncStream() throws Exception {
+        var sharedExecutor = track(Executors.newSingleThreadExecutor(namedThreads("application-")));
+        var suspendedHandle = new CompletableFuture<AsyncHandle>();
+        server = httpServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .withHandlerExecutor(sharedExecutor)
+            .withAsyncExecutor(sharedExecutor)
+            .addHandler((request, response) -> {
+                suspendedHandle.complete(request.handleAsync());
+                sharedExecutor.shutdown();
+                return true;
+            })
+            .start();
+
+        try (var h2Client = new H2Client();
+             var connection = h2Client.connectClearText(server)) {
+            connection.handshake();
+            connection.socket().setSoTimeout(2000);
+            connection.writeFrame(new Http2HeadersFrame(
+                1,
+                true,
+                RFCTestUtils.getHelloHeaders("http", server.uri().getPort())
+            )).flush();
+            suspendedHandle.get(5, TimeUnit.SECONDS).complete();
+
+            Http2ResetStreamFrame reset =
+                RFCTestUtils.readIgnoringWindowUpdates(connection, Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), is(1));
+            assertThat(reset.errorCodeEnum(), is(Http2ErrorCode.INTERNAL_ERROR));
+            assertEventually(() -> server.stats().completedRequests(), equalTo(1L));
         }
     }
 

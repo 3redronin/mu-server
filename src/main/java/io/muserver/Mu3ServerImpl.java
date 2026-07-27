@@ -177,22 +177,34 @@ class Mu3ServerImpl implements MuServer {
                 responseCompletionTasks.arriveAndDeregister();
             }
         };
+        RejectedExecutionException rejected = tryExecuteHandlerTask(trackedTask);
+        if (rejected != null) {
+            responseCompletionTasks.arriveAndDeregister();
+            log.warn("Dropping response completion callback because its application executors rejected it", rejected);
+        }
+    }
+
+    /**
+     * Dispatches accepted application work without ever falling back to the caller.
+     * The async executor is the secondary application domain when handler dispatch
+     * is unavailable; the returned rejection means neither domain can accept work.
+     */
+    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
+    @Nullable RejectedExecutionException tryExecuteHandlerTask(Runnable task) {
         try {
-            handlerExecutor.execute(trackedTask);
+            handlerExecutor.execute(task);
+            return null;
         } catch (RejectedExecutionException handlerRejected) {
             if (asyncExecutor != handlerExecutor) {
                 try {
-                    asyncExecutor.execute(trackedTask);
-                    return;
+                    asyncExecutor.execute(task);
+                    return null;
                 } catch (RejectedExecutionException asyncRejected) {
                     asyncRejected.addSuppressed(handlerRejected);
-                    responseCompletionTasks.arriveAndDeregister();
-                    log.warn("Dropping response completion callback because its executors rejected it", asyncRejected);
-                    return;
+                    return asyncRejected;
                 }
             }
-            responseCompletionTasks.arriveAndDeregister();
-            log.warn("Dropping response completion callback because its executor rejected it", handlerRejected);
+            return handlerRejected;
         }
     }
 

@@ -272,10 +272,9 @@ class Http1Connection extends BaseHttpConnection {
                 handled.completeExceptionally(t);
             }
         };
-        try {
-            handlerExecutor.execute(task);
-        } catch (RejectedExecutionException rejected) {
-            task.run();
+        RejectedExecutionException rejected = server.tryExecuteHandlerTask(task);
+        if (rejected != null) {
+            handled.completeExceptionally(rejected);
         }
         try {
             handled.get();
