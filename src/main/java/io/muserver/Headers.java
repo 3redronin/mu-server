@@ -173,6 +173,8 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
     List<String> getAll(CharSequence name);
 
     /**
+     * Returns all header entries.
+     *
      * @return All the headers
      */
     List<Map.Entry<String, String>> entries();
@@ -195,22 +197,30 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
     boolean contains(CharSequence name);
 
     /**
+     * Returns an iterator over all header entries.
+     *
      * @return An iterator to iterate through the headers
      */
     @Override
     Iterator<Map.Entry<String, String>> iterator();
 
     /**
+     * Indicates whether no headers are present.
+     *
      * @return True if there are no headers
      */
     boolean isEmpty();
 
     /**
+     * Returns the number of header entries.
+     *
      * @return The number of headers. Repeated headers are counted twice.
      */
     int size();
 
     /**
+     * Returns the distinct header names.
+     *
      * @return The header names in these headers
      */
     Set<String> names();
@@ -361,6 +371,8 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
     Headers remove(CharSequence name);
 
     /**
+     * Removes all headers from this object.
+     *
      * @return Removes all the headers from this object
      */
     Headers clear();

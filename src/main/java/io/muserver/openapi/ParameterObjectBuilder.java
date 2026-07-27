@@ -38,6 +38,14 @@ public class ParameterObjectBuilder {
     private @Nullable Map<String, MediaTypeObject> content;
 
     /**
+     * Creates an empty parameter builder.
+     */
+    public ParameterObjectBuilder() {
+    }
+
+    /**
+     * Sets the parameter name.
+     *
      * @param name <strong>REQUIRED</strong>. The name of the parameter. Parameter names are <em>case sensitive</em>.
      *             <ul>
      *             <li>If <code>in</code> is <code>"path"</code>, the <code>name</code> field MUST correspond to
@@ -56,7 +64,9 @@ public class ParameterObjectBuilder {
     }
 
     /**
-     * @param in <strong>REQUIRED</strong>. The location of the parameter. Possible values are "query", "header", "path" or "cookie".
+     * Sets the parameter location.
+     *
+     * @param in <strong>REQUIRED</strong>. The location of the parameter. Possible values are "query", "header",  "path" or "cookie".
      * @return The current builder
      */
     public ParameterObjectBuilder withIn(String in) {
@@ -65,6 +75,8 @@ public class ParameterObjectBuilder {
     }
 
     /**
+     * Sets the parameter description.
+     *
      * @param description A brief description of the parameter. This could contain examples of use.
      *                    <a href="http://spec.commonmark.org/">CommonMark syntax</a> MAY be used for rich text representation.
      * @return The current builder
@@ -75,6 +87,8 @@ public class ParameterObjectBuilder {
     }
 
     /**
+     * Sets whether the parameter is required.
+     *
      * @param required Determines whether this parameter is mandatory. If the parameter location is "path",
      *                 this property is <strong>REQUIRED</strong> and its value MUST be <code>true</code>.
      *                 Otherwise, the property MAY be included and its default value is <code>false</code>.
@@ -86,6 +100,8 @@ public class ParameterObjectBuilder {
     }
 
     /**
+     * Marks the parameter as deprecated or current.
+     *
      * @param deprecated Specifies that a parameter is deprecated and SHOULD be transitioned out of usage.
      * @return The current builder
      */
@@ -95,6 +111,8 @@ public class ParameterObjectBuilder {
     }
 
     /**
+     * Sets whether empty parameter values are allowed.
+     *
      * @param allowEmptyValue Sets the ability to pass empty-valued parameters. This is valid only for
      *                        <code>query</code> parameters and allows sending a parameter with an empty value.
      *                        Default value is <code>false</code>. If <code>style</code> is used, and if behavior
@@ -108,7 +126,9 @@ public class ParameterObjectBuilder {
     }
 
     /**
-     * @param style <p>Describes how the parameter value will be serialized depending on the type of the parameter value.
+     * Sets the parameter serialization style.
+     *
+     * @param style <p>Describes how the parameter value will be serialized depending on the type of the parameter  value.
      *              Default values (based on value of <code>in</code>): for <code>query</code> - <code>form</code>;
      *              for <code>path</code> - <code>simple</code>; for <code>header</code> - <code>simple</code>;
      *              for <code>cookie</code> - <code>form</code>.</p>
@@ -176,6 +196,8 @@ public class ParameterObjectBuilder {
     }
 
     /**
+     * Sets whether the parameter value is exploded.
+     *
      * @param explode When this is true, parameter values of type <code>array</code> or <code>object</code> generate
      *                separate parameters for each value of the array or key-value pair of the map.  For other types
      *                of parameters this property has no effect. When <code>style</code> is <code>form</code>, the
@@ -188,6 +210,8 @@ public class ParameterObjectBuilder {
     }
 
     /**
+     * Sets whether reserved characters may remain unencoded.
+     *
      * @param allowReserved Determines whether the parameter value SHOULD allow reserved characters, as defined by
      *                      <a href="https://tools.ietf.org/html/rfc3986#section-2.2">RFC3986</a>
      *                      <code>:/?#[]@!$&amp;'()*+,;=</code> to be included without percent-encoding. This property
@@ -201,6 +225,8 @@ public class ParameterObjectBuilder {
     }
 
     /**
+     * Sets the parameter schema.
+     *
      * @param schema The schema defining the type used for the parameter.
      * @return The current builder
      */
@@ -210,6 +236,8 @@ public class ParameterObjectBuilder {
     }
 
     /**
+     * Sets an example parameter value.
+     *
      * @param example Example of the media type.  The example SHOULD match the specified schema and encoding properties
      *                if present.  The <code>example</code> field is mutually exclusive of the <code>examples</code>
      *                field.  Furthermore, if referencing a <code>schema</code> which contains an example, the
@@ -224,6 +252,8 @@ public class ParameterObjectBuilder {
     }
 
     /**
+     * Sets named parameter examples.
+     *
      * @param examples Examples of the media type.  Each example SHOULD contain a value in the correct format as
      *                 specified in the parameter encoding.  The <code>examples</code> field is mutually exclusive
      *                 of the <code>example</code> field.  Furthermore, if referencing a <code>schema</code> which
@@ -237,7 +267,9 @@ public class ParameterObjectBuilder {
     }
 
     /**
-     * @param content A map containing the representations for the parameter. The key is the media type and the value describes it.
+     * Sets the parameter content representations.
+     *
+     * @param content A map containing the representations for the parameter. The key is the media type and the value  describes it.
      *                The map MUST only contain one entry.
      * @return The current builder
      */
@@ -247,6 +279,8 @@ public class ParameterObjectBuilder {
     }
 
     /**
+     * Builds a parameter object from the configured values.
+     *
      * @return A new object
      */
     public ParameterObject build() {

@@ -10,14 +10,21 @@ import scaffolding.ServerUtils;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
+import java.io.IOException;
 import java.security.KeyStore;
 import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
 import java.security.cert.CertificateExpiredException;
 import java.security.cert.X509Certificate;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+import static scaffolding.ClientCertificateTestUtils.clientForcingCertificate;
 import static scaffolding.ClientUtils.*;
 
 public class ClientCertTest {
@@ -109,6 +116,40 @@ public class ClientCertTest {
         OkHttpClient client = getClientWithCert("client.p12");
         try (Response resp = client.newCall(request(server.uri()).build()).execute()) {
             assertThat(resp.body().string(), equalTo("Cert is present? false"));
+        }
+    }
+
+    @Test
+    public void presentedUntrustedCertsAreRejected() throws Exception {
+        AtomicBoolean clientCertificateWasChecked = new AtomicBoolean();
+        X509TrustManager rejectingTrustManager = new X509TrustManager() {
+            @Override
+            public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+                clientCertificateWasChecked.set(true);
+                throw new CertificateException("Client certificate is not trusted");
+            }
+
+            @Override
+            public void checkServerTrusted(X509Certificate[] chain, String authType) {
+            }
+
+            @Override
+            public X509Certificate[] getAcceptedIssuers() {
+                return new X509Certificate[0];
+            }
+        };
+        server = ServerUtils.httpsServerForTest()
+            .withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost()
+                .withClientCertificateTrustManager(rejectingTrustManager))
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> response.write("Should not be called"))
+            .start();
+
+        try (Response ignored = clientForcingCertificate("client.p12")
+            .newCall(request(server.uri()).build()).execute()) {
+            fail("Expected the TLS handshake to fail");
+        } catch (IOException expected) {
+            assertTrue(clientCertificateWasChecked.get(),
+                "The server trust manager should have checked the offered certificate");
         }
     }
 

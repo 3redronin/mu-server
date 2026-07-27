@@ -25,6 +25,12 @@ public class HttpsRedirectorBuilder implements MuHandlerBuilder<HttpsRedirector>
     private boolean includeSubDomainsForHSTS = false;
     private boolean preload = false;
 
+    /**
+     * Creates an empty HTTPS redirector builder.
+     */
+    public HttpsRedirectorBuilder() {
+    }
+
     @Override
     public HttpsRedirector build() {
         if (port < 1) {

@@ -10,6 +10,8 @@ import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Defines a discriminator used to select among polymorphic schemas.
+ *
  * @see DiscriminatorObjectBuilder
  */
 public class DiscriminatorObject implements JsonWriter {
@@ -32,6 +34,8 @@ public class DiscriminatorObject implements JsonWriter {
     }
 
     /**
+     * Returns the discriminator property name.
+     *
      * @return The value described by {@link DiscriminatorObjectBuilder#withPropertyName}
      */
     public String propertyName() {
@@ -39,6 +43,8 @@ public class DiscriminatorObject implements JsonWriter {
     }
 
     /**
+     * Returns the discriminator mapping.
+     *
       @return The value described by {@link DiscriminatorObjectBuilder#withMapping}
      */
     public @Nullable Map<String, String> mapping() {

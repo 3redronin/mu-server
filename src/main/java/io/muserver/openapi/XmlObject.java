@@ -9,6 +9,8 @@ import java.net.URI;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Describes XML representation details for a schema property.
+ *
  * @see XmlObjectBuilder
  */
 public class XmlObject implements JsonWriter {
@@ -40,6 +42,8 @@ public class XmlObject implements JsonWriter {
     }
 
     /**
+     * Gets the XML element or attribute name override.
+     *
      * @return the value described by {@link XmlObjectBuilder#withName}
      */
     public @Nullable String name() {
@@ -47,28 +51,36 @@ public class XmlObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link XmlObjectBuilder#withNamespace}
+     * Gets the XML namespace URI.
+     *
+     * @return the value described by {@link XmlObjectBuilder#withNamespace}
      */
     public @Nullable URI namespace() {
         return namespace;
     }
 
     /**
-      @return the value described by {@link XmlObjectBuilder#withPrefix}
+     * Gets the XML namespace prefix.
+     *
+     * @return the value described by {@link XmlObjectBuilder#withPrefix}
      */
     public @Nullable String prefix() {
         return prefix;
     }
 
     /**
-      @return the value described by {@link XmlObjectBuilder#withAttribute}
+     * Indicates whether the schema maps to an XML attribute.
+     *
+     * @return the value described by {@link XmlObjectBuilder#withAttribute}
      */
     public boolean attribute() {
         return attribute;
     }
 
     /**
-      @return the value described by {@link XmlObjectBuilder#withWrapped}
+     * Indicates whether array values are XML-wrapped.
+     *
+     * @return the value described by {@link XmlObjectBuilder#withWrapped}
      */
     public boolean wrapped() {
         return wrapped;

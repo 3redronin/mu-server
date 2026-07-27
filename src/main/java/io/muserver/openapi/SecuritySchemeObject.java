@@ -12,6 +12,8 @@ import static io.muserver.openapi.Jsonizer.append;
 import static java.util.Arrays.asList;
 
 /**
+ * Describes an authentication or authorization scheme.
+ *
  * @see SecuritySchemeObjectBuilder
  */
 public class SecuritySchemeObject implements JsonWriter {
@@ -73,6 +75,8 @@ public class SecuritySchemeObject implements JsonWriter {
     }
 
     /**
+     * Gets the security scheme type.
+     *
      * @return the value described by {@link SecuritySchemeObjectBuilder#withType}
      */
     public String type() {
@@ -80,55 +84,71 @@ public class SecuritySchemeObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link SecuritySchemeObjectBuilder#withDescription}
+     * Gets the security scheme description.
+     *
+     * @return the value described by {@link SecuritySchemeObjectBuilder#withDescription}
      */
     public @Nullable String description() {
         return description;
     }
 
     /**
-      @return the value described by {@link SecuritySchemeObjectBuilder#withName}
+     * Gets the security scheme name.
+     *
+     * @return the value described by {@link SecuritySchemeObjectBuilder#withName}
      */
     public @Nullable String name() {
         return name;
     }
 
     /**
-      @return the value described by {@link SecuritySchemeObjectBuilder#withIn}
+     * Gets where the security scheme value is supplied.
+     *
+     * @return the value described by {@link SecuritySchemeObjectBuilder#withIn}
      */
     public @Nullable String in() {
         return in;
     }
 
     /**
-      @return the value described by {@link SecuritySchemeObjectBuilder#withScheme}
+     * Gets the HTTP authentication scheme name.
+     *
+     * @return the value described by {@link SecuritySchemeObjectBuilder#withScheme}
      */
     public @Nullable String scheme() {
         return scheme;
     }
 
     /**
-      @return the value described by {@link SecuritySchemeObjectBuilder#withBearerFormat}
+     * Gets the bearer-token format hint.
+     *
+     * @return the value described by {@link SecuritySchemeObjectBuilder#withBearerFormat}
      */
     public @Nullable String bearerFormat() {
         return bearerFormat;
     }
 
     /**
-      @return the value described by {@link SecuritySchemeObjectBuilder#withFlows}
+     * Gets the OAuth flows configuration.
+     *
+     * @return the value described by {@link SecuritySchemeObjectBuilder#withFlows}
      */
     public @Nullable OAuthFlowsObject flows() {
         return flows;
     }
 
     /**
-      @return the value described by {@link SecuritySchemeObjectBuilder#withOpenIdConnectUrl}
+     * Gets the OpenID Connect discovery URL.
+     *
+     * @return the value described by {@link SecuritySchemeObjectBuilder#withOpenIdConnectUrl}
      */
     public @Nullable URI openIdConnectUrl() {
         return openIdConnectUrl;
     }
 
     /**
+     * Gets the valid security scheme types.
+     *
      * @return The types allowed to be passed to {@link SecuritySchemeObjectBuilder#withType(String)}
      */
     public static List<String> validTypes() {

@@ -13,6 +13,8 @@ import java.util.regex.Pattern;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Describes the structure and validation rules of a value.
+ *
  * @see SchemaObjectBuilder
  */
 public class SchemaObject implements JsonWriter {
@@ -211,6 +213,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Creates a builder pre-populated from this schema object.
+     *
      * @return A new builder with the values set based on this instance
      */
     public SchemaObjectBuilder toBuilder() {
@@ -253,6 +257,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Indicates whether the schema is deprecated.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withDeprecated(Boolean)}, unless null was passed in which case this returns false
      */
     public boolean isDeprecated() {
@@ -260,6 +266,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the schema title.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withTitle}
      */
     public @Nullable String title() {
@@ -267,6 +275,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the multiple-of constraint.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withMultipleOf}
      */
     public @Nullable Double multipleOf() {
@@ -274,6 +284,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the maximum numeric value.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withMaximum}
      */
     public @Nullable Double maximum() {
@@ -281,6 +293,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets whether the maximum is exclusive.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withExclusiveMaximum}
      */
     public @Nullable Boolean exclusiveMaximum() {
@@ -288,6 +302,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the minimum numeric value.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withMinimum}
      */
     public @Nullable Double minimum() {
@@ -295,6 +311,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets whether the minimum is exclusive.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withExclusiveMinimum}
      */
     public @Nullable Boolean exclusiveMinimum() {
@@ -302,6 +320,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the maximum string length.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withMaxLength}
      */
     public @Nullable Integer maxLength() {
@@ -309,6 +329,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the minimum string length.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withMinLength}
      */
     public @Nullable Integer minLength() {
@@ -316,6 +338,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the string pattern constraint.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withPattern}
      */
     public @Nullable Pattern pattern() {
@@ -323,6 +347,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the maximum number of array items.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withMaxItems}
      */
     public @Nullable Integer maxItems() {
@@ -330,6 +356,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the minimum number of array items.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withMinItems}
      */
     public @Nullable Integer minItems() {
@@ -337,6 +365,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets whether array items must be unique.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withUniqueItems}
      */
     public @Nullable Boolean uniqueItems() {
@@ -344,6 +374,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the maximum number of object properties.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withMaxProperties}
      */
     public @Nullable Integer maxProperties() {
@@ -351,6 +383,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the minimum number of object properties.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withMinProperties}
      */
     public @Nullable Integer minProperties() {
@@ -358,6 +392,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the required property names.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withRequired}
      */
     public @Nullable List<String> required() {
@@ -365,6 +401,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the allowed enum values.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withEnumValue}
      */
     public @Nullable List<Object> enumValue() {
@@ -372,6 +410,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the schema type.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withType}
      */
     public @Nullable String type() {
@@ -379,6 +419,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the all-of schema list.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withAllOf}
      */
     public @Nullable List<SchemaObject> allOf() {
@@ -386,6 +428,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the one-of schema list.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withOneOf}
      */
     public @Nullable List<SchemaObject> oneOf() {
@@ -393,6 +437,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the any-of schema list.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withAnyOf}
      */
     public @Nullable List<SchemaObject> anyOf() {
@@ -400,6 +446,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the not schema list.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withNot}
      */
     public @Nullable List<SchemaObject> not() {
@@ -407,6 +455,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the schema for array items.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withItems}
      */
     public @Nullable SchemaObject items() {
@@ -414,6 +464,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the object property schemas.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withProperties}
      */
     public @Nullable Map<String, SchemaObject> properties() {
@@ -421,6 +473,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the additional-properties rule.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withAdditionalProperties}
      */
     public @Nullable Object additionalProperties() {
@@ -428,6 +482,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the schema description.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withDescription}
      */
     public @Nullable String description() {
@@ -435,6 +491,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the schema format.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withFormat}
      */
     public @Nullable String format() {
@@ -442,6 +500,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the configured default value.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withDefaultValue}
      */
     public @Nullable Object defaultValue() {
@@ -449,6 +509,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets whether the schema is nullable.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withNullable}
      */
     public @Nullable Boolean nullable() {
@@ -456,6 +518,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the discriminator metadata.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withDiscriminator}
      */
     public @Nullable DiscriminatorObject discriminator() {
@@ -463,6 +527,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets whether the schema is read-only.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withReadOnly}
      */
     public @Nullable Boolean readOnly() {
@@ -470,6 +536,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets whether the schema is write-only.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withWriteOnly}
      */
     public @Nullable Boolean writeOnly() {
@@ -477,6 +545,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the XML metadata for the schema.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withXml}
      */
     public @Nullable XmlObject xml() {
@@ -484,6 +554,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the external documentation for the schema.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withExternalDocs}
      */
     public @Nullable ExternalDocumentationObject externalDocs() {
@@ -491,6 +563,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the example value for the schema.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withExample}
      */
     public @Nullable Object example() {
@@ -498,6 +572,8 @@ public class SchemaObject implements JsonWriter {
     }
 
     /**
+     * Gets the explicitly configured deprecated flag.
+     *
      * @return the value described by {@link SchemaObjectBuilder#withDeprecated}
      */
     public @Nullable Boolean deprecated() {

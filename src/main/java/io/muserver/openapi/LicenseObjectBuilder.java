@@ -12,6 +12,14 @@ public class LicenseObjectBuilder {
     private @Nullable URI url;
 
     /**
+     * Creates an empty license object builder.
+     */
+    public LicenseObjectBuilder() {
+    }
+
+    /**
+     * Sets the license name.
+     *
      * @param name <strong>REQUIRED</strong>. The license name used for the API.
      * @return The current builder
      */
@@ -21,6 +29,8 @@ public class LicenseObjectBuilder {
     }
 
     /**
+     * Sets the license URL.
+     *
      * @param url A URL to the license used for the API.
      * @return The current builder
      */
@@ -30,6 +40,8 @@ public class LicenseObjectBuilder {
     }
 
     /**
+     * Builds a license object from the configured values.
+     *
      * @return A new object
      */
     public LicenseObject build() {
@@ -46,6 +58,8 @@ public class LicenseObjectBuilder {
     }
 
     /**
+     * Creates an Apache 2.0 license object.
+     *
      * @return A license with name "Apache 2.0" and URL <a href="http://www.apache.org/licenses/LICENSE-2.0.html">http://www.apache.org/licenses/LICENSE-2.0.html</a>
      */
     public static LicenseObject Apache2_0() {
@@ -53,6 +67,8 @@ public class LicenseObjectBuilder {
     }
 
     /**
+     * Creates an MIT license object.
+     *
      * @return A license with name "MIT License" and URL <a href="https://opensource.org/licenses/mit-license.php">https://opensource.org/licenses/mit-license.php</a>
      */
     public static LicenseObject MITLicense() {
@@ -60,6 +76,8 @@ public class LicenseObjectBuilder {
     }
 
     /**
+     * Creates an Unlicense object.
+     *
      * @return A license with name "The Unlicense" and URL <a href="https://unlicense.org">https://unlicense.org</a>
      */
     public static LicenseObject TheUnlicense() {

@@ -10,6 +10,8 @@ import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Provides a URL for additional external documentation.
+ *
  * @see ExternalDocumentationObjectBuilder
  */
 public class ExternalDocumentationObject implements JsonWriter {
@@ -32,6 +34,8 @@ public class ExternalDocumentationObject implements JsonWriter {
     }
 
     /**
+     * Returns the documentation description.
+     *
      * @return the value described by {@link ExternalDocumentationObjectBuilder#withDescription}
      */
     public @Nullable String description() {
@@ -39,6 +43,8 @@ public class ExternalDocumentationObject implements JsonWriter {
     }
 
     /**
+     * Returns the documentation URL.
+     *
       @return the value described by {@link ExternalDocumentationObjectBuilder#withUrl}
      */
     public URI url() {

@@ -17,6 +17,14 @@ public class EncodingObjectBuilder {
     private @Nullable Boolean allowReserved;
 
     /**
+     * Creates an empty encoding builder.
+     */
+    public EncodingObjectBuilder() {
+    }
+
+    /**
+     * Sets the content type used for encoding the property.
+     *
      * @param contentType The Content-Type for encoding a specific property. Default value depends on the property type:
      *                    for <code>string</code> with <code>format</code> being <code>binary</code> – <code>application/octet-stream</code>;
      *                    for other primitive types – <code>text/plain</code>; for <code>object</code> - <code>application/json</code>;
@@ -31,6 +39,8 @@ public class EncodingObjectBuilder {
     }
 
     /**
+     * Sets additional headers for the encoding.
+     *
      * @param headers A map allowing additional information to be provided as headers, for example <code>Content-Disposition</code>.
      *                <code>Content-Type</code> is described separately and SHALL be ignored in this section. This property SHALL
      *                be ignored if the request body media type is not a <code>multipart</code>.
@@ -42,6 +52,8 @@ public class EncodingObjectBuilder {
     }
 
     /**
+     * Sets the serialization style for the property.
+     *
      * @param style Describes how a specific property value will be serialized depending on its type.
      *              See {@link ParameterObjectBuilder#withStyle(String)} for details on the <code>style</code> property.
      *              The behavior follows the same values as <code>query</code> parameters, including default values.
@@ -54,6 +66,8 @@ public class EncodingObjectBuilder {
     }
 
     /**
+     * Sets whether array or object values are exploded into separate parameters.
+     *
      * @param explode When this is true, property values of type <code>array</code> or <code>object</code> generate separate
      *                parameters for each value of the array, or key-value-pair of the map.  For other types of properties this
      *                property has no effect. When <code>style</code> is <code>form</code>, the default value is <code>true</code>.
@@ -67,6 +81,8 @@ public class EncodingObjectBuilder {
     }
 
     /**
+     * Sets whether reserved characters may remain unencoded.
+     *
      * @param allowReserved Determines whether the parameter value SHOULD allow reserved characters, as defined by
      *                      <a href="https://tools.ietf.org/html/rfc3986#section-2.2">RFC3986</a> <code>:/?#[]@!$&amp;'()*+,;=</code>
      *                      to be included without percent-encoding. The default value is <code>false</code>. This property
@@ -79,6 +95,8 @@ public class EncodingObjectBuilder {
     }
 
     /**
+     * Builds the encoding object.
+     *
      * @return A new object
      */
     public EncodingObject build() {

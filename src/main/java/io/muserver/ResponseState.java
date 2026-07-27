@@ -65,6 +65,8 @@ public enum ResponseState {
     private final boolean fullResponseSent;
 
     /**
+     * Indicates whether the response has reached a terminal state.
+     *
      * @return True if the request and response has finished, either successfully or not.
      */
     public boolean endState() {
@@ -76,6 +78,8 @@ public enum ResponseState {
     }
 
     /**
+     * Indicates whether the response completed successfully.
+     *
      * @return True if the full response was sent to the client with no unexpected errors.
      */
     public boolean completedSuccessfully() {

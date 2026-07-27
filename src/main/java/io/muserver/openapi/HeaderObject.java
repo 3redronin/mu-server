@@ -11,6 +11,8 @@ import static io.muserver.openapi.ParameterObject.actualValue;
 import static io.muserver.openapi.ParameterObject.allowedStyles;
 
 /**
+ * Describes an OpenAPI response header.
+ *
  * @see HeaderObjectBuilder
  */
 public class HeaderObject implements JsonWriter {
@@ -66,6 +68,8 @@ public class HeaderObject implements JsonWriter {
     }
 
     /**
+     * Returns the header description.
+     *
      * @return the value described by {@link HeaderObjectBuilder#withDescription}
      */
     public @Nullable String description() {
@@ -73,6 +77,8 @@ public class HeaderObject implements JsonWriter {
     }
 
     /**
+     * Indicates whether the header is required.
+     *
      * @return the value described by {@link HeaderObjectBuilder#withRequired}
      */
     public boolean required() {
@@ -80,6 +86,8 @@ public class HeaderObject implements JsonWriter {
     }
 
     /**
+     * Indicates whether the header is deprecated.
+     *
      * @return the value described by {@link HeaderObjectBuilder#withDeprecated}
      */
     public boolean deprecated() {
@@ -87,6 +95,8 @@ public class HeaderObject implements JsonWriter {
     }
 
     /**
+     * Returns the header style.
+     *
      * @return the value described by {@link HeaderObjectBuilder#withStyle}
      */
     public @Nullable String style() {
@@ -94,6 +104,8 @@ public class HeaderObject implements JsonWriter {
     }
 
     /**
+     * Indicates whether the header value is exploded.
+     *
      * @return the value described by {@link HeaderObjectBuilder#withExplode}
      */
     public boolean explode() {
@@ -101,6 +113,8 @@ public class HeaderObject implements JsonWriter {
     }
 
     /**
+     * Returns the header schema.
+     *
      * @return the value described by {@link HeaderObjectBuilder#withSchema}
      */
     public @Nullable SchemaObject schema() {
@@ -108,6 +122,8 @@ public class HeaderObject implements JsonWriter {
     }
 
     /**
+     * Returns the header example.
+     *
      * @return the value described by {@link HeaderObjectBuilder#withExample}
      */
     public @Nullable Object example() {
@@ -115,6 +131,8 @@ public class HeaderObject implements JsonWriter {
     }
 
     /**
+     * Returns the header examples.
+     *
      * @return the value described by {@link HeaderObjectBuilder#withExamples}
      */
     public @Nullable Map<String, ExampleObject> examples() {
@@ -122,6 +140,8 @@ public class HeaderObject implements JsonWriter {
     }
 
     /**
+     * Returns the header content.
+     *
      * @return the value described by {@link HeaderObjectBuilder#withContent}
      */
     public @Nullable Map<String, MediaTypeObject> content() {

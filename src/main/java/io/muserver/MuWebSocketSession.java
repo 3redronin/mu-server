@@ -232,11 +232,15 @@ public interface MuWebSocketSession {
     void close(int statusCode, @Nullable String reason) throws IOException;
 
     /**
+     * Gets the remote address of the connected client.
+     *
      * @return The client's address
      */
     InetSocketAddress remoteAddress();
 
     /**
+     * Gets the current lifecycle state of the websocket session.
+     *
      * @return The state of the current session
      */
     WebsocketSessionState state();

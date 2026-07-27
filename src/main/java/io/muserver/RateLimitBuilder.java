@@ -17,6 +17,12 @@ public class RateLimitBuilder {
     private RateLimitRejectionAction action = RateLimitRejectionAction.SEND_429;
 
     /**
+     * Creates an empty rate-limit builder.
+     */
+    public RateLimitBuilder() {
+    }
+
+    /**
      * Sets the allowed rate. For example, this would be 10 if you allowed 10 per second.
      * @param rate The rate to use for this bucket
      * @return This builder

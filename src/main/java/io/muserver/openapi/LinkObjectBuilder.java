@@ -23,6 +23,14 @@ public class LinkObjectBuilder {
     private @Nullable ServerObject server;
 
     /**
+     * Creates an empty link object builder.
+     */
+    public LinkObjectBuilder() {
+    }
+
+    /**
+     * Sets the linked operation identifier.
+     *
      * @param operationId The name of an <em>existing</em>, resolvable OAS operation, as defined with a unique <code>operationId</code>.
      * @return The current builder
      */
@@ -32,6 +40,8 @@ public class LinkObjectBuilder {
     }
 
     /**
+     * Sets the linked operation parameters.
+     *
      * @param parameters A map representing parameters to pass to an operation as specified with <code>operationId</code>.
      *                   The key is the parameter name to be used, whereas the value can be a constant or an expression to be
      *                   evaluated and passed to the linked operation.  The parameter name can be qualified using the parameter
@@ -44,6 +54,8 @@ public class LinkObjectBuilder {
     }
 
     /**
+     * Sets the linked operation request body override.
+     *
      * @param requestBody A literal value or {expression} to use as a request body when calling the target operation.
      * @return The current builder
      */
@@ -53,6 +65,8 @@ public class LinkObjectBuilder {
     }
 
     /**
+     * Sets the link description.
+     *
      * @param description A description of the link. <a href="http://spec.commonmark.org/">CommonMark syntax</a> MAY be
      *                    used for rich text representation.
      * @return The current builder
@@ -63,6 +77,8 @@ public class LinkObjectBuilder {
     }
 
     /**
+     * Sets the linked operation server override.
+     *
      * @param server A server object to be used by the target operation.
      * @return The current builder
      */
@@ -72,6 +88,8 @@ public class LinkObjectBuilder {
     }
 
     /**
+     * Builds a link object from the configured values.
+     *
      * @return A new object
      */
     public LinkObject build() {

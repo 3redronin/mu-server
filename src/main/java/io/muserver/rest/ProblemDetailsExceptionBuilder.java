@@ -27,6 +27,12 @@ public class ProblemDetailsExceptionBuilder {
     private final Map<String, @Nullable Object> extensionMembers = new LinkedHashMap<>();
 
     /**
+     * Creates an empty problem-details exception builder.
+     */
+    public ProblemDetailsExceptionBuilder() {
+    }
+
+    /**
      * Creates a builder with the default 500 status.
      *
      * @return A new builder.
@@ -180,6 +186,8 @@ public class ProblemDetailsExceptionBuilder {
     }
 
     /**
+     * Gets the configured HTTP status code.
+     *
      * @return The HTTP status code currently configured for the problem.
      */
     public int status() {
@@ -187,6 +195,8 @@ public class ProblemDetailsExceptionBuilder {
     }
 
     /**
+     * Gets the configured problem title.
+     *
      * @return The title currently configured for the problem, or {@code null}.
      */
     public @Nullable String title() {
@@ -194,6 +204,8 @@ public class ProblemDetailsExceptionBuilder {
     }
 
     /**
+     * Gets the configured problem detail.
+     *
      * @return The detail currently configured for the problem, or {@code null}.
      */
     public @Nullable String detail() {
@@ -201,6 +213,8 @@ public class ProblemDetailsExceptionBuilder {
     }
 
     /**
+     * Gets the configured cause.
+     *
      * @return The cause currently configured for the problem, or {@code null}.
      */
     public @Nullable Throwable cause() {
@@ -208,6 +222,8 @@ public class ProblemDetailsExceptionBuilder {
     }
 
     /**
+     * Gets the configured problem type URI.
+     *
      * @return The type URI currently configured for the problem, or {@code null}.
      */
     public @Nullable URI type() {
@@ -215,6 +231,8 @@ public class ProblemDetailsExceptionBuilder {
     }
 
     /**
+     * Gets the configured problem instance URI.
+     *
      * @return The instance URI currently configured for the problem, or {@code null}.
      */
     public @Nullable URI instance() {
@@ -222,6 +240,8 @@ public class ProblemDetailsExceptionBuilder {
     }
 
     /**
+     * Gets the configured problem extension members.
+     *
      * @return The extension members currently configured for the problem.
      */
     public Map<String, @Nullable Object> extensionMembers() {

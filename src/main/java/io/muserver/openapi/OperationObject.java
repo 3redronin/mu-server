@@ -13,6 +13,8 @@ import static io.muserver.openapi.Jsonizer.append;
 import static java.util.stream.Collectors.toSet;
 
 /**
+ * Describes an operation available on an OpenAPI path.
+ *
  * @see OperationObjectBuilder
  */
 public class OperationObject implements JsonWriter {
@@ -76,6 +78,8 @@ public class OperationObject implements JsonWriter {
     }
 
     /**
+     * Indicates whether the operation is deprecated.
+     *
      * @return the value described by {@link OperationObjectBuilder#withDeprecated(Boolean)}, or false if not specified when building
      */
     public boolean isDeprecated() {
@@ -83,6 +87,8 @@ public class OperationObject implements JsonWriter {
     }
 
     /**
+     * Gets the tags assigned to the operation.
+     *
      * @return the value described by {@link OperationObjectBuilder#withTags}
      */
     public @Nullable List<String> tags() {
@@ -90,77 +96,99 @@ public class OperationObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link OperationObjectBuilder#withSummary}
+     * Gets the short summary for the operation.
+     *
+     * @return the value described by {@link OperationObjectBuilder#withSummary}
      */
     public @Nullable String summary() {
         return summary;
     }
 
     /**
-      @return the value described by {@link OperationObjectBuilder#withDescription}
+     * Gets the detailed description for the operation.
+     *
+     * @return the value described by {@link OperationObjectBuilder#withDescription}
      */
     public @Nullable String description() {
         return description;
     }
 
     /**
-      @return the value described by {@link OperationObjectBuilder#withExternalDocs}
+     * Gets the external documentation for the operation.
+     *
+     * @return the value described by {@link OperationObjectBuilder#withExternalDocs}
      */
     public @Nullable ExternalDocumentationObject externalDocs() {
         return externalDocs;
     }
 
     /**
-      @return the value described by {@link OperationObjectBuilder#withOperationId}
+     * Gets the operation identifier.
+     *
+     * @return the value described by {@link OperationObjectBuilder#withOperationId}
      */
     public @Nullable String operationId() {
         return operationId;
     }
 
     /**
-      @return the value described by {@link OperationObjectBuilder#withParameters}
+     * Gets the parameters accepted by the operation.
+     *
+     * @return the value described by {@link OperationObjectBuilder#withParameters}
      */
     public @Nullable List<ParameterObject> parameters() {
         return parameters;
     }
 
     /**
-      @return the value described by {@link OperationObjectBuilder#withRequestBody}
+     * Gets the request body description for the operation.
+     *
+     * @return the value described by {@link OperationObjectBuilder#withRequestBody}
      */
     public @Nullable RequestBodyObject requestBody() {
         return requestBody;
     }
 
     /**
-      @return the value described by {@link OperationObjectBuilder#withResponses}
+     * Gets the possible responses for the operation.
+     *
+     * @return the value described by {@link OperationObjectBuilder#withResponses}
      */
     public ResponsesObject responses() {
         return responses;
     }
 
     /**
-      @return the value described by {@link OperationObjectBuilder#withCallbacks}
+     * Gets the callbacks associated with the operation.
+     *
+     * @return the value described by {@link OperationObjectBuilder#withCallbacks}
      */
     public @Nullable Map<String, CallbackObject> callbacks() {
         return callbacks;
     }
 
     /**
-      @return the value described by {@link OperationObjectBuilder#withDeprecated}
+     * Gets the explicitly configured deprecation flag.
+     *
+     * @return the value described by {@link OperationObjectBuilder#withDeprecated}
      */
     public @Nullable Boolean deprecated() {
         return deprecated;
     }
 
     /**
-      @return the value described by {@link OperationObjectBuilder#withSecurity}
+     * Gets the security requirements for the operation.
+     *
+     * @return the value described by {@link OperationObjectBuilder#withSecurity}
      */
     public @Nullable List<SecurityRequirementObject> security() {
         return security;
     }
 
     /**
-      @return the value described by {@link OperationObjectBuilder#withServers}
+     * Gets the servers that can service the operation.
+     *
+     * @return the value described by {@link OperationObjectBuilder#withServers}
      */
     public @Nullable List<ServerObject> servers() {
         return servers;

@@ -32,6 +32,8 @@ public class BodySize {
     }
 
     /**
+     * Returns how the body size is declared.
+     *
      * @return the type of body size declaration
      */
     public BodyType type() {
@@ -39,6 +41,8 @@ public class BodySize {
     }
 
     /**
+     * Returns the known body size, when one is available.
+     *
      * @return the size of the body in bytes if known; or <code>null</code> if unknown (e.g. for a chunked body)
      */
     @Nullable
@@ -67,4 +71,3 @@ public class BodySize {
             '}';
     }
 }
-
