@@ -31,7 +31,10 @@ while the coordinator remains the sole owner of RFC stream-state transitions.
 Request-body read deadlines are monotonic timed waits owned by the body buffer:
 they do not require a scheduled task or coordinator round trip. The reader,
 coordinator, application executors, and timer now have separate execution
-capacity, and the deliberate cross-domain boundaries are listed below.
+capacity. Accepted sockets, live-connection publication, and listener shutdown
+admission share one lifecycle lock, so work queued on the connection executor
+cannot start a connection after server shutdown. The deliberate cross-domain
+boundaries are listed below.
 
 ## Goals
 
@@ -62,6 +65,12 @@ There are five execution domains and one timer facility:
 * timer scheduling.
 
 ### Connection I/O
+
+Before protocol selection, the listener lifecycle lock owns the transition from
+an accepted socket to a published live connection. Shutdown closes accepted
+sockets that have not crossed that boundary and prevents their queued connection
+tasks from later being promoted. Live-connection retirement signals a condition
+used by graceful shutdown; it is not discovered by polling.
 
 Each HTTP/2 connection has:
 
@@ -157,6 +166,7 @@ as defined by RFC 9113 Section 7.
 
 | State or resource | Owner |
 | --- | --- |
+| Listener state, accepted socket admission, and live connection index | `ConnectionAcceptor` lifecycle lock |
 | Socket input, input buffer, HPACK decoder | Connection reader |
 | Connection shutdown and new-stream admission gate | `Http2Connection` state lock |
 | RFC stream protocol state | Coordinator |
@@ -344,6 +354,8 @@ Permitted cross-thread primitives are deliberately narrow:
 
 * a blocking mailbox for coordinator commands;
 * a small promise backed by a latch and a result or error;
+* one listener lifecycle lock and condition for accepted/live connection
+  admission and graceful-shutdown draining;
 * one short-held connection state lock for shutdown, admission, and atomic
   publication across the protocol components;
 * one short-held lock for atomic connection-and-stream inbound flow-control
