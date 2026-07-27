@@ -9,9 +9,8 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.ConcurrentLinkedQueue;
-
-import static java.util.Collections.emptyList;
+import java.util.ArrayDeque;
+import java.util.Queue;
 
 abstract class BaseResponse implements MuResponse {
 
@@ -22,8 +21,11 @@ abstract class BaseResponse implements MuResponse {
     @Nullable
     protected volatile OutputStream wrappedOut;
 
+    private final Object completionListenersLock = new Object();
+    private final Queue<ResponseCompleteListener> completionListeners = new ArrayDeque<>();
     @Nullable
-    private ConcurrentLinkedQueue<ResponseCompleteListener> completionListeners = null;
+    private ResponseInfo completionInfo;
+    private boolean completionListenersDrained;
 
     private volatile ResponseState state = ResponseState.NOTHING;
 
@@ -204,16 +206,35 @@ abstract class BaseResponse implements MuResponse {
         if (listener == null) {
             throw new NullPointerException("Null completion listener");
         }
-        if (completionListeners == null) {
-            completionListeners = new ConcurrentLinkedQueue<>();
+        ResponseInfo completed;
+        synchronized (completionListenersLock) {
+            completed = completionInfo;
+            if (completed == null || !completionListenersDrained) {
+                completionListeners.add(listener);
+                return;
+            }
         }
-        completionListeners.add(listener);
+        request.serverImpl().executeResponseCompletionTask(() -> listener.onComplete(completed));
     }
 
-    Iterable<ResponseCompleteListener> completionListeners() {
-        var cl = completionListeners;
-        return cl == null ? emptyList() : cl;
+    void notifyCompletionListeners(ResponseInfo completed) {
+        synchronized (completionListenersLock) {
+            if (completionInfo != null) {
+                return;
+            }
+            completionInfo = completed;
+        }
+
+        while (true) {
+            ResponseCompleteListener listener;
+            synchronized (completionListenersLock) {
+                listener = completionListeners.poll();
+                if (listener == null) {
+                    completionListenersDrained = true;
+                    return;
+                }
+            }
+            listener.onComplete(completed);
+        }
     }
-
-
 }

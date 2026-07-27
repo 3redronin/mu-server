@@ -654,6 +654,62 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void completionListenerRegistrationIsOrderedAgainstNotification() throws Exception {
+        var handlerExecutor = track(Executors.newFixedThreadPool(2, namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
+        var responseRef = new CompletableFuture<MuResponse>();
+        var firstListenerStarted = new CountDownLatch(1);
+        var releaseFirstListener = new CountDownLatch(1);
+        var firstListenerThread = new CompletableFuture<String>();
+        var lateListenerThread = new CompletableFuture<String>();
+        var serverListenerFinished = new CompletableFuture<Void>();
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addResponseCompleteListener(info -> serverListenerFinished.complete(null))
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.addCompletionListener(info -> {
+                    firstListenerThread.complete(Thread.currentThread().getName());
+                    firstListenerStarted.countDown();
+                    try {
+                        releaseFirstListener.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+                responseRef.complete(response);
+                response.write("done");
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/").flushHeaders();
+            assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
+            assertThat(client.readBody(client.readHeaders()), equalTo("done"));
+            assertThat(firstListenerStarted.await(5, TimeUnit.SECONDS), is(true));
+
+            responseRef.get(5, TimeUnit.SECONDS).addCompletionListener(info ->
+                lateListenerThread.complete(Thread.currentThread().getName())
+            );
+            releaseFirstListener.countDown();
+
+            assertThat(
+                lateListenerThread.get(5, TimeUnit.SECONDS),
+                equalTo(firstListenerThread.get(5, TimeUnit.SECONDS))
+            );
+            serverListenerFinished.get(5, TimeUnit.SECONDS);
+
+            var postCompletionThread = new CompletableFuture<String>();
+            responseRef.get(5, TimeUnit.SECONDS).addCompletionListener(info ->
+                postCompletionThread.complete(Thread.currentThread().getName())
+            );
+            assertThat(postCompletionThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
+        } finally {
+            releaseFirstListener.countDown();
+        }
+    }
+
+    @Test
     void aSlowHttp1CompletionListenerDoesNotDelayTheNextRequest() throws Exception {
         var handlerExecutor = track(Executors.newFixedThreadPool(2, namedThreads("handler-")));
         var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
