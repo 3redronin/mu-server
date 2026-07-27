@@ -34,8 +34,16 @@ abstract class BaseResponse implements MuResponse {
         this.headers = headers;
     }
 
-    void setState(ResponseState newState) {
+    /**
+     * Publishes a state transition. The first terminal state wins so that
+     * concurrent cleanup cannot turn a failed exchange into a successful one.
+     */
+    synchronized boolean setState(ResponseState newState) {
+        if (state.endState()) {
+            return false;
+        }
         state = newState;
+        return true;
     }
 
     @Nullable

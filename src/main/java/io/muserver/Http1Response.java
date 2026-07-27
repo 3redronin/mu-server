@@ -109,11 +109,14 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
     }
 
     @Override
-    void setState(ResponseState newState) {
-        super.setState(newState);
+    synchronized boolean setState(ResponseState newState) {
+        if (responseState().endState()) {
+            return false;
+        }
         if (newState.endState()) {
             endNanos = System.nanoTime();
         }
+        return super.setState(newState);
     }
 
     @Override
