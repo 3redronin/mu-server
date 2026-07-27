@@ -177,6 +177,7 @@ public interface MuWebSocketSession {
      * Sends a ping message to the client, which is used for keeping sockets alive.
      * @param payload The message to send.
      * @throws IOException If the ping cannot be written to the client.
+     * @throws IllegalArgumentException if the payload exceeds 125 bytes
      */
     void sendPing(ByteBuffer payload) throws IOException;
 
@@ -207,6 +208,7 @@ public interface MuWebSocketSession {
      * Sends a pong message to the client, generally in response to receiving a ping via {@link MuWebSocket#onPing(ByteBuffer)}
      * @param payload The payload to send back to the client.
      * @throws IOException If the pong cannot be written to the client.
+     * @throws IllegalArgumentException if the payload exceeds 125 bytes
      */
     void sendPong(ByteBuffer payload) throws IOException;
 
@@ -244,6 +246,7 @@ public interface MuWebSocketSession {
      * @param statusCode The status code to send, such as <code>1000</code>. See <a href="https://tools.ietf.org/html/rfc6455#section-7.4">https://tools.ietf.org/html/rfc6455#section-7.4</a>
      * @param reason An optional reason for closing.
      * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
+     * @throws IllegalArgumentException if the UTF-8-encoded reason exceeds 123 bytes
      */
     void close(int statusCode, @Nullable String reason) throws IOException;
 

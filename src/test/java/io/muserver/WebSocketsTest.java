@@ -41,6 +41,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static scaffolding.ClientUtils.*;
 import static scaffolding.MuAssert.assertEventually;
@@ -1019,6 +1020,49 @@ public class WebSocketsTest {
 
         clientSocket.close(1000, "Finished");
         assertNotTimedOut("Closing", serverSocket.closedLatch);
+    }
+
+    @Test
+    void outgoingControlFramesCannotExceed125Bytes() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket).withPath("/ws"))
+            .start();
+
+        ClientListener listener = new ClientListener();
+        WebSocket clientSocket = client.newWebSocket(
+            webSocketRequest(server.uri().resolve("/ws")),
+            listener
+        );
+        assertNotTimedOut("Connecting", serverSocket.connectedLatch);
+
+        var tooLarge = ByteBuffer.allocate(126);
+        assertAll(
+            () -> assertThrows(
+                IllegalArgumentException.class,
+                () -> serverSocket.session().sendPing(tooLarge.duplicate())
+            ),
+            () -> assertThrows(
+                IllegalArgumentException.class,
+                () -> serverSocket.session().sendPong(tooLarge.duplicate())
+            ),
+            () -> assertThrows(
+                IllegalArgumentException.class,
+                () -> serverSocket.session().close(1000, "x".repeat(124))
+            )
+        );
+        assertThat(serverSocket.state(), equalTo(WebsocketSessionState.OPEN));
+
+        assertDoesNotThrow(() ->
+            serverSocket.session().sendPing(ByteBuffer.allocate(125))
+        );
+        assertNotTimedOut("Pong wait", serverSocket.pongLatch);
+        assertDoesNotThrow(() ->
+            serverSocket.session().sendPong(ByteBuffer.allocate(125))
+        );
+        assertDoesNotThrow(() ->
+            serverSocket.session().close(1000, "x".repeat(123))
+        );
+        assertNotTimedOut("Closing", listener.closedLatch);
     }
 
     @Test
