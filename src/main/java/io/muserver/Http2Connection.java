@@ -148,15 +148,16 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         }
     }
 
-    private Http2WriteCoordinator.CommandResult resetPendingWritesForStream(
-        int streamId,
+    private void resetPendingWritesForStream(
+        Http2ResetStreamFrame resetFrame,
         IOException reason,
         @Nullable Http2Stream stream
     ) throws Http2Exception {
         stateLock.lock();
         try {
             if (writeState.canSendFrames) {
-                return writeCoordinator.resetStream(streamId, reason, stream);
+                writeCoordinator.resetStream(resetFrame, reason, stream);
+                return;
             }
             throw Http2Exception.connection(Http2ErrorCode.INTERNAL_ERROR, "HTTP/2 writer closed before peer reset was processed");
         } finally {
@@ -521,7 +522,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                     }
                     write(new Http2ResetStreamFrame(h2e.streamId(), h2e.errorCode().code()));
                     var stream = streams.get(h2e.streamId());
-                    if (stream != null) {
+                    if (stream != null && !stream.peerResetWasRead()) {
                         stream.cancel(new IOException("Stream error", h2e));
                     }
                 } catch (SocketTimeoutException e) {
@@ -587,7 +588,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     }
 
-    private void readResetStreamFrame(Http2FrameHeader fh) throws Http2Exception, InterruptedException {
+    private void readResetStreamFrame(Http2FrameHeader fh) throws Http2Exception {
         var rstStream = Http2ResetStreamFrame.readFrom(fh, buffer);
         int streamId = rstStream.streamId();
         var stream = streams.get(streamId);
@@ -598,10 +599,12 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
         // The application exchange may already have ended while response DATA remains pending.
         // Reset coordinator state even when there is no longer an application-facing stream.
-        resetPendingWritesForStream(streamId, new IOException("Peer reset stream " + streamId), stream).await();
         if (stream != null) {
-            stream.notifyReset(rstStream);
+            // The coordinator owns the reset, but this reader-owned fence prevents
+            // subsequent wire-ordered DATA or trailers from reaching the body first.
+            stream.recordPeerResetFromReader();
         }
+        resetPendingWritesForStream(rstStream, new IOException("Peer reset stream " + streamId), stream);
     }
 
 
@@ -707,7 +710,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                 throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Received data on closed stream", fh.streamId());
             }
         } else {
-            if (!stream.canReceiveData()) {
+            if (stream.peerResetWasRead() || !stream.canReceiveData()) {
                 refundDiscardedConnectionCredit(fh.length());
                 throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Received data on closed stream", fh.streamId());
             }
@@ -729,6 +732,13 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             log.info("Got headers " + headerFragment);
             var existing = streams.get(headerFragment.streamId());
             if (existing != null) {
+                if (existing.peerResetWasRead()) {
+                    throw new Http2Exception(
+                        Http2ErrorCode.STREAM_CLOSED,
+                        "Received headers after RST_STREAM",
+                        headerFragment.streamId()
+                    );
+                }
                 existing.onTrailers(headerFragment);
                 return;
             }
@@ -814,18 +824,13 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                     stateLock.lock();
                     try {
                         markConnectionErroredLocked();
-                        writeCoordinator.failAll(e);
                     } finally {
                         stateLock.unlock();
                     }
+                    writeCoordinator.failAll(e);
                 }
             }
-            stateLock.lock();
-            try {
-                writeCoordinator.failAll(new IOException("HTTP/2 connection write loop closed"));
-            } finally {
-                stateLock.unlock();
-            }
+            writeCoordinator.failAll(new IOException("HTTP/2 connection write loop closed"));
             closeSocketQuietly();
             // note: don't close the output stream here as that closes the TLS connection in java
             log.info("Connection write loop closing with state=" + writeState);

@@ -124,6 +124,12 @@ lifecycle. Initially supported states are:
 
 Only coordinator processing can transition this state.
 
+Peer `RST_STREAM` commands are one-way. Until all inbound stream frames are
+coordinator commands, the reader records a monotonic "reset seen" fence on the
+stream. This is input-ordering state, not a protocol-state transition: it only
+prevents later wire-ordered DATA or trailers from reaching the request body
+before the coordinator closes the stream and purges pending writes.
+
 An outbound frame command is validated and its state transition reserved by the
 coordinator before it becomes pending for socket output. A reset closes the
 stream, fails or discards all unsent frames for that stream, and prevents later
@@ -134,6 +140,11 @@ by RFC 9113 Section 5.4.2.
 `RST_STREAM` is therefore the final non-priority frame emitted for a stream,
 apart from those permitted additional resets. Frames already written before the
 reset command is processed remain validly ordered before the reset.
+
+Applying a peer reset can close protocol state, error the request-body buffer,
+mark the response cancelled, and signal an async handler waiter on the
+coordinator because none of those operations invokes user code. Completion
+listeners and other application callbacks continue on the handler task.
 
 ## Flow control
 

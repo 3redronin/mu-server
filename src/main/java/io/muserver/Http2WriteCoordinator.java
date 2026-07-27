@@ -11,7 +11,6 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -23,28 +22,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * the command-processing, scheduling, and failure methods.</p>
  */
 final class Http2WriteCoordinator {
-
-    static final class CommandResult {
-        private final CountDownLatch completed = new CountDownLatch(1);
-        private volatile @Nullable Http2Exception error;
-
-        void await() throws InterruptedException, Http2Exception {
-            completed.await();
-            Http2Exception currentError = error;
-            if (currentError != null) {
-                throw currentError;
-            }
-        }
-
-        private void complete() {
-            completed.countDown();
-        }
-
-        private void fail(Http2Exception error) {
-            this.error = error;
-            completed.countDown();
-        }
-    }
 
     static final class WritableFrame {
         private final LogicalHttp2Frame frame;
@@ -100,15 +77,15 @@ final class Http2WriteCoordinator {
 
     private static final class ResetStream implements Command {
         private final int streamId;
+        private final Http2ResetStreamFrame resetFrame;
         private final IOException reason;
         private final @Nullable Http2Stream stream;
-        private final @Nullable CommandResult result;
 
-        private ResetStream(int streamId, IOException reason, @Nullable Http2Stream stream, @Nullable CommandResult result) {
-            this.streamId = streamId;
+        private ResetStream(Http2ResetStreamFrame resetFrame, IOException reason, @Nullable Http2Stream stream) {
+            this.streamId = resetFrame.streamId();
+            this.resetFrame = resetFrame;
             this.reason = reason;
             this.stream = stream;
-            this.result = result;
         }
     }
 
@@ -197,13 +174,12 @@ final class Http2WriteCoordinator {
         mailbox.add(new QueueWrite(task, true, false));
     }
 
-    CommandResult resetStream(int streamId, IOException reason, @Nullable Http2Stream stream) {
+    void resetStream(Http2ResetStreamFrame resetFrame, IOException reason, @Nullable Http2Stream stream) {
+        int streamId = resetFrame.streamId();
         if (streamId <= 0) {
             throw new IllegalArgumentException("A reset stream ID must be positive");
         }
-        CommandResult result = new CommandResult();
-        mailbox.add(new ResetStream(streamId, reason, stream, result));
-        return result;
+        mailbox.add(new ResetStream(resetFrame, reason, stream));
     }
 
     void openStream(int streamId, int initialCredit) {
@@ -370,10 +346,7 @@ final class Http2WriteCoordinator {
             streamCredits.remove(reset.streamId);
             failPendingStreamWrites(reset.streamId, reset.reason, true);
             if (reset.stream != null) {
-                reset.stream.resetProtocolState();
-            }
-            if (reset.result != null) {
-                reset.result.complete();
+                reset.stream.applyPeerReset(reset.resetFrame);
             }
         } else if (command instanceof OpenStream) {
             OpenStream open = (OpenStream) command;

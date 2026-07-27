@@ -52,9 +52,12 @@ class Http2WriteCoordinatorTest {
         coordinator.forgetStream(1);
         coordinator.processAvailableCommands();
 
-        var reset = coordinator.resetStream(1, new IOException("peer reset stream 1"), null);
+        coordinator.resetStream(
+            new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()),
+            new IOException("peer reset stream 1"),
+            null
+        );
         coordinator.processAvailableCommands();
-        reset.await();
 
         var late = task(data(1, "late"));
         coordinator.submit(late);

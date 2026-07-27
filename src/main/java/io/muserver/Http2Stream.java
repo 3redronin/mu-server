@@ -22,6 +22,9 @@ class Http2Stream implements ResponseInfo {
     @Nullable
     private Http2Response response;
     private volatile Http2StreamState state;
+    // Reader-owned, monotonic fence. It prevents frames following RST_STREAM on the
+    // wire from reaching the body before the coordinator applies the reset command.
+    private boolean peerResetRead;
     private long endTime = 0;
     private final InputStream bodyInputStream;
     private final @Nullable Long declaredRequestBodyLength;
@@ -56,19 +59,31 @@ class Http2Stream implements ResponseInfo {
         return request.completedSuccessfully() && requiredResponse().responseState().completedSuccessfully();
     }
 
-    void resetProtocolState() {
-        state = state.reset();
+    void recordPeerResetFromReader() {
+        peerResetRead = true;
     }
 
-    void notifyReset(Http2ResetStreamFrame rstStream) {
+    boolean peerResetWasRead() {
+        return peerResetRead;
+    }
+
+    /**
+     * Applies the I/O-safe effects of a peer reset. This closes protocol state,
+     * wakes body or async waiters, and does not invoke completion listeners or
+     * other application callbacks.
+     */
+    void applyPeerReset(Http2ResetStreamFrame rstStream) {
+        state = state.reset();
         Http2Response currentResponse = requiredResponse();
         if (!currentResponse.responseState().endState()) {
             currentResponse.setState(ResponseState.CLIENT_CANCELLED);
         }
-        request.onClientCancelled();
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).onStreamReset(rstStream);
         }
+        // This only completes the private future that the handler task is waiting on.
+        // Completion listeners remain on that application task.
+        request.onClientCancelled();
     }
 
     void cancel(IOException reason) {
