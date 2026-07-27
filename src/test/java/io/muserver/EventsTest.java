@@ -84,13 +84,13 @@ public class EventsTest {
             .addHandler(Method.GET, "/blah", (req, resp, pp) -> resp.write("Hello"))
             .start();
 
-        try (Http1Client client = Http1Client.connect(server)) {
-            client.writeRequestLine(Method.GET, "/blah")
-                .writeHeader("X-Big", randomAsciiStringOfLength(2000))
-                .endHeaders()
-                .flush();
-            assertThat(client.readLine(), containsString("431"));
-        }
+        Http1Client client = Http1Client.connect(server);
+        client.writeRequestLine(Method.GET, "/blah")
+            .writeHeader("X-Big", randomAsciiStringOfLength(2000))
+            .endHeaders()
+            .flush();
+        assertThat(client.readLine(), containsString("431"));
+        client.abort();
 
         RejectedRequest info = rejected.get(10, TimeUnit.SECONDS);
         assertThat(info.status(), is(431));

@@ -163,13 +163,18 @@ class Http1Connection extends BaseHttpConnection {
                         requestUri.toString(),
                         this
                     );
-                    muResponse.status(rejectException.status());
-                    muResponse.headers().set(rejectException.responseHeaders());
-                    if (rejectException.getMessage() != null) {
-                        muResponse.write(rejectException.getMessage());
+                    try {
+                        muResponse.status(rejectException.status());
+                        muResponse.headers().set(rejectException.responseHeaders());
+                        if (rejectException.getMessage() != null) {
+                            muResponse.write(rejectException.getMessage());
+                        }
+                        closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest);
+                    } finally {
+                        // Rejection listeners are also an audit/metrics hook. Notify after
+                        // attempting the response even when the client aborts during its write.
+                        server.onRequestRejected(rejectedRequest);
                     }
-                    closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest);
-                    server.onRequestRejected(rejectedRequest);
                 } else {
 
                     onRequestStarted(muRequest);

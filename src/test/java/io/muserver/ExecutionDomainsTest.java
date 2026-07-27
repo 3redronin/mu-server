@@ -170,8 +170,10 @@ class ExecutionDomainsTest {
     }
 
     @Test
-    void malformedHttp2RejectionListenersDoNotDelayProtocolProgress() throws Exception {
-        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+    void rejectedAsyncExecutorFallsBackWithoutBlockingTheHttp2Reader() throws Exception {
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("rejected-async-")));
+        asyncExecutor.shutdown();
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
         var releaseListener = new CountDownLatch(1);
         var rejectionThread = new CompletableFuture<String>();
@@ -179,6 +181,7 @@ class ExecutionDomainsTest {
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .withMaxHeadersSize(1024)
             .withAsyncExecutor(asyncExecutor)
+            .withHandlerExecutor(handlerExecutor)
             .withConnectionExecutor(connectionExecutor)
             .addRequestRejectListener(info -> {
                 rejectionThread.complete(Thread.currentThread().getName());
@@ -205,7 +208,7 @@ class ExecutionDomainsTest {
                 RFCTestUtils.readIgnoringWindowUpdates(con, Http2DataFrame.class).endStream(),
                 is(true)
             );
-            assertThat(rejectionThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
+            assertThat(rejectionThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
 
             byte[] pingData = {0, 1, 2, 3, 4, 5, 6, 7};
             con.writeFrame(new Http2Ping(false, pingData)).flush();

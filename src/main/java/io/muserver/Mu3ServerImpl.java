@@ -314,6 +314,7 @@ class Mu3ServerImpl implements MuServer {
         }
     }
 
+    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
     void onRequestRejected(RejectedRequest info) {
         if (requestRejectListeners.isEmpty()) {
             return;
@@ -321,10 +322,20 @@ class Mu3ServerImpl implements MuServer {
         Runnable notification = () -> notifyRequestRejected(info);
         try {
             asyncExecutor.execute(notification);
-        } catch (RejectedExecutionException rejected) {
-            // The protocol response has already been sent or queued. Preserve notification
-            // delivery if a caller-supplied executor rejects during shutdown or overload.
-            notification.run();
+        } catch (RejectedExecutionException asyncRejected) {
+            // Keep user callbacks off protocol readers even if a caller-supplied async
+            // executor is unavailable. The handler executor is the remaining application
+            // domain; if both reject, there is no safe executor on which to deliver this.
+            if (handlerExecutor == asyncExecutor) {
+                log.error("Request rejection notification was not delivered because the application executor rejected it", asyncRejected);
+                return;
+            }
+            try {
+                handlerExecutor.execute(notification);
+            } catch (RejectedExecutionException handlerRejected) {
+                handlerRejected.addSuppressed(asyncRejected);
+                log.error("Request rejection notification was not delivered because both application executors rejected it", handlerRejected);
+            }
         }
     }
 
