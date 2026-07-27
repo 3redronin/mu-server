@@ -32,7 +32,7 @@ class WebsocketConnection implements MuWebSocketSession {
     private @Nullable OutputStream outputStream;
     final WebSocketHandlerBuilder.Settings settings;
 
-    private volatile WebsocketSessionState state = WebsocketSessionState.NOT_STARTED;
+    private final WebsocketLifecycle lifecycle = new WebsocketLifecycle();
     private final Http1Connection httpConnection;
     private final Mu3ServerImpl server;
     private final MuWebSocket webSocket;
@@ -41,8 +41,8 @@ class WebsocketConnection implements MuWebSocketSession {
     private final AtomicBoolean applicationEventRunnerScheduled = new AtomicBoolean();
     private final AtomicBoolean errorEventQueued = new AtomicBoolean();
     private final AtomicBoolean serverShutdownRequested = new AtomicBoolean();
-    private boolean closeReceived = false;
-    private boolean closeSent = false;
+    private volatile boolean closeReceived = false;
+    private volatile boolean closeSent = false;
     private final Lock writeLock = new ReentrantLock();
     private final @Nullable WebsocketPingTracker pingTracker;
     private ReadState readState = ReadState.NONE;
@@ -97,14 +97,14 @@ class WebsocketConnection implements MuWebSocketSession {
         pingFuture = httpConnection.serverImpl().scheduleConnectionTask(() -> {
             writeLock.lock();
             try {
-                if (state == WebsocketSessionState.OPEN) {
+                if (lifecycle.state() == WebsocketSessionState.OPEN) {
                     sendPing(java.util.Objects.requireNonNull(pingTracker).newPingPayload());
                 }
-                if (state == WebsocketSessionState.OPEN) {
+                if (lifecycle.state() == WebsocketSessionState.OPEN) {
                     startPinging();
                 }
             } catch (IOException e) {
-                if (state == WebsocketSessionState.OPEN) {
+                if (lifecycle.state() == WebsocketSessionState.OPEN) {
                     // force an IO exception on the read operation in runAndBlockUntilDone()
                     Mutils.closeSilently(inputStream);
                 }
@@ -122,7 +122,7 @@ class WebsocketConnection implements MuWebSocketSession {
         connectionTaskThread = Thread.currentThread();
 
         try {
-            state = WebsocketSessionState.OPEN;
+            lifecycle.onConnected();
             invokeApplicationEvent(() -> webSocket.onConnect(this));
 
             if (settings.pingIntervalMillis > 0) {
@@ -233,9 +233,7 @@ class WebsocketConnection implements MuWebSocketSession {
                     if (payloadLen == 1) {
                         throw frameError(1002, "Close frame payload of 1 byte is invalid");
                     }
-                    if (state == WebsocketSessionState.OPEN) {
-                        state = WebsocketSessionState.CLIENT_CLOSING;
-                    }
+                    lifecycle.onClientCloseStarted();
                     closeReceived = true;
                     // close frame
                     short closeCode;
@@ -251,13 +249,7 @@ class WebsocketConnection implements MuWebSocketSession {
                     log.info("Client close: " + closeCode + " " + reason);
                     String closeReason = reason;
                     invokeApplicationEvent(() -> webSocket.onClientClosed(closeCode, closeReason));
-                    if (closeSent) {
-                        if (state == WebsocketSessionState.CLIENT_CLOSING) {
-                            state = WebsocketSessionState.CLIENT_CLOSED;
-                        } else if (state == WebsocketSessionState.SERVER_CLOSING) {
-                            state = WebsocketSessionState.SERVER_CLOSED;
-                        }
-                    }
+                    completeCloseHandshakeIfCloseSent();
                 } else if (opcode == 0x9) {
                     invokeApplicationEvent(() -> webSocket.onPing(slice));
                 } else if (opcode == 0xA) {
@@ -273,7 +265,7 @@ class WebsocketConnection implements MuWebSocketSession {
         } catch (Throwable e) {
             if (!serverShutdownRequested.get()
                 && !errorEventQueued.get()
-                && state != WebsocketSessionState.TIMED_OUT) {
+                && lifecycle.state() != WebsocketSessionState.TIMED_OUT) {
                 WebsocketSessionState errorState =
                     e instanceof TimeoutException || e instanceof SocketTimeoutException
                         ? WebsocketSessionState.TIMED_OUT
@@ -350,6 +342,19 @@ class WebsocketConnection implements MuWebSocketSession {
         return new ProtocolException(reason);
     }
 
+    private void completeCloseHandshakeIfCloseSent() {
+        // Synchronize with the close-frame writer before publishing that both
+        // sides of the closing handshake have completed.
+        writeLock.lock();
+        try {
+            if (closeSent) {
+                lifecycle.onCloseHandshakeCompleted();
+            }
+        } finally {
+            writeLock.unlock();
+        }
+    }
+
     @Override
     public boolean closeReceived() {
         return closeReceived;
@@ -369,7 +374,7 @@ class WebsocketConnection implements MuWebSocketSession {
             // The connection-level timeout closes the transport immediately after this
             // method returns. Publish the terminal state before the callback so default
             // implementations do not try to write a close frame to that closed transport.
-            state = WebsocketSessionState.TIMED_OUT;
+            lifecycle.terminateWith(WebsocketSessionState.TIMED_OUT);
             enqueueApplicationEvent(() ->
                 webSocket.onError(new TimeoutException("Connection idle timeout"))
             );
@@ -448,7 +453,7 @@ class WebsocketConnection implements MuWebSocketSession {
             try {
                 webSocket.onError(cause);
             } finally {
-                state = errorState;
+                lifecycle.terminateWith(errorState);
             }
         };
     }
@@ -599,11 +604,9 @@ class WebsocketConnection implements MuWebSocketSession {
     public void close() throws IOException {
         writeLock.lock();
         try {
+            lifecycle.onServerCloseStarted();
             writeFragment((byte)0b10001000, null, 0, 0, null, null);
             if (!closeSent) {
-                if (state == WebsocketSessionState.OPEN) {
-                    state = WebsocketSessionState.SERVER_CLOSING;
-                }
                 closeSent = true;
             }
         } finally {
@@ -618,9 +621,7 @@ class WebsocketConnection implements MuWebSocketSession {
         }
         writeLock.lock();
         try {
-            if (state == WebsocketSessionState.OPEN) {
-                state = WebsocketSessionState.SERVER_CLOSING;
-            }
+            lifecycle.onServerCloseStarted();
             if (reason == null || reason.isEmpty()) {
                 byte[] closeCodeBytes = new byte[2];
                 closeCodeBytes[0] = (byte) ((statusCode >> 8) & 0xFF);
@@ -729,7 +730,7 @@ class WebsocketConnection implements MuWebSocketSession {
 
     @Override
     public WebsocketSessionState state() {
-        return state;
+        return lifecycle.state();
     }
 
     @Override
@@ -742,7 +743,7 @@ class WebsocketConnection implements MuWebSocketSession {
     @Override
     public String toString() {
         return "WebsocketConnection{" +
-            "state=" + state +
+            "state=" + lifecycle.state() +
             ", remote=" + remoteAddress() +
             '}';
     }
