@@ -1147,7 +1147,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     private void startHandledStream(Http2Stream stream) {
         try {
-            CompletableFuture<Void> asyncCompletion = handleExchange(stream.request, stream.response());
+            CompletableFuture<@Nullable Void> asyncCompletion = handleExchange(stream.request, stream.response());
             if (asyncCompletion == null) {
                 finishHandledStream(stream, null, false);
             } else {

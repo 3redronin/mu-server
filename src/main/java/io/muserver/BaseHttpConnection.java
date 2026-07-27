@@ -65,7 +65,7 @@ abstract class BaseHttpConnection implements HttpConnection {
         server.onRequestStarted(req);
     }
 
-    protected @Nullable CompletableFuture<Void> handleExchange(Mu3Request muRequest, BaseResponse muResponse) throws Throwable {
+    protected @Nullable CompletableFuture<@Nullable Void> handleExchange(Mu3Request muRequest, BaseResponse muResponse) throws Throwable {
         try {
             var handled = false;
             for (var handler : server.handlers()) {

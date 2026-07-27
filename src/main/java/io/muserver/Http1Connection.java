@@ -57,14 +57,14 @@ class Http1Connection extends BaseHttpConnection {
 
     private static final class HandlerExecution {
         private final boolean accepted;
-        private final @Nullable CompletableFuture<Void> asyncCompletion;
+        private final @Nullable CompletableFuture<@Nullable Void> asyncCompletion;
 
-        private HandlerExecution(boolean accepted, @Nullable CompletableFuture<Void> asyncCompletion) {
+        private HandlerExecution(boolean accepted, @Nullable CompletableFuture<@Nullable Void> asyncCompletion) {
             this.accepted = accepted;
             this.asyncCompletion = asyncCompletion;
         }
 
-        private static HandlerExecution accepted(@Nullable CompletableFuture<Void> asyncCompletion) {
+        private static HandlerExecution accepted(@Nullable CompletableFuture<@Nullable Void> asyncCompletion) {
             return new HandlerExecution(true, asyncCompletion);
         }
 
@@ -172,7 +172,7 @@ class Http1Connection extends BaseHttpConnection {
                     try {
                         HandlerExecution execution = handleExchangeOnHandlerExecutor(muRequest, muResponse);
                         if (execution.accepted) {
-                            CompletableFuture<Void> asyncCompletion = execution.asyncCompletion;
+                            CompletableFuture<@Nullable Void> asyncCompletion = execution.asyncCompletion;
                             if (asyncCompletion != null) {
                                 awaitAsyncCompletion(asyncCompletion, muRequest, muResponse);
                             }
@@ -214,7 +214,7 @@ class Http1Connection extends BaseHttpConnection {
         if (handlersRunOnConnectionTask) {
             return HandlerExecution.accepted(handleExchange(request, response));
         }
-        CompletableFuture<@Nullable CompletableFuture<Void>> completion = new CompletableFuture<>();
+        CompletableFuture<@Nullable CompletableFuture<@Nullable Void>> completion = new CompletableFuture<>();
         try {
             handlerExecutor.execute(() -> {
                 try {
@@ -233,7 +233,7 @@ class Http1Connection extends BaseHttpConnection {
         }
     }
 
-    private void awaitAsyncCompletion(CompletableFuture<Void> completion, Mu3Request request,
+    private void awaitAsyncCompletion(CompletableFuture<@Nullable Void> completion, Mu3Request request,
                                       Http1Response response) throws Throwable {
         try {
             completion.get();
