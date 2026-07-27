@@ -229,7 +229,8 @@ public class MuServerBuilder {
 
     /**
      * Sets the executor used for asynchronous request body reads, asynchronous response
-     * writes, and deprecated asynchronous WebSocket compatibility methods.
+     * writes, request-rejection notifications, and deprecated asynchronous WebSocket
+     * compatibility methods.
      *
      * <p>These operations adapt blocking I/O to callback-based APIs and must not use an
      * executor whose workers can all be retained by connection readers, request handlers,
@@ -526,6 +527,9 @@ public class MuServerBuilder {
      * becomes a normal request/response exchange (for example a <code>431</code> when the request
      * headers are too large). Such rejections are never reported to
      * {@link #addResponseCompleteListener(ResponseCompleteListener)}.
+     * Listeners are dispatched on the executor configured by
+     * {@link #withAsyncExecutor(ExecutorService)} so they cannot block connection input
+     * processing.
      *
      * @param listener A listener. If <code>null</code>, then nothing is added.
      * @return Returns the server builder

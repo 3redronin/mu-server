@@ -65,11 +65,13 @@ class ExecutionDomainsTest {
             new SynchronousQueue<>(),
             namedThreads("handler-")
         ));
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
         var connectionExecutor = track(Executors.newFixedThreadPool(2, namedThreads("connection-")));
         var blockerStarted = new CountDownLatch(1);
         var releaseBlocker = new CountDownLatch(1);
         var releaseRejectListener = new CountDownLatch(1);
         var rejectedRequest = new CompletableFuture<RejectedRequest>();
+        var rejectionThread = new CompletableFuture<String>();
         var completedResponses = new AtomicInteger();
         Future<?> blocker = handlerExecutor.submit(() -> {
             blockerStarted.countDown();
@@ -84,8 +86,10 @@ class ExecutionDomainsTest {
         server = httpServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .withHandlerExecutor(handlerExecutor)
+            .withAsyncExecutor(asyncExecutor)
             .withConnectionExecutor(connectionExecutor)
             .addRequestRejectListener(info -> {
+                rejectionThread.complete(Thread.currentThread().getName());
                 rejectedRequest.complete(info);
                 try {
                     releaseRejectListener.await();
@@ -100,6 +104,7 @@ class ExecutionDomainsTest {
 
         try (var client = new H2Client();
              var con = client.connectClearText(server)) {
+            con.socket().setSoTimeout(1000);
             byte[] firstPing = {0, 1, 2, 3, 4, 5, 6, 7};
             con.handshake()
                 .writeFrame(new Http2Ping(false, firstPing))
@@ -131,13 +136,14 @@ class ExecutionDomainsTest {
             assertThat(rejection.method(), equalTo(Optional.of("GET")));
             assertThat(rejection.uri().orElseThrow().getPath(), equalTo("/hello"));
             assertThat(rejection.connection().protocol(), equalTo("HTTP/2"));
-            releaseRejectListener.countDown();
+            assertThat(rejectionThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
 
             byte[] secondPing = {7, 6, 5, 4, 3, 2, 1, 0};
             con.writeFrame(RFCTestUtils.utf8DataFrame(1, true, "discarded"))
                 .writeFrame(new Http2Ping(false, secondPing))
                 .flush();
             assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, secondPing)));
+            releaseRejectListener.countDown();
 
             releaseBlocker.countDown();
             blocker.get(5, TimeUnit.SECONDS);
@@ -162,6 +168,91 @@ class ExecutionDomainsTest {
         assertEventually(() -> server.stats().completedRequests(), equalTo(1L));
         assertEventually(completedResponses::get, equalTo(1));
         assertThat(server.stats().rejectedDueToOverload(), equalTo(1L));
+    }
+
+    @Test
+    void rejectedAsyncExecutorFallsBackWithoutBlockingTheHttp2Reader() throws Exception {
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("rejected-async-")));
+        asyncExecutor.shutdown();
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
+        var releaseListener = new CountDownLatch(1);
+        var rejectionThread = new CompletableFuture<String>();
+        server = httpServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .withMaxHeadersSize(1024)
+            .withAsyncExecutor(asyncExecutor)
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addRequestRejectListener(info -> {
+                rejectionThread.complete(Thread.currentThread().getName());
+                try {
+                    releaseListener.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connectClearText(server)) {
+            con.handshake();
+            con.socket().setSoTimeout(1000);
+            FieldBlock headers = RFCTestUtils.getHelloHeaders("http", server.uri().getPort());
+            headers.add("x-big", "a".repeat(2000));
+            con.writeFrame(new Http2HeadersFrame(1, true, headers)).flush();
+
+            Http2HeadersFrame response =
+                RFCTestUtils.readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(response.headers().get(":status"), equalTo("431"));
+            assertThat(
+                RFCTestUtils.readIgnoringWindowUpdates(con, Http2DataFrame.class).endStream(),
+                is(true)
+            );
+            assertThat(rejectionThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
+
+            byte[] pingData = {0, 1, 2, 3, 4, 5, 6, 7};
+            con.writeFrame(new Http2Ping(false, pingData)).flush();
+            assertThat(
+                RFCTestUtils.readIgnoringWindowUpdates(con, Http2Ping.class),
+                equalTo(new Http2Ping(true, pingData))
+            );
+        } finally {
+            releaseListener.countDown();
+        }
+    }
+
+    @Test
+    void http1RejectionResponsePrecedesFallbackListenerDelivery() throws Exception {
+        var rejectedAsyncExecutor =
+            track(Executors.newSingleThreadExecutor(namedThreads("rejected-async-")));
+        rejectedAsyncExecutor.shutdown();
+        var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
+        var listenerEntered = new CountDownLatch(1);
+        var releaseListener = new CountDownLatch(1);
+        server = httpServer()
+            .withMaxHeadersSize(1024)
+            .withAsyncExecutor(rejectedAsyncExecutor)
+            .addRequestRejectListener(info -> {
+                listenerEntered.countDown();
+                try {
+                    releaseListener.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/")
+                .writeHeader("x-big", "a".repeat(2000))
+                .flushHeaders();
+            assertThat(listenerEntered.await(5, TimeUnit.SECONDS), is(true));
+            Future<String> responseLine = clientExecutor.submit(client::readLine);
+            assertThat(responseLine.get(2, TimeUnit.SECONDS), startsWith("HTTP/1.1 431"));
+        } finally {
+            releaseListener.countDown();
+        }
     }
 
     @Test

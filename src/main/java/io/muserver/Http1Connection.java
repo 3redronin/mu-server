@@ -156,14 +156,25 @@ class Http1Connection extends BaseHttpConnection {
                     onInvalidRequest(rejectException);
                     String rejectedMethod = method.name();
                     String rejectReason = rejectException.getMessage() != null ? rejectException.getMessage() : rejectException.status().toString();
-                    server.onRequestRejected(new RejectedRequestImpl(rejectException.status().code(),
-                        rejectReason, rejectedMethod, requestUri.toString(), this));
-                    muResponse.status(rejectException.status());
-                    muResponse.headers().set(rejectException.responseHeaders());
-                    if (rejectException.getMessage() != null) {
-                        muResponse.write(rejectException.getMessage());
+                    var rejectedRequest = new RejectedRequestImpl(
+                        rejectException.status().code(),
+                        rejectReason,
+                        rejectedMethod,
+                        requestUri.toString(),
+                        this
+                    );
+                    try {
+                        muResponse.status(rejectException.status());
+                        muResponse.headers().set(rejectException.responseHeaders());
+                        if (rejectException.getMessage() != null) {
+                            muResponse.write(rejectException.getMessage());
+                        }
+                        closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest);
+                    } finally {
+                        // Rejection listeners are also an audit/metrics hook. Notify after
+                        // attempting the response even when the client aborts during its write.
+                        server.onRequestRejected(rejectedRequest);
                     }
-                    closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest);
                 } else {
 
                     onRequestStarted(muRequest);

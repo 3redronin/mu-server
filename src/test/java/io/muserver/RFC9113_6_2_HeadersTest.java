@@ -395,7 +395,7 @@ class RFC9113_6_2_HeadersTest {
             con.writeFrame(new Http2HeadersFrame(1, true, oversized)).flush();
 
             var responseHeaders = con.readLogicalFrame(Http2HeadersFrame.class);
-            assertThat(responseHeaders.headers().get(":status"), equalTo("431 Request Header Fields Too Large"));
+            assertThat(responseHeaders.headers().get(":status"), equalTo("431"));
             assertNothingToRead(con.socket());
 
             int contentLength = Integer.parseInt(responseHeaders.headers().get("content-length"));
@@ -459,7 +459,7 @@ class RFC9113_6_2_HeadersTest {
 
             var responseHeaders = con.readLogicalFrame(Http2HeadersFrame.class);
             assertThat(responseHeaders.streamId(), equalTo(1));
-            assertThat(responseHeaders.headers().get(":status"), equalTo("431 Request Header Fields Too Large"));
+            assertThat(responseHeaders.headers().get(":status"), equalTo("431"));
             assertThat(
                 con.readLogicalFrame(),
                 equalTo(new Http2ResetStreamFrame(3, Http2ErrorCode.REFUSED_STREAM.code()))
