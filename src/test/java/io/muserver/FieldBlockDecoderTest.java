@@ -77,6 +77,36 @@ class FieldBlockDecoderTest {
     }
 
     @Test
+    void truncatedHpackIntegersAreCompressionErrors() {
+        var ex = assertThrows(
+            Http2Exception.class,
+            () -> readHpackInt(7, (byte) 0xff, ByteBuffer.allocate(0))
+        );
+
+        assertThat(ex.errorType(), equalTo(Http2Level.CONNECTION));
+        assertThat(ex.errorCode(), equalTo(Http2ErrorCode.COMPRESSION_ERROR));
+    }
+
+    @Test
+    void truncatedLiteralFieldsAreCompressionErrors() {
+        byte[][] malformedBlocks = {
+            {0x00},
+            {0x00, 0x05, 'a'},
+            {0x01},
+            {0x01, (byte) 0x85, 'a'}
+        };
+
+        for (byte[] malformedBlock : malformedBlocks) {
+            var ex = assertThrows(
+                Http2Exception.class,
+                () -> decoder.decodeFrom(ByteBuffer.wrap(malformedBlock))
+            );
+            assertThat(ex.errorType(), equalTo(Http2Level.CONNECTION));
+            assertThat(ex.errorCode(), equalTo(Http2ErrorCode.COMPRESSION_ERROR));
+        }
+    }
+
+    @Test
     public void integerMaxValueIsMaxValue() throws Http2Exception {
         assertThat(readHpackInt(5, (byte) 31, buffed((byte) 224, (byte) 255, (byte) 255, (byte) 255, (byte) 7)), equalTo(Integer.MAX_VALUE));
 
