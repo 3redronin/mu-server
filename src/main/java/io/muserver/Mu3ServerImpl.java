@@ -63,9 +63,20 @@ class Mu3ServerImpl implements MuServer {
     }
 
     private void startListening() {
-        if (acceptors.isEmpty()) throw new IllegalStateException("No listener ports defined");
-        for (ConnectionAcceptor acceptor : acceptors) {
-            acceptor.start();
+        try {
+            if (acceptors.isEmpty()) {
+                throw new IllegalStateException("No listener ports defined");
+            }
+            for (ConnectionAcceptor acceptor : acceptors) {
+                acceptor.start();
+            }
+        } catch (RuntimeException | Error startFailure) {
+            try {
+                stop(0, TimeUnit.MILLISECONDS);
+            } catch (RuntimeException | Error cleanupFailure) {
+                startFailure.addSuppressed(cleanupFailure);
+            }
+            throw startFailure;
         }
     }
 

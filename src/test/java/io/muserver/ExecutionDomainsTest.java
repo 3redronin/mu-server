@@ -9,6 +9,8 @@ import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.io.IOException;
+import java.net.ServerSocket;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,6 +21,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -30,6 +33,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.startsWith;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.client;
 import static scaffolding.ClientUtils.request;
@@ -178,6 +182,28 @@ class ExecutionDomainsTest {
         assertThat(timerExecutor.isShutdown(), is(false));
     }
 
+    @Test
+    void rejectedTimerSchedulingRollsBackStartupWithoutTakingCallerExecutors() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
+        var timerExecutor = track(Executors.newSingleThreadScheduledExecutor(namedThreads("timer-")));
+        timerExecutor.shutdown();
+        int port = availablePort();
+
+        assertThrows(RejectedExecutionException.class, () -> httpServer()
+            .withHttpPort(port)
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .withTimerExecutor(timerExecutor)
+            .start());
+
+        assertThat(handlerExecutor.isShutdown(), is(false));
+        assertThat(connectionExecutor.isShutdown(), is(false));
+        try (var replacementListener = new ServerSocket(port)) {
+            assertThat(replacementListener.isBound(), is(true));
+        }
+    }
+
     @RepeatedTest(5)
     void timedConnectionWorkIsNotStarvedByTheHandlerExecutor() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
@@ -222,6 +248,12 @@ class ExecutionDomainsTest {
     private <T extends ExecutorService> T track(T executor) {
         executors.add(executor);
         return executor;
+    }
+
+    private static int availablePort() throws IOException {
+        try (var socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
+        }
     }
 
     private static java.util.concurrent.ThreadFactory namedThreads(String prefix) {
