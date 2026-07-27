@@ -26,8 +26,8 @@ coordinator. Connection and stream inbound flow-control accounting is also
 centralized in one component with a short-held lock. The reader atomically
 debits both receive windows without depending on the blocking-output executor,
 body consumers return freed credit through the same component, and the writer
-publishes that credit as available only after the corresponding `WINDOW_UPDATE`
-is flushed. Live stream identity publication is similarly centralized in one
+publishes that credit as available immediately before emitting the corresponding
+`WINDOW_UPDATE`. Live stream identity publication is similarly centralized in one
 short-held registry lock, while the coordinator remains the sole owner of RFC
 stream-state transitions.
 Request-body read deadlines are monotonic timed waits owned by the body buffer:
@@ -299,9 +299,12 @@ atomic with credit returned by body-consumer threads and its later publication
 by the writer. Debiting does not require a write-coordinator round trip: the
 socket writer can block, and input must continue reading and processing HTTP/2
 frames promptly as required by RFC 9113 Section 5.2.2. Freed credit is not
-available for another DATA debit until its `WINDOW_UPDATE` has been flushed,
+available for another DATA debit while its `WINDOW_UPDATE` is merely queued,
 because Section 6.9.1 defines the sender's limit in terms of the window
-advertised by the receiver. A body consumer commits its buffer offset and
+advertised by the receiver. The writer publishes the credit immediately before
+writing the frame: publishing after `flush()` is too late because the complete
+frame can reach the peer before `flush()` returns, while a write failure closes
+the connection. A body consumer commits its buffer offset and
 releases the body lock before returning credit to the inbound component or
 queuing `WINDOW_UPDATE` output. Coordinator contention therefore cannot retain
 the body-buffer lock.

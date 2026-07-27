@@ -69,7 +69,7 @@ class Http2InboundFlowControlTest {
     }
 
     @Test
-    void returnedCreditIsUnavailableUntilItsWindowUpdateIsWritten() {
+    void returnedCreditIsUnavailableUntilItsWindowUpdateIsBeingWritten() {
         var flow = new Http2InboundFlowControl(4);
         flow.openStream(1, 4);
         assertThat(flow.reserve(1, 4).error(), nullValue());
@@ -82,8 +82,8 @@ class Http2InboundFlowControlTest {
         assertThat(beforeUpdate.errorType(), equalTo(Http2Level.CONNECTION));
         assertThat(beforeUpdate.errorCode(), equalTo(Http2ErrorCode.FLOW_CONTROL_ERROR));
 
-        flow.windowUpdateWritten(0, 4);
-        flow.windowUpdateWritten(1, 4);
+        flow.windowUpdateWriting(0, 4);
+        flow.windowUpdateWriting(1, 4);
         assertThat(flow.reserve(1, 4).error(), nullValue());
     }
 
