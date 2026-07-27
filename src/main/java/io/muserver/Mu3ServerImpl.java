@@ -118,15 +118,14 @@ class Mu3ServerImpl implements MuServer {
     @Override
     public boolean stop(long duration, java.util.concurrent.TimeUnit unit) {
         long timeoutMillis = Math.max(0L, unit.toMillis(duration));
-        long deadline = System.currentTimeMillis() + timeoutMillis;
+        long deadlineNanos = MonotonicTime.deadlineAfterMillis(timeoutMillis);
         boolean stoppedCleanly = true;
         for (var acceptor : acceptors) {
-            long remaining = Math.max(0L, deadline - System.currentTimeMillis());
-            if (!acceptor.stop(remaining)) {
+            if (!acceptor.stopUntil(deadlineNanos)) {
                 stoppedCleanly = false;
             }
         }
-        if (!awaitDetachedApplicationTasks(deadline)) {
+        if (!awaitDetachedApplicationTasks(deadlineNanos)) {
             stoppedCleanly = false;
         }
         if (ownsTimerExecutor) {
@@ -150,7 +149,7 @@ class Mu3ServerImpl implements MuServer {
         return stoppedCleanly;
     }
 
-    private boolean awaitDetachedApplicationTasks(long deadline) {
+    private boolean awaitDetachedApplicationTasks(long deadlineNanos) {
         // A callback cannot safely wait for other detached callbacks: with a
         // single-worker application executor, they may be queued behind this
         // callback and cannot start until stop() returns. Leave every registration
@@ -159,21 +158,30 @@ class Mu3ServerImpl implements MuServer {
         if (activeDetachedApplicationTask.get() != null) {
             return true;
         }
-        return awaitDetachedApplicationTasks(detachedApplicationTasks, deadline);
+        return awaitDetachedApplicationTasks(
+            detachedApplicationTasks,
+            deadlineNanos
+        );
     }
 
-    static boolean awaitDetachedApplicationTasks(Phaser tasks, long deadline) {
+    static boolean awaitDetachedApplicationTasks(
+        Phaser tasks,
+        long deadlineNanos
+    ) {
         while (true) {
             int phase = tasks.getPhase();
             if (tasks.getRegisteredParties() == 0) {
                 return true;
             }
-            long remaining = Math.max(0L, deadline - System.currentTimeMillis());
+            long remainingNanos = Math.max(
+                0L,
+                MonotonicTime.nanosUntil(deadlineNanos)
+            );
             try {
                 tasks.awaitAdvanceInterruptibly(
                     phase,
-                    remaining,
-                    TimeUnit.MILLISECONDS
+                    remainingNanos,
+                    TimeUnit.NANOSECONDS
                 );
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
