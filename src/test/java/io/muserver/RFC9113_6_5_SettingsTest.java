@@ -5,6 +5,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.time.Instant;
@@ -22,7 +23,10 @@ import static io.muserver.RFCTestUtils.readIgnoringWindowUpdates;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static scaffolding.MuAssert.assertEventually;
 import static scaffolding.MuAssert.assertNotTimedOut;
 
 @DisplayName("RFC 9113 6.5 Frame Definitions: SETTINGS")
@@ -682,7 +686,7 @@ class RFC9113_6_5_SettingsTest {
     }
 
     @Test
-    void serverSettingsAreOnlyAckPendingAfterTheyAreSent() throws Exception {
+    void serverSettingsAckTimeoutStartsOnlyAfterTheSettingsAreFlushed() throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled().withSettingsAckTimeoutMillis(5000))
             .start();
@@ -711,8 +715,30 @@ class RFC9113_6_5_SettingsTest {
                 assertThat(settingsAckQueue.size(), equalTo(0));
 
                 queuedOnlyConnection.write(new Http2Settings(false, 8192, 123, 65535, 16384, 32768));
-
                 assertThat(settingsAckQueue.size(), equalTo(0));
+
+                var flushEntered = new CountDownLatch(1);
+                var releaseFlush = new CountDownLatch(1);
+                var blockedOutput = new ByteArrayOutputStream() {
+                    @Override
+                    public void flush() {
+                        flushEntered.countDown();
+                        assertNotTimedOut("waiting to release SETTINGS flush", releaseFlush);
+                    }
+                };
+
+                queuedOnlyConnection.startWriteLoop(blockedOutput);
+                assertNotTimedOut("waiting for SETTINGS flush", flushEntered);
+
+                assertThat(settingsAckQueue.size(), equalTo(1));
+                Object pendingAck = settingsAckQueue.peek();
+                assertThat(getField(pendingAck, "timeoutTask", Object.class), nullValue());
+
+                releaseFlush.countDown();
+                assertEventually(
+                    () -> getField(pendingAck, "timeoutTask", Object.class),
+                    notNullValue()
+                );
             } finally {
                 executor.shutdownNow();
             }

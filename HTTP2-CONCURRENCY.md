@@ -152,7 +152,10 @@ protocol state, perform socket I/O, or invoke user code.
 Connection idle-timeout scans, WebSocket pings, and HTTP/2 SETTINGS
 acknowledgement deadlines use this facility. SETTINGS expiry atomically wins
 or loses a race with its ACK, then enqueues a connection-error command without
-mutating protocol state on the timer thread.
+mutating protocol state on the timer thread. The writer registers each local
+SETTINGS frame in the acknowledgement FIFO before writing any of its bytes, so
+a fast ACK cannot be missed, but arms its deadline only after the frame is
+flushed, so blocked output does not consume the peer's acknowledgement period.
 
 Request-body read deadlines are intentionally not server timer tasks. They
 bound an application thread's blocking read on `Http2BodyInputStream`, so the
@@ -175,7 +178,8 @@ as defined by RFC 9113 Section 7.
 | Live application/rejected stream identity index | `Http2StreamRegistry` lock |
 | Inbound END_STREAM and reset-seen fences | Connection reader, with monotonic publication where another domain reads them |
 | Peer settings snapshot after decoding | Connection reader (volatile publication) |
-| Outbound effects of peer settings and local settings lifecycle | Coordinator |
+| Outbound effects of peer settings | Coordinator |
+| Local SETTINGS acknowledgement lifecycle | Writer registration and post-flush deadline publication; reader FIFO consumption; atomic ACK/timeout gate |
 | Connection and stream outbound flow-control credit | Coordinator |
 | Connection and stream inbound flow-control accounting | `Http2InboundFlowControl` lock |
 | Pending outbound frames and their ordering | Coordinator |

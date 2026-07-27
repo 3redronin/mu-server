@@ -403,9 +403,13 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         }
     }
 
-    private void queuePendingSettingsAck() throws IOException {
+    private PendingSettingsAck registerPendingSettingsAck() {
         var pendingAck = new PendingSettingsAck();
         settingsAckQueue.add(pendingAck);
+        return pendingAck;
+    }
+
+    private void startSettingsAckTimeout(PendingSettingsAck pendingAck) throws IOException {
         try {
             pendingAck.timeoutTask(server.scheduleTimerCallback(
                 () -> {
@@ -417,10 +421,18 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 TimeUnit.MILLISECONDS
             ));
         } catch (RuntimeException | Error e) {
-            settingsAckQueue.remove(pendingAck);
-            pendingAck.acknowledge();
-            throw new IOException("Could not schedule SETTINGS acknowledgement timeout", e);
+            // The reader can consume and acknowledge this entry as soon as its
+            // bytes reach the peer, including before flush() returns. Only fail
+            // the connection if this writer still owns the pending entry.
+            if (settingsAckQueue.remove(pendingAck)) {
+                pendingAck.acknowledge();
+                throw new IOException("Could not schedule SETTINGS acknowledgement timeout", e);
+            }
         }
+    }
+
+    private void registerInitialSettingsAck() throws IOException {
+        startSettingsAckTimeout(registerPendingSettingsAck());
     }
 
     private void cancelPendingSettingsAckTimeouts() {
@@ -590,6 +602,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     ? candidate.frame()
                     : prepareCoordinatorErrorFrame(protocolError);
                 log.info("Writing {}", frame);
+                PendingSettingsAck pendingSettingsAck = null;
                 if (frame instanceof Http2WindowUpdate) {
                     var update = (Http2WindowUpdate) frame;
                     // OutputStream writes can make a complete frame visible
@@ -600,14 +613,21 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                         update.windowSizeIncrement()
                     );
                 }
-                frame.writeTo(this, clientOut);
                 if (frame instanceof Http2Settings) {
                     var settings = (Http2Settings) frame;
                     if (!settings.isAck) {
-                        queuePendingSettingsAck();
+                        // Register before any bytes can reach the peer so a fast
+                        // ACK always has a FIFO entry to consume.
+                        pendingSettingsAck = registerPendingSettingsAck();
                     }
                 }
+                frame.writeTo(this, clientOut);
                 clientOut.flush();
+                if (pendingSettingsAck != null) {
+                    // The peer cannot be late until the SETTINGS frame has
+                    // actually crossed the writer's publication boundary.
+                    startSettingsAckTimeout(pendingSettingsAck);
+                }
                 if (GO_AWAY_WARNING.equals(frame)) {
                     recordInitialGoAwayWritten();
                 }
@@ -660,7 +680,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             // do the handshake
             clientSettings = Http2Handshaker.handshake(this, serverSettings, clientSettings, buffer, clientIn, clientOut);
 
-            queuePendingSettingsAck();
+            // The handshake flushes the initial SETTINGS before the reader is
+            // started, so no ACK can race this registration.
+            registerInitialSettingsAck();
 
             var fieldBlockDecoder = new FieldBlockDecoder(new HpackTable(serverSettings.headerTableSize), server.maxUrlSize(), server.maxRequestHeadersSize());
             writeEndedFuture = startWriteLoop(clientOut);
