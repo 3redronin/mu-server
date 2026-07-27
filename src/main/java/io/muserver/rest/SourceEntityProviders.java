@@ -8,6 +8,7 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.MessageBodyReader;
 import jakarta.ws.rs.ext.MessageBodyWriter;
+import org.jspecify.annotations.Nullable;
 
 import javax.xml.XMLConstants;
 import javax.xml.transform.OutputKeys;
@@ -28,6 +29,7 @@ import java.lang.reflect.Type;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Objects;
 
 import static java.util.Collections.singletonList;
 
@@ -56,7 +58,7 @@ class SourceEntityProviders {
         private static final class BomAwareReader extends Reader {
             private final PushbackInputStream input;
             private final String declaredCharset;
-            private Reader delegate;
+            private @Nullable Reader delegate;
 
             private BomAwareReader(InputStream input, String declaredCharset) {
                 this.input = new PushbackInputStream(input, 4);
@@ -76,15 +78,17 @@ class SourceEntityProviders {
 
             @Override
             public void close() throws IOException {
-                if (delegate == null) {
+                Reader current = delegate;
+                if (current == null) {
                     input.close();
                 } else {
-                    delegate.close();
+                    current.close();
                 }
             }
 
             private Reader delegate() throws IOException {
-                if (delegate == null) {
+                Reader current = delegate;
+                if (current == null) {
                     byte[] prefix = new byte[4];
                     int length = 0;
                     while (length < prefix.length) {
@@ -122,9 +126,10 @@ class SourceEntityProviders {
                     if (length > bomLength) {
                         input.unread(prefix, bomLength, length - bomLength);
                     }
-                    delegate = new InputStreamReader(input, charset);
+                    current = new InputStreamReader(input, charset);
+                    delegate = current;
                 }
-                return delegate;
+                return current;
             }
 
             private static boolean startsWith(byte[] actual, int actualLength, int... expected) {
@@ -169,7 +174,7 @@ class SourceEntityProviders {
                         throw (NotSupportedException) cause;
                     }
                     Throwable next = cause.getCause();
-                    if (next == cause) {
+                    if (Objects.equals(next, cause)) {
                         break;
                     }
                     cause = next;
