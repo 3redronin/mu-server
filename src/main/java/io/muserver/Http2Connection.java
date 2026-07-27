@@ -485,7 +485,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             stateLock.unlock();
         }
         for (Http2Stream stream : streamRegistry.applicationStreams()) {
-            stream.cancel(reason, false);
+            stream.onConnectionTerminated(reason);
         }
         signalWriteLoop();
     }
@@ -830,14 +830,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     // work triggered by cancellation is then rejected behind this command.
                     failConnection(writeTask, connectionError);
                     for (var stream : streamRegistry.applicationStreams()) {
-                        stream.cancel(connectionError, false);
+                        stream.onConnectionTerminated(connectionError);
                     }
                     writeTask.await(30, TimeUnit.SECONDS);
                     setReadStateAndSignal(HState.ERRORED);
                     writeEndedFuture.get(1, TimeUnit.MINUTES);
                 } else {
                     for (var stream : streamRegistry.applicationStreams()) {
-                        stream.cancel(connectionError, false);
+                        stream.onConnectionTerminated(connectionError);
                     }
                     goAway.writeTo(this, clientOut);
                     clientOut.flush();
@@ -1493,8 +1493,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
 
     @Override
     public void abortWithTimeout() {
-        // TODO do something with this
-        abort();
+        forceShutdown(new IOException(
+            "HTTP/2 connection idle timeout exceeded",
+            new TimeoutException("Idle timeout exceeded")
+        ));
     }
 
     @Override
@@ -1509,6 +1511,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
 
     @Override
     void forceShutdown() {
+        forceShutdown(new IOException("HTTP/2 connection was shut down"));
+    }
+
+    private void forceShutdown(IOException reason) {
         stateLock.lock();
         try {
             if (writeState.canSendFrames) {
@@ -1516,6 +1522,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             }
         } finally {
             stateLock.unlock();
+        }
+        for (Http2Stream stream : streamRegistry.applicationStreams()) {
+            stream.onConnectionTerminated(reason);
         }
         signalWriteLoop();
         closeSocketQuietly();
