@@ -37,6 +37,7 @@ class ConnectionAcceptor {
     private final @Nullable Http2Config http2Config;
     private final ExecutorService handlerExecutor;
     private final ExecutorService connectionExecutor;
+    private final ExecutorService http2WriterExecutor;
     private final List<ContentEncoder> contentEncoders;
 
     public boolean isHttps() {
@@ -79,6 +80,7 @@ class ConnectionAcceptor {
     ConnectionAcceptor(Mu3ServerImpl server, ServerSocket socketServer, InetSocketAddress address, URI uri,
                        @Nullable HttpsConfig httpsConfig, @Nullable Http2Config http2Config,
                        ExecutorService handlerExecutor, ExecutorService connectionExecutor,
+                       ExecutorService http2WriterExecutor,
                        List<ContentEncoder> contentEncoders) {
         this.server = server;
         this.socketServer = socketServer;
@@ -88,6 +90,7 @@ class ConnectionAcceptor {
         this.http2Config = http2Config;
         this.handlerExecutor = handlerExecutor;
         this.connectionExecutor = connectionExecutor;
+        this.http2WriterExecutor = http2WriterExecutor;
         this.contentEncoders = contentEncoders;
         this.isHttps = httpsConfig != null;
 
@@ -347,7 +350,7 @@ class ConnectionAcceptor {
                 http2Config.initialSettings(),
                 http2Config.settingsAckTimeoutMillis(),
                 handlerExecutor,
-                connectionExecutor
+                http2WriterExecutor
             );
         } else {
             con = new Http1Connection(server, this, socket, clientCert, startTime);
@@ -449,6 +452,7 @@ class ConnectionAcceptor {
         @Nullable Http2Config h2Config,
         ExecutorService handlerExecutor,
         ExecutorService connectionExecutor,
+        ExecutorService http2WriterExecutor,
         List<ContentEncoder> contentEncoders) throws IOException {
 
         ServerSocket socketServer = new ServerSocket(bindPort, ACCEPT_BACKLOG, address);
@@ -459,7 +463,7 @@ class ConnectionAcceptor {
 
         return new ConnectionAcceptor(server, socketServer,
             (InetSocketAddress) socketServer.getLocalSocketAddress(),
-            uri, httpsConfig, h2Config, handlerExecutor, connectionExecutor, contentEncoders);
+            uri, httpsConfig, h2Config, handlerExecutor, connectionExecutor, http2WriterExecutor, contentEncoders);
     }
 
     private static void configureSocketOptions(ServerSocket socketServer) throws IOException {

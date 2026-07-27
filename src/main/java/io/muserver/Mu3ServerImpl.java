@@ -38,11 +38,13 @@ class Mu3ServerImpl implements MuServer {
     final Path tempDir;
     private final ExecutorService connectionExecutor;
     private final boolean ownsConnectionExecutor;
+    private final ExecutorService http2WriterExecutor;
+    private final boolean ownsHttp2WriterExecutor;
     private final ScheduledExecutorService timerExecutor;
     private final boolean ownsTimerExecutor;
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
 
-    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService connectionExecutor, boolean ownsConnectionExecutor, ScheduledExecutorService timerExecutor, boolean ownsTimerExecutor) {
+    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService connectionExecutor, boolean ownsConnectionExecutor, ExecutorService http2WriterExecutor, boolean ownsHttp2WriterExecutor, ScheduledExecutorService timerExecutor, boolean ownsTimerExecutor) {
         this.acceptors = acceptors;
         this.handlers = handlers;
         this.responseCompleteListeners = responseCompleteListeners;
@@ -58,6 +60,8 @@ class Mu3ServerImpl implements MuServer {
         this.tempDir = tempDir;
         this.connectionExecutor = connectionExecutor;
         this.ownsConnectionExecutor = ownsConnectionExecutor;
+        this.http2WriterExecutor = http2WriterExecutor;
+        this.ownsHttp2WriterExecutor = ownsHttp2WriterExecutor;
         this.timerExecutor = timerExecutor;
         this.ownsTimerExecutor = ownsTimerExecutor;
     }
@@ -102,6 +106,9 @@ class Mu3ServerImpl implements MuServer {
         }
         if (ownsConnectionExecutor) {
             connectionExecutor.shutdown();
+        }
+        if (ownsHttp2WriterExecutor) {
+            http2WriterExecutor.shutdown();
         }
         return stoppedCleanly;
     }
@@ -301,6 +308,11 @@ class Mu3ServerImpl implements MuServer {
         if (connectionExecutor == null) {
             connectionExecutor = MuServerBuilder.defaultExecutor();
         }
+        ExecutorService http2WriterExecutor = builder.http2WriterExecutor();
+        boolean ownsHttp2WriterExecutor = http2WriterExecutor == null;
+        if (http2WriterExecutor == null) {
+            http2WriterExecutor = MuServerBuilder.defaultExecutor();
+        }
         ScheduledExecutorService timerExecutor = builder.timerExecutor();
         boolean ownsTimerExecutor = timerExecutor == null;
         if (timerExecutor == null) {
@@ -346,6 +358,8 @@ class Mu3ServerImpl implements MuServer {
             tempDir,
             connectionExecutor,
             ownsConnectionExecutor,
+            http2WriterExecutor,
+            ownsHttp2WriterExecutor,
             timerExecutor,
             ownsTimerExecutor
             );
@@ -382,6 +396,7 @@ class Mu3ServerImpl implements MuServer {
                 http2Config,
                 handlerExecutor,
                 connectionExecutor,
+                http2WriterExecutor,
                 contentEncoders
             );
             acceptors.add(acceptor);
@@ -396,6 +411,7 @@ class Mu3ServerImpl implements MuServer {
                 http2ConfigForHttp,
                 handlerExecutor,
                 connectionExecutor,
+                http2WriterExecutor,
                 contentEncoders
             ));
         }

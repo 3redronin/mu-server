@@ -155,18 +155,44 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void singleThreadConnectionAndWriterExecutorsMakeIndependentProgress() throws Exception {
+        var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
+        var writerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("h2-writer-")));
+
+        server = httpServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .withConnectionExecutor(connectionExecutor)
+            .withHttp2WriterExecutor(writerExecutor)
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connectClearText(server)) {
+            con.handshake();
+            con.socket().setSoTimeout(1000);
+
+            byte[] pingData = {0, 1, 2, 3, 4, 5, 6, 7};
+            con.writeFrame(new Http2Ping(false, pingData)).flush();
+
+            assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, pingData)));
+        }
+    }
+
+    @Test
     void configuredExecutorsStayCallerOwnedAndHttp1UsesTheHandlerExecutor() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
+        var writerExecutor = track(Executors.newCachedThreadPool(namedThreads("h2-writer-")));
         var timerExecutor = track(Executors.newSingleThreadScheduledExecutor(namedThreads("timer-")));
 
         var builder = httpServer()
             .withHandlerExecutor(handlerExecutor)
             .withConnectionExecutor(connectionExecutor)
+            .withHttp2WriterExecutor(writerExecutor)
             .withTimerExecutor(timerExecutor)
             .addHandler(Method.GET, "/", (request, response, pathParams) ->
                 response.write(Thread.currentThread().getName()));
         assertThat(builder.connectionExecutor(), is(connectionExecutor));
+        assertThat(builder.http2WriterExecutor(), is(writerExecutor));
         assertThat(builder.timerExecutor(), is(timerExecutor));
 
         server = builder.start();
@@ -178,6 +204,7 @@ class ExecutionDomainsTest {
         server.stop();
         server = null;
         assertThat(connectionExecutor.isShutdown(), is(false));
+        assertThat(writerExecutor.isShutdown(), is(false));
         assertThat(handlerExecutor.isShutdown(), is(false));
         assertThat(timerExecutor.isShutdown(), is(false));
     }
@@ -186,6 +213,7 @@ class ExecutionDomainsTest {
     void rejectedTimerSchedulingRollsBackStartupWithoutTakingCallerExecutors() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
+        var writerExecutor = track(Executors.newCachedThreadPool(namedThreads("h2-writer-")));
         var timerExecutor = track(Executors.newSingleThreadScheduledExecutor(namedThreads("timer-")));
         timerExecutor.shutdown();
         int port = availablePort();
@@ -194,11 +222,13 @@ class ExecutionDomainsTest {
             .withHttpPort(port)
             .withHandlerExecutor(handlerExecutor)
             .withConnectionExecutor(connectionExecutor)
+            .withHttp2WriterExecutor(writerExecutor)
             .withTimerExecutor(timerExecutor)
             .start());
 
         assertThat(handlerExecutor.isShutdown(), is(false));
         assertThat(connectionExecutor.isShutdown(), is(false));
+        assertThat(writerExecutor.isShutdown(), is(false));
         try (var replacementListener = new ServerSocket(port)) {
             assertThat(replacementListener.isBound(), is(true));
         }

@@ -40,6 +40,7 @@ public class MuServerBuilder {
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(20);
     private @Nullable ExecutorService executor;
     private @Nullable ExecutorService connectionExecutor;
+    private @Nullable ExecutorService http2WriterExecutor;
     private @Nullable ScheduledExecutorService timerExecutor;
     private long maxRequestSize = 24 * 1024 * 1024;
     private @Nullable List<ResponseCompleteListener> responseCompleteListeners;
@@ -213,26 +214,49 @@ public class MuServerBuilder {
     }
 
     /**
-     * Sets the executor used for connection setup and HTTP/2 connection I/O.
+     * Sets the executor used for connection setup and HTTP/2 connection reads.
      *
-     * <p>HTTP/2 uses two long-lived tasks per connection: a socket reader and a write
-     * coordinator. The executor must allow both tasks to make progress independently for
-     * every active HTTP/2 connection, with additional capacity for short connection setup
-     * and timed maintenance tasks. Request handlers do not run on this executor; they use
-     * the executor configured by {@link #withHandlerExecutor(ExecutorService)}. Supplying
-     * the same executor to both methods disables that isolation.</p>
+     * <p>HTTP/2 uses one long-lived reader task per connection on this executor. HTTP/2
+     * writes use the executor configured by
+     * {@link #withHttp2WriterExecutor(ExecutorService)} so a fixed-size connection pool
+     * cannot be occupied by readers while their writers wait in the same queue. Request
+     * handlers use the executor configured by
+     * {@link #withHandlerExecutor(ExecutorService)}.</p>
      *
      * <p>By default, a server-owned virtual-thread-per-task executor is used when the
      * runtime supports virtual threads, otherwise a cached thread pool is used. A
      * caller-supplied executor remains owned by the caller and is not shut down when
      * the server stops.</p>
      *
-     * @param connectionExecutor The executor for connection setup and HTTP/2 I/O, or
+     * @param connectionExecutor The executor for connection setup and HTTP/2 reads, or
      *                           <code>null</code> to use the default
      * @return The current Mu Server builder
      */
     public MuServerBuilder withConnectionExecutor(@Nullable ExecutorService connectionExecutor) {
         this.connectionExecutor = connectionExecutor;
+        return this;
+    }
+
+    /**
+     * Sets the executor used by HTTP/2 connection writers.
+     *
+     * <p>HTTP/2 uses one long-lived writer task per connection on this executor. It must
+     * be independent from the executor configured by
+     * {@link #withConnectionExecutor(ExecutorService)}: supplying the same bounded
+     * executor to both methods can allow reader tasks to occupy every thread while writer
+     * tasks wait in its queue.</p>
+     *
+     * <p>By default, a server-owned virtual-thread-per-task executor is used when the
+     * runtime supports virtual threads, otherwise a cached thread pool is used. A
+     * caller-supplied executor remains owned by the caller and is not shut down when
+     * the server stops.</p>
+     *
+     * @param http2WriterExecutor The executor for HTTP/2 connection writers, or
+     *                            <code>null</code> to use the default
+     * @return The current Mu Server builder
+     */
+    public MuServerBuilder withHttp2WriterExecutor(@Nullable ExecutorService http2WriterExecutor) {
+        this.http2WriterExecutor = http2WriterExecutor;
         return this;
     }
 
@@ -652,12 +676,21 @@ public class MuServerBuilder {
     }
 
     /**
-     * Gets the executor used for connection setup and HTTP/2 connection I/O.
+     * Gets the executor used for connection setup and HTTP/2 connection reads.
      *
      * @return The configured executor, or <code>null</code> if the default executor will be used.
      */
     public @Nullable ExecutorService connectionExecutor() {
         return connectionExecutor;
+    }
+
+    /**
+     * Gets the executor used by HTTP/2 connection writers.
+     *
+     * @return The configured executor, or <code>null</code> if the default executor will be used.
+     */
+    public @Nullable ExecutorService http2WriterExecutor() {
+        return http2WriterExecutor;
     }
 
     /**
@@ -778,6 +811,7 @@ public class MuServerBuilder {
             ", idleTimeoutMills=" + idleTimeoutMills +
             ", executor=" + executor +
             ", connectionExecutor=" + connectionExecutor +
+            ", http2WriterExecutor=" + http2WriterExecutor +
             ", timerExecutor=" + timerExecutor +
             ", maxRequestSize=" + maxRequestSize +
             ", responseCompleteListeners=" + responseCompleteListeners +

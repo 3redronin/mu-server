@@ -57,7 +57,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     private final ConcurrentHashMap<Integer, Http2Stream> streams = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Integer, Http2IncomingFlowController> rejectedRequestBodies = new ConcurrentHashMap<>();
     private final ExecutorService handlerExecutor;
-    private final ExecutorService connectionExecutor;
+    private final ExecutorService writerExecutor;
     private final long settingsAckTimeoutMillis;
 
     private final Lock stateLock = new ReentrantLock();
@@ -67,12 +67,12 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     final FieldBlockEncoder fieldBlockEncoder;
 
-    Http2Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime, Http2Settings initialServerSettings, long settingsAckTimeoutMillis, ExecutorService handlerExecutor, ExecutorService connectionExecutor) {
+    Http2Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime, Http2Settings initialServerSettings, long settingsAckTimeoutMillis, ExecutorService handlerExecutor, ExecutorService writerExecutor) {
         super(server, creator, clientSocket, clientCertificate, handshakeStartTime);
         this.serverSettings = initialServerSettings;
         this.settingsAckTimeoutMillis = settingsAckTimeoutMillis;
         this.handlerExecutor = handlerExecutor;
-        this.connectionExecutor = connectionExecutor;
+        this.writerExecutor = writerExecutor;
         this.buffer = ByteBuffer.allocate(serverSettings.maxFrameSize).flip();
         this.fieldBlockEncoder = new FieldBlockEncoder(new HpackTable(clientSettings.headerTableSize));
     }
@@ -997,7 +997,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     }
 
     private Future<?> startWriteLoop(OutputStream clientOut) {
-        return connectionExecutor.submit(() -> {
+        return writerExecutor.submit(() -> {
             while (writeState.canSendFrames) {
                 try {
                     writeCoordinator.processAvailableCommands();
