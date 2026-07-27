@@ -104,21 +104,16 @@ public class HttpConnectionTest {
     public void successfulSocketWritesRefreshIdleTimeAndByteStats(
         boolean http2
     ) throws Exception {
-        AtomicReference<Long> idleAfterWrite = new AtomicReference<>();
+        AtomicReference<BaseHttpConnection> connectionRef = new AtomicReference<>();
         server = ServerUtils.httpsServerForTest(http2 ? "h2" : "http")
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 var connection = (BaseHttpConnection) request.connection();
                 connection.lastIONanos.set(
                     System.nanoTime() - TimeUnit.SECONDS.toNanos(2)
                 );
+                connectionRef.set(connection);
 
                 response.write("written");
-
-                assertThat(
-                    connection.httpVersion(),
-                    is(http2 ? HttpVersion.HTTP_2 : HttpVersion.HTTP_1_1)
-                );
-                idleAfterWrite.set(connection.idleTimeMillis());
             })
             .start();
 
@@ -126,7 +121,13 @@ public class HttpConnectionTest {
             assertThat(response.body().string(), is("written"));
         }
 
-        assertThat(idleAfterWrite.get(), lessThan(1000L));
+        BaseHttpConnection connection = connectionRef.get();
+        assertThat(connection, notNullValue());
+        assertThat(
+            connection.httpVersion(),
+            is(http2 ? HttpVersion.HTTP_2 : HttpVersion.HTTP_1_1)
+        );
+        assertThat(connection.idleTimeMillis(), lessThan(1000L));
         assertThat(server.stats().bytesSent(), greaterThan(0L));
     }
 
