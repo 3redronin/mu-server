@@ -30,8 +30,8 @@ class Http2Stream implements ResponseInfo {
     private volatile boolean resetInitiated;
     private volatile boolean applicationExchangeEnded;
     private volatile boolean protocolStateClosed;
-    // Writer-published immediately before END_STREAM output so the reader never
-    // lags behind a frame that the peer can already have observed.
+    // Writer-published after the complete END_STREAM frame is handed to output
+    // and before flush, matching the stream-admission publication boundary.
     private volatile boolean localEndStreamPublished;
     private long endTime = 0;
     private final InputStream bodyInputStream;
