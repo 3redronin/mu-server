@@ -14,7 +14,11 @@ import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -23,6 +27,8 @@ import static java.util.Collections.emptySet;
 class Http1Connection extends BaseHttpConnection {
 
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
+    private final ExecutorService handlerExecutor;
+    private final boolean handlersRunOnConnectionTask;
     private final Queue<HttpRequestTemp> requestPipeline = new ConcurrentLinkedQueue<>();
     // At most one active exchange exists on HTTP/1.1: either an HTTP request/response or a websocket takeover.
     private final AtomicReference<@Nullable ActiveExchange> activeExchange = new AtomicReference<>();
@@ -49,8 +55,12 @@ class Http1Connection extends BaseHttpConnection {
         }
     }
 
-    Http1Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime) {
+    Http1Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket,
+                    @Nullable Certificate clientCertificate, Instant handshakeStartTime,
+                    ExecutorService handlerExecutor, boolean handlersRunOnConnectionTask) {
         super(server, creator, clientSocket, clientCertificate, handshakeStartTime);
+        this.handlerExecutor = handlerExecutor;
+        this.handlersRunOnConnectionTask = handlersRunOnConnectionTask;
     }
 
     @Override
@@ -140,15 +150,22 @@ class Http1Connection extends BaseHttpConnection {
 
                     onRequestStarted(muRequest);
 
+                    boolean rejectedByHandlerExecutor = false;
                     try {
-                        handleExchange(muRequest, muResponse);
-                        closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest);
+                        if (handleExchangeOnHandlerExecutor(muRequest, muResponse)) {
+                            closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest);
+                        } else {
+                            rejectedByHandlerExecutor = true;
+                            closeConnection = rejectRequestDueToHandlerOverload(muRequest, outputStream);
+                        }
                     } catch (Throwable e) {
                         closeConnection = true;
                         log.warn("Unrecoverable error for " + muRequest, e);
                         muResponse.setState(ResponseState.ERRORED);
                     } finally {
-                        onExchangeEnded(muResponse);
+                        if (!rejectedByHandlerExecutor) {
+                            onExchangeEnded(muResponse);
+                        }
                         clientSocket.setSoTimeout(0);
                     }
                     var websocket = muResponse.getWebsocket();
@@ -168,6 +185,53 @@ class Http1Connection extends BaseHttpConnection {
             activeExchange.set(null);
             closeTransportQuietly();
         }
+    }
+
+    private boolean handleExchangeOnHandlerExecutor(Mu3Request request, Http1Response response) throws Throwable {
+        if (handlersRunOnConnectionTask) {
+            handleExchange(request, response);
+            return true;
+        }
+        CompletableFuture<@Nullable Void> completion = new CompletableFuture<>();
+        try {
+            handlerExecutor.execute(() -> {
+                try {
+                    handleExchange(request, response);
+                    completion.complete(null);
+                } catch (Throwable t) {
+                    completion.completeExceptionally(t);
+                }
+            });
+        } catch (RejectedExecutionException rejected) {
+            return false;
+        }
+        try {
+            completion.get();
+            return true;
+        } catch (ExecutionException e) {
+            throw e.getCause();
+        }
+    }
+
+    private boolean rejectRequestDueToHandlerOverload(Mu3Request request, OutputStream outputStream) throws IOException {
+        rejectedDueToOverload.incrementAndGet();
+        server.getStatsImpl().onRejectedDueToOverload();
+        server.onRequestSubmissionRejected(request);
+        activeExchange.updateAndGet(cur ->
+            cur != null && isSameRequest(cur.request, request) ? null : cur
+        );
+
+        String rejectionReason = "503 Service Unavailable";
+        outputStream.write(ConnectionAcceptor.serverUnavailableResponse);
+        outputStream.flush();
+        server.onRequestRejected(new RejectedRequestImpl(
+            HttpStatus.SERVICE_UNAVAILABLE_503.code(),
+            rejectionReason,
+            request.method().name(),
+            request.uri().toString(),
+            this
+        ));
+        return true;
     }
 
     private boolean cleanUpNicely(Boolean closeConnection, Http1Response muResponse, Mu3Request muRequest) {
