@@ -602,6 +602,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     ? candidate.frame()
                     : prepareCoordinatorErrorFrame(protocolError);
                 log.info("Writing {}", frame);
+                // Publish reader-facing monotonic output fences before bytes
+                // can reach the peer. Protocol completion still occurs only
+                // in candidate.complete() after flush.
+                candidate.publishBeforeWrite(frame);
                 PendingSettingsAck pendingSettingsAck = null;
                 if (frame instanceof Http2WindowUpdate) {
                     var update = (Http2WindowUpdate) frame;

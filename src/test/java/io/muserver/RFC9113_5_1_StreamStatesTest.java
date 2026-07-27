@@ -6,11 +6,15 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 
 import static io.muserver.MuServerBuilder.httpServer;
@@ -28,6 +32,86 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class RFC9113_5_1_StreamStatesTest {
 
     private @Nullable MuServer server;
+
+    @Test
+    void localEndStreamStopsCountingBeforeFlushReturns() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake();
+            var liveConnection =
+                (Http2Connection) server.activeConnections().iterator().next();
+            var executor = Executors.newSingleThreadExecutor();
+            try {
+                var writerConnection = new Http2Connection(
+                    liveConnection.server,
+                    liveConnection.creator,
+                    liveConnection.clientSocket,
+                    liveConnection.clientCertificate,
+                    Instant.now(),
+                    Http2Settings.DEFAULT_CLIENT_SETTINGS,
+                    5000,
+                    executor,
+                    executor
+                );
+                var requestUri = server.uri().resolve("/synthetic");
+                var request = new Mu3Request(
+                    writerConnection,
+                    Method.GET,
+                    requestUri,
+                    server.uri(),
+                    HttpVersion.HTTP_2,
+                    new FieldBlock(),
+                    BodySize.NONE,
+                    EmptyInputStream.INSTANCE
+                );
+                var stream = new Http2Stream(
+                    1,
+                    writerConnection,
+                    Http2StreamState.HALF_CLOSED_REMOTE,
+                    request,
+                    EmptyInputStream.INSTANCE
+                );
+                Http2WriteCoordinator coordinator = getField(
+                    writerConnection,
+                    "writeCoordinator",
+                    Http2WriteCoordinator.class
+                );
+                coordinator.openStream(
+                    1,
+                    65_535,
+                    Http2StreamState.HALF_CLOSED_REMOTE,
+                    stream
+                );
+                writerConnection.write(
+                    new Http2HeadersFrame(1, true, new FieldBlock())
+                );
+
+                assertThat(stream.countsTowardsMaxConcurrentStreams(), equalTo(true));
+                var flushEntered = new CountDownLatch(1);
+                var countedDuringFlush = new AtomicReference<Boolean>();
+                var output = new ByteArrayOutputStream() {
+                    @Override
+                    public void flush() {
+                        countedDuringFlush.set(
+                            stream.countsTowardsMaxConcurrentStreams()
+                        );
+                        flushEntered.countDown();
+                    }
+                };
+
+                writerConnection.startWriteLoop(output);
+                assertThat(flushEntered.await(5, TimeUnit.SECONDS), equalTo(true));
+                assertThat(countedDuringFlush.get(), equalTo(false));
+            } finally {
+                executor.shutdownNow();
+            }
+        }
+    }
 
     @Test
     public void streamIDsFromClientsCannotBeRepeated() throws Exception {

@@ -340,6 +340,13 @@ The following are distinct events:
 
 A handler finishing does not remove the stream.
 
+The writer publishes the reader-facing local `END_STREAM` fence immediately
+before emitting the terminal frame. A complete frame can reach the peer before
+`flush()` returns, so publishing only after flush could make the reader
+temporarily count a stream that the peer already knows is closed. Protocol
+closure, write promises, and successful response completion still advance only
+after the write succeeds; a failed terminal write closes the connection.
+
 If a handler completes a response while the peer request side is still open,
 the input enters discard mode. Already-buffered and future request DATA is
 discarded with both connection and stream credit returned. This allows a client

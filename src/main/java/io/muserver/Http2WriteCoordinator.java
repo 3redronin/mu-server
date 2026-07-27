@@ -48,6 +48,15 @@ final class Http2WriteCoordinator {
             return protocolError;
         }
 
+        void publishBeforeWrite(LogicalHttp2Frame frameToWrite) {
+            if (frameToWrite.endStream()) {
+                Http2Stream stream = applicationStreams.get(frameToWrite.streamId());
+                if (stream != null) {
+                    stream.onLocalEndStreamPublished();
+                }
+            }
+        }
+
         void complete() {
             if (completesTask) {
                 onWriteCompleted(frame);
@@ -735,7 +744,7 @@ final class Http2WriteCoordinator {
         if (frame.endStream()) {
             Http2Stream stream = applicationStreams.get(streamId);
             if (stream != null) {
-                stream.onLocalEndStreamWritten();
+                stream.onLocalEndStreamPublished();
             }
         }
         if (frame instanceof Http2ResetStreamFrame
