@@ -317,6 +317,7 @@ class ConnectionAcceptor {
         }
     }
 
+    @SuppressWarnings("ReferenceEquality") // Sharing is defined by the exact configured executor instance.
     private void handleRequest(Socket socket, @Nullable Certificate clientCert, Instant startTime, HttpVersion httpVersion, @Nullable InputStream providedInputStream) {
         BaseHttpConnection con;
         if (httpVersion == HttpVersion.HTTP_2) {
