@@ -603,6 +603,16 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     : prepareCoordinatorErrorFrame(protocolError);
                 log.info("Writing {}", frame);
                 PendingSettingsAck pendingSettingsAck = null;
+                if (frame instanceof Http2WindowUpdate) {
+                    var update = (Http2WindowUpdate) frame;
+                    // OutputStream writes can make a complete frame visible
+                    // before flush() returns. Publish the matching receive
+                    // credit first so the reader accepts DATA enabled by it.
+                    inboundFlowControl.windowUpdateWriting(
+                        update.streamId(),
+                        update.windowSizeIncrement()
+                    );
+                }
                 if (frame instanceof Http2Settings) {
                     var settings = (Http2Settings) frame;
                     if (!settings.isAck) {
@@ -617,13 +627,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     // The peer cannot be late until the SETTINGS frame has
                     // actually crossed the writer's publication boundary.
                     startSettingsAckTimeout(pendingSettingsAck);
-                }
-                if (frame instanceof Http2WindowUpdate) {
-                    var update = (Http2WindowUpdate) frame;
-                    inboundFlowControl.windowUpdateWritten(
-                        update.streamId(),
-                        update.windowSizeIncrement()
-                    );
                 }
                 if (GO_AWAY_WARNING.equals(frame)) {
                     recordInitialGoAwayWritten();
