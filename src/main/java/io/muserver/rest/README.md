@@ -197,7 +197,7 @@ No plan to implement as it would add another dependency.
 - [x] `java.io.Reader` All media types (*/*)
 - [x] `java.io.File` All media types (*/*)
 - [ ] `jakarta.activation.DataSource` Will not implement as Jakarta Activation is an optional dependency
-- [ ] `javax.xml.transform.Source` XML types (text/xml, application/xml and media types of the form application/*+xml)
+- [x] `javax.xml.transform.Source` XML types (text/xml, application/xml and media types of the form application/*+xml)
 - [ ] `jakarta.xml.bind.JAXBElement` and application-supplied JAXB classes XML types (text/xml and application/xml and media types of the form application/*+xml)
 - [x] `MultivaluedMap<String,String>` Form content (application/x-www-form-urlencoded)
 - [ ] `java.util.List<EntityPart>` multipart/form-data `MessageBodyReader` (not started)

@@ -121,6 +121,7 @@ class EntityProviders {
         readers.addAll(StringEntityProviders.stringEntityReaders);
         readers.addAll(PrimitiveEntityProvider.primitiveEntryProviders);
         readers.addAll(BinaryEntityProviders.binaryEntityReaders);
+        readers.addAll(SourceEntityProviders.sourceEntityReaders);
         return readers;
     }
     public static List<MessageBodyWriter> builtInWriters() {
@@ -128,6 +129,7 @@ class EntityProviders {
         writers.addAll(StringEntityProviders.stringEntityWriters);
         writers.addAll(PrimitiveEntityProvider.primitiveEntryProviders);
         writers.addAll(BinaryEntityProviders.binaryEntityWriters);
+        writers.addAll(SourceEntityProviders.sourceEntityWriters);
         return writers;
     }
 

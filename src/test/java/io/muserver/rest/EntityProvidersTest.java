@@ -35,6 +35,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import javax.xml.transform.Source;
+import javax.xml.transform.stream.StreamSource;
 
 import static io.muserver.Mutils.NEWLINE;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -61,6 +63,42 @@ public class EntityProvidersTest {
         }
         startServer(new Sample());
         stringCheck("text/plain", randomStringOfLength(128 * 1024), "text/plain;charset=utf-8", "/samples");
+    }
+
+    @Test
+    public void sourceEntitiesAreSupportedForXmlMediaTypes() throws Exception {
+        @Path("source")
+        class Sample {
+            @POST
+            @Consumes("application/xml")
+            @Produces("application/xml")
+            public Source echo(Source source) {
+                return source;
+            }
+
+            @GET
+            @Path("suffix")
+            @Produces("application/vnd.mu+xml")
+            public Source suffixXml() {
+                return new StreamSource(new StringReader("<message>suffix</message>"));
+            }
+        }
+
+        startServer(new Sample());
+
+        try (Response response = call(request()
+            .post(RequestBody.create("<message>echo</message>", MediaType.get("application/xml")))
+            .url(server.uri().resolve("/source").toString()))) {
+            assertThat(response.code(), equalTo(200));
+            assertThat(response.header("Content-Type"), equalTo("application/xml"));
+            assertThat(response.body().string(), Matchers.containsString("<message>echo</message>"));
+        }
+
+        try (Response response = call(request(server.uri().resolve("/source/suffix")))) {
+            assertThat(response.code(), equalTo(200));
+            assertThat(response.header("Content-Type"), equalTo("application/vnd.mu+xml"));
+            assertThat(response.body().string(), Matchers.containsString("<message>suffix</message>"));
+        }
     }
 
     @Test
