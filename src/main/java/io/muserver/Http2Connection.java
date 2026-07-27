@@ -699,7 +699,11 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             // started, so no ACK can race this registration.
             registerInitialSettingsAck();
 
-            var fieldBlockDecoder = new FieldBlockDecoder(new HpackTable(serverSettings.headerTableSize), server.maxUrlSize(), server.maxRequestHeadersSize());
+            var fieldBlockDecoder = new FieldBlockDecoder(
+                new HpackTable(serverSettings.headerTableSize),
+                server.maxUrlSize(),
+                serverSettings.maxHeaderListSize
+            );
             writeEndedFuture = startWriteLoop(clientOut);
 
             // and now just read frames
@@ -1008,7 +1012,16 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID " + fh.streamId());
         }
         try {
-            var headerFragment = Http2HeadersFrame.readLogicalFrame(fh, fieldBlockDecoder, buffer, clientIn);
+            var headerFragment = Http2HeadersFrame.readLogicalFrame(
+                fh,
+                fieldBlockDecoder,
+                buffer,
+                clientIn,
+                Math.max(
+                    serverSettings.maxHeaderListSize,
+                    serverSettings.maxFrameSize
+                )
+            );
             log.info("Got headers " + headerFragment);
             Http2StreamRegistry.Lookup registered =
                 streamRegistry.lookup(headerFragment.streamId());

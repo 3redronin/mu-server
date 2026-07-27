@@ -12,6 +12,7 @@ import java.nio.ByteBuffer;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class Http2HeaderFragmentTest {
 
@@ -65,6 +66,42 @@ public class Http2HeaderFragmentTest {
         assertThat(headers.endStream(), equalTo(true));
         assertThat(headers.headers().get(":method"), equalTo("GET"));
         assertThat(headers.headers().get(":path"), equalTo("/hello"));
+    }
+
+    @Test
+    void continuationAccumulationIsBoundedBeforeTheNextFragmentIsRetained() {
+        var frameHeader = new Http2FrameHeader(
+            5,
+            Http2FrameType.HEADERS,
+            0b00000001,
+            1
+        );
+        ByteBuffer firstFragment = ByteBuffer.allocate(32);
+        firstFragment.put(
+            new byte[]{(byte) 0x82, (byte) 0x87, (byte) 0x84, (byte) 0x81, (byte) 0x90}
+        );
+        firstFragment.flip();
+        var continuation = new ByteArrayInputStream(
+            RFCTestUtils.continuationFrame(
+                1,
+                true,
+                new byte[]{(byte) 0x90, (byte) 0x90}
+            )
+        );
+
+        var failure = assertThrows(
+            Http2Exception.class,
+            () -> Http2HeadersFrame.readLogicalFrame(
+                frameHeader,
+                getFieldBlockDecoder(),
+                firstFragment,
+                continuation,
+                6
+            )
+        );
+
+        assertThat(failure.errorType(), equalTo(Http2Level.CONNECTION));
+        assertThat(failure.errorCode(), equalTo(Http2ErrorCode.COMPRESSION_ERROR));
     }
 
     @Test
