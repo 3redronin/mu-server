@@ -620,7 +620,7 @@ class Mu3ServerImpl implements MuServer {
     ) {
         try {
             listener.onComplete(exchange);
-        } catch (Exception failure) {
+        } catch (Throwable failure) {
             log.error("Error from response completion listener", failure);
         }
     }
