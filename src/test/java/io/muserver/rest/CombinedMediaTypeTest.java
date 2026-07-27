@@ -50,6 +50,27 @@ public class CombinedMediaTypeTest {
     }
 
     @Test
+    public void structuredSuffixWildcardMatchesAConcreteSubtype() {
+        CombinedMediaType combined = CombinedMediaType.s(
+            delegate.fromString("application/vnd.mu+xml"),
+            delegate.fromString("application/*+xml"));
+
+        assertThat(combined.type, equalTo("application"));
+        assertThat(combined.subType, equalTo("vnd.mu+xml"));
+        assertThat(combined.d, equalTo(1));
+        assertThat(combined.isConcrete(), equalTo(true));
+    }
+
+    @Test
+    public void structuredSuffixWildcardDoesNotMatchAnotherSubtype() {
+        CombinedMediaType combined = CombinedMediaType.s(
+            delegate.fromString("application/json"),
+            delegate.fromString("application/*+xml"));
+
+        assertThat(combined, sameInstance(CombinedMediaType.NONMATCH));
+    }
+
+    @Test
     public void specificIsABetterMatchThanAWildcard() {
         CombinedMediaType[] sample = new CombinedMediaType[]{
             t("*", "*", 0.5, 0.5, 0),

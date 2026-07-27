@@ -36,8 +36,7 @@ class SourceEntityProviders {
     static final List<MessageBodyReader> sourceEntityReaders = singletonList(new SourceReader());
     static final List<MessageBodyWriter> sourceEntityWriters = singletonList(new SourceWriter());
 
-    // MediaType only supports a full subtype wildcard, so isReadable narrows application/* to *+xml types.
-    @Consumes({"text/xml", "application/xml", "application/*"})
+    @Consumes({"text/xml", "application/xml", "application/*+xml"})
     static class SourceReader implements MessageBodyReader<Source> {
         @Override
         public boolean isReadable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
@@ -142,8 +141,7 @@ class SourceEntityProviders {
         }
     }
 
-    // application/* makes structured-suffix types candidates; isWriteable performs the final XML-only check.
-    @Produces({"application/xml", "text/xml;qs=0.9", "application/*;qs=0.8"})
+    @Produces({"application/xml", "text/xml;qs=0.9", "application/*+xml;qs=0.8"})
     static class SourceWriter implements MessageBodyWriter<Source> {
         @Override
         public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {

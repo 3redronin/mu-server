@@ -48,10 +48,16 @@ class EntityProviders {
 
     private static int mediaTypeSpecificity(ProviderWrapper<?> provider, MediaType requestedType) {
         return provider.mediaTypes.stream()
-            .filter(mediaType -> mediaType.isCompatible(requestedType))
-            .mapToInt(mediaType -> mediaType.isWildcardType() ? 2 : mediaType.isWildcardSubtype() ? 1 : 0)
+            .filter(mediaType -> MediaTypeHeaderDelegate.isCompatible(mediaType, requestedType))
+            .mapToInt(EntityProviders::mediaTypeSpecificity)
             .min()
             .orElse(2);
+    }
+
+    private static int mediaTypeSpecificity(MediaType mediaType) {
+        return mediaType.isWildcardType()
+            ? 2
+            : MediaTypeHeaderDelegate.isWildcardSubtype(mediaType.getSubtype()) ? 1 : 0;
     }
 
     private static Class<?> box(Class<?> type) {
@@ -89,8 +95,8 @@ class EntityProviders {
                 }
 
                 // and a secondary key of media type
-                Integer min1 = o1.mediaTypes.stream().map(mt -> mt.isWildcardType() ? 2 : mt.isWildcardSubtype() ? 1 : 0).min(Comparator.naturalOrder()).orElse(2);
-                Integer min2 = o2.mediaTypes.stream().map(mt -> mt.isWildcardType() ? 2 : mt.isWildcardSubtype() ? 1 : 0).min(Comparator.naturalOrder()).orElse(2);
+                Integer min1 = o1.mediaTypes.stream().map(EntityProviders::mediaTypeSpecificity).min(Comparator.naturalOrder()).orElse(2);
+                Integer min2 = o2.mediaTypes.stream().map(EntityProviders::mediaTypeSpecificity).min(Comparator.naturalOrder()).orElse(2);
                 int mtCompare = min1.compareTo(min2);
                 if (mtCompare != 0) {
                     return mtCompare;

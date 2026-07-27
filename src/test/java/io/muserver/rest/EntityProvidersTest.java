@@ -75,11 +75,11 @@ public class EntityProvidersTest {
             @POST
             @Consumes({
                 "text/xml", "application/xml", "application/atom+xml",
-                "application/svg+xml", "application/vnd.mu+xml", "application/*+xml"
+                "application/svg+xml", "application/vnd.mu+xml"
             })
             @Produces({
                 "text/xml", "application/xml", "application/atom+xml",
-                "application/svg+xml", "application/vnd.mu+xml", "application/*+xml"
+                "application/svg+xml", "application/vnd.mu+xml"
             })
             public Source echo(Source source) {
                 return source;
@@ -95,7 +95,7 @@ public class EntityProvidersTest {
 
             @GET
             @Path("suffix")
-            @Produces("application/vnd.mu+xml")
+            @Produces("application/*+xml")
             public Source suffixXml() {
                 return new StreamSource(new StringReader("<message>suffix</message>"));
             }
@@ -105,7 +105,7 @@ public class EntityProvidersTest {
 
         for (String xmlMediaType : asList(
             "text/xml", "application/xml", "application/atom+xml",
-            "application/svg+xml", "application/vnd.mu+xml", "application/*+xml")) {
+            "application/svg+xml", "application/vnd.mu+xml")) {
             try (Response response = call(request()
                 .header("Accept", xmlMediaType)
                 .post(RequestBody.create("<message>echo</message>", MediaType.get(xmlMediaType)))
@@ -124,7 +124,8 @@ public class EntityProvidersTest {
             assertThat(response.body().string(), Matchers.containsString("<message>stream</message>"));
         }
 
-        try (Response response = call(request(server.uri().resolve("/source/suffix")))) {
+        try (Response response = call(request(server.uri().resolve("/source/suffix"))
+            .header("Accept", "application/vnd.mu+xml"))) {
             assertThat(response.code(), equalTo(200));
             assertThat(response.header("Content-Type"), equalTo("application/vnd.mu+xml"));
             assertThat(response.body().string(), Matchers.containsString("<message>suffix</message>"));
@@ -335,6 +336,11 @@ public class EntityProvidersTest {
             assertThat(response.code(), equalTo(200));
             assertThat(response.header("Content-Type"), equalTo("application/vnd.mu+xml"));
             assertThat(response.body().string(), Matchers.containsString("<message>default</message>"));
+        }
+
+        try (Response response = call(request(server.uri().resolve("/source"))
+            .header("Accept", "application/json"))) {
+            assertThat(response.code(), equalTo(406));
         }
     }
 

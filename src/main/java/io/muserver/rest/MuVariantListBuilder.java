@@ -131,7 +131,7 @@ class MuVariantListBuilder extends Variant.VariantListBuilder {
         List<CombinedMediaType> m = new ArrayList<>();
         for (MediaType clientAccepts : acceptableMediaTypes) {
             for (MediaType serverProduces : candidates) {
-                if (clientAccepts.isCompatible(serverProduces)) {
+                if (MediaTypeHeaderDelegate.isCompatible(clientAccepts, serverProduces)) {
                     CombinedMediaType combined = CombinedMediaType.s(clientAccepts, serverProduces);
                     combinedToServerType.put(combined, serverProduces);
                     m.add(combined);
