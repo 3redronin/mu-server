@@ -274,41 +274,18 @@ class Http1Connection extends BaseHttpConnection {
     }
 
     private void onExchangeEndedOnHandler(Http1Response response) {
+        recordExchangeEnded(response);
         if (handlersRunOnConnectionTask) {
-            onExchangeEnded(response);
+            notifyExchangeEnded(response);
             return;
         }
-        CompletableFuture<Void> ended = new CompletableFuture<>();
-        Runnable task = () -> {
-            try {
-                onExchangeEnded(response);
-                ended.complete(null);
-            } catch (Throwable t) {
-                ended.completeExceptionally(t);
-            }
-        };
+        Runnable task = () -> notifyExchangeEnded(response);
         try {
             handlerExecutor.execute(task);
         } catch (RejectedExecutionException rejected) {
-            // The exchange was already accepted and its response has been cleaned up.
-            // Finish inline rather than losing its completion notifications during shutdown
-            // or a transient executor-capacity rejection.
+            // Internal exchange accounting is already complete. Preserve application
+            // notifications during shutdown or a transient capacity rejection.
             task.run();
-        }
-        try {
-            ended.get();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new MuException("Interrupted waiting for response completion callbacks", e);
-        } catch (ExecutionException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof RuntimeException) {
-                throw (RuntimeException) cause;
-            }
-            if (cause instanceof Error) {
-                throw (Error) cause;
-            }
-            throw new MuException("Unexpected response completion callback failure", cause);
         }
     }
 
@@ -363,9 +340,9 @@ class Http1Connection extends BaseHttpConnection {
     }
 
     @Override
-    public void onExchangeEnded(ResponseInfo exchange) {
+    protected void recordExchangeEnded(ResponseInfo exchange) {
         activeExchange.updateAndGet(cur -> cur != null && isSameRequest(cur.request, exchange.request()) ? null : cur);
-        super.onExchangeEnded(exchange);
+        super.recordExchangeEnded(exchange);
     }
 
     @SuppressWarnings("ReferenceEquality") // Connection ownership belongs to the exact request instance.
