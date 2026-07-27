@@ -1,5 +1,6 @@
 package io.muserver;
 
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 
 class FieldBlockDecoder {
@@ -17,6 +18,18 @@ class FieldBlockDecoder {
     }
 
     FieldBlock decodeFrom(ByteBuffer buffer) throws HttpException, Http2Exception {
+        try {
+            return decodeCompleteBlock(buffer);
+        } catch (BufferUnderflowException truncated) {
+            throw new Http2Exception(
+                Http2ErrorCode.COMPRESSION_ERROR,
+                "truncated HPACK field block"
+            );
+        }
+    }
+
+    private FieldBlock decodeCompleteBlock(ByteBuffer buffer)
+        throws HttpException, Http2Exception {
         var fb = new FieldBlock();
         int totalLen = 0;
         int uriLen = 0;
@@ -121,6 +134,12 @@ class FieldBlockDecoder {
         int B;
         do {
             // B = next octet
+            if (!buffer.hasRemaining()) {
+                throw new Http2Exception(
+                    Http2ErrorCode.COMPRESSION_ERROR,
+                    "truncated HPACK integer"
+                );
+            }
             B = buffer.get() & 0xFF;
 
             // I = I + (B & 127) * 2^M
@@ -136,8 +155,20 @@ class FieldBlockDecoder {
     }
 
     private static HeaderString readHeaderString(ByteBuffer buffer, HeaderString.Type type) throws Http2Exception {
+        if (!buffer.hasRemaining()) {
+            throw new Http2Exception(
+                Http2ErrorCode.COMPRESSION_ERROR,
+                "missing HPACK string length"
+            );
+        }
         byte decl = buffer.get();
         int codeLen = readHpackInt(7, decl, buffer);
+        if (codeLen > buffer.remaining()) {
+            throw new Http2Exception(
+                Http2ErrorCode.COMPRESSION_ERROR,
+                "HPACK string exceeds the field block"
+            );
+        }
         if ((decl & 0b10000000) > 0) {
             return HuffmanDecoder.decodeFrom(buffer, codeLen, type);
         } else {

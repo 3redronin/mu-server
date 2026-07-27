@@ -7,6 +7,12 @@ import java.nio.ByteBuffer;
 class HuffmanDecoder {
 
     static HeaderString decodeFrom(ByteBuffer bb, int len, HeaderString.Type type) throws Http2Exception {
+        if (len < 0 || len > bb.remaining()) {
+            throw new Http2Exception(
+                Http2ErrorCode.COMPRESSION_ERROR,
+                "Huffman string exceeds the field block"
+            );
+        }
         var sb = new StringBuilder();
         var node = root;
         int bitsSinceLastSymbol = 0;
