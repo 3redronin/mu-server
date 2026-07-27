@@ -724,6 +724,54 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void synchronousHttp2CompletionDoesNotResubmitFromItsApplicationWorker() throws Exception {
+        var applicationExecutor = track(new ThreadPoolExecutor(
+            1,
+            1,
+            0,
+            TimeUnit.MILLISECONDS,
+            new SynchronousQueue<>(),
+            namedThreads("application-")
+        ));
+        var responseCompletionThread = new CompletableFuture<String>();
+        var completionThread = new CompletableFuture<String>();
+        server = httpServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .withHandlerExecutor(applicationExecutor)
+            .withAsyncExecutor(applicationExecutor)
+            .addResponseCompleteListener(info ->
+                completionThread.complete(Thread.currentThread().getName())
+            )
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                response.addCompletionListener(info ->
+                    responseCompletionThread.complete(Thread.currentThread().getName())
+                );
+                response.write("done");
+            })
+            .start();
+
+        try (var h2Client = new H2Client();
+             var connection = h2Client.connectClearText(server)) {
+            connection.handshake();
+            connection.socket().setSoTimeout(2000);
+            connection.writeFrame(new Http2HeadersFrame(
+                1,
+                true,
+                RFCTestUtils.getHelloHeaders("http", server.uri().getPort())
+            )).flush();
+
+            Http2HeadersFrame responseHeaders =
+                RFCTestUtils.readIgnoringWindowUpdates(connection, Http2HeadersFrame.class);
+            assertThat(responseHeaders.headers().get(":status"), equalTo("200"));
+            Http2DataFrame responseData =
+                RFCTestUtils.readIgnoringWindowUpdates(connection, Http2DataFrame.class);
+            assertThat(responseData.toUTF8(), equalTo("done"));
+            assertThat(responseCompletionThread.get(5, TimeUnit.SECONDS), startsWith("application-"));
+            assertThat(completionThread.get(5, TimeUnit.SECONDS), startsWith("application-"));
+        }
+    }
+
+    @Test
     void rejectedHandlerDispatchesHttp2AsyncCompletionToTheAsyncExecutor() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));

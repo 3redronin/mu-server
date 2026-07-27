@@ -1221,7 +1221,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             }
             stream.abandonApplicationExchange();
         } finally {
-            onExchangeEnded(stream);
+            onExchangeEnded(stream, false);
         }
     }
 
@@ -1249,7 +1249,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                 stream.cancel(new IOException("Unhandled stream exception", e), false);
             }
         } finally {
-            onExchangeEnded(stream);
+            onExchangeEnded(stream, true);
         }
     }
 
@@ -1385,12 +1385,21 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     @Override
     protected void onExchangeEnded(ResponseInfo exchange) {
-        var stream = (Http2Stream) exchange;
+        onExchangeEnded((Http2Stream) exchange, false);
+    }
+
+    private void onExchangeEnded(
+        Http2Stream stream,
+        boolean alreadyOnApplicationExecutor
+    ) {
         stream.onApplicationExchangeEnded();
         applicationExchangeEndedForWrites(stream.id);
         signalWriteLoop();
-        recordExchangeEnded(exchange);
-        server.executeResponseCompletionTask(() -> notifyExchangeEnded(exchange));
+        recordExchangeEnded(stream);
+        server.executeResponseCompletionTask(
+            () -> notifyExchangeEnded(stream),
+            alreadyOnApplicationExecutor
+        );
     }
 
     void removeProtocolStream(Http2Stream stream) {
