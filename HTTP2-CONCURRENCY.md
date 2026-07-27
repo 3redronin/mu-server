@@ -365,6 +365,12 @@ The connection state lock may enter the registry, inbound-flow component, or
 coordinator mailbox while publishing one transition. None of those components
 enters the connection state lock while holding its own lock.
 
+Graceful HTTP/2 shutdown uses the same state-lock boundary for stream admission
+and the final accepted-stream snapshot. The in-flight stream-creation grace
+period begins only after the writer flushes the initial maximum-stream-ID
+`GOAWAY`; writer scheduling or socket delay therefore cannot consume the grace
+period before the peer sees the warning. Its deadline uses monotonic time.
+
 No lock is held while:
 
 * writing to a socket;

@@ -6,6 +6,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -118,6 +119,55 @@ class RFC9113_6_8_GoAwayTest {
             assertThrows(IOException.class, con::readFrameHeader);
 
             stopper.shutdownNow();
+        }
+    }
+
+    @Test
+    void gracefulShutdownWaitsAfterTheInitialGoAwayIsActuallyWritten() throws Exception {
+        var writerStarted = new CountDownLatch(1);
+        var releaseWriter = new CountDownLatch(1);
+        var writerExecutor = Executors.newSingleThreadExecutor();
+        var stopper = Executors.newSingleThreadExecutor();
+        writerExecutor.submit(() -> {
+            writerStarted.countDown();
+            releaseWriter.await();
+            return null;
+        });
+        assertThat(writerStarted.await(5, TimeUnit.SECONDS), equalTo(true));
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .withHttp2WriterExecutor(writerExecutor)
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake();
+            var stopped = stopper.submit(() -> server.stop());
+
+            // Let the old initiation-based grace period expire while the writer cannot
+            // emit even the warning GOAWAY.
+            Thread.sleep(Http2Connection.GO_AWAY_GRACE_PERIOD_MILLIS * 2);
+            releaseWriter.countDown();
+
+            assertThat("Expected warning goaway", con.readLogicalFrame(),
+                equalTo(goAway(0x7FFFFFFF, Http2ErrorCode.NO_ERROR)));
+
+            int originalTimeout = con.socket().getSoTimeout();
+            con.socket().setSoTimeout(20);
+            try {
+                assertThrows(SocketTimeoutException.class, con::readFrameHeader);
+            } finally {
+                con.socket().setSoTimeout(originalTimeout);
+            }
+
+            assertThat("Expected final goaway", con.readLogicalFrame(),
+                equalTo(goAway(0, Http2ErrorCode.NO_ERROR)));
+            stopped.get(5, TimeUnit.SECONDS);
+        } finally {
+            releaseWriter.countDown();
+            stopper.shutdownNow();
+            writerExecutor.shutdownNow();
         }
     }
 
