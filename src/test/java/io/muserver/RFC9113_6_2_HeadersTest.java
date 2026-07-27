@@ -376,6 +376,36 @@ class RFC9113_6_2_HeadersTest {
     }
 
     @Test
+    void oversizedInitialHeadersCanReceiveAFlowControlledErrorBody() throws Exception {
+        server = httpsServer()
+            .withMaxHeadersSize(512)
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2Settings(false, 4096, 100, 0, 16384, 32768))
+                .flush();
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            var oversized = getHelloHeaders(getPort());
+            oversized.add("x-oversized", "x".repeat(1024));
+            con.writeFrame(new Http2HeadersFrame(1, true, oversized)).flush();
+
+            var responseHeaders = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(responseHeaders.headers().get(":status"), equalTo("431 Request Header Fields Too Large"));
+            assertNothingToRead(con.socket());
+
+            int contentLength = Integer.parseInt(responseHeaders.headers().get("content-length"));
+            con.writeFrame(new Http2WindowUpdate(1, contentLength)).flush();
+            var body = con.readLogicalFrame(Http2DataFrame.class);
+            assertThat(body.toUTF8(), equalTo("431 Request Header Fields Too Large"));
+            assertThat(body.endStream(), equalTo(true));
+        }
+    }
+
+    @Test
     void trailingHeadersMustEndTheStream() throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())

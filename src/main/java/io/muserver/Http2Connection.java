@@ -164,16 +164,22 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         }
     }
 
-    private void openStreamForWrites(
+    private void queueRejectedResponse(
         int streamId,
         int initialCredit,
         Http2StreamState initialState,
-        @Nullable Http2Stream stream
+        Http2HeadersFrame headers,
+        Http2DataFrame body
     ) {
         stateLock.lock();
         try {
             if (writeState.canSendFrames) {
-                writeCoordinator.openStream(streamId, initialCredit, initialState, stream);
+                // Rejected headers do not create an application-facing Http2Stream, so queue
+                // their complete protocol exchange directly as one ordered coordinator transaction.
+                writeCoordinator.openStream(streamId, initialCredit, initialState, null);
+                writeCoordinator.submit(new WriteTask(headers, false));
+                writeCoordinator.submit(new WriteTask(body, false));
+                writeCoordinator.forgetStream(streamId);
             }
         } finally {
             stateLock.unlock();
@@ -188,17 +194,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                 return;
             }
             throw Http2Exception.connection(Http2ErrorCode.INTERNAL_ERROR, "HTTP/2 writer closed before END_STREAM was processed");
-        } finally {
-            stateLock.unlock();
-        }
-    }
-
-    private void forgetStreamForWrites(int streamId) {
-        stateLock.lock();
-        try {
-            if (writeState.canSendFrames) {
-                writeCoordinator.forgetStream(streamId);
-            }
         } finally {
             stateLock.unlock();
         }
@@ -879,6 +874,15 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                     "Invalid stream ID " + fh.streamId()
                 );
             }
+            stateLock.lock();
+            try {
+                // An HTTP error response means this stream was processed. Record it before
+                // exposing the rejection or queuing flow-controlled response DATA so later
+                // stream frames and GOAWAY use the same retry boundary.
+                lastStreamId = fh.streamId();
+            } finally {
+                stateLock.unlock();
+            }
             server.onRequestRejected(new RejectedRequestImpl(e.status().code(), rejectReason, null, null, this));
             FieldBlock errorHeaders = new FieldBlock();
             errorHeaders.add(HeaderNames.PSEUDO_STATUS, e.status());
@@ -890,10 +894,13 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             Http2StreamState initialState = (fh.flags() & 0b00000001) == 0
                 ? Http2StreamState.OPEN
                 : Http2StreamState.HALF_CLOSED_REMOTE;
-            openStreamForWrites(fh.streamId(), clientSettings.initialWindowSize, initialState, null);
-            write(new Http2HeadersFrame(fh.streamId(), false, errorHeaders));
-            write(new Http2DataFrame(fh.streamId(), true, message, 0, message.length));
-            forgetStreamForWrites(fh.streamId());
+            queueRejectedResponse(
+                fh.streamId(),
+                clientSettings.initialWindowSize,
+                initialState,
+                new Http2HeadersFrame(fh.streamId(), false, errorHeaders),
+                new Http2DataFrame(fh.streamId(), true, message, 0, message.length)
+            );
         }
     }
 
