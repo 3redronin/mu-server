@@ -181,7 +181,7 @@ as defined by RFC 9113 Section 7.
 | Pending outbound frames and their ordering | Coordinator |
 | HPACK encoder and socket output | Coordinator |
 | Request-body producer/consumer buffer and read deadline | `Http2BodyInputStream` lock and condition |
-| Response API call ordering | Application-side response/async handle |
+| Response API call ordering and async completion terminal gate | Application-side response/async handle lock |
 | Protocol stream completion | Coordinator |
 | Application exchange completion | Serialized application completion path |
 
@@ -376,7 +376,9 @@ Permitted cross-thread primitives are deliberately narrow:
 * one short-held lock for the live stream identity index;
 * the request-body buffer lock and condition, including its monotonic blocking
   read deadline;
-* an application-side lock that orders async response submissions; and
+* an application-side lock that orders async response submissions with the
+  terminal completion gate, so completion observes every accepted write and
+  rejects every later write; and
 * a thread-confined FIFO that drains nested application work without recursive
   calls or executor resubmission; and
 * atomics for idempotent resource closure.

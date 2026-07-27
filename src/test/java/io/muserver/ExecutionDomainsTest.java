@@ -28,6 +28,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.Phaser;
@@ -765,6 +766,69 @@ class ExecutionDomainsTest {
             assertThat(client.readBody(client.readHeaders()), equalTo("done"));
         }
         assertThat(completionThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
+    }
+
+    @Test
+    void asyncCompletionIsATerminalGateForLaterWrites() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var blockerStarted = new CountDownLatch(1);
+        var releaseBlocker = new CountDownLatch(1);
+        Future<?> blocker = asyncExecutor.submit(() -> {
+            blockerStarted.countDown();
+            releaseBlocker.await();
+            return null;
+        });
+        assertThat(blockerStarted.await(5, TimeUnit.SECONDS), is(true));
+
+        var suspendedHandle = new CompletableFuture<AsyncHandle>();
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withAsyncExecutor(asyncExecutor)
+            .addHandler((request, response) -> {
+                suspendedHandle.complete(request.handleAsync());
+                return true;
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/").flushHeaders();
+            AsyncHandle handle = suspendedHandle.get(5, TimeUnit.SECONDS);
+            handlerExecutor.submit(() -> {
+            }).get(5, TimeUnit.SECONDS);
+
+            Future<@Nullable Void> acceptedWrite = handle.write(ByteBuffer.wrap(new byte[]{'a'}));
+            handle.complete();
+            Future<@Nullable Void> lateWrite = handle.write(ByteBuffer.wrap(new byte[]{1}));
+            var callbackFailure = new CompletableFuture<Throwable>();
+            handle.write(ByteBuffer.wrap(new byte[]{2}), callbackFailure::complete);
+
+            assertThat(acceptedWrite.isDone(), is(false));
+            ExecutionException failedWrite = assertThrows(
+                ExecutionException.class,
+                () -> lateWrite.get(5, TimeUnit.SECONDS)
+            );
+            assertThat(failedWrite.getCause(), instanceOf(IllegalStateException.class));
+            assertThat(callbackFailure.get(5, TimeUnit.SECONDS), instanceOf(IllegalStateException.class));
+
+            releaseBlocker.countDown();
+            blocker.get(5, TimeUnit.SECONDS);
+            acceptedWrite.get(5, TimeUnit.SECONDS);
+            assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
+            assertThat(
+                client.readHeaders().contains(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED, true),
+                is(true)
+            );
+            assertThat(client.readLine(), equalTo("1"));
+            assertThat(client.in().read(), is((int) 'a'));
+            assertThat(client.in().read(), is((int) '\r'));
+            assertThat(client.in().read(), is((int) '\n'));
+            assertThat(client.readLine(), equalTo("0"));
+            assertThat(client.readLine(), equalTo(""));
+        } finally {
+            releaseBlocker.countDown();
+            blocker.get(5, TimeUnit.SECONDS);
+        }
     }
 
     @Test
