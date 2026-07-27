@@ -423,6 +423,10 @@ class Mu3ServerImpl implements MuServer {
         return timerExecutor.schedule(() -> tryDispatchConnectionTask(task), delay, unit);
     }
 
+    ScheduledFuture<?> scheduleTimerCallback(Runnable task, long delay, TimeUnit unit) {
+        return timerExecutor.schedule(task, delay, unit);
+    }
+
     ScheduledFuture<?> scheduleConnectionTaskAtFixedRate(
         Runnable task,
         long initialDelay,

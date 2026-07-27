@@ -240,11 +240,16 @@ public class MuServerBuilder {
     /**
      * Sets the executor used by HTTP/2 connection writers.
      *
-     * <p>HTTP/2 uses one long-lived writer task per connection on this executor. It must
-     * be independent from the executor configured by
+     * <p>HTTP/2 schedules serialized drain tasks on this executor when a connection has
+     * frames that can be written. A task returns when no further write can make progress,
+     * so an idle connection does not retain a worker. At most one task writes for a
+     * connection at a time.</p>
+     *
+     * <p>This executor must be independent from the executor configured by
      * {@link #withConnectionExecutor(ExecutorService)}: supplying the same bounded
      * executor to both methods can allow reader tasks to occupy every thread while writer
-     * tasks wait in its queue.</p>
+     * tasks wait in its queue. A bounded writer executor limits the number of connections
+     * that can perform socket writes concurrently.</p>
      *
      * <p>By default, a server-owned virtual-thread-per-task executor is used when the
      * runtime supports virtual threads, otherwise a cached thread pool is used. A

@@ -14,6 +14,7 @@ import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
@@ -61,9 +62,13 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     private final long settingsAckTimeoutMillis;
 
     private final Lock stateLock = new ReentrantLock();
-    private final Http2WriteCoordinator writeCoordinator = new Http2WriteCoordinator(65535);
+    private final Http2WriteCoordinator writeCoordinator;
+    private final AtomicBoolean writerTaskScheduled = new AtomicBoolean();
+    private final CompletableFuture<@Nullable Void> writeLoopEnded = new CompletableFuture<>();
+    private volatile @Nullable OutputStream writerOutput;
     private volatile boolean finalGoAwayQueued;
     private volatile long finalGoAwayEarliestTime = Long.MAX_VALUE;
+    private boolean finalGoAwayWakeScheduled;
 
     final FieldBlockEncoder fieldBlockEncoder;
 
@@ -73,6 +78,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         this.settingsAckTimeoutMillis = settingsAckTimeoutMillis;
         this.handlerExecutor = handlerExecutor;
         this.writerExecutor = writerExecutor;
+        this.writeCoordinator = new Http2WriteCoordinator(65535, this::requestWriteRun);
         this.buffer = ByteBuffer.allocate(serverSettings.maxFrameSize).flip();
         this.fieldBlockEncoder = new FieldBlockEncoder(new HpackTable(clientSettings.headerTableSize));
     }
@@ -997,52 +1003,111 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     }
 
     private Future<?> startWriteLoop(OutputStream clientOut) {
-        return writerExecutor.submit(() -> {
-            while (writeState.canSendFrames) {
-                try {
-                    writeCoordinator.processAvailableCommands();
-                    if (drainWritableFrames(clientOut)) {
-                        continue;
-                    }
+        writerOutput = clientOut;
+        requestWriteRun();
+        return writeLoopEnded;
+    }
 
-                    long now = System.currentTimeMillis();
-                    boolean waitForCommand = false;
-                    long waitTime = -1L;
-                    stateLock.lock();
-                    try {
-                        if (shouldQueueFinalGoAwayLocked(now)) {
-                            queueFinalGoAwayLocked();
-                        } else if (isTerminalAndDrainedLocked()) {
-                            completeShutdownLocked();
-                        } else {
-                            waitForCommand = true;
-                            waitTime = millisUntilNextWriteActionLocked(now);
+    private void requestWriteRun() {
+        if (writerOutput == null || writeLoopEnded.isDone()
+            || !writerTaskScheduled.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            writerExecutor.execute(this::runWriteTask);
+        } catch (RejectedExecutionException e) {
+            writerTaskScheduled.set(false);
+            failWriteLoop(new IOException("HTTP/2 writer executor rejected connection work", e));
+        }
+    }
+
+    private void runWriteTask() {
+        try {
+            OutputStream clientOut = Objects.requireNonNull(writerOutput, "HTTP/2 writer output is not initialized");
+            while (writeState.canSendFrames) {
+                writeCoordinator.processAvailableCommands();
+                if (drainWritableFrames(clientOut)) {
+                    continue;
+                }
+
+                long now = System.currentTimeMillis();
+                boolean continueWriting = false;
+                stateLock.lock();
+                try {
+                    if (shouldQueueFinalGoAwayLocked(now)) {
+                        queueFinalGoAwayLocked();
+                        continueWriting = true;
+                    } else if (isTerminalAndDrainedLocked()) {
+                        completeShutdownLocked();
+                    } else {
+                        long waitTime = millisUntilNextWriteActionLocked(now);
+                        if (waitTime > 0L && !finalGoAwayWakeScheduled) {
+                            scheduleFinalGoAwayWakeLocked(waitTime);
                         }
-                    } finally {
-                        stateLock.unlock();
                     }
-                    if (waitForCommand) {
-                        writeCoordinator.awaitCommand(waitTime);
-                    }
-                } catch (Exception e) {
-                    if (e instanceof InterruptedException) {
-                        Thread.currentThread().interrupt();
-                    }
-                    log.info("Write loop IO Exception with state=" + writeState);
-                    stateLock.lock();
-                    try {
-                        markConnectionErroredLocked();
-                    } finally {
-                        stateLock.unlock();
-                    }
-                    writeCoordinator.failAll(e);
+                } finally {
+                    stateLock.unlock();
+                }
+                if (!continueWriting) {
+                    break;
                 }
             }
-            writeCoordinator.failAll(new IOException("HTTP/2 connection write loop closed"));
-            closeSocketQuietly();
-            // note: don't close the output stream here as that closes the TLS connection in java
-            log.info("Connection write loop closing with state=" + writeState);
-        });
+            if (!writeState.canSendFrames) {
+                finishWriteLoop(new IOException("HTTP/2 connection write loop closed"));
+            }
+        } catch (Exception e) {
+            log.info("Write loop IO Exception with state=" + writeState);
+            failWriteLoop(e);
+        } finally {
+            writerTaskScheduled.set(false);
+            if (!writeLoopEnded.isDone()
+                && (writeCoordinator.hasCommands() || !writeState.canSendFrames)) {
+                requestWriteRun();
+            }
+        }
+    }
+
+    private void scheduleFinalGoAwayWakeLocked(long delayMillis) {
+        finalGoAwayWakeScheduled = true;
+        try {
+            server.scheduleTimerCallback(() -> {
+                boolean wakeWriter;
+                stateLock.lock();
+                try {
+                    finalGoAwayWakeScheduled = false;
+                    wakeWriter = writeState.canSendFrames;
+                } finally {
+                    stateLock.unlock();
+                }
+                if (wakeWriter) {
+                    signalWriteLoop();
+                }
+            }, delayMillis, TimeUnit.MILLISECONDS);
+        } catch (RuntimeException | Error e) {
+            finalGoAwayWakeScheduled = false;
+            throw e;
+        }
+    }
+
+    private void failWriteLoop(Exception reason) {
+        stateLock.lock();
+        try {
+            markConnectionErroredLocked();
+        } finally {
+            stateLock.unlock();
+        }
+        finishWriteLoop(reason);
+    }
+
+    private void finishWriteLoop(Exception reason) {
+        if (writeLoopEnded.isDone()) {
+            return;
+        }
+        writeCoordinator.failAll(reason);
+        closeSocketQuietly();
+        // Don't close the output stream here because that closes the TLS connection in Java.
+        log.info("Connection write loop closing with state=" + writeState);
+        writeLoopEnded.complete(null);
     }
 
     private void startRequest(Http2HeadersFrame frame) throws Http2Exception {
