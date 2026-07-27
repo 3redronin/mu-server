@@ -215,6 +215,10 @@ public class MuServerBuilder {
      * both, HTTP/1 handlers run on their connection task to avoid submitting work back
      * to an executor that may already be at capacity.</p>
      *
+     * <p>This executor also dispatches response-completion listeners and serialized
+     * WebSocket lifecycle and message callbacks. A WebSocket connection does not retain
+     * a worker while waiting for frames; each callback is short-lived executor work.</p>
+     *
      * @param executor The executor service to use to handle requests
      * @return The current Mu Server builder
      */
