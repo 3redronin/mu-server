@@ -683,7 +683,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             stateLock.unlock();
         }
         for (Http2Stream stream : streamRegistry.applicationStreams()) {
-            stream.cancel(reason, false);
+            stream.onConnectionTerminated(reason, ResponseState.ERRORED);
         }
         return new Http2GoAway(acceptedLastStreamId, error.errorCode().code(), null);
     }
@@ -789,22 +789,22 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                         stream.cancel(new IOException("Stream error", h2e));
                     }
                 } catch (EOFException e) {
-                    boolean noActiveStreams = noProtocolStreamsAreActive();
-                    if (readingFrameHeader && noActiveStreams) {
+                    boolean noActiveWork = noConnectionWorkIsActive();
+                    if (readingFrameHeader && noActiveWork) {
                         log.info("Client closed HTTP/2 connection while waiting for the next frame");
                         setReadStateIfActiveAndSignal(HState.COMPLETED);
                     } else {
                         String frameDetails = readingFrameHeader ? "frame header" : "frame payload for " + currentFrameHeader;
                         log.warn("EOF while reading {} at read state {} writeState={}", frameDetails, readState, writeState, e);
-                        if (noActiveStreams) {
+                        if (noActiveWork) {
                             setReadStateIfActiveAndSignal(HState.COMPLETED);
                         } else {
                             failAfterUnexpectedInputEnd(new IOException("Client closed an active HTTP/2 connection", e));
                         }
                     }
                 } catch (SocketException e) {
-                    boolean noActiveStreams = noProtocolStreamsAreActive();
-                    if (noActiveStreams) {
+                    boolean noActiveWork = noConnectionWorkIsActive();
+                    if (noActiveWork) {
                         log.info("Socket closed while reading HTTP/2 frames at read state {} writeState={}: {}", readState, writeState, e.getMessage());
                         setReadStateIfActiveAndSignal(HState.COMPLETED);
                     } else {
@@ -1003,8 +1003,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         }
     }
 
-    private boolean noProtocolStreamsAreActive() {
-        return !streamRegistry.hasActiveProtocolStreams();
+    private boolean noConnectionWorkIsActive() {
+        return !streamRegistry.hasActiveConnectionWork();
     }
 
     private void readHeaders(InputStream clientIn, Http2FrameHeader fh, FieldBlockDecoder fieldBlockDecoder) throws Http2Exception, IOException {
@@ -1347,8 +1347,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         log.warn("Aborting accepted HTTP/2 stream because its application executors rejected completion", dispatchFailure);
         try {
             BaseResponse response = stream.response();
-            if (!stream.resetWasInitiated() && !response.responseState().endState()) {
-                response.setState(ResponseState.ERRORED);
+            if (!stream.resetWasInitiated()
+                && response.setState(ResponseState.ERRORED)) {
                 write(new Http2ResetStreamFrame(stream.id, Http2ErrorCode.INTERNAL_ERROR.code()));
                 stream.cancel(
                     new IOException("Application executors rejected HTTP/2 stream completion", dispatchFailure)
@@ -1395,8 +1395,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             log.info("Unhandled stream exception", e);
             if (stream.response().hasStartedSendingData()
                 && !stream.resetWasInitiated()
-                && !stream.response().responseState().endState()) {
-                stream.response().setState(ResponseState.ERRORED);
+                && stream.response().setState(ResponseState.ERRORED)) {
                 Http2ErrorCode errorCode =
                     e instanceof HttpException
                         && ((HttpException) e).status().sameCode(HttpStatus.REQUEST_TIMEOUT_408)

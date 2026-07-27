@@ -183,8 +183,21 @@ final class Http2StreamRegistry {
         }
     }
 
-    boolean hasActiveProtocolStreams() {
-        return concurrentStreamCount() != 0;
+    boolean hasActiveConnectionWork() {
+        lock.lock();
+        try {
+            for (Lookup entry : entries.values()) {
+                Http2Stream stream = entry.applicationStream();
+                if (stream == null
+                    || stream.countsTowardsMaxConcurrentStreams()
+                    || !stream.applicationExchangeEnded()) {
+                    return true;
+                }
+            }
+            return false;
+        } finally {
+            lock.unlock();
+        }
     }
 
     boolean isEmpty() {
