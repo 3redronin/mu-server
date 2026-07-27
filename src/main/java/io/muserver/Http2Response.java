@@ -31,9 +31,7 @@ class Http2Response extends BaseResponse {
         } else {
             closeWriter();
         }
-        if (!responseState().endState()) {
-            setState(ResponseState.FINISHED);
-        }
+        setState(ResponseState.FINISHED);
     }
 
     private void writeStatusAndHeaders(boolean endOfStream) throws InterruptedException, IOException {
