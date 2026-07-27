@@ -2,6 +2,7 @@ package io.muserver;
 
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
@@ -260,7 +261,12 @@ class Http2WriteCoordinatorTest {
         assertThat(coordinator.pollWritable(), nullValue());
 
         var ack = task(Http2Settings.ACK);
-        coordinator.applyInitialWindowSizeChange("newly writable".length(), ack, 1);
+        coordinator.applyPeerSettingsChange(
+            "newly writable".length(),
+            4096,
+            ack,
+            1
+        );
         coordinator.processAvailableCommands();
 
         assertThat(
@@ -281,7 +287,7 @@ class Http2WriteCoordinatorTest {
         coordinator.processAvailableCommands();
         coordinator.pollWritable().complete();
 
-        coordinator.applyInitialWindowSizeChange(-800, task(Http2Settings.ACK), 1);
+        coordinator.applyPeerSettingsChange(-800, 4096, task(Http2Settings.ACK), 1);
         coordinator.processAvailableCommands();
         assertThat(coordinator.pollWritable().frame(), equalTo(Http2Settings.ACK));
 
@@ -364,7 +370,7 @@ class Http2WriteCoordinatorTest {
     @Test
     void settingsWindowOverflowIsAConnectionFlowControlErrorAndIsNotAcknowledged() {
         var coordinator = coordinator(0, 1, Integer.MAX_VALUE - 1);
-        coordinator.applyInitialWindowSizeChange(2, task(Http2Settings.ACK), 5);
+        coordinator.applyPeerSettingsChange(2, 4096, task(Http2Settings.ACK), 5);
         coordinator.processAvailableCommands();
 
         var writable = coordinator.pollWritable();
@@ -377,6 +383,21 @@ class Http2WriteCoordinatorTest {
         );
         writable.complete();
         assertThat(coordinator.pollWritable(), nullValue());
+    }
+
+    @Test
+    void peerSettingsChangeAppliesEncoderLimitBeforeAcknowledgement() throws Exception {
+        var coordinator = new Http2WriteCoordinator(65_535);
+        coordinator.applyPeerSettingsChange(0, 0, task(Http2Settings.ACK), 0);
+        coordinator.processAvailableCommands();
+
+        assertThat(coordinator.pollWritable().frame(), equalTo(Http2Settings.ACK));
+        var encoded = new ByteArrayOutputStream();
+        coordinator.fieldBlockEncoder().encodeTo(new FieldBlock(), encoded);
+        assertThat(
+            FieldBlockEncoderTest.bytesToHex(encoded.toByteArray()),
+            equalTo("20")
+        );
     }
 
     @Test

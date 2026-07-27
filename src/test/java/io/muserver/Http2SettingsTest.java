@@ -91,4 +91,12 @@ public class Http2SettingsTest {
         assertThat(settings1.equals(settings2), equalTo(true));
         assertThat(settings1.hashCode(), equalTo(settings2.hashCode()));
     }
+
+    @Test
+    void copyIfChangedAppliesEveryPeerSetting() {
+        var existing = new Http2Settings(false, 4096, 100, 65535, 16384, 32768);
+        var update = new Http2Settings(false, 1024, 7, 1234, 20000, 8192);
+
+        assertThat(update.copyIfChanged(existing), equalTo(update));
+    }
 }
