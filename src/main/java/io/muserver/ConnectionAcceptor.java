@@ -15,15 +15,18 @@ import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.Certificate;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 class ConnectionAcceptor {
     private static final Logger log = LoggerFactory.getLogger(ConnectionAcceptor.class);
@@ -61,15 +64,25 @@ class ConnectionAcceptor {
 
     private enum State { NOT_STARTED, STARTED, STOPPING, STOPPED }
 
-    private final ConcurrentHashMap.KeySetView<BaseHttpConnection, Boolean> connections = ConcurrentHashMap.newKeySet();
+    // Owns listener state, accepted-to-live connection promotion, and shutdown
+    // drain signalling. Socket close and connection callbacks happen outside it.
+    private final ReentrantLock lifecycleLock = new ReentrantLock();
+    private final Condition connectionRetired = lifecycleLock.newCondition();
+    private final Set<Socket> acceptedSockets = new HashSet<>();
+    private final Set<BaseHttpConnection> connections = new HashSet<>();
 
     public Set<HttpConnection> activeConnections() {
-        return Set.copyOf(connections);
+        lifecycleLock.lock();
+        try {
+            return Set.copyOf(connections);
+        } finally {
+            lifecycleLock.unlock();
+        }
     }
 
     private volatile State state = State.NOT_STARTED;
     private volatile long gracefulShutdownTimeoutMillis = 20_000;
-    private volatile long gracefulShutdownDeadlineMillis = Long.MAX_VALUE;
+    private volatile long gracefulShutdownDeadlineNanos = Long.MAX_VALUE;
     private volatile boolean lastStopWasGraceful = true;
 
     private final boolean isHttps;
@@ -104,21 +117,26 @@ class ConnectionAcceptor {
             try {
                 Socket clientSocket = socketServer.accept();
                 clientSocket.setTcpNoDelay(true);
+                if (!registerAcceptedSocket(clientSocket)) {
+                    closeQuietly(clientSocket);
+                    continue;
+                }
                 Instant startTime = Instant.now();
                 try {
-                    connectionExecutor.submit(() -> {
-                        handleClientSocket(clientSocket, startTime, h2, false);
-                    });
+                    connectionExecutor.submit(
+                        () -> runAcceptedSocket(clientSocket, startTime, h2, false)
+                    );
                 } catch (RejectedExecutionException e) {
-                    int oldTimeout = clientSocket.getSoTimeout();
                     try {
                         clientSocket.setSoTimeout(2000);
-                        handleClientSocket(clientSocket, startTime, false, true);
+                        runAcceptedSocket(clientSocket, startTime, false, true);
                     } catch (Exception e2) {
-                        log.info("Exception while writing 503 when executor is full: {}", e.getMessage());
-                    } finally {
-                        clientSocket.setSoTimeout(oldTimeout);
+                        log.info("Exception while writing 503 when executor is full: {}", e2.getMessage());
                     }
+                } catch (RuntimeException | Error submissionFailure) {
+                    retireAcceptedSocket(clientSocket);
+                    closeQuietly(clientSocket);
+                    throw submissionFailure;
                 }
             } catch (Throwable e) {
                 if (Thread.interrupted() || e instanceof SocketException) {
@@ -132,31 +150,72 @@ class ConnectionAcceptor {
             }
         }
         lastStopWasGraceful = shutdownConnections();
-        state = State.STOPPED;
+        lifecycleLock.lock();
+        try {
+            state = State.STOPPED;
+            connectionRetired.signalAll();
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    private boolean registerAcceptedSocket(Socket socket) {
+        lifecycleLock.lock();
+        try {
+            if (state != State.STARTED) {
+                return false;
+            }
+            acceptedSockets.add(socket);
+            return true;
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    private void runAcceptedSocket(
+        Socket socket,
+        Instant startTime,
+        boolean http2Enabled,
+        boolean rejectDueToOverload
+    ) {
+        try {
+            handleClientSocket(
+                socket,
+                startTime,
+                http2Enabled,
+                rejectDueToOverload
+            );
+        } finally {
+            retireAcceptedSocket(socket);
+            closeQuietly(socket);
+        }
+    }
+
+    private void retireAcceptedSocket(Socket socket) {
+        lifecycleLock.lock();
+        try {
+            acceptedSockets.remove(socket);
+        } finally {
+            lifecycleLock.unlock();
+        }
     }
 
     private boolean shutdownConnections() {
-        log.info("Closing server with " + connections.size() + " connected connections");
-        long waitUntil = gracefulShutdownDeadlineMillis;
-        if (waitUntil == Long.MAX_VALUE) {
-            waitUntil = System.currentTimeMillis() + gracefulShutdownTimeoutMillis;
+        closePendingAcceptedSockets();
+        List<BaseHttpConnection> active = connectionSnapshot();
+        log.info("Closing server with " + active.size() + " connected connections");
+        if (gracefulShutdownDeadlineNanos == Long.MAX_VALUE) {
+            gracefulShutdownDeadlineNanos =
+                deadlineAfterMillis(gracefulShutdownTimeoutMillis);
         }
-        for (BaseHttpConnection connection : connections) {
+        for (BaseHttpConnection connection : active) {
             try {
                 connection.initiateGracefulShutdown();
             } catch (IOException ignored) {
             }
         }
-        while (!connections.isEmpty() && System.currentTimeMillis() < waitUntil) {
-            try {
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-        }
-        boolean drainedCleanly = connections.isEmpty();
-        for (BaseHttpConnection connection : connections) {
+        boolean drainedCleanly = awaitConnectionsRetired();
+        for (BaseHttpConnection connection : connectionSnapshot()) {
             log.info("Force closure of active connection {} with requests {}", connection, connection.activeRequests());
             try {
                 connection.abort();
@@ -173,13 +232,57 @@ class ConnectionAcceptor {
         return drainedCleanly;
     }
 
+    private void closePendingAcceptedSockets() {
+        List<Socket> pending;
+        lifecycleLock.lock();
+        try {
+            pending = new ArrayList<>(acceptedSockets);
+            acceptedSockets.clear();
+        } finally {
+            lifecycleLock.unlock();
+        }
+        for (Socket socket : pending) {
+            closeQuietly(socket);
+        }
+    }
+
+    private List<BaseHttpConnection> connectionSnapshot() {
+        lifecycleLock.lock();
+        try {
+            return new ArrayList<>(connections);
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    private boolean awaitConnectionsRetired() {
+        lifecycleLock.lock();
+        try {
+            while (!connections.isEmpty()) {
+                long remaining = nanosUntil(gracefulShutdownDeadlineNanos);
+                if (remaining <= 0L) {
+                    return false;
+                }
+                try {
+                    connectionRetired.awaitNanos(remaining);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                }
+            }
+            return true;
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
     private void checkIdleTimeouts() {
         if (state != State.STARTED) {
             return;
         }
         try {
             long cutoff = System.currentTimeMillis() - server.idleTimeoutMillis();
-            for (BaseHttpConnection con : connections) {
+            for (BaseHttpConnection con : connectionSnapshot()) {
                 if (con.lastIO() < cutoff) {
                     log.info("Timing out {}", con);
                     con.abortWithTimeout();
@@ -264,7 +367,14 @@ class ConnectionAcceptor {
         if (rejectDueToOverload) {
             handleOverload(socket);
         } else {
-            handleRequest(socket, clientCert, startTime, httpVersion, inputStream);
+            handleRequest(
+                clientSocket,
+                socket,
+                clientCert,
+                startTime,
+                httpVersion,
+                inputStream
+            );
         }
     }
 
@@ -318,7 +428,14 @@ class ConnectionAcceptor {
     }
 
     @SuppressWarnings("ReferenceEquality") // Sharing is defined by the exact configured executor instance.
-    private void handleRequest(Socket socket, @Nullable Certificate clientCert, Instant startTime, HttpVersion httpVersion, @Nullable InputStream providedInputStream) {
+    private void handleRequest(
+        Socket acceptedSocket,
+        Socket socket,
+        @Nullable Certificate clientCert,
+        Instant startTime,
+        HttpVersion httpVersion,
+        @Nullable InputStream providedInputStream
+    ) {
         BaseHttpConnection con;
         if (httpVersion == HttpVersion.HTTP_2) {
             if (http2Config == null) {
@@ -347,7 +464,9 @@ class ConnectionAcceptor {
             );
         }
 
-        connections.add(con);
+        if (!promoteAcceptedSocket(acceptedSocket, con)) {
+            return;
+        }
         server.getStatsImpl().onConnectionOpened(con);
         try {
             InputStream requestIn = providedInputStream == null ? socket.getInputStream() : providedInputStream;
@@ -359,16 +478,49 @@ class ConnectionAcceptor {
             log.error("Unhandled exception for {}", con, t);
         } finally {
             server.getStatsImpl().onConnectionClosed(con);
-            connections.remove(con);
+            retireConnection(con);
+        }
+    }
+
+    private boolean promoteAcceptedSocket(
+        Socket acceptedSocket,
+        BaseHttpConnection connection
+    ) {
+        lifecycleLock.lock();
+        try {
+            acceptedSockets.remove(acceptedSocket);
+            if (state != State.STARTED) {
+                return false;
+            }
+            connections.add(connection);
+            return true;
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    private void retireConnection(BaseHttpConnection connection) {
+        lifecycleLock.lock();
+        try {
+            if (connections.remove(connection)) {
+                connectionRetired.signalAll();
+            }
+        } finally {
+            lifecycleLock.unlock();
         }
     }
 
     public void start() {
-        if (state != State.STOPPED && state != State.NOT_STARTED) {
-            throw new IllegalStateException("Cannot start with state " + state);
+        lifecycleLock.lock();
+        try {
+            if (state != State.STOPPED && state != State.NOT_STARTED) {
+                throw new IllegalStateException("Cannot start with state " + state);
+            }
+            state = State.STARTED;
+        } finally {
+            lifecycleLock.unlock();
         }
         acceptorThread.setDaemon(false);
-        state = State.STARTED;
         try {
             if (server.idleTimeoutMillis() > 0) {
                 timeoutTask = server.scheduleConnectionTaskAtFixedRate(
@@ -385,20 +537,39 @@ class ConnectionAcceptor {
                 currentTimeoutTask.cancel(false);
                 timeoutTask = null;
             }
-            state = State.NOT_STARTED;
+            lifecycleLock.lock();
+            try {
+                state = State.NOT_STARTED;
+            } finally {
+                lifecycleLock.unlock();
+            }
             throw e;
         }
     }
 
     public boolean stop(long timeoutMillis) {
-        if (state == State.STOPPED) {
-            return lastStopWasGraceful;
+        long stopTimeoutMillis = Math.max(0L, timeoutMillis);
+        long callerDeadlineNanos = deadlineAfterMillis(stopTimeoutMillis);
+        lifecycleLock.lock();
+        try {
+            if (state == State.STOPPED) {
+                return lastStopWasGraceful;
+            }
+            log.info("Stopping server 1");
+            if (state != State.STOPPING) {
+                gracefulShutdownTimeoutMillis = stopTimeoutMillis;
+                gracefulShutdownDeadlineNanos = callerDeadlineNanos;
+                state = State.STOPPING;
+            } else if (callerDeadlineNanos > gracefulShutdownDeadlineNanos) {
+                // A callback-local stop can have a shorter deadline than a concurrent
+                // external stop. Preserve the longer opportunity to drain.
+                gracefulShutdownDeadlineNanos = callerDeadlineNanos;
+                connectionRetired.signalAll();
+            }
+        } finally {
+            lifecycleLock.unlock();
         }
-        log.info("Stopping server 1");
-        state = State.STOPPING;
-        gracefulShutdownTimeoutMillis = Math.max(0L, timeoutMillis);
-        long deadline = System.currentTimeMillis() + gracefulShutdownTimeoutMillis;
-        gracefulShutdownDeadlineMillis = deadline;
+        closePendingAcceptedSockets();
         ScheduledFuture<?> currentTimeoutTask = timeoutTask;
         if (currentTimeoutTask != null) {
             currentTimeoutTask.cancel(false);
@@ -409,21 +580,61 @@ class ConnectionAcceptor {
         } catch (IOException e) {
             log.warn("Error closing server socket", e);
         }
-        long remaining = Math.max(0L, deadline - System.currentTimeMillis());
-        if (remaining > 0) {
-            try {
-                acceptorThread.join(remaining);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
+        joinAcceptorUntil(callerDeadlineNanos);
         if (acceptorThread.isAlive()) {
             log.warn("Could not kill " + this + " after " + timeoutMillis + " ms");
             lastStopWasGraceful = false;
             return false;
         }
-        state = State.STOPPED;
-        return lastStopWasGraceful;
+        lifecycleLock.lock();
+        try {
+            state = State.STOPPED;
+            return lastStopWasGraceful;
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    private void joinAcceptorUntil(long deadlineNanos) {
+        while (acceptorThread.isAlive()) {
+            long remaining = nanosUntil(deadlineNanos);
+            if (remaining <= 0L) {
+                return;
+            }
+            long millis = TimeUnit.NANOSECONDS.toMillis(remaining);
+            int nanos = (int) (
+                remaining - TimeUnit.MILLISECONDS.toNanos(millis)
+            );
+            try {
+                acceptorThread.join(millis, nanos);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    private static long deadlineAfterMillis(long timeoutMillis) {
+        long now = System.nanoTime();
+        long duration = TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
+        long deadline = now + duration;
+        if (duration > 0L && deadline < now) {
+            return Long.MAX_VALUE;
+        }
+        return deadline;
+    }
+
+    private static long nanosUntil(long deadlineNanos) {
+        return deadlineNanos == Long.MAX_VALUE
+            ? Long.MAX_VALUE
+            : deadlineNanos - System.nanoTime();
+    }
+
+    private static void closeQuietly(Socket socket) {
+        try {
+            socket.close();
+        } catch (IOException ignored) {
+        }
     }
 
     @Override

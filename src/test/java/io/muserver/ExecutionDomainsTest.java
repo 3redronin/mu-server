@@ -16,7 +16,9 @@ import scaffolding.Http1Client;
 import java.io.EOFException;
 import java.io.IOException;
 import java.net.ServerSocket;
+import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -56,6 +58,69 @@ class ExecutionDomainsTest {
 
     private @Nullable MuServer server;
     private final List<ExecutorService> executors = new ArrayList<>();
+
+    @Test
+    void anAcceptedConnectionQueuedBeforeStopCannotStartAfterStop() throws Exception {
+        var connectionExecutor = track(new ThreadPoolExecutor(
+            1,
+            1,
+            0,
+            TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(1),
+            namedThreads("connection-")
+        ));
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var blockerStarted = new CountDownLatch(1);
+        var releaseBlocker = new CountDownLatch(1);
+        var handledRequests = new AtomicInteger();
+        Future<?> blocker = connectionExecutor.submit(() -> {
+            blockerStarted.countDown();
+            releaseBlocker.await();
+            return null;
+        });
+        assertThat(blockerStarted.await(5, TimeUnit.SECONDS), is(true));
+
+        server = httpServer()
+            .withConnectionExecutor(connectionExecutor)
+            .withHandlerExecutor(handlerExecutor)
+            .addHandler((request, response) -> {
+                handledRequests.incrementAndGet();
+                response.write("late response");
+                return true;
+            })
+            .start();
+
+        try (var client = new Socket(server.uri().getHost(), server.uri().getPort())) {
+            client.getOutputStream().write((
+                "GET / HTTP/1.1\r\n"
+                    + "Host: " + server.uri().getHost() + "\r\n"
+                    + "Connection: close\r\n"
+                    + "\r\n"
+            ).getBytes(StandardCharsets.US_ASCII));
+            client.getOutputStream().flush();
+
+            assertEventually(
+                () -> connectionExecutor.getQueue().size(),
+                equalTo(1)
+            );
+
+            server.stop();
+            server = null;
+
+            releaseBlocker.countDown();
+            blocker.get(5, TimeUnit.SECONDS);
+            assertEventually(
+                () -> connectionExecutor.getQueue().size(),
+                equalTo(0)
+            );
+            connectionExecutor.submit(() -> {
+            }).get(5, TimeUnit.SECONDS);
+
+            assertThat(handledRequests.get(), equalTo(0));
+        } finally {
+            releaseBlocker.countDown();
+        }
+    }
 
     @Test
     void http2IoRemainsResponsiveWhenTheHandlerExecutorIsSaturated() throws Exception {
