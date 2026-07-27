@@ -2,6 +2,8 @@ package io.muserver;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.ServerUtils;
 
 import java.time.Instant;
@@ -95,6 +97,37 @@ public class HttpConnectionTest {
         call(request(server.uri().resolve("/blah"))).close();
         call(request(server.uri())).close();
         assertThat(error.get(), is(nullValue()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void successfulSocketWritesRefreshIdleTimeAndByteStats(
+        boolean http2
+    ) throws Exception {
+        AtomicReference<Long> idleAfterWrite = new AtomicReference<>();
+        server = ServerUtils.httpsServerForTest(http2 ? "h2" : "http")
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                var connection = (BaseHttpConnection) request.connection();
+                connection.lastIONanos.set(
+                    System.nanoTime() - TimeUnit.SECONDS.toNanos(2)
+                );
+
+                response.write("written");
+
+                assertThat(
+                    connection.httpVersion(),
+                    is(http2 ? HttpVersion.HTTP_2 : HttpVersion.HTTP_1_1)
+                );
+                idleAfterWrite.set(connection.idleTimeMillis());
+            })
+            .start();
+
+        try (var response = call(request(server.uri()))) {
+            assertThat(response.body().string(), is("written"));
+        }
+
+        assertThat(idleAfterWrite.get(), lessThan(1000L));
+        assertThat(server.stats().bytesSent(), greaterThan(0L));
     }
 
     @AfterEach

@@ -31,7 +31,7 @@ abstract class BaseHttpConnection implements HttpConnection {
     protected final long connectionStartTime = System.currentTimeMillis();
     protected final InetSocketAddress remoteAddress;
     protected final InetSocketAddress localAddress;
-    protected volatile long lastIONanos = System.nanoTime();
+    protected final AtomicLong lastIONanos = new AtomicLong(System.nanoTime());
     protected final AtomicLong completedRequests = new AtomicLong(0);
     protected final AtomicLong invalidHttpRequests = new AtomicLong(0);
     protected final AtomicLong rejectedDueToOverload = new AtomicLong(0);
@@ -114,7 +114,7 @@ abstract class BaseHttpConnection implements HttpConnection {
 
     @Override
     public long idleTimeMillis() {
-        long idleNanos = MonotonicTime.elapsedNanosSince(lastIONanos);
+        long idleNanos = MonotonicTime.elapsedNanosSince(lastIONanos.get());
         return idleNanos <= 0L
             ? 0L
             : java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(idleNanos);
@@ -189,22 +189,22 @@ abstract class BaseHttpConnection implements HttpConnection {
         return activeRequests().isEmpty() && activeWebsockets().isEmpty();
     }
 
-    protected void onBytesRead(int read) {
+    void onBytesRead(int read) {
         onIO();
         server.getStatsImpl().onBytesRead(read);
     }
 
-    protected void onBytesRead(byte[] buffer, int off, int len) {
+    void onBytesSent(int sent) {
         onIO();
-        server.getStatsImpl().onBytesRead(len);
+        server.getStatsImpl().onBytesSent(sent);
     }
 
     private void onIO() {
-        lastIONanos = System.nanoTime();
+        MonotonicTime.publishLatest(lastIONanos, System.nanoTime());
     }
 
     boolean hasBeenIdleFor(long nowNanos, long timeoutNanos) {
-        return nowNanos - lastIONanos >= timeoutNanos;
+        return nowNanos - lastIONanos.get() >= timeoutNanos;
     }
 
     @Override

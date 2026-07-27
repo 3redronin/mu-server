@@ -350,8 +350,6 @@ class WebsocketConnection implements MuWebSocketSession {
                 readBuffer.capacity() - readBuffer.limit());
             if (read == -1) {
                 throw new ClientDisconnectedException();
-            } else {
-                httpConnection.onBytesRead(read);
             }
             readBuffer.limit(readBuffer.limit() + read);
         }

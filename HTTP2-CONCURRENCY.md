@@ -74,6 +74,12 @@ sockets that have not crossed that boundary and prevents their queued connection
 tasks from later being promoted. Live-connection retirement signals a condition
 used by graceful shutdown; it is not discovered by polling.
 
+The accepted connection wraps socket input and output once, below every
+protocol implementation. Successful reads and writes publish monotonic
+connection activity and update byte statistics at that boundary. Protocol
+layers do not duplicate this bookkeeping; the wrappers account for transport
+activity but do not own protocol serialization.
+
 Each HTTP/2 connection has:
 
 * one blocking socket reader; and
@@ -183,6 +189,7 @@ as defined by RFC 9113 Section 7.
 | --- | --- |
 | Listener state, accepted socket admission, and live connection index | `ConnectionAcceptor` lifecycle lock |
 | Socket input, input buffer, HPACK decoder | Connection reader |
+| Connection byte accounting and idle-activity publication | Socket input/output wrappers |
 | Connection shutdown and new-stream admission gate | `Http2Connection` state lock |
 | RFC stream protocol state | Coordinator |
 | Live application/rejected stream identity index | `Http2StreamRegistry` lock |

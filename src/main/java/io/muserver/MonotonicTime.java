@@ -1,6 +1,7 @@
 package io.muserver;
 
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Monotonic elapsed-time arithmetic. Values returned by {@link System#nanoTime()}
@@ -29,6 +30,14 @@ final class MonotonicTime {
 
     static boolean isAfter(long candidateNanos, long referenceNanos) {
         return candidateNanos - referenceNanos > 0L;
+    }
+
+    static void publishLatest(AtomicLong destination, long candidateNanos) {
+        long current = destination.get();
+        while (isAfter(candidateNanos, current)
+            && !destination.compareAndSet(current, candidateNanos)) {
+            current = destination.get();
+        }
     }
 
     static long deadlineAfter(long nowNanos, long durationNanos) {
