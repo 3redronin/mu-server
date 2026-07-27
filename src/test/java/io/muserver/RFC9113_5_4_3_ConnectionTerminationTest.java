@@ -79,6 +79,95 @@ class RFC9113_5_4_3_ConnectionTerminationTest {
     }
 
     @Test
+    void disconnectCompletesAnAsyncExchangeAfterItsWireStreamClosed()
+        throws Exception {
+        var responsePublished = new CountDownLatch(1);
+        var completed = new CompletableFuture<ResponseInfo>();
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addResponseCompleteListener(completed::complete)
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                request.handleAsync();
+                response.write("done");
+                responsePublished.countDown();
+            })
+            .start();
+
+        try (var client = new H2Client()) {
+            var con = client.connect(server);
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(
+                    1,
+                    true,
+                    getHelloHeaders(server.uri().getPort())
+                ))
+                .flush();
+            assertThat(
+                responsePublished.await(5, TimeUnit.SECONDS),
+                equalTo(true)
+            );
+            assertThat(server.stats().activeRequests().size(), equalTo(1));
+
+            con.close();
+
+            ResponseInfo responseInfo = completed.get(5, TimeUnit.SECONDS);
+            assertThat(responseInfo.completedSuccessfully(), equalTo(true));
+            assertThat(
+                responseInfo.response().responseState(),
+                equalTo(ResponseState.FULL_SENT)
+            );
+            assertThat(server.stats().activeRequests().isEmpty(), equalTo(true));
+        }
+    }
+
+    @Test
+    void coordinatorConnectionErrorsCompleteAsyncExchangesAsErrored()
+        throws Exception {
+        var asyncStarted = new CountDownLatch(1);
+        var completed = new CompletableFuture<ResponseInfo>();
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addResponseCompleteListener(completed::complete)
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                request.handleAsync();
+                asyncStarted.countDown();
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(
+                    1,
+                    true,
+                    getHelloHeaders(server.uri().getPort())
+                ))
+                .flush();
+            assertThat(
+                asyncStarted.await(5, TimeUnit.SECONDS),
+                equalTo(true)
+            );
+
+            con.writeFrame(
+                new Http2WindowUpdate(0, Integer.MAX_VALUE)
+            ).flush();
+
+            Http2GoAway goAway = con.readLogicalFrame(Http2GoAway.class);
+            assertThat(
+                goAway.errorCodeEnum(),
+                equalTo(Http2ErrorCode.FLOW_CONTROL_ERROR)
+            );
+            ResponseInfo responseInfo = completed.get(5, TimeUnit.SECONDS);
+            assertThat(responseInfo.completedSuccessfully(), equalTo(false));
+            assertThat(
+                responseInfo.response().responseState(),
+                equalTo(ResponseState.ERRORED)
+            );
+            assertThat(server.stats().activeRequests().isEmpty(), equalTo(true));
+        }
+    }
+
+    @Test
     void idleTimeoutCompletesAnAsyncExchange() throws Exception {
         var asyncStarted = new CountDownLatch(1);
         var completed = new CompletableFuture<ResponseInfo>();
