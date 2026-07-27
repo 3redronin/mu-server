@@ -267,6 +267,26 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void serverOwnedExecutorsAreShutDownWithTheServer() throws Exception {
+        server = httpServer().start();
+        var serverImpl = (Mu3ServerImpl) server;
+        List<ExecutorService> serverOwnedExecutors = List.of(
+            getField(serverImpl, "handlerExecutor", ExecutorService.class),
+            getField(serverImpl, "connectionExecutor", ExecutorService.class),
+            getField(serverImpl, "http2WriterExecutor", ExecutorService.class),
+            getField(serverImpl, "connectionMaintenanceExecutor", ExecutorService.class),
+            getField(serverImpl, "timerExecutor", ExecutorService.class)
+        );
+
+        server.stop();
+        server = null;
+
+        for (ExecutorService executor : serverOwnedExecutors) {
+            assertThat(executor.isShutdown(), is(true));
+        }
+    }
+
+    @Test
     void rejectedTimerSchedulingRollsBackStartupWithoutTakingCallerExecutors() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
@@ -290,6 +310,37 @@ class ExecutionDomainsTest {
         assertThat(writerExecutor.isShutdown(), is(false));
         assertThat(maintenanceExecutor.isShutdown(), is(false));
         try (var replacementListener = new ServerSocket(port)) {
+            assertThat(replacementListener.isBound(), is(true));
+        }
+    }
+
+    @Test
+    void listenerCreationFailureRollsBackEarlierListenersWithoutTakingCallerExecutors() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
+        var writerExecutor = track(Executors.newCachedThreadPool(namedThreads("h2-writer-")));
+        var maintenanceExecutor = track(Executors.newCachedThreadPool(namedThreads("maintenance-")));
+        var timerExecutor = track(Executors.newSingleThreadScheduledExecutor(namedThreads("timer-")));
+        int firstPort = availablePort();
+
+        try (var occupiedListener = new ServerSocket(0)) {
+            assertThrows(MuException.class, () -> MuServerBuilder.muServer()
+                .withHttpsPort(firstPort)
+                .withHttpPort(occupiedListener.getLocalPort())
+                .withHandlerExecutor(handlerExecutor)
+                .withConnectionExecutor(connectionExecutor)
+                .withHttp2WriterExecutor(writerExecutor)
+                .withConnectionMaintenanceExecutor(maintenanceExecutor)
+                .withTimerExecutor(timerExecutor)
+                .start());
+        }
+
+        assertThat(handlerExecutor.isShutdown(), is(false));
+        assertThat(connectionExecutor.isShutdown(), is(false));
+        assertThat(writerExecutor.isShutdown(), is(false));
+        assertThat(maintenanceExecutor.isShutdown(), is(false));
+        assertThat(timerExecutor.isShutdown(), is(false));
+        try (var replacementListener = new ServerSocket(firstPort)) {
             assertThat(replacementListener.isBound(), is(true));
         }
     }
@@ -351,6 +402,12 @@ class ExecutionDomainsTest {
     private static java.util.concurrent.ThreadFactory namedThreads(String prefix) {
         var count = new AtomicInteger();
         return runnable -> new Thread(runnable, prefix + count.incrementAndGet());
+    }
+
+    private static <T> T getField(Object target, String name, Class<T> type) throws Exception {
+        var field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return type.cast(field.get(target));
     }
 
     @AfterEach

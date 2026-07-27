@@ -431,6 +431,7 @@ class ConnectionAcceptor {
             lastStopWasGraceful = false;
             return false;
         }
+        state = State.STOPPED;
         return lastStopWasGraceful;
     }
 
@@ -456,14 +457,23 @@ class ConnectionAcceptor {
         List<ContentEncoder> contentEncoders) throws IOException {
 
         ServerSocket socketServer = new ServerSocket(bindPort, ACCEPT_BACKLOG, address);
-        configureSocketOptions(socketServer);
+        try {
+            configureSocketOptions(socketServer);
 
-        String uriHost = address != null ? address.getHostName() : "localhost";
-        URI uri = URI.create("http" + (httpsConfig == null ? "" : "s") + "://" + uriHost + ":" + socketServer.getLocalPort());
+            String uriHost = address != null ? address.getHostName() : "localhost";
+            URI uri = URI.create("http" + (httpsConfig == null ? "" : "s") + "://" + uriHost + ":" + socketServer.getLocalPort());
 
-        return new ConnectionAcceptor(server, socketServer,
-            (InetSocketAddress) socketServer.getLocalSocketAddress(),
-            uri, httpsConfig, h2Config, handlerExecutor, connectionExecutor, http2WriterExecutor, contentEncoders);
+            return new ConnectionAcceptor(server, socketServer,
+                (InetSocketAddress) socketServer.getLocalSocketAddress(),
+                uri, httpsConfig, h2Config, handlerExecutor, connectionExecutor, http2WriterExecutor, contentEncoders);
+        } catch (IOException | RuntimeException | Error creationFailure) {
+            try {
+                socketServer.close();
+            } catch (IOException cleanupFailure) {
+                creationFailure.addSuppressed(cleanupFailure);
+            }
+            throw creationFailure;
+        }
     }
 
     private static void configureSocketOptions(ServerSocket socketServer) throws IOException {
