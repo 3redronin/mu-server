@@ -8,12 +8,55 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.nullValue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class Http2BodyInputStreamTest {
+
+    @Test
+    void zeroLengthReadReturnsImmediatelyWithoutWaitingForData() throws Exception {
+        try (var stream = new Http2BodyInputStream(1, credit -> {}, credit -> {})) {
+            assertThat(stream.read(new byte[1], 0, 0), equalTo(0));
+        }
+    }
+
+    @Test
+    void zeroTimeoutWaitsUntilDataArrives() throws Exception {
+        var executor = Executors.newSingleThreadExecutor();
+        try (var stream = new Http2BodyInputStream(0, credit -> {}, credit -> {})) {
+            var aboutToRead = new CountDownLatch(1);
+            var read = executor.submit(() -> {
+                aboutToRead.countDown();
+                return stream.read();
+            });
+
+            assertThat(aboutToRead.await(5, TimeUnit.SECONDS), equalTo(true));
+            assertThrows(TimeoutException.class, () -> read.get(50, TimeUnit.MILLISECONDS));
+            stream.onData(data("x", true));
+
+            assertThat(read.get(5, TimeUnit.SECONDS), equalTo((int) 'x'));
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void finiteTimeoutThrows408WithoutAnHttp1ConnectionHeader() throws Exception {
+        try (var stream = new Http2BodyInputStream(1, credit -> {}, credit -> {})) {
+            var timeout = assertThrows(HttpException.class, stream::read);
+
+            assertThat(timeout.status(), equalTo(HttpStatus.REQUEST_TIMEOUT_408));
+            assertThat(timeout.responseHeaders().get(HeaderNames.CONNECTION), nullValue());
+        }
+    }
 
     @ParameterizedTest
     @ValueSource(ints = {1, 2, 11, 1024})

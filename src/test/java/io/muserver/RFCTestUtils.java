@@ -127,9 +127,13 @@ class RFCTestUtils {
     }
 
     static @NonNull FieldBlock postHelloHeaders(int port) {
+        return postHeaders(port, "/hello");
+    }
+
+    static @NonNull FieldBlock postHeaders(int port, String path) {
         FieldBlock headers = baseHeaders("https", port);
         headers.add(":method", "POST");
-        headers.add(":path", "/hello");
+        headers.add(":path", path);
         headers.add("content-type", "text/plain; charset=utf-8");
         return headers;
     }

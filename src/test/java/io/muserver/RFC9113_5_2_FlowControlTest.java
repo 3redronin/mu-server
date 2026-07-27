@@ -145,10 +145,12 @@ class RFC9113_5_2_FlowControlTest {
     @Test
     void cancellingAStreamWithUnreadQueuedDataRefundsConnectionCredit() throws Exception {
         var holdLatch = new CountDownLatch(1);
+        var holdStarted = new CountDownLatch(1);
 
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .addHandler(Method.POST, "/hold", (request, response, pathParams) -> {
+                holdStarted.countDown();
                 assertNotTimedOut("waiting for hold request to finish", holdLatch);
                 try {
                     request.readBodyAsString();
@@ -163,24 +165,28 @@ class RFC9113_5_2_FlowControlTest {
         try (var client = new H2Client();
              var con = client.connect(server)) {
 
-            var holdHeaders = postHelloHeaders(getPort());
-            holdHeaders.set(":path", "/hold");
-
-            var echoHeaders = postHelloHeaders(getPort());
-
             byte[] sixteenKb = repeated('a', 16384);
             byte[] lastChunk = repeated('b', 16383);
 
             con.handshake()
-                .writeFrame(new Http2HeadersFrame(1, false, holdHeaders))
+                .writeFrame(new Http2HeadersFrame(
+                    1,
+                    false,
+                    postHeaders(getPort(), "/hold")
+                ))
                 .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
                 .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
                 .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
                 .writeFrame(new Http2DataFrame(1, false, lastChunk, 0, lastChunk.length))
                 .flush();
 
+            assertNotTimedOut("waiting for held request to start", holdStarted);
             con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()))
-                .writeFrame(new Http2HeadersFrame(3, false, echoHeaders))
+                .writeFrame(new Http2HeadersFrame(
+                    3,
+                    false,
+                    postHelloHeaders(getPort())
+                ))
                 .writeFrame(RFCTestUtils.utf8DataFrame(3, true, "x"))
                 .flush();
 
@@ -196,6 +202,88 @@ class RFC9113_5_2_FlowControlTest {
             assertThat(eos, equalTo(Http2DataFrame.eos(3)));
         } finally {
             holdLatch.countDown();
+        }
+    }
+
+    @Test
+    void locallyResettingAStreamRefundsUnreadConnectionCredit() throws Exception {
+        var failRequest = new CountDownLatch(1);
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/fail", (request, response, pathParams) -> {
+                response.sendChunk("partial");
+                assertNotTimedOut("waiting to fail request", failRequest);
+                throw new IllegalStateException("expected test failure");
+            })
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                response.write(request.readBodyAsString());
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(
+                    1,
+                    false,
+                    postHeaders(getPort(), "/fail")
+                ))
+                .flush();
+
+            assertThat(
+                readIgnoringWindowUpdates(con, Http2HeadersFrame.class)
+                    .headers().get(":status"),
+                equalTo("200")
+            );
+            assertThat(
+                readIgnoringWindowUpdates(con, Http2DataFrame.class).toUTF8(),
+                equalTo("partial")
+            );
+
+            byte[] sixteenKb = repeated('a', 16_384);
+            byte[] lastChunk = repeated('b', 16_383);
+            byte[] pingData = new byte[] {1, 2, 3, 4, 5, 6, 7, 8};
+            con.writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
+                .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
+                .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
+                .writeFrame(new Http2DataFrame(1, false, lastChunk, 0, lastChunk.length))
+                .writeFrame(new Http2Ping(false, pingData))
+                .flush();
+
+            assertThat(
+                con.readLogicalFrame(Http2Ping.class),
+                equalTo(new Http2Ping(true, pingData))
+            );
+            failRequest.countDown();
+
+            var reset =
+                readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.INTERNAL_ERROR));
+
+            con.writeFrame(new Http2HeadersFrame(
+                    3,
+                    false,
+                    postHelloHeaders(getPort())
+                ))
+                .writeFrame(utf8DataFrame(3, true, "x"))
+                .flush();
+
+            var headers =
+                readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(3));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+            assertThat(
+                readIgnoringWindowUpdates(con, Http2DataFrame.class).toUTF8(),
+                equalTo("x")
+            );
+            assertThat(
+                readIgnoringWindowUpdates(con, Http2DataFrame.class),
+                equalTo(Http2DataFrame.eos(3))
+            );
+        } finally {
+            failRequest.countDown();
         }
     }
 

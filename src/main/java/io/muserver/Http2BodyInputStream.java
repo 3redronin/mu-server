@@ -69,14 +69,25 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
 
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
+        Objects.checkFromIndexSize(off, len, b.length);
+        if (len == 0) {
+            return 0;
+        }
+
         lock.lock();
         try {
+            long remainingNanos = TimeUnit.MILLISECONDS.toNanos(readTimeoutMillis);
             while (true) {
                 Object frame;
                 while ((frame = frames.peek()) == null) {
                     try {
-                        if (!hasData.await(readTimeoutMillis, TimeUnit.MILLISECONDS)) {
-                            throw new IOException("Timed out waiting for data");
+                        if (readTimeoutMillis == 0) {
+                            hasData.await();
+                        } else {
+                            if (remainingNanos <= 0) {
+                                throw new HttpException(HttpStatus.REQUEST_TIMEOUT_408);
+                            }
+                            remainingNanos = hasData.awaitNanos(remainingNanos);
                         }
                     } catch (InterruptedException e) {
                         throw new InterruptedIOException("Interrupted waiting for data");
