@@ -6,19 +6,23 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.EOFException;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Lock;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @DisplayName("RFC 9113 6.4 Frame Definitions: RST_STREAM")
 class RFC9113_6_4_RstStreamTest {
@@ -30,12 +34,18 @@ class RFC9113_6_4_RstStreamTest {
         var requestStarted = new CountDownLatch(1);
         var completedStreams = new LinkedBlockingQueue<ResponseInfo>(1);
         var handleRef = new AtomicReference<AsyncHandle>();
+        var handlerThread = new AtomicReference<Thread>();
+        var completionThread = new AtomicReference<Thread>();
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                handlerThread.set(Thread.currentThread());
                 AsyncHandle handle = request.handleAsync();
                 handleRef.set(handle);
-                handle.addResponseCompleteHandler(completedStreams::add);
+                handle.addResponseCompleteHandler(info -> {
+                    completionThread.set(Thread.currentThread());
+                    completedStreams.add(info);
+                });
                 requestStarted.countDown();
             })
             .start();
@@ -63,6 +73,49 @@ class RFC9113_6_4_RstStreamTest {
         assertThat("Resetting the HTTP/2 stream did not complete the suspended request", completedStream, is(notNullValue()));
         assertThat(completedStream.completedSuccessfully(), is(false));
         assertThat(completedStream.response().responseState(), is(ResponseState.CLIENT_CANCELLED));
+        assertThat(completionThread.get(), sameInstance(handlerThread.get()));
+    }
+
+    @Test
+    void dataFollowingResetInTheSameWriteIsNotDeliveredToTheRequestBody() throws Exception {
+        var requestStarted = new CountDownLatch(1);
+        var releaseHandler = new CountDownLatch(1);
+        var bodyResults = new LinkedBlockingQueue<Throwable>(1);
+        byte[] opaqueData = {1, 2, 3, 4, 5, 6, 7, 8};
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                requestStarted.countDown();
+                try {
+                    int value = request.body().read();
+                    bodyResults.add(new AssertionError("Expected reset, but read " + value));
+                } catch (Throwable e) {
+                    bodyResults.add(e);
+                }
+                assertThat(releaseHandler.await(10, TimeUnit.SECONDS), is(true));
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .flush();
+            assertThat("The request did not start", requestStarted.await(5, TimeUnit.SECONDS), is(true));
+
+            con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()))
+                .writeFrame(utf8DataFrame(1, false, "late"))
+                .writeFrame(new Http2Ping(false, opaqueData))
+                .flush();
+
+            assertThat(bodyResults.poll(5, TimeUnit.SECONDS), instanceOf(EOFException.class));
+            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.STREAM_CLOSED));
+            assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, opaqueData)));
+        } finally {
+            releaseHandler.countDown();
+        }
     }
 
     @Test
@@ -109,6 +162,101 @@ class RFC9113_6_4_RstStreamTest {
             assertThat(info.completedSuccessfully(), equalTo(false));
         }
 
+    }
+
+    @Test
+    void resetFenceRejectsWritesBeforeTheResetCommandReachesTheCoordinator() throws Exception {
+        var requestStarted = new CountDownLatch(1);
+        var connectionRef = new AtomicReference<Http2Connection>();
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                connectionRef.set((Http2Connection) request.connection());
+                request.handleAsync();
+                requestStarted.countDown();
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+            assertThat("The request did not start", requestStarted.await(5, TimeUnit.SECONDS), is(true));
+
+            Http2Connection connection = connectionRef.get();
+            Map<?, ?> streams = getField(connection, "streams", Map.class);
+            Http2Stream stream = (Http2Stream) streams.get(1);
+            Lock stateLock = getField(connection, "stateLock", Lock.class);
+            stateLock.lock();
+            try {
+                con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()))
+                    .flush();
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+                while (!stream.resetWasInitiated() && System.nanoTime() < deadline) {
+                    Thread.sleep(1);
+                }
+                assertThat("The reader did not publish the reset fence", stream.resetWasInitiated(), is(true));
+
+                var lateWrite = new WriteTask(utf8DataFrame(1, false, "late"), true);
+                connection.write(lateWrite);
+                var failure = assertThrows(
+                    IOException.class,
+                    () -> lateWrite.await(1, TimeUnit.SECONDS)
+                );
+                assertThat(failure.getMessage(), containsString("stream is closed"));
+            } finally {
+                stateLock.unlock();
+            }
+
+            assertNothingToRead(con.socket());
+        }
+    }
+
+    @Test
+    void peerCancellationIsPublishedBeforeBlockedResponseWritersAreReleased() throws Exception {
+        var requestStarted = new CountDownLatch(1);
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                request.handleAsync();
+                requestStarted.countDown();
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2Settings(false, 4096, 100, 0, 16384, 32768))
+                .flush();
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            con.writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort()))).flush();
+            assertThat("The request did not start", requestStarted.await(5, TimeUnit.SECONDS), is(true));
+
+            Http2Connection connection = (Http2Connection) server.activeConnections().iterator().next();
+            Map<?, ?> streams = getField(connection, "streams", Map.class);
+            Http2Stream stream = (Http2Stream) streams.get(1);
+            var stateAtWriteFailure = new AtomicReference<ResponseState>();
+            var blockedWrite = new WriteTask(utf8DataFrame(1, false, "blocked"), true) {
+                @Override
+                public void fail(Exception ex) {
+                    stateAtWriteFailure.set(stream.response().responseState());
+                    super.fail(ex);
+                }
+            };
+            connection.write(blockedWrite);
+
+            byte[] barrierData = {1, 2, 3, 4, 5, 6, 7, 8};
+            var barrier = new WriteTask(new Http2Ping(false, barrierData), true);
+            connection.write(barrier);
+            barrier.await(5, TimeUnit.SECONDS);
+            assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(false, barrierData)));
+
+            con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code())).flush();
+            assertThrows(IOException.class, () -> blockedWrite.await(5, TimeUnit.SECONDS));
+            assertThat(stateAtWriteFailure.get(), equalTo(ResponseState.CLIENT_CANCELLED));
+        }
     }
 
     @Test
@@ -482,6 +630,12 @@ class RFC9113_6_4_RstStreamTest {
 
     private int getPort() {
         return server.uri().getPort();
+    }
+
+    private static <T> T getField(Object target, String name, Class<T> type) throws Exception {
+        var field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return type.cast(field.get(target));
     }
 
     @AfterEach

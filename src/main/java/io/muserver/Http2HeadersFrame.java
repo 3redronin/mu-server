@@ -40,6 +40,7 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
         var endHeaders = (frameHeader.flags() & 0b00000100) > 0;
         var endStream = (frameHeader.flags() & 0b0000001) > 0;
         int hpackLength = frameHeader.length();
+        Http2Exception deferredStreamError = null;
 
         int padLength = 0;
         if (padded) {
@@ -62,7 +63,14 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
             int streamDependency = buffer.getInt() & 0x7FFFFFFF;
             buffer.get();
             if (streamDependency == frameHeader.streamId()) {
-                throw Http2Exception.stream(Http2ErrorCode.PROTOCOL_ERROR, "HEADERS stream cannot depend on itself", frameHeader.streamId());
+                // This is a stream error, so the connection remains usable. Consume and
+                // decode the complete field block before throwing to preserve HPACK state
+                // and leave the reader positioned at the next frame.
+                deferredStreamError = Http2Exception.stream(
+                    Http2ErrorCode.PROTOCOL_ERROR,
+                    "HEADERS stream cannot depend on itself",
+                    frameHeader.streamId()
+                );
             }
         }
 
@@ -127,6 +135,9 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
             }
         }
 
+        if (deferredStreamError != null) {
+            throw deferredStreamError;
+        }
         if (invalidRequestException != null) {
             throw invalidRequestException;
         }
@@ -228,6 +239,7 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
             '}';
     }
 
+    @Override
     public int streamId() {
         return streamId;
     }

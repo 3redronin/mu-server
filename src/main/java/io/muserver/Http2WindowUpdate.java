@@ -17,6 +17,7 @@ class Http2WindowUpdate implements LogicalHttp2Frame {
         this.windowSizeIncrement = windowSizeIncrement;
     }
 
+    @Override
     public int streamId() {
         return streamId;
     }
