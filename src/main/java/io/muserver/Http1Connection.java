@@ -223,17 +223,19 @@ class Http1Connection extends BaseHttpConnection {
 
     private HandlerExecution handleExchangeOnHandlerExecutor(Mu3Request request, Http1Response response) throws Throwable {
         if (handlersRunOnConnectionTask) {
-            return HandlerExecution.accepted(handleExchange(request, response));
+            return HandlerExecution.accepted(
+                server.callHandlerApplicationTask(() -> handleExchange(request, response))
+            );
         }
         CompletableFuture<@Nullable CompletableFuture<@Nullable Void>> completion = new CompletableFuture<>();
         try {
-            handlerExecutor.execute(() -> {
+            handlerExecutor.execute(server.handlerApplicationTask(() -> {
                 try {
                     completion.complete(handleExchange(request, response));
                 } catch (Throwable t) {
                     completion.completeExceptionally(t);
                 }
-            });
+            }));
         } catch (RejectedExecutionException rejected) {
             return HandlerExecution.rejected();
         }
@@ -260,7 +262,10 @@ class Http1Connection extends BaseHttpConnection {
     private void handleAsyncExceptionOnHandler(Mu3Request request, Http1Response response,
                                                Exception failure) throws Throwable {
         if (handlersRunOnConnectionTask) {
-            handleExchangeException(request, response, failure);
+            server.callHandlerApplicationTask(() -> {
+                handleExchangeException(request, response, failure);
+                return null;
+            });
             return;
         }
         CompletableFuture<@Nullable Void> handled = new CompletableFuture<>();
@@ -286,7 +291,7 @@ class Http1Connection extends BaseHttpConnection {
     private void onExchangeEndedOnHandler(Http1Response response) {
         recordExchangeEnded(response);
         if (handlersRunOnConnectionTask) {
-            notifyExchangeEnded(response);
+            server.runHandlerApplicationTask(() -> notifyExchangeEnded(response));
             return;
         }
         server.executeResponseCompletionTask(() -> notifyExchangeEnded(response));
@@ -461,10 +466,6 @@ class Http1Connection extends BaseHttpConnection {
         if (cur != null && cur.websocket != null) {
             cur.websocket.onTimeout();
         }
-    }
-
-    ExecutorService webSocketHandlerExecutor() {
-        return handlerExecutor;
     }
 
     void wakeWebSocketReader() {

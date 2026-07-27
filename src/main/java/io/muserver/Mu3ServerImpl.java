@@ -50,6 +50,7 @@ class Mu3ServerImpl implements MuServer {
     private final boolean ownsConnectionMaintenanceExecutor;
     private final ScheduledExecutorService timerExecutor;
     private final boolean ownsTimerExecutor;
+    private final ThreadLocal<ApplicationTaskContext> applicationTaskContext = new ThreadLocal<>();
     private final Phaser detachedApplicationTasks = new Phaser() {
         @Override
         protected boolean onAdvance(int phase, int registeredParties) {
@@ -168,15 +169,10 @@ class Mu3ServerImpl implements MuServer {
     }
 
     void executeResponseCompletionTask(Runnable task) {
-        executeResponseCompletionTask(task, false);
-    }
-
-    void executeResponseCompletionTask(Runnable task, boolean alreadyOnApplicationExecutor) {
         executeTrackedApplicationTask(
             task,
             true,
-            "response completion callback",
-            alreadyOnApplicationExecutor
+            "response completion callback"
         );
     }
 
@@ -184,15 +180,6 @@ class Mu3ServerImpl implements MuServer {
         Runnable task,
         boolean preferHandlerExecutor,
         String description
-    ) {
-        executeTrackedApplicationTask(task, preferHandlerExecutor, description, false);
-    }
-
-    private void executeTrackedApplicationTask(
-        Runnable task,
-        boolean preferHandlerExecutor,
-        String description,
-        boolean alreadyOnApplicationExecutor
     ) {
         detachedApplicationTasks.register();
         Runnable trackedTask = () -> {
@@ -202,10 +189,6 @@ class Mu3ServerImpl implements MuServer {
                 detachedApplicationTasks.arriveAndDeregister();
             }
         };
-        if (alreadyOnApplicationExecutor) {
-            trackedTask.run();
-            return;
-        }
         RejectedExecutionException rejected = preferHandlerExecutor
             ? tryExecuteHandlerTask(trackedTask)
             : tryExecuteAsyncTask(trackedTask);
@@ -224,23 +207,54 @@ class Mu3ServerImpl implements MuServer {
         return tryExecuteApplicationTask(task, handlerExecutor, asyncExecutor);
     }
 
-    private @Nullable RejectedExecutionException tryExecuteAsyncTask(Runnable task) {
+    @Nullable RejectedExecutionException tryExecuteAsyncTask(Runnable task) {
         return tryExecuteApplicationTask(task, asyncExecutor, handlerExecutor);
     }
 
+    void executeAsyncApplicationTask(Runnable task) {
+        RejectedExecutionException rejected = tryExecuteRequiredAsyncTask(task);
+        if (rejected != null) {
+            throw rejected;
+        }
+    }
+
     @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
-    private static @Nullable RejectedExecutionException tryExecuteApplicationTask(
+    private @Nullable RejectedExecutionException tryExecuteRequiredAsyncTask(Runnable task) {
+        ApplicationTaskContext currentContext = applicationTaskContext.get();
+        if (currentContext != null && currentContext.includes(asyncExecutor)) {
+            currentContext.tasks.add(task);
+            return null;
+        }
+        try {
+            asyncExecutor.execute(applicationTask(asyncExecutor, asyncExecutor, task));
+            return null;
+        } catch (RejectedExecutionException rejected) {
+            return rejected;
+        }
+    }
+
+    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
+    private @Nullable RejectedExecutionException tryExecuteApplicationTask(
         Runnable task,
         ExecutorService primaryExecutor,
         ExecutorService fallbackExecutor
     ) {
+        ApplicationTaskContext currentContext = applicationTaskContext.get();
+        if (currentContext != null && currentContext.includes(primaryExecutor)) {
+            currentContext.tasks.add(task);
+            return null;
+        }
         try {
-            primaryExecutor.execute(task);
+            primaryExecutor.execute(applicationTask(primaryExecutor, primaryExecutor, task));
             return null;
         } catch (RejectedExecutionException primaryRejected) {
             if (fallbackExecutor != primaryExecutor) {
+                if (currentContext != null && currentContext.includes(fallbackExecutor)) {
+                    currentContext.tasks.add(task);
+                    return null;
+                }
                 try {
-                    fallbackExecutor.execute(task);
+                    fallbackExecutor.execute(applicationTask(primaryExecutor, fallbackExecutor, task));
                     return null;
                 } catch (RejectedExecutionException fallbackRejected) {
                     fallbackRejected.addSuppressed(primaryRejected);
@@ -248,6 +262,138 @@ class Mu3ServerImpl implements MuServer {
                 }
             }
             return primaryRejected;
+        }
+    }
+
+    Runnable handlerApplicationTask(Runnable task) {
+        return applicationTask(handlerExecutor, handlerExecutor, task);
+    }
+
+    private Runnable applicationTask(
+        ExecutorService requestedExecutor,
+        ExecutorService executingExecutor,
+        Runnable task
+    ) {
+        Objects.requireNonNull(task, "task");
+        return () -> runApplicationTask(requestedExecutor, executingExecutor, task);
+    }
+
+    void runHandlerApplicationTask(Runnable task) {
+        runApplicationTask(handlerExecutor, handlerExecutor, task);
+    }
+
+    private void runApplicationTask(
+        ExecutorService requestedExecutor,
+        ExecutorService executingExecutor,
+        Runnable task
+    ) {
+        Objects.requireNonNull(task, "task");
+        ApplicationTaskContext currentContext = applicationTaskContext.get();
+        if (currentContext != null) {
+            if (currentContext.includes(requestedExecutor)) {
+                currentContext.tasks.add(task);
+                return;
+            }
+            throw new IllegalStateException("Cannot enter a different application execution domain");
+        }
+
+        ApplicationTaskContext newContext =
+            new ApplicationTaskContext(requestedExecutor, executingExecutor);
+        newContext.tasks.add(task);
+        applicationTaskContext.set(newContext);
+        @Nullable Throwable failure = null;
+        try {
+            failure = drainApplicationTasks(newContext, null);
+        } finally {
+            applicationTaskContext.remove();
+        }
+        if (failure != null) {
+            throwUnchecked(failure);
+        }
+    }
+
+    <T> @Nullable T callHandlerApplicationTask(ApplicationCallable<T> task) throws Throwable {
+        Objects.requireNonNull(task, "task");
+        ApplicationTaskContext currentContext = applicationTaskContext.get();
+        if (currentContext != null) {
+            if (currentContext.includes(handlerExecutor)) {
+                return task.call();
+            }
+            throw new IllegalStateException("Cannot enter the handler execution domain from another application domain");
+        }
+
+        ApplicationTaskContext newContext =
+            new ApplicationTaskContext(handlerExecutor, handlerExecutor);
+        applicationTaskContext.set(newContext);
+        @Nullable T result = null;
+        @Nullable Throwable failure = null;
+        try {
+            try {
+                result = task.call();
+            } catch (Throwable taskFailure) {
+                failure = taskFailure;
+            }
+            failure = drainApplicationTasks(newContext, failure);
+        } finally {
+            applicationTaskContext.remove();
+        }
+        if (failure != null) {
+            throw failure;
+        }
+        return result;
+    }
+
+    @SuppressWarnings("ReferenceEquality") // Throwable forbids suppressing itself; identity is required.
+    private static @Nullable Throwable drainApplicationTasks(
+        ApplicationTaskContext context,
+        @Nullable Throwable failure
+    ) {
+        Runnable task;
+        while ((task = context.tasks.poll()) != null) {
+            try {
+                task.run();
+            } catch (Throwable taskFailure) {
+                if (failure == null) {
+                    failure = taskFailure;
+                } else if (failure != taskFailure) {
+                    failure.addSuppressed(taskFailure);
+                }
+            }
+        }
+        return failure;
+    }
+
+    private static void throwUnchecked(Throwable failure) {
+        if (failure instanceof RuntimeException) {
+            throw (RuntimeException) failure;
+        }
+        if (failure instanceof Error) {
+            throw (Error) failure;
+        }
+        throw new MuException("Application task failed", failure);
+    }
+
+    @FunctionalInterface
+    interface ApplicationCallable<T> {
+        @Nullable T call() throws Throwable;
+    }
+
+    private static final class ApplicationTaskContext {
+        private final ExecutorService requestedExecutor;
+        private final ExecutorService executingExecutor;
+        private final Queue<Runnable> tasks = new ArrayDeque<>();
+
+        private ApplicationTaskContext(
+            ExecutorService requestedExecutor,
+            ExecutorService executingExecutor
+        ) {
+            this.requestedExecutor = requestedExecutor;
+            this.executingExecutor = executingExecutor;
+        }
+
+        @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
+        private boolean includes(ExecutorService executor) {
+            return requestedExecutor == executor || executingExecutor == executor;
         }
     }
 

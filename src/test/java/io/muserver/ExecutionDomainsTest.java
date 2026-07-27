@@ -575,6 +575,70 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void oneSharedNonQueueingWorkerCanReadAndEchoARequestBody() throws Exception {
+        var applicationExecutor = track(new ThreadPoolExecutor(
+            1,
+            1,
+            0,
+            TimeUnit.MILLISECONDS,
+            new SynchronousQueue<>(),
+            namedThreads("application-")
+        ));
+        var callbackThreads = new CopyOnWriteArrayList<String>();
+        byte[] payload = new byte[20_000];
+        for (int i = 0; i < payload.length; i++) {
+            payload[i] = (byte) ('a' + (i % 26));
+        }
+        server = httpServer()
+            .withHandlerExecutor(applicationExecutor)
+            .withAsyncExecutor(applicationExecutor)
+            .addHandler(Method.POST, "/", (request, response, pathParams) -> {
+                AsyncHandle handle = request.handleAsync();
+                handle.setReadListener(new RequestBodyListener() {
+                    @Override
+                    public void onDataReceived(ByteBuffer data, DoneCallback doneCallback) {
+                        callbackThreads.add(Thread.currentThread().getName());
+                        handle.write(data, error -> {
+                            callbackThreads.add(Thread.currentThread().getName());
+                            doneCallback.onComplete(error);
+                        });
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        callbackThreads.add(Thread.currentThread().getName());
+                        handle.complete();
+                    }
+
+                    @Override
+                    public void onError(Throwable t) {
+                        handle.complete(t);
+                    }
+                });
+            })
+            .start();
+
+        RequestBody body = new RequestBody() {
+            @Override
+            public MediaType contentType() {
+                return null;
+            }
+
+            @Override
+            public void writeTo(BufferedSink sink) throws IOException {
+                sink.write(payload);
+            }
+        };
+        try (Response response = call(request(server.uri()).post(body))) {
+            assertThat(response.body().bytes(), equalTo(payload));
+        }
+        assertThat(callbackThreads.size(), greaterThanOrEqualTo(3));
+        for (String callbackThread : callbackThreads) {
+            assertThat(callbackThread, startsWith("application-"));
+        }
+    }
+
+    @Test
     void rejectedAsyncWritesFailTheRequestAndInvokeTheCallback() throws Exception {
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
         asyncExecutor.shutdown();

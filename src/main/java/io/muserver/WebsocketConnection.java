@@ -34,8 +34,8 @@ class WebsocketConnection implements MuWebSocketSession {
 
     private volatile WebsocketSessionState state = WebsocketSessionState.NOT_STARTED;
     private final Http1Connection httpConnection;
+    private final Mu3ServerImpl server;
     private final MuWebSocket webSocket;
-    private final ExecutorService handlerExecutor;
     private final boolean eventsRunOnConnectionTask;
     private final Queue<ApplicationEventTask> applicationEvents = new ConcurrentLinkedQueue<>();
     private final AtomicBoolean applicationEventRunnerScheduled = new AtomicBoolean();
@@ -73,9 +73,9 @@ class WebsocketConnection implements MuWebSocketSession {
 
     WebsocketConnection(Http1Connection httpConnection, MuWebSocket webSocket, WebSocketHandlerBuilder.Settings settings) {
         this.httpConnection = httpConnection;
+        this.server = httpConnection.serverImpl();
         this.webSocket = webSocket;
         this.settings = settings;
-        this.handlerExecutor = httpConnection.webSocketHandlerExecutor();
         this.eventsRunOnConnectionTask = httpConnection.webSocketEventsRunOnConnectionTask();
         if (settings.pingIntervalMillis == 0) {
             pingBuffer = null;
@@ -95,9 +95,8 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     ExecutorService asyncExecutor() {
-        return httpConnection.serverImpl().asyncExecutor();
+        return server.asyncExecutor();
     }
-
 
     private void startPinging() {
         pingFuture = httpConnection.serverImpl().scheduleConnectionTask(() -> {
@@ -405,7 +404,7 @@ class WebsocketConnection implements MuWebSocketSession {
     private void invokeApplicationEvent(ApplicationEvent event) throws Exception {
         if (eventsRunOnConnectionTask) {
             try {
-                event.run();
+                callApplicationEvent(event);
             } finally {
                 // A terminal event can be queued by a write attempted inside a callback.
                 // Drain it before returning to the blocking socket read.
@@ -428,6 +427,19 @@ class WebsocketConnection implements MuWebSocketSession {
                 throw (Error) cause;
             }
             throw new MuException("Unexpected WebSocket callback failure", cause);
+        }
+    }
+
+    private void callApplicationEvent(ApplicationEvent event) throws Exception {
+        try {
+            server.callHandlerApplicationTask(() -> {
+                event.run();
+                return null;
+            });
+        } catch (Exception | Error failure) {
+            throw failure;
+        } catch (Throwable failure) {
+            throw new MuException("Unexpected WebSocket callback failure", failure);
         }
     }
 
@@ -470,26 +482,13 @@ class WebsocketConnection implements MuWebSocketSession {
         return task.completion;
     }
 
-    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
     private void scheduleApplicationEventRunner() {
         if (!applicationEventRunnerScheduled.compareAndSet(false, true)) {
             return;
         }
-        try {
-            handlerExecutor.execute(this::runApplicationEvents);
-        } catch (RejectedExecutionException handlerRejected) {
-            ExecutorService fallbackExecutor = asyncExecutor();
-            if (fallbackExecutor != handlerExecutor) {
-                try {
-                    fallbackExecutor.execute(this::runApplicationEvents);
-                    return;
-                } catch (RejectedExecutionException asyncRejected) {
-                    asyncRejected.addSuppressed(handlerRejected);
-                    failApplicationEvents(asyncRejected);
-                    return;
-                }
-            }
-            failApplicationEvents(handlerRejected);
+        RejectedExecutionException rejected = server.tryExecuteHandlerTask(this::runApplicationEvents);
+        if (rejected != null) {
+            failApplicationEvents(rejected);
         }
     }
 
@@ -516,7 +515,7 @@ class WebsocketConnection implements MuWebSocketSession {
         ApplicationEventTask task;
         while ((task = applicationEvents.poll()) != null) {
             try {
-                task.event.run();
+                callApplicationEvent(task.event);
                 task.completion.complete(null);
             } catch (Throwable t) {
                 task.completion.completeExceptionally(t);

@@ -245,6 +245,83 @@ public class AsynchronousProcessingTest {
         }
     }
 
+    @Test
+    public void completedStagesDoNotResubmitFromTheApplicationWorker() throws Exception {
+        var applicationExecutor = track(nonQueueingApplicationExecutor());
+
+        @Path("samples")
+        class Sample {
+            @GET
+            public CompletionStage<ThreadReportingEntity> go() {
+                return CompletableFuture.completedFuture(new ThreadReportingEntity());
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest("http")
+            .withHandlerExecutor(applicationExecutor)
+            .withAsyncExecutor(applicationExecutor)
+            .addHandler(restHandler(new Sample()).addCustomWriter(threadReportingWriter()))
+            .start();
+
+        try (Response response = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), startsWith("application-"));
+        }
+    }
+
+    @Test
+    public void inlineResumeDoesNotResubmitFromTheApplicationWorker() throws Exception {
+        var applicationExecutor = track(nonQueueingApplicationExecutor());
+
+        @Path("samples")
+        class Sample {
+            @GET
+            public void go(@Suspended AsyncResponse response) {
+                assertThat(response.resume(new ThreadReportingEntity()), is(true));
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest("http")
+            .withHandlerExecutor(applicationExecutor)
+            .withAsyncExecutor(applicationExecutor)
+            .addHandler(restHandler(new Sample()).addCustomWriter(threadReportingWriter()))
+            .start();
+
+        try (Response response = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), startsWith("application-"));
+        }
+    }
+
+    @Test
+    public void timeoutResumeDoesNotResubmitFromTheApplicationWorker() throws Exception {
+        var applicationExecutor = track(nonQueueingApplicationExecutor());
+        var timerExecutor = track(Executors.newSingleThreadScheduledExecutor(namedThreads("timer-")));
+
+        @Path("samples")
+        class Sample {
+            @GET
+            public void go(@Suspended AsyncResponse response) {
+                response.setTimeoutHandler(timedOut ->
+                    timedOut.resume(new ThreadReportingEntity())
+                );
+                response.setTimeout(1, TimeUnit.MILLISECONDS);
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest("http")
+            .withHandlerExecutor(applicationExecutor)
+            .withAsyncExecutor(applicationExecutor)
+            .withTimerExecutor(timerExecutor)
+            .addHandler(restHandler(new Sample()).addCustomWriter(threadReportingWriter()))
+            .start();
+
+        try (Response response = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), startsWith("application-"));
+        }
+    }
+
 
     @Test
     public void ifResumedWithExceptionThenItIsHandledNormally() throws Exception {
@@ -533,6 +610,17 @@ public class AsynchronousProcessingTest {
     private static ThreadFactory namedThreads(String prefix) {
         var count = new AtomicInteger();
         return runnable -> new Thread(runnable, prefix + count.incrementAndGet());
+    }
+
+    private static ThreadPoolExecutor nonQueueingApplicationExecutor() {
+        return new ThreadPoolExecutor(
+            1,
+            1,
+            0,
+            TimeUnit.MILLISECONDS,
+            new SynchronousQueue<>(),
+            namedThreads("application-")
+        );
     }
 
     private static MessageBodyWriter<ThreadReportingEntity> threadReportingWriter() {
