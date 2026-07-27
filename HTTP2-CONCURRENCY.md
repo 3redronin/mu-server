@@ -1,10 +1,9 @@
 # HTTP/2 concurrency model
 
-This document defines the target concurrency and ownership rules for the direct
-HTTP/2 implementation. It is the design contract for a staged migration, not an
-inventory of guarantees that have all landed: completed slices must preserve the
-rules they implement, and later changes must move the remaining code towards
-this model.
+This document defines the concurrency and ownership rules for the direct HTTP/2
+implementation. It is the design contract for the staged migration: completed
+slices must preserve the rules they implement, and later changes must keep each
+piece of mutable state within one of the ownership boundaries described here.
 
 ## Implementation status
 
@@ -30,9 +29,9 @@ and body consumers return credit through the same component. Live stream
 identity publication is similarly centralized in one short-held registry lock,
 while the coordinator remains the sole owner of RFC stream-state transitions.
 Request-body read deadlines are monotonic timed waits owned by the body buffer:
-they do not require a scheduled task or coordinator round trip. The reader and
-coordinator have separate execution capacity from handlers, but do not yet have
-all of the final ownership boundaries described below.
+they do not require a scheduled task or coordinator round trip. The reader,
+coordinator, application executors, and timer now have separate execution
+capacity, and the deliberate cross-domain boundaries are listed below.
 
 ## Goals
 
@@ -49,8 +48,9 @@ The model must:
 ## Execution domains
 
 The executor allocation and application-turn rules in this section are
-implemented. Some finer-grained protocol ownership rules remain the target for
-later phases, as called out below.
+implemented. The ownership boundaries below describe both the current design
+and the constraint on later phases; individual call sites can still be
+simplified within those boundaries.
 
 There are five execution domains and one timer facility:
 
@@ -71,17 +71,19 @@ Each HTTP/2 connection has:
 These tasks run independently of request handlers and independently of each
 other. The connection reader is a long-lived task on the executor configured
 by `MuServerBuilder.withConnectionExecutor`. It owns the input stream, read
-buffer, and HPACK decoder. The target end state is for it to turn every logical
-frame into a coordinator command without mutating connection or stream protocol
-state; migration of the remaining reader-owned protocol mutations is not
-complete.
+buffer, HPACK decoder, wire-order validation, and monotonic inbound
+`END_STREAM`/reset-seen fences. It directly debits receive credit and publishes
+validated DATA to the request-body buffer. Making either operation wait for the
+writer would let a blocked socket output stall input and can deadlock
+bidirectional exchanges.
 
-The coordinator already serializes outbound protocol state and is the only code
-that writes to the socket. It schedules short serialized drains on the executor
-configured by `MuServerBuilder.withHttp2WriterExecutor`; an idle or
-flow-control-blocked connection does not retain a writer worker. The coordinator
-will become the sole owner of all connection and stream protocol state as the
-remaining state is migrated.
+The coordinator serializes the RFC stream-state machine, outbound flow control,
+pending frames, and socket output. The reader enqueues each inbound transition
+before publishing an application-visible terminal event, but its wire-order
+fences are intentionally not a second RFC state machine. The coordinator
+schedules short serialized drains on the executor configured by
+`MuServerBuilder.withHttp2WriterExecutor`; an idle or flow-control-blocked
+connection does not retain a writer worker.
 
 Timed connection work runs on
 `MuServerBuilder.withConnectionMaintenanceExecutor`, not on a reader or writer.
@@ -191,7 +193,7 @@ single-consumer mailbox.
 
 Command categories include:
 
-* decoded inbound frames;
+* protocol transitions and outbound effects of decoded inbound frames;
 * outbound headers, data, and informational responses;
 * application handler completion or failure;
 * WINDOW_UPDATE output produced after request-body credit is returned;
@@ -231,11 +233,10 @@ and peer `RST_STREAM` commands are one-way. The reader enqueues a valid
 awakened by EOF is necessarily ordered after the inbound transition. Local
 `END_STREAM` is reserved when the coordinator accepts its outbound frame.
 
-Until all inbound stream frames are coordinator commands, the reader records
-monotonic "remote end seen" and "reset seen" fences on the stream. This is
-input-ordering state, not a protocol-state transition: it only prevents later
-wire-ordered DATA or trailers from reaching the request body before the
-coordinator applies the corresponding transition.
+The reader records monotonic "remote end seen" and "reset seen" fences on the
+stream. This is input-ordering state, not a protocol-state transition: it only
+prevents later wire-ordered DATA or trailers from reaching the request body
+before the coordinator applies the corresponding transition.
 
 An outbound frame command is validated and its state transition reserved by the
 coordinator before it becomes pending for socket output. A reset closes the

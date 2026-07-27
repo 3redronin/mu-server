@@ -65,12 +65,10 @@ final class Http2WriteCoordinator {
 
     private static final class QueueWrite implements Command {
         private final WriteTask task;
-        private final boolean first;
         private final boolean retainResetState;
 
-        private QueueWrite(WriteTask task, boolean first, boolean retainResetState) {
+        private QueueWrite(WriteTask task, boolean retainResetState) {
             this.task = task;
-            this.first = first;
             this.retainResetState = retainResetState;
         }
     }
@@ -225,11 +223,7 @@ final class Http2WriteCoordinator {
     }
 
     void submit(WriteTask task, boolean retainResetState) {
-        enqueue(new QueueWrite(task, false, retainResetState));
-    }
-
-    void submitFirst(WriteTask task) {
-        enqueue(new QueueWrite(task, true, false));
+        enqueue(new QueueWrite(task, retainResetState));
     }
 
     void resetStream(Http2ResetStreamFrame resetFrame, IOException reason, @Nullable Http2Stream stream) {
@@ -458,7 +452,7 @@ final class Http2WriteCoordinator {
     private void apply(Command command) {
         if (command instanceof QueueWrite) {
             QueueWrite write = (QueueWrite) command;
-            queue(write.task, write.first, write.retainResetState);
+            queue(write.task, false, write.retainResetState);
         } else if (command instanceof ResetStream) {
             ResetStream reset = (ResetStream) command;
             peerResetStreams.add(reset.streamId);
