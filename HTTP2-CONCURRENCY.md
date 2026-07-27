@@ -23,10 +23,13 @@ as a coordinator connection-error command; it no longer changes the socket
 reader's blocking timeout. Peer SETTINGS are decoded into an immutable
 reader-published snapshot, while their outbound effects (existing-stream flow
 credit, the HPACK encoder limit, and the ACK) are applied in order by the
-coordinator. Still to be implemented are migration of the stream registry,
-inbound flow-control accounting, and request-body read deadlines to coordinator
-ownership. The reader and coordinator have separate execution capacity from
-handlers, but do not yet have all of the final single-owner boundaries described
+coordinator. Connection and stream inbound flow-control accounting is also
+centralized in one component with a short-held lock. The reader atomically
+debits both receive windows without depending on the blocking-output executor,
+and body consumers return credit through the same component. Still to be
+implemented are migration of the stream registry and request-body read
+deadlines. The reader and coordinator have separate execution capacity from
+handlers, but do not yet have all of the final ownership boundaries described
 below.
 
 ## Goals
@@ -146,7 +149,7 @@ local blocking deadlines for now.
 | Peer settings snapshot after decoding | Connection reader (volatile publication) |
 | Outbound effects of peer settings and local settings lifecycle | Coordinator |
 | Connection and stream outbound flow-control credit | Coordinator |
-| Connection and stream inbound flow-control accounting | Coordinator |
+| Connection and stream inbound flow-control accounting | `Http2InboundFlowControl` lock |
 | Pending outbound frames and their ordering | Coordinator |
 | HPACK encoder and socket output | Coordinator |
 | Request-body producer/consumer buffer | `Http2BodyInputStream` lock |
@@ -169,7 +172,7 @@ Command categories include:
 * decoded inbound frames;
 * outbound headers, data, and informational responses;
 * application handler completion or failure;
-* request-body credit returned or body abandoned;
+* WINDOW_UPDATE output produced after request-body credit is returned;
 * local graceful or forced shutdown; and
 * timeout expiry.
 
@@ -250,9 +253,17 @@ Flow-control commands from the reader are one-way. If a window increment
 overflows, the coordinator queues the required `RST_STREAM` or `GOAWAY` itself;
 the reader does not wait for the coordinator to validate the command.
 
-Inbound DATA is charged when its frame command is processed. Credit is returned
-exactly once when bytes are consumed or discarded. Body consumers post
-credit-return commands rather than mutating flow controllers directly.
+Inbound DATA is charged before the reader exposes its payload to the
+request-body buffer. One short-held lock makes the connection and stream debit
+atomic with credit returned by body-consumer threads. This is intentionally not
+a write-coordinator round trip: the socket writer can block, and input must
+continue reading and processing HTTP/2 frames promptly as required by RFC 9113
+Section 5.2.2. No lock is held while queuing WINDOW_UPDATE output.
+
+Credit is returned exactly once when bytes are consumed or discarded. The
+inbound component batches WINDOW_UPDATE increments at half of the advertised
+window and keeps connection-level accounting synchronized even when DATA is
+rejected with a stream error, as required by RFC 9113 Section 6.9.
 
 ## Exchange lifecycle
 
@@ -273,17 +284,19 @@ A handler finishing does not remove the stream.
 
 If a handler completes a response while the peer request side is still open,
 the input enters discard mode. Already-buffered and future request DATA is
-discarded with connection credit returned. Stream credit is not returned: this
-bounds the amount of additional data that the peer can send on an abandoned
-request while preserving connection capacity for other streams. The stream
-remains in the protocol registry until peer END_STREAM or reset.
+discarded with both connection and stream credit returned. This allows a client
+whose request is larger than the initial stream window to reach END_STREAM
+instead of leaving the half-closed stream permanently flow-control blocked. No
+discarded payload is retained. The stream remains in the protocol registry until
+peer END_STREAM or reset.
 
 RFC 9113 Section 8.1 permits a server to complete a response before receiving
 the entire request and permits, but does not require, a subsequent
-`RST_STREAM(NO_ERROR)`. The current policy retains the stream instead of
-resetting it, allowing already-in-flight request frames to be processed while
-the withheld stream credit bounds further transmission on that abandoned
-request.
+`RST_STREAM(NO_ERROR)`. The current compatibility policy retains the stream
+instead of resetting it and consumes and discards the remaining request. Since
+the server is freeing that capacity, it returns both windows as described in
+Section 6.9.1. A future explicit `NO_ERROR` reset policy would be a separate,
+observable protocol choice.
 
 Application-active request reporting is independent of that registry. A
 half-closed stream still counts towards `SETTINGS_MAX_CONCURRENT_STREAMS` after
@@ -301,14 +314,19 @@ Permitted cross-thread primitives are deliberately narrow:
 
 * a blocking mailbox for coordinator commands;
 * a small promise backed by a latch and a result or error;
+* one short-held lock for atomic connection-and-stream inbound flow-control
+  accounting;
 * the existing request-body buffer lock and condition;
 * an application-side lock that orders async response submissions; and
 * a thread-confined FIFO that drains nested application work without recursive
   calls or executor resubmission; and
 * atomics for idempotent resource closure.
 
-Protocol state, stream maps, flow-control windows, and pending-write queues are
-not protected by independent locks because they have a single owner.
+Protocol state, stream maps, outbound flow-control windows, and pending-write
+queues are not protected by independent locks because they have a single owner.
+Inbound receive windows are the deliberate exception: DATA debits happen on
+the reader while credit is returned by body-consumer threads, so both windows
+share the one lock described above.
 
 No lock is held while:
 
@@ -323,7 +341,9 @@ invariant 2, and invariants 9 and 10, depend on the future ownership and
 execution-domain phases identified above.
 
 1. Inbound frame events from the reader are processed in wire order.
-2. Every protocol state mutation has the coordinator as its linearization point.
+2. Every protocol state mutation has an explicit linearization point: the
+   coordinator for stream and output state, and the inbound-flow lock for
+   receive-window accounting.
 3. No frame other than permitted priority information or a permitted additional
    `RST_STREAM` is emitted after `RST_STREAM`.
 4. No DATA is emitted unless both connection and stream credit were reserved.

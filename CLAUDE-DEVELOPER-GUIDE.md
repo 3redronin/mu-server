@@ -171,7 +171,7 @@ HTTP/2 lives in roughly a dozen files. The key ones:
 | Connection state machine      | `Http2Connection` (read loop + lock-based write loop)       |
 | Per-stream state              | `Http2Stream`                                               |
 | Frames                        | `Http2FrameHeader`, `Http2DataFrame`, `Http2HeadersFrame`, `Http2ContinuationFrame`, `Http2Settings`, `Http2Ping`, `Http2GoAway`, `Http2WindowUpdate`, `Http2ResetStreamFrame`, `Http2FrameType` |
-| Flow control                  | `Http2IncomingFlowController`, `Http2OutgoingFlowController`, `CreditAvailableListener` |
+| Flow control                  | `Http2InboundFlowControl` (receive), `Http2WriteCoordinator` (send), `CreditAvailableListener` |
 | HPACK                         | `HpackTable`, `FieldBlockEncoder`, `FieldBlockDecoder`, `HuffmanEncoder`, `HuffmanDecoder` |
 | Request/response              | `Mu3Request` + `Http2Response` + `Http2BodyInputStream` + `Http2DataFrameOutputStream` |
 

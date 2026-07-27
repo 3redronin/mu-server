@@ -137,7 +137,7 @@ class Http2BodyInputStreamTest {
     }
 
     @Test
-    void applicationCompletionDiscardsUnreadDataAndRefundsItOnlyOnce() throws Exception {
+    void applicationCompletionReturnsUnreadReusableCreditOnlyOnce() throws Exception {
         var readCallbackValue = new AtomicLong();
         var discardCallbackValue = new AtomicLong();
 
@@ -154,12 +154,12 @@ class Http2BodyInputStreamTest {
             assertThat(stream.isRequestBodyComplete(), equalTo(false));
         }
 
-        assertThat(readCallbackValue.get(), equalTo(2L));
-        assertThat(discardCallbackValue.get(), equalTo(6L));
+        assertThat(readCallbackValue.get(), equalTo(8L));
+        assertThat(discardCallbackValue.get(), equalTo(0L));
     }
 
     @Test
-    void dataArrivingInDiscardModeReturnsConnectionCreditUntilPeerEndStream() throws Exception {
+    void dataArrivingInDiscardModeReturnsReusableCreditUntilPeerEndStream() throws Exception {
         var readCallbackValue = new AtomicLong();
         var discardCallbackValue = new AtomicLong();
 
@@ -174,8 +174,8 @@ class Http2BodyInputStreamTest {
             assertThat(stream.isRequestBodyComplete(), equalTo(true));
         }
 
-        assertThat(readCallbackValue.get(), equalTo(0L));
-        assertThat(discardCallbackValue.get(), equalTo(13L));
+        assertThat(readCallbackValue.get(), equalTo(13L));
+        assertThat(discardCallbackValue.get(), equalTo(0L));
     }
 
     private Http2DataFrame data(String data, boolean eos) {
