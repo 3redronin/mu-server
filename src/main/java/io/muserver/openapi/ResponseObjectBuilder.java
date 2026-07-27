@@ -18,6 +18,14 @@ public class ResponseObjectBuilder {
     private @Nullable Map<String, LinkObject> links;
 
     /**
+     * Creates an empty response object builder.
+     */
+    public ResponseObjectBuilder() {
+    }
+
+    /**
+     * Sets the response description.
+     *
      * @param description <strong>REQUIRED</strong>. A short description of the response.
      *                    <a href="http://spec.commonmark.org/">CommonMark syntax</a> MAY be used for rich text representation.
      * @return The current builder
@@ -28,6 +36,8 @@ public class ResponseObjectBuilder {
     }
 
     /**
+     * Sets the response headers.
+     *
      * @param headers Maps a header name to its definition. <a href="https://tools.ietf.org/html/rfc7230#page-22">RFC7230</a>
      *                states header names are case insensitive. If a response header is defined with the name
      *                <code>"Content-Type"</code>, it SHALL be ignored.
@@ -39,6 +49,8 @@ public class ResponseObjectBuilder {
     }
 
     /**
+     * Sets the response content definitions.
+     *
      * @param content A map containing descriptions of potential response payloads. The key is a media type or
      *                <a href="https://tools.ietf.org/html/rfc7231#appendix-D">media type range</a> and the value
      *                describes it.  For responses that match multiple keys, only the most specific key is applicable.
@@ -51,6 +63,8 @@ public class ResponseObjectBuilder {
     }
 
     /**
+     * Sets the links that can be followed from the response.
+     *
      * @param links A map of operations links that can be followed from the response.
      * @return The current builder
      */
@@ -60,6 +74,8 @@ public class ResponseObjectBuilder {
     }
 
     /**
+     * Builds a response object from the configured values.
+     *
      * @return A new object
      */
     public ResponseObject build() {

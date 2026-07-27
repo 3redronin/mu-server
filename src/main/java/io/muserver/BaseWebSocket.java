@@ -28,6 +28,14 @@ public abstract class BaseWebSocket implements MuWebSocket {
     private @Nullable NiceByteArrayOutputStream fragmentBuffer;
 
     /**
+     * Creates a websocket base implementation.
+     */
+    protected BaseWebSocket() {
+    }
+
+    /**
+     * Returns the state of the current websocket session.
+     *
      * @return The state of the current session
      */
     protected WebsocketSessionState state() {

@@ -28,6 +28,12 @@ public class CORSConfigBuilder {
     private long maxAge = -1;
 
     /**
+     * Creates a builder with the default CORS settings.
+     */
+    public CORSConfigBuilder() {
+    }
+
+    /**
      * All origins will be allowed
      * @return This builder
      */

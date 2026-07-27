@@ -21,6 +21,14 @@ public class HeaderObjectBuilder {
     private @Nullable Map<String, MediaTypeObject> content;
 
     /**
+     * Creates an empty header builder.
+     */
+    public HeaderObjectBuilder() {
+    }
+
+    /**
+     * Sets the header description.
+     *
      * @param description A brief description of the header. This could contain examples of use.
      *                    <a href="http://spec.commonmark.org/">CommonMark syntax</a> MAY be used for rich text representation.
      * @return The current builder
@@ -31,6 +39,8 @@ public class HeaderObjectBuilder {
     }
 
     /**
+     * Sets whether the header is required.
+     *
      * @param required Determines whether this header is mandatory. The default value is <code>false</code>.
      * @return The current builder
      */
@@ -40,6 +50,8 @@ public class HeaderObjectBuilder {
     }
 
     /**
+     * Marks the header as deprecated or current.
+     *
      * @param deprecated Specifies that a header is deprecated and SHOULD be transitioned out of usage.
      * @return The current builder
      */
@@ -49,7 +61,9 @@ public class HeaderObjectBuilder {
     }
 
     /**
-     * @param style <p>Describes how the parameter value will be serialized depending on the type of the parameter value.
+     * Sets the header serialization style.
+     *
+     * @param style <p>Describes how the parameter value will be serialized depending on the type of the parameter  value.
      *              Default value is <code>simple</code>.</p>
      *              <p>In order to support common ways of serializing simple parameters, a set of <code>style</code> values are defined.</p>
      *              <table>
@@ -77,6 +91,8 @@ public class HeaderObjectBuilder {
     }
 
     /**
+     * Sets whether the header value is exploded.
+     *
      * @param explode When this is true, parameter values of type <code>array</code> or <code>object</code> generate
      *                separate parameters for each value of the array or key-value pair of the map.  For other types
      *                of parameters this property has no effect. When <code>style</code> is <code>form</code>, the
@@ -89,6 +105,8 @@ public class HeaderObjectBuilder {
     }
 
     /**
+     * Sets the header schema.
+     *
      * @param schema The schema defining the type used for the header.
      * @return The current builder
      */
@@ -98,6 +116,8 @@ public class HeaderObjectBuilder {
     }
 
     /**
+     * Sets an example header value.
+     *
      * @param example Example of the media type.  The example SHOULD match the specified schema and encoding properties
      *                if present.  The <code>example</code> field is mutually exclusive of the <code>examples</code>
      *                field.  Furthermore, if referencing a <code>schema</code> which contains an example, the
@@ -112,6 +132,8 @@ public class HeaderObjectBuilder {
     }
 
     /**
+     * Sets named header examples.
+     *
      * @param examples Examples of the media type.  Each example SHOULD contain a value in the correct format as
      *                 specified in the parameter encoding.  The <code>examples</code> field is mutually exclusive
      *                 of the <code>example</code> field.  Furthermore, if referencing a <code>schema</code> which
@@ -125,7 +147,9 @@ public class HeaderObjectBuilder {
     }
 
     /**
-     * @param content A map containing the representations for the parameter. The key is the media type and the value describes it.
+     * Sets the header content representations.
+     *
+     * @param content A map containing the representations for the parameter. The key is the media type and the value  describes it.
      *                The map MUST only contain one entry.
      * @return The current builder
      */
@@ -135,6 +159,8 @@ public class HeaderObjectBuilder {
     }
 
     /**
+     * Builds a header object from the configured values.
+     *
      * @return A new object
      */
     public HeaderObject build() {

@@ -17,6 +17,14 @@ public class OAuthFlowObjectBuilder {
     private @Nullable Map<String, String> scopes;
 
     /**
+     * Creates an empty OAuth flow object builder.
+     */
+    public OAuthFlowObjectBuilder() {
+    }
+
+    /**
+     * Sets the authorization URL for the flow.
+     *
      * @param authorizationUrl <strong>REQUIRED</strong>. The authorization URL to be used for this flow.
      * @return The current builder
      */
@@ -26,6 +34,8 @@ public class OAuthFlowObjectBuilder {
     }
 
     /**
+     * Sets the token URL for the flow.
+     *
      * @param tokenUrl <strong>REQUIRED</strong>. The token URL to be used for this flow. This MUST be in the form of a URL.
      * @return The current builder
      */
@@ -35,6 +45,8 @@ public class OAuthFlowObjectBuilder {
     }
 
     /**
+     * Sets the refresh URL for the flow.
+     *
      * @param refreshUrl The URL to be used for obtaining refresh tokens. This MUST be in the form of a URL.
      * @return The current builder
      */
@@ -44,6 +56,8 @@ public class OAuthFlowObjectBuilder {
     }
 
     /**
+     * Sets the scopes available for the flow.
+     *
      * @param scopes <strong>REQUIRED</strong>. The available scopes for the OAuth2 security scheme. A map between the scope name and a short description for it.
      * @return The current builder
      */
@@ -53,6 +67,8 @@ public class OAuthFlowObjectBuilder {
     }
 
     /**
+     * Builds an OAuth flow object from the configured values.
+     *
      * @return A new object
      */
     public OAuthFlowObject build() {

@@ -14,6 +14,14 @@ public class ExampleObjectBuilder {
     private @Nullable URI externalValue;
 
     /**
+     * Creates an empty example builder.
+     */
+    public ExampleObjectBuilder() {
+    }
+
+    /**
+     * Sets the short example summary.
+     *
      * @param summary Short description for the example.
      * @return The current builder
      */
@@ -23,6 +31,8 @@ public class ExampleObjectBuilder {
     }
 
     /**
+     * Sets the example description.
+     *
      * @param description Long description for the example. <a href="http://spec.commonmark.org/">CommonMark syntax</a>
      *                    MAY be used for rich text representation.
      * @return The current builder
@@ -33,6 +43,8 @@ public class ExampleObjectBuilder {
     }
 
     /**
+     * Sets the embedded example value.
+     *
      * @param value Embedded literal example. The <code>value</code> field and <code>externalValue</code> field are mutually
      *              exclusive. To represent examples of media types that cannot naturally represented in JSON or YAML, use
      *              a string value to contain the example, escaping where necessary.
@@ -44,6 +56,8 @@ public class ExampleObjectBuilder {
     }
 
     /**
+     * Sets the URL of an externally stored example.
+     *
      * @param externalValue A URL that points to the literal example. This provides the capability to reference examples that
      *                      cannot easily be included in JSON or YAML documents.  The <code>value</code> field
      *                      and <code>externalValue</code> field are mutually exclusive.
@@ -55,6 +69,8 @@ public class ExampleObjectBuilder {
     }
 
     /**
+     * Builds the example object.
+     *
      * @return A new object
      */
     public ExampleObject build() {

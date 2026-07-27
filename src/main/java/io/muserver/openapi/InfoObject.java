@@ -11,6 +11,8 @@ import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Provides metadata about the API.
+ *
  * @see InfoObjectBuilder
  */
 public class InfoObject implements JsonWriter {
@@ -49,6 +51,8 @@ public class InfoObject implements JsonWriter {
     }
 
     /**
+     * Gets the API title.
+     *
      * @return the value described by {@link InfoObjectBuilder#withTitle}
      */
     public String title() {
@@ -56,35 +60,45 @@ public class InfoObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link InfoObjectBuilder#withDescription}
+     * Gets the API description.
+     *
+     * @return the value described by {@link InfoObjectBuilder#withDescription}
      */
     public @Nullable String description() {
         return description;
     }
 
     /**
-      @return the value described by {@link InfoObjectBuilder#withTermsOfService}
+     * Gets the terms of service URI.
+     *
+     * @return the value described by {@link InfoObjectBuilder#withTermsOfService}
      */
     public @Nullable URI termsOfService() {
         return termsOfService;
     }
 
     /**
-      @return the value described by {@link InfoObjectBuilder#withContact}
+     * Gets the API contact details.
+     *
+     * @return the value described by {@link InfoObjectBuilder#withContact}
      */
     public @Nullable ContactObject contact() {
         return contact;
     }
 
     /**
-      @return the value described by {@link InfoObjectBuilder#withLicense}
+     * Gets the API license details.
+     *
+     * @return the value described by {@link InfoObjectBuilder#withLicense}
      */
     public @Nullable LicenseObject license() {
         return license;
     }
 
     /**
-      @return the value described by {@link InfoObjectBuilder#withVersion}
+     * Gets the OpenAPI document version.
+     *
+     * @return the value described by {@link InfoObjectBuilder#withVersion}
      */
     public String version() {
         return version;

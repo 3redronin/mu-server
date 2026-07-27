@@ -16,6 +16,12 @@ public class MediaTypeParser {
     }
 
     /**
+     * Creates a media type parser instance.
+     */
+    public MediaTypeParser() {
+    }
+
+    /**
      * Converts a string such as "text/plain" into a MediaType object.
      * @param value The value to parse
      * @return A MediaType object

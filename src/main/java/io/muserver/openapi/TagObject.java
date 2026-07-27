@@ -10,6 +10,8 @@ import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Adds descriptive metadata for a group of API operations.
+ *
  * @see TagObjectBuilder
  */
 public class TagObject implements JsonWriter {
@@ -49,6 +51,8 @@ public class TagObject implements JsonWriter {
     }
 
     /**
+     * Gets the tag name.
+     *
      * @return the value described by {@link TagObjectBuilder#withName}
      */
     public String name() {
@@ -56,14 +60,18 @@ public class TagObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link TagObjectBuilder#withDescription}
+     * Gets the tag description.
+     *
+     * @return the value described by {@link TagObjectBuilder#withDescription}
      */
     public @Nullable String description() {
         return description;
     }
 
     /**
-      @return the value described by {@link TagObjectBuilder#withExternalDocs}
+     * Gets the tag external documentation.
+     *
+     * @return the value described by {@link TagObjectBuilder#withExternalDocs}
      */
     public @Nullable ExternalDocumentationObject externalDocs() {
         return externalDocs;

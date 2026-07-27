@@ -20,6 +20,7 @@ public class HttpsConfig implements SSLInfo {
     private static final Logger log = LoggerFactory.getLogger(HttpsConfig.class);
     private final SSLContext sslContext;
     private final SSLParameters sslParameters;
+    private final ClientCertificateAuthentication clientCertificateAuthentication;
 
     @Nullable
     private final X509TrustManager clientAuthTrustManager;
@@ -28,9 +29,12 @@ public class HttpsConfig implements SSLInfo {
     @Nullable
     private URI httpsUri;
 
-    HttpsConfig(SSLContext sslContext, SSLParameters sslParameters, @Nullable X509TrustManager clientAuthTrustManager) {
+    HttpsConfig(SSLContext sslContext, SSLParameters sslParameters,
+                ClientCertificateAuthentication clientCertificateAuthentication,
+                @Nullable X509TrustManager clientAuthTrustManager) {
         this.sslContext = sslContext;
         this.sslParameters = sslParameters;
+        this.clientCertificateAuthentication = clientCertificateAuthentication;
         this.clientAuthTrustManager = clientAuthTrustManager;
     }
 
@@ -151,10 +155,19 @@ public class HttpsConfig implements SSLInfo {
     }
 
     /**
-     * Gets the trust manager used to validate optional client certificates.
+     * Gets the configured client-certificate authentication policy.
+     *
+     * @return The client-certificate authentication policy.
+     */
+    public ClientCertificateAuthentication clientCertificateAuthentication() {
+        return clientCertificateAuthentication;
+    }
+
+    /**
+     * Gets the explicitly configured trust manager used to validate client certificates.
      *
      * @return The trust manager for client-certificate validation, or <code>null</code> if client certificates
-     * are not requested.
+     * are not requested or validation is delegated to a pre-built SSL context.
      */
     public @Nullable X509TrustManager clientAuthTrustManager() {
         return clientAuthTrustManager;

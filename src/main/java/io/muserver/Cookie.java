@@ -37,6 +37,8 @@ public class Cookie {
     }
 
     /**
+     * Returns the cookie name.
+     *
      * @return The cookie name
      */
     public String name() {
@@ -44,6 +46,8 @@ public class Cookie {
     }
 
     /**
+     * Returns the cookie value.
+     *
      * @return The cookie value
      */
     public @Nullable String value() {
@@ -51,6 +55,8 @@ public class Cookie {
     }
 
     /**
+     * Returns the domain for which this cookie is valid.
+     *
      * @return The domain this cookie is valid for
      */
     public @Nullable String domain() {
@@ -58,6 +64,8 @@ public class Cookie {
     }
 
     /**
+     * Returns the path to which this cookie applies.
+     *
      * @return The path this cookie applies to
      */
     public @Nullable String path() {
@@ -65,6 +73,8 @@ public class Cookie {
     }
 
     /**
+     * Returns the cookie lifetime in seconds.
+     *
      * @return The max age in seconds of this cookie
      */
     public @Nullable Long maxAge() {
@@ -72,6 +82,8 @@ public class Cookie {
     }
 
     /**
+     * Returns the cookie's SameSite setting.
+     *
      * @return The SameSite value of the cookie, for example "Strict", "Lax", or "None"
      */
     public @Nullable SameSite sameSite() {
@@ -79,6 +91,8 @@ public class Cookie {
     }
 
     /**
+     * Indicates whether the cookie is restricted to HTTPS.
+     *
      * @return True if this cookie is only readable over https
      */
     public boolean isSecure() {
@@ -86,6 +100,8 @@ public class Cookie {
     }
 
     /**
+     * Indicates whether client-side scripts cannot read this cookie.
+     *
      * @return True if this cookie is only available via HTTP. If false, client side script will not be able to read the cookie (if the client supports this).
      */
     public boolean isHttpOnly() {
@@ -160,6 +176,8 @@ public class Cookie {
         }
 
         /**
+         * Returns the SameSite attribute value used in the response header.
+         *
          * @return The attribute value as used in the <code>set-cookie</code> header.
          */
         public String cookieValue() {

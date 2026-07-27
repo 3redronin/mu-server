@@ -17,6 +17,8 @@ public class Http2Config {
     }
 
     /**
+     * Creates a builder initialized with these HTTP/2 settings.
+     *
      * @return A new HTTP2 config builder based on the current settings
      */
     public Http2ConfigBuilder toBuilder() {
@@ -31,6 +33,8 @@ public class Http2Config {
     }
 
     /**
+     * Indicates whether HTTP/2 is enabled.
+     *
      * @return <code>true</code> if HTTP2 is enabled for this server; otherwise <code>false</code>.
      */
     public boolean enabled() {

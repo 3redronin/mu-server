@@ -17,6 +17,12 @@ public class WebSocketHandlerBuilder implements MuHandlerBuilder<WebSocketHandle
     private long maxMessageLength = -1;
 
     /**
+     * Creates an empty websocket handler builder.
+     */
+    public WebSocketHandlerBuilder() {
+    }
+
+    /**
      * <p>Sets the factory that decides whether to create a websocket connection for a request.</p>
      * <p>Note that the factory will only be called if the request is a websocket upgrade request.</p>
      * @param factory A factory that creates websockets, or returns null if the websocket connection shouldn't

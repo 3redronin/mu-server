@@ -20,6 +20,14 @@ public class PathItemObjectBuilder {
     private @Nullable List<ParameterObject> parameters;
 
     /**
+     * Creates an empty path item object builder.
+     */
+    public PathItemObjectBuilder() {
+    }
+
+    /**
+     * Sets the summary for operations on this path.
+     *
      * @param summary An optional, string summary, intended to apply to all operations in this path.
      * @return The current builder
      */
@@ -29,6 +37,8 @@ public class PathItemObjectBuilder {
     }
 
     /**
+     * Sets the description for operations on this path.
+     *
      * @param description An optional, string description, intended to apply to all operations in this path.
      *                    <a href="http://spec.commonmark.org/">CommonMark syntax</a> MAY be used for rich text representation.
      * @return The current builder
@@ -39,6 +49,8 @@ public class PathItemObjectBuilder {
     }
 
     /**
+     * Sets the operations available on this path.
+     *
      * @param operations The operations allowed on this path, where the keys to the map are <code>GET</code>, <code>POST</code> etc.
      * @return The current builder
      */
@@ -48,6 +60,8 @@ public class PathItemObjectBuilder {
     }
 
     /**
+     * Sets the servers that can service this path.
+     *
      * @param servers An alternative server array to service all operations in this path.
      * @return The current builder
      */
@@ -57,6 +71,8 @@ public class PathItemObjectBuilder {
     }
 
     /**
+     * Sets the parameters shared by all operations on this path.
+     *
      * @param parameters A list of parameters that are applicable for all the operations described under this path.
      *                   These parameters can be overridden at the operation level, but cannot be removed there. The
      *                   list MUST NOT include duplicated parameters. A unique parameter is defined by a combination
@@ -69,6 +85,8 @@ public class PathItemObjectBuilder {
     }
 
     /**
+     * Builds a path item object from the configured values.
+     *
      * @return A new object
      */
     public PathItemObject build() {
@@ -93,6 +111,8 @@ public class PathItemObjectBuilder {
     }
 
     /**
+     * Gets the configured operations for this path.
+     *
      * @return The value set with {@link #withOperations}
      */
     public @Nullable Map<String, OperationObject> operations() {

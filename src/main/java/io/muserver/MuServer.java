@@ -45,33 +45,45 @@ public interface MuServer extends Closeable {
     boolean stop(long duration, TimeUnit unit);
 
     /**
+     * Gets the preferred base URI for the server.
+     *
      * @return The HTTPS (or if unavailable the HTTP) URI of the web server.
      */
     URI uri();
 
     /**
+     * Gets the HTTP base URI when HTTP is enabled.
+     *
      * @return The HTTP URI of the web server, if HTTP is supported; otherwise <code>null</code>
      */
     @Nullable
     URI httpUri();
 
     /**
+     * Gets the HTTPS base URI when HTTPS is enabled.
+     *
      * @return The HTTPS URI of the web server, if HTTPS is supported; otherwise <code>null</code>
      */
     @Nullable
     URI httpsUri();
 
     /**
+     * Gets runtime statistics for the server.
+     *
      * @return Provides stats about the server
      */
     MuStats stats();
 
     /**
+     * Gets the currently active HTTP connections.
+     *
      * @return The current HTTP connections between this server and its clients.
      */
     Set<HttpConnection> activeConnections();
 
     /**
+     * Gets the bound socket address for the server.
+     *
      * @return The address of the server. To get the ip address, use {@link InetSocketAddress#getAddress()} and on that
      * call {@link InetAddress#getHostAddress()}. To get the hostname, use {@link InetSocketAddress#getHostName()} or
      * {@link InetSocketAddress#getHostString()}.
@@ -79,6 +91,8 @@ public interface MuServer extends Closeable {
     InetSocketAddress address();
 
     /**
+     * Gets the current Mu Server artifact version.
+     *
      * @return Returns the current version of MuServer, or 0.x if unknown
      */
     static String artifactVersion() {
@@ -200,26 +214,36 @@ public interface MuServer extends Closeable {
      */
     @Nullable HttpsConfig httpsConfig();
     /**
+     * Gets the configured rate limiters.
+     *
      * @return The rate limiters added to the server with {@link MuServerBuilder#withRateLimiter(RateLimitSelector)}, in the order they are applied.
      */
     List<RateLimiter> rateLimiters();
 
     /**
+     * Gets the directory used for temporary request files.
+     *
      * @return The directory used to store temp files such as files uploaded on forms
      */
     Path tempDir();
 
     /**
+     * Gets the handlers attached to this server.
+     *
      * @return The handlers on this server
      */
     List<MuHandler> handlers();
 
     /**
+     * Gets the unhandled exception handler for this server.
+     *
      * @return The unhandled exception handler
      */
     UnhandledExceptionHandler exceptionHandler();
 
     /**
+     * Gets the maximum allowed request body size.
+     *
      * @return The max size in bytes for request bodies
      */
     long maxRequestBodySize();

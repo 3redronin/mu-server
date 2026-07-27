@@ -9,16 +9,22 @@ import java.util.List;
 public interface SSLInfo {
 
     /**
+     * Returns the supported cipher suites in preference order.
+     *
      * @return An unmodifiable list of ciphers supported, in preference order
      */
     List<String> ciphers();
 
     /**
+     * Returns the supported TLS protocols.
+     *
      * @return An unmodifiable list of protocols supported, such as <code>TLSv1.2</code>
      */
     List<String> protocols();
 
     /**
+     * Returns the name of the SSL provider.
+     *
      * @return Gets the SSL provider, e.g. <code>JDK</code> or <code>OpenSSL</code>
      */
     String providerName();

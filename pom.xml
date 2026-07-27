@@ -267,6 +267,8 @@
                 <configuration>
                     <source>${jdk.version}</source>
                     <detectJavaApiLink>false</detectJavaApiLink>
+                    <doclint>all</doclint>
+                    <failOnWarnings>true</failOnWarnings>
                 </configuration>
                 <executions>
                     <execution>
@@ -274,9 +276,6 @@
                         <goals>
                             <goal>jar</goal>
                         </goals>
-                        <configuration>
-                            <failOnWarnings>false</failOnWarnings>
-                        </configuration>
                     </execution>
                 </executions>
             </plugin>

@@ -28,7 +28,7 @@ class CombinedMediaType implements Comparable<CombinedMediaType> {
         this.qs = qs;
         this.d = d;
         this.isWildcardType = "*".equals(type);
-        this.isWildcardSubtype = "*".equals(subType);
+        this.isWildcardSubtype = subType != null && MediaTypeHeaderDelegate.isWildcardSubtype(subType);
         this.charset = charset;
     }
 
@@ -37,18 +37,21 @@ class CombinedMediaType implements Comparable<CombinedMediaType> {
     }
 
     public static CombinedMediaType s(MediaType clientType, MediaType serverType) {
-        if (!clientType.isCompatible(serverType)) {
+        if (!MediaTypeHeaderDelegate.isCompatible(clientType, serverType)) {
             return NONMATCH;
         }
         String type = clientType.isWildcardType() ? serverType.getType() : clientType.getType();
-        String sub = clientType.isWildcardSubtype() ? serverType.getSubtype() : clientType.getSubtype();
+        String sub = MediaTypeHeaderDelegate.isWildcardSubtype(clientType.getSubtype())
+            ? serverType.getSubtype()
+            : clientType.getSubtype();
         double q = Double.parseDouble(clientType.getParameters().getOrDefault("q", "1.0"));
         double qs = Double.parseDouble(serverType.getParameters().getOrDefault("qs", "1.0"));
         int d = 0;
         if (clientType.isWildcardType() ^ serverType.isWildcardType()) {
             d++;
         }
-        if (clientType.isWildcardSubtype() ^ serverType.isWildcardSubtype()) {
+        if (MediaTypeHeaderDelegate.isWildcardSubtype(clientType.getSubtype())
+            ^ MediaTypeHeaderDelegate.isWildcardSubtype(serverType.getSubtype())) {
             d++;
         }
         return new CombinedMediaType(type, sub, q, qs, d, serverType.getParameters().get("charset"));

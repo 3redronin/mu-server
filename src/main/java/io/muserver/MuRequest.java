@@ -34,11 +34,15 @@ public interface MuRequest {
     String contentType();
 
     /**
+     * Returns the time at which the server received this request.
+     *
      * @return The time as epoch millis when this request was received on the server.
      */
     long startTime();
 
     /**
+     * Returns the HTTP method used for this request.
+     *
      * @return The request method, e.g. GET or POST
      */
     Method method();
@@ -63,6 +67,8 @@ public interface MuRequest {
     URI serverURI();
 
     /**
+     * Returns the request headers.
+     *
      * @return The request headers
      */
     Headers headers();
@@ -273,6 +279,8 @@ public interface MuRequest {
     }
 
     /**
+     * Returns the Mu Server instance handling this request.
+     *
      * @return Returns a reference to the mu server instance.
      */
     default MuServer server() {
@@ -280,6 +288,8 @@ public interface MuRequest {
     }
 
     /**
+     * Indicates whether this request is being handled asynchronously.
+     *
      * @return Returns try if {@link #handleAsync()} has been called and this is an async response
      */
     boolean isAsync();
@@ -301,6 +311,8 @@ public interface MuRequest {
     HttpVersion httpVersion();
 
     /**
+     * Returns the HTTP connection carrying this request.
+     *
      * @return The HTTP connection that this request is sent over.
      */
     HttpConnection connection();

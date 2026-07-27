@@ -28,15 +28,13 @@ import java.util.Objects;
  * contains the enum constant names accepted by that converter.
  *
  * <p>The original conversion failure is available from {@link #getCause()}.
+ *
+ * @serial exclude
  */
 public final class UriParameterConversionException extends NotFoundException {
-    /** Backing field for {@link #getParameterName()}. */
     private final String parameterName;
-    /** Backing field for {@link #getParameterValue()}. */
     private final @Nullable String parameterValue;
-    /** Backing field for {@link #getTargetType()}. */
     private final Class<?> targetType;
-    /** Backing field for {@link #getAllowedValues()}. */
     private final List<String> allowedValues;
 
     UriParameterConversionException(String parameterName, @Nullable String parameterValue, Class<?> targetType, List<String> allowedValues, Throwable cause) {

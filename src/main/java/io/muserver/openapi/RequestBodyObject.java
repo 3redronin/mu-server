@@ -11,6 +11,8 @@ import static io.muserver.openapi.Jsonizer.append;
 import static io.muserver.openapi.ParameterObject.actualValue;
 
 /**
+ * Describes an OpenAPI request body and its media types.
+ *
  * @see RequestBodyObjectBuilder
  */
 public class RequestBodyObject implements JsonWriter {
@@ -37,6 +39,8 @@ public class RequestBodyObject implements JsonWriter {
     }
 
     /**
+     * Gets the request body description.
+     *
      * @return the value described by {@link RequestBodyObjectBuilder#withDescription}
      */
     public @Nullable String description() {
@@ -44,14 +48,18 @@ public class RequestBodyObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link RequestBodyObjectBuilder#withContent}
+     * Gets the content definitions for the request body.
+     *
+     * @return the value described by {@link RequestBodyObjectBuilder#withContent}
      */
     public Map<String, MediaTypeObject> content() {
         return content;
     }
 
     /**
-      @return the value described by {@link RequestBodyObjectBuilder#withRequired}
+     * Indicates whether the request body is required.
+     *
+     * @return the value described by {@link RequestBodyObjectBuilder#withRequired}
      */
     public boolean required() {
         return actualValue(required, false);

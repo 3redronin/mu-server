@@ -7,6 +7,8 @@ package io.muserver;
 public interface MuHandlerBuilder<T extends MuHandler> {
 
     /**
+     * Builds the configured handler.
+     *
      * @return A newly built {@link MuHandler}
      */
     T build();

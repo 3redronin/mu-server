@@ -9,6 +9,8 @@ import java.net.URI;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Identifies the contact person or organization for an API.
+ *
  * @see ContactObjectBuilder
  */
 public class ContactObject implements JsonWriter {
@@ -36,6 +38,8 @@ public class ContactObject implements JsonWriter {
     }
 
     /**
+     * Returns the contact name.
+     *
      * @return The value described by {@link ContactObjectBuilder#withName}
      */
     public @Nullable String name() {
@@ -43,6 +47,8 @@ public class ContactObject implements JsonWriter {
     }
 
     /**
+     * Returns the contact URL.
+     *
      * @return The value described by {@link ContactObjectBuilder#withUrl}
      */
     public @Nullable URI url() {
@@ -50,6 +56,8 @@ public class ContactObject implements JsonWriter {
     }
 
     /**
+     * Returns the contact email address.
+     *
      * @return The value described by {@link ContactObjectBuilder#withEmail}
      */
     public @Nullable String email() {

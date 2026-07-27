@@ -10,19 +10,15 @@ import java.util.Map;
 
 /**
  * An RFC 9457 problem-details exception.
+ *
+ * @serial exclude
  */
 public class ProblemDetailsException extends WebApplicationException {
-    /** Backing field for {@link #getStatus()}. */
     private final int status;
-    /** Backing field for {@link #getTitle()}. */
     private final String title;
-    /** Backing field for {@link #getDetail()}. */
     private final @Nullable String detail;
-    /** Backing field for {@link #getType()}. */
     private final @Nullable URI type;
-    /** Backing field for {@link #getInstance()}. */
     private final URI instance;
-    /** Backing field for {@link #getExtensionMembers()}. */
     private final Map<String, @Nullable Object> extensionMembers;
 
     ProblemDetailsException(int status, String title, @Nullable String detail, @Nullable URI type, URI instance,
@@ -91,6 +87,8 @@ public class ProblemDetailsException extends WebApplicationException {
     }
 
     /**
+     * Creates a builder for a problem-details exception.
+     *
      * @return a builder to create a new ProblemDetailsException
      */
     public static ProblemDetailsExceptionBuilder builder() {
@@ -98,6 +96,8 @@ public class ProblemDetailsException extends WebApplicationException {
     }
 
     /**
+     * Creates a builder for a problem-details exception with a preset status.
+     *
      * @param status the HTTP status code for the problem response
      * @return a builder to create a new ProblemDetailsException with the given status
      */

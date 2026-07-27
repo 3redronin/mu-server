@@ -11,11 +11,15 @@ import java.util.Optional;
 public interface RejectedRequest {
 
     /**
+     * Gets the HTTP status code sent for the rejected request.
+     *
      * @return The HTTP status code sent to the client, for example <code>431</code> or <code>503</code>.
      */
     int status();
 
     /**
+     * Gets the plain-text reason sent for the rejected request.
+     *
      * @return The plain-text message sent to the client, for example
      * <code>431 Request Header Fields Too Large</code>.
      */
@@ -44,6 +48,8 @@ public interface RejectedRequest {
     Optional<URI> uri();
 
     /**
+     * Gets the connection that received the rejected request.
+     *
      * @return The connection the rejected request arrived on, which can be used to find details such as
      * the {@link HttpConnection#remoteAddress()} and {@link HttpConnection#protocol()}.
      */

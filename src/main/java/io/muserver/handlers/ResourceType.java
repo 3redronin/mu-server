@@ -30,6 +30,8 @@ public class ResourceType {
     private final boolean gzip;
 
     /**
+     * Gets the MIME type served for this resource type.
+     *
      * @return The mime type of this resource, such as <code>image/jpeg</code>
      */
     public CharSequence mimeType() {
@@ -37,6 +39,8 @@ public class ResourceType {
     }
 
     /**
+     * Gets the default response headers for this resource type.
+     *
      * @return The response headers that mu-server will send when serving this resource type
      */
     public Headers headers() {
@@ -44,6 +48,8 @@ public class ResourceType {
     }
 
     /**
+     * Gets the file extensions mapped to this resource type.
+     *
      * @return The file name extensions that this resource type is associated with, for example <code>jpg</code> and <code>jpeg</code>
      */
     public List<String> extensions() {
@@ -51,6 +57,8 @@ public class ResourceType {
     }
 
     /**
+     * Indicates whether this resource type is gzipped by default.
+     *
      * @return True if by default mu-server gzips this resource type when serving it. (In general text-based resources are gzipped; others aren't.)
      */
     public boolean gzip() {
@@ -73,6 +81,8 @@ public class ResourceType {
     }
 
     /**
+     * Creates headers for short-lived cacheable responses.
+     *
      * @return Creates and returns a Headers object with a single cache-control header set for 5 minutes.
      */
     public static Headers shortCache() {
@@ -81,6 +91,8 @@ public class ResourceType {
     }
 
     /**
+     * Creates headers that disable caching.
+     *
      * @return Creates and returns a Headers object with a single cache-control header set with no-cache.
      */
     public static Headers noCache() {
@@ -402,6 +414,8 @@ public class ResourceType {
     }
 
     /**
+     * Gets all resource types defined by Mu Server.
+     *
      * @return All the resource types defined by mu-server
      */
     public static List<ResourceType> getResourceTypes() {

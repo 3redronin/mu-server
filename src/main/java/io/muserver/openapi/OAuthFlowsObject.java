@@ -8,6 +8,8 @@ import java.io.Writer;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Groups the OAuth 2.0 authorization flows supported by an API.
+ *
  * @see OAuthFlowsObjectBuilder
  */
 public class OAuthFlowsObject implements JsonWriter {
@@ -37,6 +39,8 @@ public class OAuthFlowsObject implements JsonWriter {
     }
 
     /**
+     * Gets the implicit OAuth flow configuration.
+     *
      * @return the value described by {@link OAuthFlowsObjectBuilder#withImplicit}
      */
     public @Nullable OAuthFlowObject implicit() {
@@ -44,21 +48,27 @@ public class OAuthFlowsObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link OAuthFlowsObjectBuilder#withPassword}
+     * Gets the resource-owner-password OAuth flow configuration.
+     *
+     * @return the value described by {@link OAuthFlowsObjectBuilder#withPassword}
      */
     public @Nullable OAuthFlowObject password() {
         return password;
     }
 
     /**
-      @return the value described by {@link OAuthFlowsObjectBuilder#withClientCredentials}
+     * Gets the client-credentials OAuth flow configuration.
+     *
+     * @return the value described by {@link OAuthFlowsObjectBuilder#withClientCredentials}
      */
     public @Nullable OAuthFlowObject clientCredentials() {
         return clientCredentials;
     }
 
     /**
-      @return the value described by {@link OAuthFlowsObjectBuilder#withAuthorizationCode}
+     * Gets the authorization-code OAuth flow configuration.
+     *
+     * @return the value described by {@link OAuthFlowsObjectBuilder#withAuthorizationCode}
      */
     public @Nullable OAuthFlowObject authorizationCode() {
         return authorizationCode;

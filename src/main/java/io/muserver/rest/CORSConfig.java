@@ -117,6 +117,8 @@ public class CORSConfig {
     }
 
     /**
+     * Indicates whether credentials are allowed for cross-origin requests.
+     *
      * @return the value described by {@link CORSConfigBuilder#withAllowCredentials}
      */
     public boolean allowCredentials() {
@@ -124,6 +126,8 @@ public class CORSConfig {
     }
 
     /**
+      * Returns the configured allowed origins.
+      *
       @return the value described by {@link CORSConfigBuilder#withAllowedOrigins}
      */
     public @Nullable Collection<String> allowedOrigins() {
@@ -131,6 +135,8 @@ public class CORSConfig {
     }
 
     /**
+      * Returns the regular expressions used to match allowed origins.
+      *
       @return the value described by {@link CORSConfigBuilder#withAllowedOriginRegex}
      */
     public List<Pattern> allowedOriginRegex() {
@@ -138,6 +144,8 @@ public class CORSConfig {
     }
 
     /**
+      * Returns the headers exposed to cross-origin callers.
+      *
       @return the value described by {@link CORSConfigBuilder#withExposedHeaders}
      */
     public Collection<String> exposedHeaders() {
@@ -145,6 +153,8 @@ public class CORSConfig {
     }
 
     /**
+      * Returns the maximum duration for which CORS results may be cached.
+      *
       @return the value described by {@link CORSConfigBuilder#withMaxAge}
      */
     public long maxAge() {
@@ -152,6 +162,8 @@ public class CORSConfig {
     }
 
     /**
+      * Returns the headers allowed in cross-origin requests.
+      *
       @return the value described by {@link CORSConfigBuilder#withAllowedHeaders}
      */
     public Collection<String> allowedHeaders() {
