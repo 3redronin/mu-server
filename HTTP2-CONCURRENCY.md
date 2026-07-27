@@ -380,6 +380,8 @@ half-closed protocol streams, not handler tasks.
 Completion listeners are notified exactly once, outside the coordinator, after
 the outcome is known. A successful outcome requires the request to have reached
 EOF or successful discard and the response END_STREAM to have been written.
+Failure from one listener is logged and isolated so it cannot strand later
+listeners or prevent the notification gate from reaching its completed state.
 
 ## Locking and signalling
 
