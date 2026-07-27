@@ -646,7 +646,7 @@ class RFC9113_6_5_SettingsTest {
                     executor
                 );
 
-                Queue<Long> settingsAckQueue = getField(queuedOnlyConnection, "settingsAckQueue", Queue.class);
+                Queue<?> settingsAckQueue = getField(queuedOnlyConnection, "settingsAckQueue", Queue.class);
                 assertThat(settingsAckQueue.size(), equalTo(0));
 
                 queuedOnlyConnection.write(new Http2Settings(false, 8192, 123, 65535, 16384, 32768));

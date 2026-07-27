@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.net.Socket;
 import java.net.SocketException;
-import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.Certificate;
@@ -54,7 +53,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     private volatile int lastStreamId = 0;
     private volatile int peerGoAwayLastStreamId = MAX_POSSIBLE_STREAM_ID;
     private final Http2IncomingFlowController incomingFlowControl = new Http2IncomingFlowController(0, 65535);
-    private final ConcurrentLinkedQueue<Long> settingsAckQueue = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<PendingSettingsAck> settingsAckQueue = new ConcurrentLinkedQueue<>();
     private final ConcurrentHashMap<Integer, Http2Stream> streams = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Integer, Http2IncomingFlowController> rejectedRequestBodies = new ConcurrentHashMap<>();
     private final ExecutorService handlerExecutor;
@@ -71,6 +70,33 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     private boolean finalGoAwayWakeScheduled;
 
     final FieldBlockEncoder fieldBlockEncoder;
+
+    private static final class PendingSettingsAck {
+        private final AtomicBoolean pending = new AtomicBoolean(true);
+        private volatile @Nullable ScheduledFuture<?> timeoutTask;
+
+        private boolean acknowledge() {
+            if (!pending.compareAndSet(true, false)) {
+                return false;
+            }
+            ScheduledFuture<?> currentTimeoutTask = timeoutTask;
+            if (currentTimeoutTask != null) {
+                currentTimeoutTask.cancel(false);
+            }
+            return true;
+        }
+
+        private boolean markTimedOut() {
+            return pending.compareAndSet(true, false);
+        }
+
+        private void timeoutTask(ScheduledFuture<?> task) {
+            timeoutTask = task;
+            if (!pending.get()) {
+                task.cancel(false);
+            }
+        }
+    }
 
     Http2Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime, Http2Settings initialServerSettings, long settingsAckTimeoutMillis, ExecutorService handlerExecutor, ExecutorService writerExecutor) {
         super(server, creator, clientSocket, clientCertificate, handshakeStartTime);
@@ -327,21 +353,31 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         }
     }
 
-    private void queuePendingSettingsAck() {
-        settingsAckQueue.add(System.currentTimeMillis() + settingsAckTimeoutMillis);
+    private void queuePendingSettingsAck() throws IOException {
+        var pendingAck = new PendingSettingsAck();
+        settingsAckQueue.add(pendingAck);
+        try {
+            pendingAck.timeoutTask(server.scheduleTimerCallback(
+                () -> {
+                    if (pendingAck.markTimedOut()) {
+                        writeCoordinator.settingsTimedOut();
+                    }
+                },
+                settingsAckTimeoutMillis,
+                TimeUnit.MILLISECONDS
+            ));
+        } catch (RuntimeException | Error e) {
+            settingsAckQueue.remove(pendingAck);
+            pendingAck.acknowledge();
+            throw new IOException("Could not schedule SETTINGS acknowledgement timeout", e);
+        }
     }
 
-    private void prepareForFrameRead() throws SocketException, Http2Exception {
-        Long deadline = settingsAckQueue.peek();
-        if (deadline == null) {
-            clientSocket.setSoTimeout(0);
-            return;
+    private void cancelPendingSettingsAckTimeouts() {
+        PendingSettingsAck pendingAck;
+        while ((pendingAck = settingsAckQueue.poll()) != null) {
+            pendingAck.acknowledge();
         }
-        long remaining = deadline - System.currentTimeMillis();
-        if (remaining <= 0) {
-            throw Http2Exception.connection(Http2ErrorCode.SETTINGS_TIMEOUT, "Timed out waiting for SETTINGS ack");
-        }
-        clientSocket.setSoTimeout((int) Math.min(Integer.MAX_VALUE, remaining));
     }
 
     private void setReadStateAndSignal(HState newState) {
@@ -556,7 +592,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                 Http2FrameHeader currentFrameHeader = null;
                 boolean readingFrameHeader = true;
                 try {
-                    prepareForFrameRead();
                     Mutils.readAtLeast(buffer, clientIn, Http2FrameHeader.FRAME_HEADER_LENGTH);
 
                     currentFrameHeader = Http2FrameHeader.readFrom(buffer);
@@ -634,11 +669,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                     if (stream != null && !stream.peerResetWasRead()) {
                         stream.cancel(new IOException("Stream error", h2e));
                     }
-                } catch (SocketTimeoutException e) {
-                    if (!settingsAckQueue.isEmpty()) {
-                        throw Http2Exception.connection(Http2ErrorCode.SETTINGS_TIMEOUT, "Timed out waiting for SETTINGS ack");
-                    }
-                    throw e;
                 } catch (EOFException e) {
                     boolean noActiveStreams = noProtocolStreamsAreActive();
                     if (readingFrameHeader && noActiveStreams) {
@@ -663,7 +693,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                         failAfterUnexpectedInputEnd(new IOException("Socket closed with active HTTP/2 streams", e));
                     }
                 }
-                // TODO: end if pending settings ack not received
             }
 
             writeEndedFuture.get();
@@ -772,7 +801,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             var ackedOne = settingsAckQueue.poll();
             if (ackedOne == null) {
                 throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Settings ack without pending settings");
-            } else {
+            } else if (ackedOne.acknowledge()) {
                 log.info("Settings acked");
             }
         } else {
@@ -1105,6 +1134,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         if (writeLoopEnded.isDone()) {
             return;
         }
+        cancelPendingSettingsAckTimeouts();
         writeCoordinator.failAll(reason);
         closeSocketQuietly();
         // Don't close the output stream here because that closes the TLS connection in Java.

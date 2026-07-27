@@ -164,6 +164,10 @@ final class Http2WriteCoordinator {
         }
     }
 
+    private enum SettingsTimeout implements Command {
+        INSTANCE
+    }
+
     private static final class ConnectionFailure implements Command {
         private final WriteTask goAway;
         private final IOException reason;
@@ -295,6 +299,10 @@ final class Http2WriteCoordinator {
             throw new IllegalArgumentException("The last stream ID cannot be negative");
         }
         enqueue(new InitialWindowSizeChange(difference, acknowledgement, lastStreamId));
+    }
+
+    void settingsTimedOut() {
+        enqueue(SettingsTimeout.INSTANCE);
     }
 
     void failConnection(WriteTask goAway, IOException reason) {
@@ -498,6 +506,14 @@ final class Http2WriteCoordinator {
                     change.lastStreamId
                 );
             }
+        } else if (command == SettingsTimeout.INSTANCE) {
+            queueConnectionError(
+                Http2Exception.connection(
+                    Http2ErrorCode.SETTINGS_TIMEOUT,
+                    "Timed out waiting for SETTINGS ack"
+                ),
+                0
+            );
         } else if (command instanceof ConnectionFailure) {
             ConnectionFailure failure = (ConnectionFailure) command;
             if (beginConnectionError(failure.reason)) {
