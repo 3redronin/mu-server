@@ -21,8 +21,10 @@ class FieldLine implements Map.Entry<String,String> {
         this.neverIndexed = neverIndexed;
     }
 
-    int length() {
-        return name.length() + value.length();
+    int hpackSize() {
+        // RFC 7541 section 4.1 and RFC 9113 section 6.5.2 use the same
+        // accounting: name octets + value octets + 32 octets of overhead.
+        return name.length() + value.length() + 32;
     }
 
     public HeaderString name() {
