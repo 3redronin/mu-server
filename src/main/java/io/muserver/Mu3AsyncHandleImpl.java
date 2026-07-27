@@ -57,17 +57,24 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
 
     @Override
     public void setReadListener(RequestBodyListener readListener) {
-        new AsyncBodyReader(readListener).scheduleNextRead();
+        Objects.requireNonNull(readListener, "readListener");
+        // Claim body ownership before asynchronous dispatch so a blocking read
+        // or second listener cannot race the first reader task.
+        new AsyncBodyReader(readListener, request.body()).scheduleNextRead();
     }
 
     private final class AsyncBodyReader {
         private final RequestBodyListener readListener;
         private final byte[] buffer = new byte[8192];
         private final AtomicBoolean finished = new AtomicBoolean();
-        private @Nullable InputStream clientIn;
+        private final InputStream clientIn;
 
-        private AsyncBodyReader(RequestBodyListener readListener) {
+        private AsyncBodyReader(
+            RequestBodyListener readListener,
+            InputStream clientIn
+        ) {
             this.readListener = readListener;
+            this.clientIn = clientIn;
         }
 
         private void scheduleNextRead() {
@@ -85,20 +92,9 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
             if (finished.get()) {
                 return;
             }
-            InputStream input = clientIn;
-            if (input == null) {
-                try {
-                    input = request.body();
-                    clientIn = input;
-                } catch (Throwable t) {
-                    fail(t, false);
-                    return;
-                }
-            }
-
             final int read;
             try {
-                read = input.read(buffer);
+                read = clientIn.read(buffer);
             } catch (Throwable t) {
                 fail(t, true);
                 return;

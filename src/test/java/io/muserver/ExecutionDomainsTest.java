@@ -1035,6 +1035,64 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void asyncReadListenerClaimsBodyBeforeDispatch() throws Exception {
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var blockerStarted = new CountDownLatch(1);
+        var releaseBlocker = new CountDownLatch(1);
+        Future<?> blocker = asyncExecutor.submit(() -> {
+            blockerStarted.countDown();
+            releaseBlocker.await();
+            return null;
+        });
+        assertThat(blockerStarted.await(5, TimeUnit.SECONDS), is(true));
+
+        var competingReadFailure = new CompletableFuture<Throwable>();
+        server = httpServer()
+            .withAsyncExecutor(asyncExecutor)
+            .addHandler(Method.POST, "/", (request, response, pathParams) -> {
+                AsyncHandle handle = request.handleAsync();
+                handle.setReadListener(new RequestBodyListener() {
+                    @Override
+                    public void onDataReceived(
+                        ByteBuffer data,
+                        DoneCallback doneCallback
+                    ) throws Exception {
+                        doneCallback.onComplete(null);
+                    }
+
+                    @Override
+                    public void onComplete() {
+                    }
+
+                    @Override
+                    public void onError(Throwable t) {
+                    }
+                });
+                try {
+                    request.readBodyAsString();
+                    competingReadFailure.complete(null);
+                } catch (Throwable failure) {
+                    competingReadFailure.complete(failure);
+                }
+                handle.complete();
+            })
+            .start();
+
+        try (Response response = call(
+            request(server.uri()).post(RequestBody.create("body", null))
+        )) {
+            assertThat(response.code(), is(200));
+            assertThat(
+                competingReadFailure.get(5, TimeUnit.SECONDS),
+                instanceOf(IllegalStateException.class)
+            );
+        } finally {
+            releaseBlocker.countDown();
+            blocker.get(5, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
     void asyncBodyListenerFailuresAreReportedOnTheAsyncExecutor() throws Exception {
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
         var dataThread = new CompletableFuture<String>();

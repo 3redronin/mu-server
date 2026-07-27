@@ -20,6 +20,7 @@ public interface AsyncHandle {
      * <p>Sets a listener that will be notified when chunks of request data become available.</p>
      * <p>If this is not set, then the usual (blocking) request reading methods on the request object can be used.</p>
      * @param readListener The listener.
+     * @throws IllegalStateException if request-body access has already been claimed
      */
     void setReadListener(RequestBodyListener readListener);
 

@@ -31,8 +31,12 @@ class Mu3Request implements MuRequest {
     private String contextPath = "";
     private String relativePath;
     @Nullable private List<Cookie> cookies;
-    private boolean bodyClaimed;
-    private boolean inputStreamAccessed;
+    private enum BodyAccess {
+        UNCLAIMED,
+        INPUT_STREAM,
+        EXCLUSIVE
+    }
+    private BodyAccess bodyAccess = BodyAccess.UNCLAIMED;
     @Nullable private volatile Mu3AsyncHandleImpl asyncHandle;
     private boolean clientCancelled;
     private volatile boolean rateLimitRejected;
@@ -64,11 +68,18 @@ class Mu3Request implements MuRequest {
         return mu3Headers.get("content-type");
     }
 
-    private void claimbody() {
-        if (bodyClaimed || inputStreamAccessed) {
+    private synchronized void claimBody() {
+        if (bodyAccess != BodyAccess.UNCLAIMED) {
             throw new IllegalStateException("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods.");
         }
-        bodyClaimed = true;
+        bodyAccess = BodyAccess.EXCLUSIVE;
+    }
+
+    private synchronized void claimInputStream() {
+        if (bodyAccess == BodyAccess.EXCLUSIVE) {
+            throw new IllegalStateException("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods.");
+        }
+        bodyAccess = BodyAccess.INPUT_STREAM;
     }
 
     @Override
@@ -113,7 +124,7 @@ class Mu3Request implements MuRequest {
         if (BodySize.NONE.equals(bodySize)) {
             return Optional.empty();
         }
-        inputStreamAccessed = true;
+        claimInputStream();
         return Optional.of(body);
     }
 
@@ -135,7 +146,7 @@ class Mu3Request implements MuRequest {
 
     @Override
     public InputStream body() {
-        claimbody();
+        claimBody();
         return body;
     }
 
@@ -146,7 +157,7 @@ class Mu3Request implements MuRequest {
 
     @Override
     public String readBodyAsString() throws IOException {
-        claimbody();
+        claimBody();
         Long size = bodySize.size();
         if (size == null || size > 4096) {
             return streamBodyToString(Headtils.bodyCharset(mu3Headers, true));
@@ -183,7 +194,7 @@ class Mu3Request implements MuRequest {
     @Override
     public MuForm form() throws IOException {
         if (this.form == null) {
-            claimbody();
+            claimBody();
             MediaType bodyType = mu3Headers.contentType();
             if (bodyType == null) {
                 this.form = EmptyForm.VALUE;
