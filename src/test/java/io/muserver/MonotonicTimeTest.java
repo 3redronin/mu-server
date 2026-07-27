@@ -21,4 +21,14 @@ class MonotonicTimeTest {
     void negativeDurationsExpireImmediately() {
         assertThat(MonotonicTime.deadlineAfter(123L, -1L), is(123L));
     }
+
+    @Test
+    void anAbsoluteDeadlineRetainsASubMillisecondRemainder() {
+        long deadline = MonotonicTime.deadlineAfter(100L, 1_000_000L);
+
+        assertThat(
+            MonotonicTime.nanosUntil(deadline, 101L),
+            is(999_999L)
+        );
+    }
 }

@@ -81,7 +81,7 @@ class ConnectionAcceptor {
     }
 
     private volatile State state = State.NOT_STARTED;
-    private volatile long gracefulShutdownTimeoutMillis = 20_000;
+    private static final long FALLBACK_SHUTDOWN_TIMEOUT_MILLIS = 20_000;
     private volatile long gracefulShutdownDeadlineNanos = Long.MAX_VALUE;
     private volatile boolean lastStopWasGraceful = true;
 
@@ -207,7 +207,7 @@ class ConnectionAcceptor {
         if (gracefulShutdownDeadlineNanos == Long.MAX_VALUE) {
             gracefulShutdownDeadlineNanos =
                 MonotonicTime.deadlineAfterMillis(
-                    gracefulShutdownTimeoutMillis
+                    FALLBACK_SHUTDOWN_TIMEOUT_MILLIS
                 );
         }
         for (BaseHttpConnection connection : active) {
@@ -554,11 +554,7 @@ class ConnectionAcceptor {
         }
     }
 
-    public boolean stop(long timeoutMillis) {
-        long stopTimeoutMillis = Math.max(0L, timeoutMillis);
-        long callerDeadlineNanos = MonotonicTime.deadlineAfterMillis(
-            stopTimeoutMillis
-        );
+    boolean stopUntil(long callerDeadlineNanos) {
         lifecycleLock.lock();
         try {
             if (state == State.STOPPED) {
@@ -566,7 +562,6 @@ class ConnectionAcceptor {
             }
             log.info("Stopping server 1");
             if (state != State.STOPPING) {
-                gracefulShutdownTimeoutMillis = stopTimeoutMillis;
                 gracefulShutdownDeadlineNanos = callerDeadlineNanos;
                 state = State.STOPPING;
             } else if (MonotonicTime.isAfter(
@@ -594,7 +589,7 @@ class ConnectionAcceptor {
         }
         joinAcceptorUntil(callerDeadlineNanos);
         if (acceptorThread.isAlive()) {
-            log.warn("Could not kill " + this + " after " + timeoutMillis + " ms");
+            log.warn("Could not stop {} before the shutdown deadline", this);
             lastStopWasGraceful = false;
             return false;
         }
