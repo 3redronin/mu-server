@@ -899,6 +899,104 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void http2CompletionOnTheAsyncWorkerDoesNotResubmitWhenHandlersAreSaturated() throws Exception {
+        var handlerExecutor = track(new ThreadPoolExecutor(
+            1,
+            1,
+            0,
+            TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(1),
+            namedThreads("handler-")
+        ));
+        var asyncExecutor = track(new ThreadPoolExecutor(
+            1,
+            1,
+            0,
+            TimeUnit.MILLISECONDS,
+            new SynchronousQueue<>(),
+            namedThreads("async-")
+        ));
+        var writeCallbackEntered = new CountDownLatch(1);
+        var releaseWriteCallback = new CountDownLatch(1);
+        var blockerStarted = new CountDownLatch(1);
+        var releaseBlockers = new CountDownLatch(1);
+        var completionThread = new CompletableFuture<String>();
+        server = httpServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .withHandlerExecutor(handlerExecutor)
+            .withAsyncExecutor(asyncExecutor)
+            .addResponseCompleteListener(info ->
+                completionThread.complete(Thread.currentThread().getName())
+            )
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                AsyncHandle handle = request.handleAsync();
+                handle.write(ByteBuffer.wrap(new byte[]{1}), error -> {
+                    if (error != null) {
+                        handle.complete(error);
+                        return;
+                    }
+                    writeCallbackEntered.countDown();
+                    releaseWriteCallback.await();
+                    handle.complete();
+                });
+            })
+            .start();
+
+        Future<?> blocker = null;
+        Future<?> queuedBlocker = null;
+        try (var h2Client = new H2Client();
+             var connection = h2Client.connectClearText(server)) {
+            connection.handshake();
+            connection.socket().setSoTimeout(2000);
+            connection.writeFrame(new Http2HeadersFrame(
+                1,
+                true,
+                RFCTestUtils.getHelloHeaders("http", server.uri().getPort())
+            )).flush();
+
+            assertThat(writeCallbackEntered.await(5, TimeUnit.SECONDS), is(true));
+            blocker = handlerExecutor.submit(() -> {
+                blockerStarted.countDown();
+                try {
+                    releaseBlockers.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            assertThat(blockerStarted.await(5, TimeUnit.SECONDS), is(true));
+            queuedBlocker = handlerExecutor.submit(() -> {
+                try {
+                    releaseBlockers.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            releaseWriteCallback.countDown();
+
+            Http2HeadersFrame responseHeaders =
+                RFCTestUtils.readIgnoringWindowUpdates(connection, Http2HeadersFrame.class);
+            assertThat(responseHeaders.headers().get(":status"), equalTo("200"));
+            Http2DataFrame responseData =
+                RFCTestUtils.readIgnoringWindowUpdates(connection, Http2DataFrame.class);
+            assertThat(responseData.payloadLength(), is(1));
+            assertThat(
+                RFCTestUtils.readIgnoringWindowUpdates(connection, Http2DataFrame.class).endStream(),
+                is(true)
+            );
+            assertThat(completionThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
+        } finally {
+            releaseWriteCallback.countDown();
+            releaseBlockers.countDown();
+            if (blocker != null) {
+                blocker.get(5, TimeUnit.SECONDS);
+            }
+            if (queuedBlocker != null) {
+                queuedBlocker.get(5, TimeUnit.SECONDS);
+            }
+        }
+    }
+
+    @Test
     void rejectedHandlerDispatchesHttp2AsyncCompletionToTheAsyncExecutor() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
