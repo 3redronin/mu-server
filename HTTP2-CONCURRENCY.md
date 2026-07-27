@@ -118,6 +118,10 @@ callbacks, request-rejection notifications, and deprecated asynchronous
 WebSocket adapters. Handler-oriented detached callbacks may use it as a
 fallback when the handler executor rejects them. Operations whose contract
 specifically requires the async executor fail when that executor rejects them.
+A response write rejected by the async-completion terminal gate still dispatches
+its failure callback to this executor; if the executor itself rejects that
+notification, the caller delivers the required failure callback rather than
+dropping it.
 
 Neither application executor runs a connection reader, writer, or timer
 callback. Rejection of a new handler is handled as rejection of that individual

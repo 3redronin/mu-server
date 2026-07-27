@@ -913,19 +913,25 @@ class ExecutionDomainsTest {
             handle.complete();
             Future<@Nullable Void> lateWrite = handle.write(ByteBuffer.wrap(new byte[]{1}));
             var callbackFailure = new CompletableFuture<Throwable>();
-            handle.write(ByteBuffer.wrap(new byte[]{2}), callbackFailure::complete);
+            var callbackThread = new CompletableFuture<String>();
+            handle.write(ByteBuffer.wrap(new byte[]{2}), failure -> {
+                callbackThread.complete(Thread.currentThread().getName());
+                callbackFailure.complete(failure);
+            });
 
             assertThat(acceptedWrite.isDone(), is(false));
+            assertThat(callbackFailure.isDone(), is(false));
             ExecutionException failedWrite = assertThrows(
                 ExecutionException.class,
                 () -> lateWrite.get(5, TimeUnit.SECONDS)
             );
             assertThat(failedWrite.getCause(), instanceOf(IllegalStateException.class));
-            assertThat(callbackFailure.get(5, TimeUnit.SECONDS), instanceOf(IllegalStateException.class));
 
             releaseBlocker.countDown();
             blocker.get(5, TimeUnit.SECONDS);
             acceptedWrite.get(5, TimeUnit.SECONDS);
+            assertThat(callbackFailure.get(5, TimeUnit.SECONDS), instanceOf(IllegalStateException.class));
+            assertThat(callbackThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
             assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
             assertThat(
                 client.readHeaders().contains(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED, true),
@@ -1084,6 +1090,33 @@ class ExecutionDomainsTest {
             assertThat(response.code(), is(500));
         }
         assertThat(callbackFailure.get(5, TimeUnit.SECONDS), instanceOf(RejectedExecutionException.class));
+    }
+
+    @Test
+    void rejectedAsyncExecutorDoesNotDropALateWriteCallback() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        asyncExecutor.shutdown();
+        var callbackFailure = new CompletableFuture<Throwable>();
+        var callbackThread = new CompletableFuture<String>();
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withAsyncExecutor(asyncExecutor)
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                AsyncHandle handle = request.handleAsync();
+                handle.complete();
+                handle.write(ByteBuffer.wrap(new byte[]{1}), failure -> {
+                    callbackThread.complete(Thread.currentThread().getName());
+                    callbackFailure.complete(failure);
+                });
+            })
+            .start();
+
+        try (Response response = call(request(server.uri()))) {
+            assertThat(response.code(), is(200));
+        }
+        assertThat(callbackFailure.get(5, TimeUnit.SECONDS), instanceOf(IllegalStateException.class));
+        assertThat(callbackThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
     }
 
     @Test

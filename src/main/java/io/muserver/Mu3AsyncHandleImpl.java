@@ -223,9 +223,13 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
         if (writeFuture == null) {
             Throwable failure = completedResponseWriteFailure();
             try {
-                callback.onComplete(failure);
-            } catch (Throwable callbackFailure) {
-                addSuppressedIfDifferent(failure, callbackFailure);
+                server.executeAsyncApplicationTask(() ->
+                    invokeWriteCallback(callback, failure)
+                );
+            } catch (RejectedExecutionException rejected) {
+                // The callback contract still needs an outcome when the
+                // required async executor cannot accept the notification.
+                invokeWriteCallback(callback, failure);
             }
             return;
         }
@@ -270,6 +274,14 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
             }
         });
         return writeFuture;
+    }
+
+    private static void invokeWriteCallback(DoneCallback callback, Throwable failure) {
+        try {
+            callback.onComplete(failure);
+        } catch (Throwable callbackFailure) {
+            addSuppressedIfDifferent(failure, callbackFailure);
+        }
     }
 
     private static IllegalStateException completedResponseWriteFailure() {
