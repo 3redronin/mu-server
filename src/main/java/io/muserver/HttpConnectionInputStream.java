@@ -31,7 +31,7 @@ class HttpConnectionInputStream extends FilterInputStream {
     public int read(byte[] b, int off, int len) throws IOException {
         if (httpConnection.isClosed()) throw new IOException("The connection is closed");
         int read = in.read(b, off, len);
-        if (read != -1) {
+        if (read > 0) {
             httpConnection.onBytesRead(read);
         }
         return read;

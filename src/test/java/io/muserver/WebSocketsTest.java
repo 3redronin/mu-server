@@ -269,6 +269,56 @@ public class WebSocketsTest {
     }
 
     @Test
+    public void incomingWebSocketBytesAreCountedOnceByTheConnection() throws Exception {
+        server = httpServer()
+            .addHandler(webSocketHandler(
+                (request, responseHeaders) -> serverSocket
+            ))
+            .start();
+
+        try (Socket socket = new Socket(
+                 server.uri().getHost(),
+                 server.uri().getPort()
+             );
+             OutputStream out = socket.getOutputStream();
+             InputStream in = socket.getInputStream()) {
+            int handshakeBytes = handshake(out, in);
+            assertEventually(
+                () -> server.stats().bytesRead(),
+                equalTo((long) handshakeBytes)
+            );
+
+            // A masked "hi" text frame. A zero mask leaves the payload unchanged.
+            byte[] frame = {
+                (byte) 0x81, (byte) 0x82,
+                0, 0, 0, 0,
+                'h', 'i'
+            };
+            out.write(frame);
+            out.flush();
+
+            assertEventually(
+                () -> serverSocket.received,
+                contains("connected", "onText: hi")
+            );
+            assertThat(
+                server.stats().bytesRead(),
+                equalTo((long) handshakeBytes + frame.length)
+            );
+
+            sendMaskedFrame(
+                out,
+                true,
+                0x8,
+                new byte[]{0x03, (byte) 0xE8},
+                new byte[4]
+            );
+            out.flush();
+            assertNotTimedOut("closing server socket", serverSocket.closedLatch);
+        }
+    }
+
+    @Test
     public void invalidUTF8MessagesResultInErrors() throws Exception {
         server = MuServerBuilder.httpServer()
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket))
@@ -570,7 +620,7 @@ public class WebSocketsTest {
     }
 
 
-    private void handshake(OutputStream out, InputStream in) throws IOException {
+    private int handshake(OutputStream out, InputStream in) throws IOException {
         // Perform WebSocket handshake
         String request = "GET / HTTP/1.1\r\n" +
             "Host: " + server.uri().getAuthority() + "\r\n" +
@@ -585,6 +635,7 @@ public class WebSocketsTest {
         var reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.US_ASCII));
         while (!reader.readLine().isEmpty()) {
         }
+        return request.getBytes(StandardCharsets.US_ASCII).length;
     }
 
 

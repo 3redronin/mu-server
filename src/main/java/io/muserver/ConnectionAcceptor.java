@@ -477,7 +477,10 @@ class ConnectionAcceptor {
         server.getStatsImpl().onConnectionOpened(con);
         try {
             InputStream requestIn = providedInputStream == null ? socket.getInputStream() : providedInputStream;
-            try (OutputStream clientOut = socket.getOutputStream();
+            try (OutputStream clientOut = new HttpConnectionOutputStream(
+                     con,
+                     socket.getOutputStream()
+                 );
                  InputStream clientIn = new HttpConnectionInputStream(con, requestIn)) {
                 con.start(clientIn, clientOut);
             }
