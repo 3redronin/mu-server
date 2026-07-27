@@ -209,8 +209,17 @@ class ConnectionAcceptor {
                     secureSocket.setSSLParameters(createSSLParameters(secureSocket));
                 }
 
-                var clientAuthTrustManager = hc.clientAuthTrustManager();
-                secureSocket.setWantClientAuth(clientAuthTrustManager != null);
+                var clientCertificateAuthentication = hc.clientCertificateAuthentication();
+                switch (clientCertificateAuthentication) {
+                    case OPTIONAL:
+                        secureSocket.setWantClientAuth(true);
+                        break;
+                    case MANDATORY:
+                        secureSocket.setNeedClientAuth(true);
+                        break;
+                    default:
+                        secureSocket.setWantClientAuth(false);
+                }
 
                 secureSocket.addHandshakeCompletedListener(event ->
                     log.debug("Handshake complete {}", event));
@@ -222,7 +231,7 @@ class ConnectionAcceptor {
                     httpVersion = HttpVersion.HTTP_2;
                 }
 
-                if (clientAuthTrustManager != null) {
+                if (clientCertificateAuthentication != ClientCertificateAuthentication.NONE) {
                     try {
                         Certificate[] certs = secureSocket.getSession().getPeerCertificates();
                         if (certs != null && certs.length > 0) {

@@ -62,7 +62,7 @@ N/A Not applicable as only singletons supported
 - [x] Static valueOf method objects
 - [x] Single-string constructor objects
 - [x] `List<T>`, `Set<T>`, and `SortedSet<T>` for values satisfying above 3 cases. 
-- [ ] `T[]` parameters for `@CookieParam`, `@FormParam`, `@HeaderParam`, `@MatrixParam`, and `@QueryParam`
+- [x] `T[]` parameters for `@CookieParam`, `@FormParam`, `@HeaderParam`, `@MatrixParam`, and `@QueryParam`
 - [x] `@DefaultValue`
 - [x] `@Encoded`
 
@@ -414,7 +414,7 @@ Will not implement. Configuration should be handled by the user.
 ## 11 Environment
 
 - [x] Java SE bootstrap with HTTP, HTTPS, root-path mounting, external configuration, dynamic ports, and shutdown.
-- [ ] TLS client authentication through `SeBootstrap` is not supported.
+- [x] TLS client authentication through `SeBootstrap`, including `NONE`, `OPTIONAL`, and `MANDATORY`.
 
 Mu Server does not advertise its `RuntimeDelegate` globally merely by being present on an application's classpath.
 Call `MuRuntimeDelegate.ensureSet()` once before the first `SeBootstrap` call to select Mu explicitly. When no
