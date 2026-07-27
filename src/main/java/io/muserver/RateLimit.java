@@ -30,7 +30,7 @@ public class RateLimit {
         return new RateLimitBuilder();
     }
 
-    long expiryMillis() {
-        return this.perUnit.toMillis(this.per);
+    long expiryNanos() {
+        return this.perUnit.toNanos(this.per);
     }
 }
