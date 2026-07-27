@@ -435,6 +435,38 @@ class RFC9113_6_2_HeadersTest {
     }
 
     @Test
+    void rejectedInitialHeadersRespectMaxConcurrentStreams() throws Exception {
+        server = httpsServer()
+            .withMaxHeadersSize(512)
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled().withMaxConcurrentStreams(1))
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2Settings(false, 4096, 100, 0, 16384, 32768))
+                .flush();
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            var firstOversized = postHelloHeaders(getPort());
+            firstOversized.add("x-oversized", "x".repeat(1024));
+            var secondOversized = postHelloHeaders(getPort());
+            secondOversized.add("x-oversized", "x".repeat(1024));
+            con.writeFrame(new Http2HeadersFrame(1, false, firstOversized))
+                .writeFrame(new Http2HeadersFrame(3, false, secondOversized))
+                .flush();
+
+            var responseHeaders = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(responseHeaders.streamId(), equalTo(1));
+            assertThat(responseHeaders.headers().get(":status"), equalTo("431 Request Header Fields Too Large"));
+            assertThat(
+                con.readLogicalFrame(),
+                equalTo(new Http2ResetStreamFrame(3, Http2ErrorCode.REFUSED_STREAM.code()))
+            );
+        }
+    }
+
+    @Test
     void trailingHeadersMustEndTheStream() throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())

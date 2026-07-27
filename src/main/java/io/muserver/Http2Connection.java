@@ -894,30 +894,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             if (fh.streamId() <= lastStreamId) {
                 throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID " + fh.streamId());
             }
-            boolean startRequest;
-            stateLock.lock();
-            try {
-                long now = System.currentTimeMillis();
-                if (!canStartNewStreamsLocked(now)) {
-                    log.info("Refusing stream {} because graceful shutdown no longer allows new streams", headerFragment.streamId());
-                    write(new Http2ResetStreamFrame(headerFragment.streamId(), Http2ErrorCode.REFUSED_STREAM.code()));
-                    startRequest = false;
-                } else if (rejectedRequestBodies.size()
-                    + streams.values().stream()
-                        .filter(Http2Stream::countsTowardsMaxConcurrentStreams)
-                        .count() >= serverSettings.maxConcurrentStreams) {
-                    log.info("Max concurrent streams reached");
-                    write(new Http2ResetStreamFrame(headerFragment.streamId(), Http2ErrorCode.REFUSED_STREAM.code()));
-                    startRequest = false;
-                } else {
-                    log.info("Setting last stream id to " + fh.streamId());
-                    lastStreamId = fh.streamId();
-                    startRequest = true;
-                }
-            } finally {
-                stateLock.unlock();
-            }
-            if (startRequest) {
+            if (acceptNewStream(headerFragment.streamId())) {
                 startRequest(headerFragment);
             }
         } catch (HttpException e) {
@@ -959,14 +936,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                     "Invalid stream ID " + fh.streamId()
                 );
             }
-            stateLock.lock();
-            try {
-                // An HTTP error response means this stream was processed. Record it before
-                // exposing the rejection or queuing flow-controlled response DATA so later
-                // stream frames and GOAWAY use the same retry boundary.
-                lastStreamId = fh.streamId();
-            } finally {
-                stateLock.unlock();
+            if (!acceptNewStream(fh.streamId())) {
+                return;
             }
             server.onRequestRejected(new RejectedRequestImpl(e.status().code(), rejectReason, null, null, this));
             FieldBlock errorHeaders = new FieldBlock();
@@ -986,6 +957,35 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                 new Http2HeadersFrame(fh.streamId(), false, errorHeaders),
                 new Http2DataFrame(fh.streamId(), true, message, 0, message.length)
             );
+        }
+    }
+
+    private boolean acceptNewStream(int streamId) {
+        stateLock.lock();
+        try {
+            long now = System.currentTimeMillis();
+            if (!canStartNewStreamsLocked(now)) {
+                log.info("Refusing stream {} because graceful shutdown no longer allows new streams", streamId);
+                write(new Http2ResetStreamFrame(streamId, Http2ErrorCode.REFUSED_STREAM.code()));
+                return false;
+            }
+            long activeStreams = rejectedRequestBodies.size()
+                + streams.values().stream()
+                    .filter(Http2Stream::countsTowardsMaxConcurrentStreams)
+                    .count();
+            if (activeStreams >= serverSettings.maxConcurrentStreams) {
+                log.info("Max concurrent streams reached");
+                write(new Http2ResetStreamFrame(streamId, Http2ErrorCode.REFUSED_STREAM.code()));
+                return false;
+            }
+            // An HTTP error response also means the stream was processed. Record every
+            // admitted stream before exposing it to application callbacks or queuing
+            // flow-controlled output so subsequent frames and GOAWAY share one boundary.
+            log.info("Setting last stream id to " + streamId);
+            lastStreamId = streamId;
+            return true;
+        } finally {
+            stateLock.unlock();
         }
     }
 
