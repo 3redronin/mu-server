@@ -11,6 +11,27 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.LongSupplier;
 
 class RateLimiterImpl implements RateLimiter {
+    static final class Decision {
+        private final RateLimitRejectionAction action;
+        private final @Nullable String retryAfter;
+
+        private Decision(
+            RateLimitRejectionAction action,
+            @Nullable String retryAfter
+        ) {
+            this.action = action;
+            this.retryAfter = retryAfter;
+        }
+
+        RateLimitRejectionAction action() {
+            return action;
+        }
+
+        @Nullable String retryAfter() {
+            return retryAfter;
+        }
+    }
+
     private final Logger log = LoggerFactory.getLogger(RateLimiterImpl.class);
 
     private final Lock lock = new ReentrantLock();
@@ -42,7 +63,7 @@ class RateLimiterImpl implements RateLimiter {
         }
     }
 
-    @Nullable RateLimitRejectionAction record(MuRequest request) {
+    @Nullable Decision record(MuRequest request) {
         RateLimit rateLimit = selector.select(request);
         if (rateLimit == null || rateLimit.bucket == null) {
             return null;
@@ -76,25 +97,30 @@ class RateLimiterImpl implements RateLimiter {
         } finally {
             lock.unlock();
         }
-        if (action != null) {
-            log.info("Rate limit for {} exceeded. Action: {}", rateLimit.bucket, rateLimit.action);
-            if (action == RateLimitRejectionAction.SEND_429
-                && request != null
-                && nextExpiryNanos != null) {
-                long remainingNanos = Math.max(
-                    0L,
-                    MonotonicTime.nanosUntil(
-                        nextExpiryNanos,
-                        nanoTime.getAsLong()
-                    )
-                );
-                long secondsToNext =
-                    TimeUnit.NANOSECONDS.toSeconds(remainingNanos);
-                long fuzz = (long) (Math.random() * 20.0);
-                request.headers().set(HeaderNames.RETRY_AFTER, secondsToNext + fuzz);
-            }
+        if (action == null) {
+            return null;
         }
-        return action;
+        log.info(
+            "Rate limit for {} exceeded. Action: {}",
+            rateLimit.bucket,
+            rateLimit.action
+        );
+        String retryAfter = null;
+        if (action == RateLimitRejectionAction.SEND_429
+            && nextExpiryNanos != null) {
+            long remainingNanos = Math.max(
+                0L,
+                MonotonicTime.nanosUntil(
+                    nextExpiryNanos,
+                    nanoTime.getAsLong()
+                )
+            );
+            long secondsToNext =
+                TimeUnit.NANOSECONDS.toSeconds(remainingNanos);
+            long fuzz = (long) (Math.random() * 20.0);
+            retryAfter = Long.toString(secondsToNext + fuzz);
+        }
+        return new Decision(action, retryAfter);
     }
 
     @Override
