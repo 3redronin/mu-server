@@ -93,7 +93,16 @@ class NewCookieHeaderDelegate implements RuntimeDelegate.HeaderDelegate<NewCooki
         if (ss != null) {
             nettyCookie.setSameSite(toNetty(ss));
         }
-        return encoder.encode(nettyCookie);
+        String encoded = encoder.encode(nettyCookie);
+        String comment = cookie.getComment();
+        return comment == null ? encoded : encoded + "; Comment=\"" + escapeQuotedString(comment) + "\"";
+    }
+
+    private static String escapeQuotedString(String value) {
+        if (value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0) {
+            throw new IllegalArgumentException("Cookie comments cannot contain CR or LF characters");
+        }
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
     private CookieHeaderNames.SameSite toNetty(NewCookie.SameSite ss) {
