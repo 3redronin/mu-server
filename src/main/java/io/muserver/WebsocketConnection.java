@@ -44,7 +44,7 @@ class WebsocketConnection implements MuWebSocketSession {
     private boolean closeReceived = false;
     private boolean closeSent = false;
     private final Lock writeLock = new ReentrantLock();
-    private final @Nullable ByteBuffer pingBuffer;
+    private final @Nullable WebsocketPingTracker pingTracker;
     private ReadState readState = ReadState.NONE;
     private volatile @Nullable ScheduledFuture<?> pingFuture;
     private volatile @Nullable Thread connectionTaskThread;
@@ -78,14 +78,9 @@ class WebsocketConnection implements MuWebSocketSession {
         this.settings = settings;
         this.eventsRunOnConnectionTask = httpConnection.webSocketEventsRunOnConnectionTask();
         if (settings.pingIntervalMillis == 0) {
-            pingBuffer = null;
+            pingTracker = null;
         } else {
-            // a ping is 8 random bytes following by a long (the time)
-            // the random bytes are used to identify if we created the payload received on a pong
-            pingBuffer = ByteBuffer.allocate(16);
-            byte[] header = new byte[8];
-            HttpsConfigBuilder.random.nextBytes(header);
-            pingBuffer.put(header);
+            pingTracker = new WebsocketPingTracker();
         }
 
     }
@@ -103,12 +98,7 @@ class WebsocketConnection implements MuWebSocketSession {
             writeLock.lock();
             try {
                 if (state == WebsocketSessionState.OPEN) {
-                    ByteBuffer ping = java.util.Objects.requireNonNull(pingBuffer);
-                    ping.position(8)
-                        .limit(16)
-                        .putLong(System.currentTimeMillis())
-                        .flip();
-                    sendPing(ping);
+                    sendPing(java.util.Objects.requireNonNull(pingTracker).newPingPayload());
                 }
                 if (state == WebsocketSessionState.OPEN) {
                     startPinging();
@@ -745,15 +735,8 @@ class WebsocketConnection implements MuWebSocketSession {
     @Override
     public @Nullable Long pongLatencyMillis(ByteBuffer pongPayload) {
         if (pongPayload == null) throw new NullPointerException("pongPayload");
-        if (pingBuffer == null) return null;
-        if (pongPayload.remaining() != 16) return null;
-        // verify header
-        for (int i = 0; i < 8; i++) {
-            if (pingBuffer.get(i) != pongPayload.get(i)) return null;
-        }
-        // okay we probably made it. Now get the timestamp from it.
-        var pingTime = pingBuffer.getLong(8);
-        return System.currentTimeMillis() - pingTime;
+        WebsocketPingTracker tracker = pingTracker;
+        return tracker == null ? null : tracker.pongLatencyMillis(pongPayload);
     }
 
     @Override
