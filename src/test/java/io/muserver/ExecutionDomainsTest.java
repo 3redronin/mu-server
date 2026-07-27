@@ -32,6 +32,7 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.muserver.MuServerBuilder.httpServer;
@@ -589,6 +590,383 @@ class ExecutionDomainsTest {
         assertThat(callbackThreads.size(), is(2));
         for (String callbackThread : callbackThreads) {
             assertThat(callbackThread, startsWith("async-"));
+        }
+    }
+
+    @Test
+    void webSocketEventsUseTheHandlerExecutor() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
+        var connectedThread = new CompletableFuture<String>();
+        var messageThread = new CompletableFuture<String>();
+        var errorThread = new CompletableFuture<String>();
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
+                @Override
+                public void onConnect(MuWebSocketSession session) throws Exception {
+                    super.onConnect(session);
+                    connectedThread.complete(Thread.currentThread().getName());
+                }
+
+                @Override
+                public void onText(String message) {
+                    messageThread.complete(Thread.currentThread().getName());
+                    throw new MuException("message failure");
+                }
+
+                @Override
+                public void onBinary(ByteBuffer payload) {
+                }
+
+                @Override
+                public void onError(Throwable cause) {
+                    errorThread.complete(Thread.currentThread().getName());
+                }
+            }))
+            .start();
+
+        String websocketUrl = "ws" + server.uri().toString().substring(4);
+        WebSocket webSocket = client.newWebSocket(
+            request().url(websocketUrl).build(),
+            new WebSocketListener() {
+            }
+        );
+        try {
+            assertThat(connectedThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
+            assertThat(webSocket.send("hello"), is(true));
+            assertThat(messageThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
+            assertThat(errorThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
+        } finally {
+            webSocket.cancel();
+        }
+    }
+
+    @Test
+    void webSocketTimeoutWaitsForAnInFlightCallbackAndUsesTheHandlerExecutor() throws Exception {
+        var handlerExecutor = track(Executors.newFixedThreadPool(2, namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
+        var maintenanceExecutor = track(Executors.newSingleThreadExecutor(namedThreads("maintenance-")));
+        var textEntered = new CountDownLatch(1);
+        var releaseText = new CountDownLatch(1);
+        var timeoutThread = new CompletableFuture<String>();
+        var clientDisconnected = new CompletableFuture<Void>();
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .withConnectionMaintenanceExecutor(maintenanceExecutor)
+            .withIdleTimeout(100, TimeUnit.MILLISECONDS)
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
+                @Override
+                public void onText(String message) {
+                    textEntered.countDown();
+                    try {
+                        releaseText.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+
+                @Override
+                public void onBinary(ByteBuffer payload) {
+                }
+
+                @Override
+                public void onError(Throwable cause) {
+                    if (cause instanceof TimeoutException) {
+                        timeoutThread.complete(Thread.currentThread().getName());
+                    }
+                }
+            })
+                .withPingInterval(0, TimeUnit.MILLISECONDS)
+                .withIdleReadTimeout(0, TimeUnit.MILLISECONDS))
+            .start();
+
+        String websocketUrl = "ws" + server.uri().toString().substring(4);
+        WebSocket webSocket = client.newWebSocket(
+            request().url(websocketUrl).build(),
+            new WebSocketListener() {
+                @Override
+                public void onFailure(WebSocket webSocket, Throwable t, @Nullable Response response) {
+                    clientDisconnected.complete(null);
+                }
+            }
+        );
+        try {
+            assertThat(webSocket.send("hold"), is(true));
+            assertThat(textEntered.await(5, TimeUnit.SECONDS), is(true));
+            clientDisconnected.get(5, TimeUnit.SECONDS);
+            assertThat(timeoutThread.isDone(), is(false));
+        } finally {
+            releaseText.countDown();
+            webSocket.cancel();
+        }
+        assertThat(timeoutThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
+    }
+
+    @Test
+    void webSocketShutdownCallbacksUseTheHandlerExecutor() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
+        var connected = new CountDownLatch(1);
+        var shutdownThread = new CompletableFuture<String>();
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
+                @Override
+                public void onConnect(MuWebSocketSession session) throws Exception {
+                    super.onConnect(session);
+                    connected.countDown();
+                }
+
+                @Override
+                public void onText(String message) {
+                }
+
+                @Override
+                public void onBinary(ByteBuffer payload) {
+                }
+
+                @Override
+                public void onServerShuttingDown() throws Exception {
+                    shutdownThread.complete(Thread.currentThread().getName());
+                    session().close(1001, "Going away");
+                }
+            }))
+            .start();
+
+        String websocketUrl = "ws" + server.uri().toString().substring(4);
+        WebSocket webSocket = client.newWebSocket(
+            request().url(websocketUrl).build(),
+            new WebSocketListener() {
+            }
+        );
+        try {
+            assertThat(connected.await(5, TimeUnit.SECONDS), is(true));
+            server.stop(2, TimeUnit.SECONDS);
+            assertThat(shutdownThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
+            server = null;
+        } finally {
+            webSocket.cancel();
+        }
+    }
+
+    @Test
+    void blockedWebSocketShutdownCallbackDoesNotBlockTheShutdownDeadline() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
+        var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
+        var connected = new CountDownLatch(1);
+        var shutdownEntered = new CountDownLatch(1);
+        var releaseShutdown = new CountDownLatch(1);
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
+                @Override
+                public void onConnect(MuWebSocketSession session) throws Exception {
+                    super.onConnect(session);
+                    connected.countDown();
+                }
+
+                @Override
+                public void onText(String message) {
+                }
+
+                @Override
+                public void onBinary(ByteBuffer payload) {
+                }
+
+                @Override
+                public void onServerShuttingDown() throws Exception {
+                    shutdownEntered.countDown();
+                    releaseShutdown.await();
+                }
+            }))
+            .start();
+
+        String websocketUrl = "ws" + server.uri().toString().substring(4);
+        WebSocket webSocket = client.newWebSocket(
+            request().url(websocketUrl).build(),
+            new WebSocketListener() {
+            }
+        );
+        try {
+            assertThat(connected.await(5, TimeUnit.SECONDS), is(true));
+            MuServer runningServer = Objects.requireNonNull(server);
+            Future<Boolean> stopped = clientExecutor.submit(() ->
+                runningServer.stop(100, TimeUnit.MILLISECONDS)
+            );
+            assertThat(shutdownEntered.await(5, TimeUnit.SECONDS), is(true));
+            assertThat(stopped.get(2, TimeUnit.SECONDS), is(false));
+            server = null;
+        } finally {
+            releaseShutdown.countDown();
+            webSocket.cancel();
+        }
+    }
+
+    @Test
+    void sharedExecutorSerializesShutdownBehindAnInFlightWebSocketCallback() throws Exception {
+        var sharedExecutor = track(Executors.newSingleThreadExecutor(namedThreads("shared-")));
+        var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
+        var textEntered = new CountDownLatch(1);
+        var releaseText = new CountDownLatch(1);
+        var shutdownCalled = new CompletableFuture<@Nullable Void>();
+        var callbackActive = new AtomicBoolean();
+        var callbacksOverlapped = new AtomicBoolean();
+        server = httpServer()
+            .withHandlerExecutor(sharedExecutor)
+            .withConnectionExecutor(sharedExecutor)
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
+                @Override
+                public void onText(String message) throws Exception {
+                    callbackActive.set(true);
+                    textEntered.countDown();
+                    try {
+                        releaseText.await();
+                    } finally {
+                        callbackActive.set(false);
+                    }
+                }
+
+                @Override
+                public void onBinary(ByteBuffer payload) {
+                }
+
+                @Override
+                public void onServerShuttingDown() {
+                    callbacksOverlapped.set(callbackActive.get());
+                    shutdownCalled.complete(null);
+                }
+            }))
+            .start();
+
+        String websocketUrl = "ws" + server.uri().toString().substring(4);
+        WebSocket webSocket = client.newWebSocket(
+            request().url(websocketUrl).build(),
+            new WebSocketListener() {
+            }
+        );
+        try {
+            assertThat(webSocket.send("hold"), is(true));
+            assertThat(textEntered.await(5, TimeUnit.SECONDS), is(true));
+            MuServer runningServer = Objects.requireNonNull(server);
+            Future<Boolean> stopped = clientExecutor.submit(() ->
+                runningServer.stop(2, TimeUnit.SECONDS)
+            );
+            assertThrows(TimeoutException.class, () ->
+                shutdownCalled.get(100, TimeUnit.MILLISECONDS)
+            );
+            releaseText.countDown();
+            shutdownCalled.get(5, TimeUnit.SECONDS);
+            assertThat(callbacksOverlapped.get(), is(false));
+            assertThat(stopped.get(5, TimeUnit.SECONDS), is(true));
+            server = null;
+        } finally {
+            releaseText.countDown();
+            webSocket.cancel();
+        }
+    }
+
+    @Test
+    void sharedExecutorDrainsAWriteFailureCaughtInsideAWebSocketCallback() throws Exception {
+        var sharedExecutor = track(Executors.newSingleThreadExecutor(namedThreads("shared-")));
+        var textEntered = new CountDownLatch(1);
+        var attemptWrite = new CountDownLatch(1);
+        var writeFailure = new CompletableFuture<IOException>();
+        var errorCallback = new CompletableFuture<Throwable>();
+        server = httpServer()
+            .withHandlerExecutor(sharedExecutor)
+            .withConnectionExecutor(sharedExecutor)
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
+                @Override
+                public void onText(String message) throws Exception {
+                    textEntered.countDown();
+                    attemptWrite.await();
+                    try {
+                        session().sendBinary(ByteBuffer.allocate(1024 * 1024));
+                    } catch (IOException e) {
+                        writeFailure.complete(e);
+                    }
+                }
+
+                @Override
+                public void onBinary(ByteBuffer payload) {
+                }
+
+                @Override
+                public void onError(Throwable cause) {
+                    errorCallback.complete(cause);
+                }
+            }))
+            .start();
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/")
+                .writeHeader("Upgrade", "websocket")
+                .writeHeader("Connection", "Upgrade")
+                .writeHeader("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+                .writeHeader("Sec-WebSocket-Version", "13")
+                .flushHeaders();
+            assertThat(client.readLine(), equalTo("HTTP/1.1 101 Switching Protocols"));
+            client.readHeaders();
+
+            // A masked "hold" frame. A zero mask is valid and leaves the payload unchanged.
+            client.out().write(new byte[]{
+                (byte) 0x81, (byte) 0x84, 0, 0, 0, 0, 'h', 'o', 'l', 'd'
+            });
+            client.out().flush();
+            assertThat(textEntered.await(5, TimeUnit.SECONDS), is(true));
+            client.abort();
+            attemptWrite.countDown();
+
+            IOException expected = writeFailure.get(5, TimeUnit.SECONDS);
+            assertThat(errorCallback.get(5, TimeUnit.SECONDS), is(expected));
+        } finally {
+            attemptWrite.countDown();
+        }
+    }
+
+    @Test
+    void sharedConnectionAndHandlerExecutorDoesNotDeadlockWebSocketEvents() throws Exception {
+        var sharedExecutor = track(Executors.newSingleThreadExecutor(namedThreads("shared-")));
+        var callbackThread = new CompletableFuture<String>();
+        var clientMessage = new CompletableFuture<String>();
+        server = httpServer()
+            .withHandlerExecutor(sharedExecutor)
+            .withConnectionExecutor(sharedExecutor)
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
+                @Override
+                public void onText(String message) throws IOException {
+                    callbackThread.complete(Thread.currentThread().getName());
+                    session().sendText(message);
+                }
+
+                @Override
+                public void onBinary(ByteBuffer payload) {
+                }
+            }))
+            .start();
+
+        String websocketUrl = "ws" + server.uri().toString().substring(4);
+        WebSocket webSocket = client.newWebSocket(
+            request().url(websocketUrl).build(),
+            new WebSocketListener() {
+                @Override
+                public void onMessage(WebSocket webSocket, String text) {
+                    clientMessage.complete(text);
+                }
+            }
+        );
+        try {
+            assertThat(webSocket.send("hello"), is(true));
+            assertThat(clientMessage.get(5, TimeUnit.SECONDS), equalTo("hello"));
+            assertThat(callbackThread.get(5, TimeUnit.SECONDS), startsWith("shared-"));
+        } finally {
+            webSocket.cancel();
         }
     }
 

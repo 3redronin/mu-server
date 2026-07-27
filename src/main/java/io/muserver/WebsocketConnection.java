@@ -12,10 +12,16 @@ import java.net.ProtocolException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Queue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -27,14 +33,21 @@ class WebsocketConnection implements MuWebSocketSession {
     final WebSocketHandlerBuilder.Settings settings;
 
     private volatile WebsocketSessionState state = WebsocketSessionState.NOT_STARTED;
-    private final BaseHttpConnection httpConnection;
+    private final Http1Connection httpConnection;
     private final MuWebSocket webSocket;
+    private final ExecutorService handlerExecutor;
+    private final boolean eventsRunOnConnectionTask;
+    private final Queue<ApplicationEventTask> applicationEvents = new ConcurrentLinkedQueue<>();
+    private final AtomicBoolean applicationEventRunnerScheduled = new AtomicBoolean();
+    private final AtomicBoolean errorEventQueued = new AtomicBoolean();
+    private final AtomicBoolean serverShutdownRequested = new AtomicBoolean();
     private boolean closeReceived = false;
     private boolean closeSent = false;
     private final Lock writeLock = new ReentrantLock();
     private final @Nullable ByteBuffer pingBuffer;
     private ReadState readState = ReadState.NONE;
     private volatile @Nullable ScheduledFuture<?> pingFuture;
+    private volatile @Nullable Thread connectionTaskThread;
 
     private enum ReadState {
         NONE, TEXT, BINARY,
@@ -44,10 +57,26 @@ class WebsocketConnection implements MuWebSocketSession {
         UNKNOWN
     }
 
+    @FunctionalInterface
+    private interface ApplicationEvent {
+        void run() throws Exception;
+    }
+
+    private static final class ApplicationEventTask {
+        private final ApplicationEvent event;
+        private final CompletableFuture<@Nullable Void> completion = new CompletableFuture<>();
+
+        private ApplicationEventTask(ApplicationEvent event) {
+            this.event = event;
+        }
+    }
+
     WebsocketConnection(Http1Connection httpConnection, MuWebSocket webSocket, WebSocketHandlerBuilder.Settings settings) {
         this.httpConnection = httpConnection;
         this.webSocket = webSocket;
         this.settings = settings;
+        this.handlerExecutor = httpConnection.webSocketHandlerExecutor();
+        this.eventsRunOnConnectionTask = httpConnection.webSocketEventsRunOnConnectionTask();
         if (settings.pingIntervalMillis == 0) {
             pingBuffer = null;
         } else {
@@ -101,10 +130,11 @@ class WebsocketConnection implements MuWebSocketSession {
         this.inputStream = inputStream;
         this.outputStream = outputStream;
         this.buffer = ByteBuffer.wrap(readBuffer).flip();
+        connectionTaskThread = Thread.currentThread();
 
         try {
             state = WebsocketSessionState.OPEN;
-            webSocket.onConnect(this);
+            invokeApplicationEvent(() -> webSocket.onConnect(this));
 
             if (settings.pingIntervalMillis > 0) {
                 startPinging();
@@ -175,9 +205,9 @@ class WebsocketConnection implements MuWebSocketSession {
                     // continuation frame
                     messageLength += payloadLength;
                     if (readState == ReadState.TEXT) {
-                        webSocket.onTextFragment(slice, fin);
+                        invokeApplicationEvent(() -> webSocket.onTextFragment(slice, fin));
                     } else if (readState == ReadState.BINARY) {
-                        webSocket.onBinaryFragment(slice, fin);
+                        invokeApplicationEvent(() -> webSocket.onBinaryFragment(slice, fin));
                     } else if (readState != ReadState.UNKNOWN) {
                         throw frameError(1002, "Continuation frame received unexpectedly");
                     }
@@ -193,10 +223,10 @@ class WebsocketConnection implements MuWebSocketSession {
                     messageLength = payloadLength;
                     if (fin) {
                         var text = StandardCharsets.UTF_8.newDecoder().decode(slice).toString();
-                        webSocket.onText(text);
+                        invokeApplicationEvent(() -> webSocket.onText(text));
                     } else {
                         readState = ReadState.TEXT;
-                        webSocket.onTextFragment(slice, false);
+                        invokeApplicationEvent(() -> webSocket.onTextFragment(slice, false));
                     }
                 } else if (opcode == 0x2) {
                     // binary frame
@@ -205,10 +235,10 @@ class WebsocketConnection implements MuWebSocketSession {
                     }
                     messageLength = payloadLength;
                     if (fin) {
-                        webSocket.onBinary(slice);
+                        invokeApplicationEvent(() -> webSocket.onBinary(slice));
                     } else {
                         readState = ReadState.BINARY;
-                        webSocket.onBinaryFragment(slice, false);
+                        invokeApplicationEvent(() -> webSocket.onBinaryFragment(slice, false));
                     }
                 } else if (opcode == 0x8) {
                     if (payloadLen == 1) {
@@ -230,7 +260,8 @@ class WebsocketConnection implements MuWebSocketSession {
                         closeCode = 1005;
                     }
                     log.info("Client close: " + closeCode + " " + reason);
-                    webSocket.onClientClosed(closeCode, reason);
+                    String closeReason = reason;
+                    invokeApplicationEvent(() -> webSocket.onClientClosed(closeCode, closeReason));
                     if (closeSent) {
                         if (state == WebsocketSessionState.CLIENT_CLOSING) {
                             state = WebsocketSessionState.CLIENT_CLOSED;
@@ -239,9 +270,9 @@ class WebsocketConnection implements MuWebSocketSession {
                         }
                     }
                 } else if (opcode == 0x9) {
-                    webSocket.onPing(slice);
+                    invokeApplicationEvent(() -> webSocket.onPing(slice));
                 } else if (opcode == 0xA) {
-                    webSocket.onPong(slice);
+                    invokeApplicationEvent(() -> webSocket.onPong(slice));
                 } else if (!fin) {
                     // ignore unknown types, but do allow continuation frames for them
                     readState = ReadState.UNKNOWN;
@@ -251,17 +282,25 @@ class WebsocketConnection implements MuWebSocketSession {
 
             // it's finished - the TCP connection will be closed
         } catch (Throwable e) {
-            if (state != WebsocketSessionState.TIMED_OUT) {
-                webSocket.onError(e);
-                state = (e instanceof TimeoutException || e instanceof SocketTimeoutException) ?
-                    WebsocketSessionState.TIMED_OUT : WebsocketSessionState.ERRORED;
+            if (!serverShutdownRequested.get()
+                && !errorEventQueued.get()
+                && state != WebsocketSessionState.TIMED_OUT) {
+                WebsocketSessionState errorState =
+                    e instanceof TimeoutException || e instanceof SocketTimeoutException
+                        ? WebsocketSessionState.TIMED_OUT
+                        : WebsocketSessionState.ERRORED;
+                invokeApplicationError(e, errorState);
             }
         } finally {
+            if (eventsRunOnConnectionTask) {
+                drainApplicationEvents();
+            }
             ScheduledFuture<?> currentPing = pingFuture;
             if (currentPing != null) {
                 currentPing.cancel(false);
                 pingFuture = null;
             }
+            connectionTaskThread = null;
         }
     }
 
@@ -339,11 +378,149 @@ class WebsocketConnection implements MuWebSocketSession {
     private @Nullable IOException writeFailure;
 
     void onTimeout() {
-        try {
-            this.webSocket.onError(new TimeoutException("Connection idle timeout"));
-        } catch (Exception ignored) {
-        } finally {
+        if (errorEventQueued.compareAndSet(false, true)) {
+            // The connection-level timeout closes the transport immediately after this
+            // method returns. Publish the terminal state before the callback so default
+            // implementations do not try to write a close frame to that closed transport.
             state = WebsocketSessionState.TIMED_OUT;
+            enqueueApplicationEvent(() ->
+                webSocket.onError(new TimeoutException("Connection idle timeout"))
+            );
+        }
+    }
+
+    void onServerShuttingDown() throws Exception {
+        if (!serverShutdownRequested.compareAndSet(false, true)) {
+            return;
+        }
+        enqueueApplicationEvent(webSocket::onServerShuttingDown)
+            .whenComplete((ignored, failure) -> {
+                if (failure != null) {
+                    log.info("Error while shutting down WebSocket", failure);
+                    httpConnection.forceShutdown();
+                }
+            });
+    }
+
+    private void invokeApplicationEvent(ApplicationEvent event) throws Exception {
+        if (eventsRunOnConnectionTask) {
+            try {
+                event.run();
+            } finally {
+                // A terminal event can be queued by a write attempted inside a callback.
+                // Drain it before returning to the blocking socket read.
+                drainApplicationEvents();
+            }
+            return;
+        }
+        CompletableFuture<@Nullable Void> completion = enqueueApplicationEvent(event);
+        try {
+            completion.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw e;
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof Exception) {
+                throw (Exception) cause;
+            }
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
+            throw new MuException("Unexpected WebSocket callback failure", cause);
+        }
+    }
+
+    private void invokeApplicationError(Throwable cause, WebsocketSessionState errorState) throws Exception {
+        if (errorEventQueued.compareAndSet(false, true)) {
+            invokeApplicationEvent(errorEvent(cause, errorState));
+        }
+    }
+
+    private void enqueueApplicationError(Throwable cause, WebsocketSessionState errorState) {
+        if (errorEventQueued.compareAndSet(false, true)) {
+            enqueueApplicationEvent(errorEvent(cause, errorState));
+        }
+    }
+
+    private ApplicationEvent errorEvent(Throwable cause, WebsocketSessionState errorState) {
+        return () -> {
+            try {
+                webSocket.onError(cause);
+            } finally {
+                state = errorState;
+            }
+        };
+    }
+
+    @SuppressWarnings("ReferenceEquality") // Connection-task ownership belongs to the exact thread instance.
+    private CompletableFuture<@Nullable Void> enqueueApplicationEvent(ApplicationEvent event) {
+        var task = new ApplicationEventTask(event);
+        applicationEvents.add(task);
+        if (eventsRunOnConnectionTask) {
+            if (Thread.currentThread() != connectionTaskThread) {
+                // A shared single-thread executor cannot run another task while its
+                // connection reader is blocked. Terminal external events wake that reader,
+                // which drains this mailbox from its finally block.
+                httpConnection.wakeWebSocketReader();
+            }
+        } else {
+            scheduleApplicationEventRunner();
+        }
+        return task.completion;
+    }
+
+    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
+    private void scheduleApplicationEventRunner() {
+        if (!applicationEventRunnerScheduled.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            handlerExecutor.execute(this::runApplicationEvents);
+        } catch (RejectedExecutionException handlerRejected) {
+            ExecutorService fallbackExecutor = asyncExecutor();
+            if (fallbackExecutor != handlerExecutor) {
+                try {
+                    fallbackExecutor.execute(this::runApplicationEvents);
+                    return;
+                } catch (RejectedExecutionException asyncRejected) {
+                    asyncRejected.addSuppressed(handlerRejected);
+                    failApplicationEvents(asyncRejected);
+                    return;
+                }
+            }
+            failApplicationEvents(handlerRejected);
+        }
+    }
+
+    private void failApplicationEvents(RejectedExecutionException failure) {
+        applicationEventRunnerScheduled.set(false);
+        ApplicationEventTask task;
+        while ((task = applicationEvents.poll()) != null) {
+            task.completion.completeExceptionally(failure);
+        }
+    }
+
+    private void runApplicationEvents() {
+        while (true) {
+            drainApplicationEvents();
+            applicationEventRunnerScheduled.set(false);
+            if (applicationEvents.isEmpty()
+                || !applicationEventRunnerScheduled.compareAndSet(false, true)) {
+                return;
+            }
+        }
+    }
+
+    private void drainApplicationEvents() {
+        ApplicationEventTask task;
+        while ((task = applicationEvents.poll()) != null) {
+            try {
+                task.event.run();
+                task.completion.complete(null);
+            } catch (Throwable t) {
+                task.completion.completeExceptionally(t);
+            }
         }
     }
 
@@ -490,6 +667,7 @@ class WebsocketConnection implements MuWebSocketSession {
     private void writeFragment(byte firstByte, byte@Nullable[] payload, int payloadOffset, int payloadLen, @Nullable MessageWritingState expectedState, @Nullable MessageWritingState endState) throws IOException {
         var header = header(firstByte, payloadLen);
         OutputStream output = java.util.Objects.requireNonNull(outputStream);
+        IOException failure = null;
         writeLock.lock();
         try {
             throwStoredWriteFailure();
@@ -511,16 +689,14 @@ class WebsocketConnection implements MuWebSocketSession {
             } catch (IOException e) {
                 writeFailure = e;
                 messageWritingState = MessageWritingState.ERROR;
-                state = WebsocketSessionState.ERRORED;
-                try {
-                    webSocket.onError(e);
-                } catch (Exception userException) {
-                    e.addSuppressed(userException);
-                }
-                throw e;
+                failure = e;
             }
         } finally {
             writeLock.unlock();
+        }
+        if (failure != null) {
+            enqueueApplicationError(failure, WebsocketSessionState.ERRORED);
+            throw failure;
         }
     }
 

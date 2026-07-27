@@ -391,10 +391,11 @@ class Http1Connection extends BaseHttpConnection {
         if (isIdle()) {
             log.info("Connection is idle; shutting down");
             forceShutdown();
-        } else if (!activeWebsockets().isEmpty()) {
-            for (MuWebSocket activeWebsocket : activeWebsockets()) {
+        } else {
+            var cur = activeExchange.get();
+            if (cur != null && cur.websocket != null) {
                 try {
-                    activeWebsocket.onServerShuttingDown();
+                    cur.websocket.onServerShuttingDown();
                 } catch (Exception e) {
                     log.info("Error while aborting websocket: {}", e.getMessage());
                     forceShutdown();
@@ -450,5 +451,21 @@ class Http1Connection extends BaseHttpConnection {
         if (cur != null && cur.websocket != null) {
             cur.websocket.onTimeout();
         }
+    }
+
+    ExecutorService webSocketHandlerExecutor() {
+        return handlerExecutor;
+    }
+
+    void wakeWebSocketReader() {
+        try {
+            clientSocket.shutdownInput();
+        } catch (IOException e) {
+            log.debug("Could not wake WebSocket reader", e);
+        }
+    }
+
+    boolean webSocketEventsRunOnConnectionTask() {
+        return handlersRunOnConnectionTask;
     }
 }
