@@ -27,6 +27,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.Phaser;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -321,6 +322,59 @@ class ExecutionDomainsTest {
             server = null;
         } finally {
             releaseListener.countDown();
+        }
+    }
+
+    @Test
+    void detachedTaskWaitDoesNotWaitOnANewEmptyPhase() {
+        Phaser tasks = new Phaser(1) {
+            private boolean advanceBeforeReturningParties = true;
+
+            @Override
+            public int getRegisteredParties() {
+                int parties = super.getRegisteredParties();
+                if (advanceBeforeReturningParties) {
+                    advanceBeforeReturningParties = false;
+                    arriveAndDeregister();
+                }
+                return parties;
+            }
+        };
+
+        assertThat(
+            Mu3ServerImpl.awaitDetachedApplicationTasks(
+                tasks,
+                System.currentTimeMillis() + 100
+            ),
+            is(true)
+        );
+    }
+
+    @Test
+    void requestRejectionListenerCanStopItsServerWithoutWaitingForItself() throws Exception {
+        var runningServer = new CompletableFuture<MuServer>();
+        var stopResult = new CompletableFuture<Boolean>();
+        server = httpServer()
+            .withMaxHeadersSize(1024)
+            .addRequestRejectListener(info -> {
+                try {
+                    stopResult.complete(
+                        runningServer.get().stop(2, TimeUnit.SECONDS)
+                    );
+                } catch (Throwable failure) {
+                    stopResult.completeExceptionally(failure);
+                }
+            })
+            .start();
+        runningServer.complete(server);
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/")
+                .writeHeader("x-big", "a".repeat(2000))
+                .flushHeaders();
+            assertThat(client.readLine(), startsWith("HTTP/1.1 431"));
+            assertThat(stopResult.get(1, TimeUnit.SECONDS), is(true));
+            server = null;
         }
     }
 

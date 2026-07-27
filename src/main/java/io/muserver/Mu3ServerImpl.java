@@ -59,6 +59,8 @@ class Mu3ServerImpl implements MuServer {
             return false;
         }
     };
+    private final ThreadLocal<@Nullable DetachedApplicationTask> activeDetachedApplicationTask =
+        new ThreadLocal<>();
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
 
     Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService handlerExecutor, boolean ownsHandlerExecutor, ExecutorService asyncExecutor, boolean ownsAsyncExecutor, ExecutorService connectionExecutor, boolean ownsConnectionExecutor, ExecutorService http2WriterExecutor, boolean ownsHttp2WriterExecutor, ExecutorService connectionMaintenanceExecutor, boolean ownsConnectionMaintenanceExecutor, ScheduledExecutorService timerExecutor, boolean ownsTimerExecutor) {
@@ -149,11 +151,23 @@ class Mu3ServerImpl implements MuServer {
     }
 
     private boolean awaitDetachedApplicationTasks(long deadline) {
-        while (detachedApplicationTasks.getRegisteredParties() > 0) {
-            int phase = detachedApplicationTasks.getPhase();
+        DetachedApplicationTask currentTask = activeDetachedApplicationTask.get();
+        while (currentTask != null) {
+            currentTask.deregister();
+            currentTask = currentTask.previous;
+        }
+        return awaitDetachedApplicationTasks(detachedApplicationTasks, deadline);
+    }
+
+    static boolean awaitDetachedApplicationTasks(Phaser tasks, long deadline) {
+        while (true) {
+            int phase = tasks.getPhase();
+            if (tasks.getRegisteredParties() == 0) {
+                return true;
+            }
             long remaining = Math.max(0L, deadline - System.currentTimeMillis());
             try {
-                detachedApplicationTasks.awaitAdvanceInterruptibly(
+                tasks.awaitAdvanceInterruptibly(
                     phase,
                     remaining,
                     TimeUnit.MILLISECONDS
@@ -165,7 +179,6 @@ class Mu3ServerImpl implements MuServer {
                 return false;
             }
         }
-        return true;
     }
 
     void executeResponseCompletionTask(Runnable task) {
@@ -182,19 +195,40 @@ class Mu3ServerImpl implements MuServer {
         String description
     ) {
         detachedApplicationTasks.register();
+        DetachedApplicationTask registration = new DetachedApplicationTask();
         Runnable trackedTask = () -> {
+            DetachedApplicationTask previous = activeDetachedApplicationTask.get();
+            registration.previous = previous;
+            activeDetachedApplicationTask.set(registration);
             try {
                 task.run();
             } finally {
-                detachedApplicationTasks.arriveAndDeregister();
+                registration.deregister();
+                if (previous == null) {
+                    activeDetachedApplicationTask.remove();
+                } else {
+                    activeDetachedApplicationTask.set(previous);
+                }
             }
         };
         RejectedExecutionException rejected = preferHandlerExecutor
             ? tryExecuteHandlerTask(trackedTask)
             : tryExecuteAsyncTask(trackedTask);
         if (rejected != null) {
-            detachedApplicationTasks.arriveAndDeregister();
+            registration.deregister();
             log.warn("Dropping {} because its application executors rejected it", description, rejected);
+        }
+    }
+
+    private final class DetachedApplicationTask {
+        private @Nullable DetachedApplicationTask previous;
+        private boolean registered = true;
+
+        private void deregister() {
+            if (registered) {
+                registered = false;
+                detachedApplicationTasks.arriveAndDeregister();
+            }
         }
     }
 
