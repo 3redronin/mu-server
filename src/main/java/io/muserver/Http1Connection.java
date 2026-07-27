@@ -187,7 +187,7 @@ class Http1Connection extends BaseHttpConnection {
                         muResponse.setState(ResponseState.ERRORED);
                     } finally {
                         if (!rejectedByHandlerExecutor) {
-                            onExchangeEnded(muResponse);
+                            onExchangeEndedOnHandler(muResponse);
                         }
                         clientSocket.setSoTimeout(0);
                     }
@@ -270,6 +270,45 @@ class Http1Connection extends BaseHttpConnection {
             handled.get();
         } catch (ExecutionException e) {
             throw e.getCause();
+        }
+    }
+
+    private void onExchangeEndedOnHandler(Http1Response response) {
+        if (handlersRunOnConnectionTask) {
+            onExchangeEnded(response);
+            return;
+        }
+        CompletableFuture<Void> ended = new CompletableFuture<>();
+        Runnable task = () -> {
+            try {
+                onExchangeEnded(response);
+                ended.complete(null);
+            } catch (Throwable t) {
+                ended.completeExceptionally(t);
+            }
+        };
+        try {
+            handlerExecutor.execute(task);
+        } catch (RejectedExecutionException rejected) {
+            // The exchange was already accepted and its response has been cleaned up.
+            // Finish inline rather than losing its completion notifications during shutdown
+            // or a transient executor-capacity rejection.
+            task.run();
+        }
+        try {
+            ended.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new MuException("Interrupted waiting for response completion callbacks", e);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException) {
+                throw (RuntimeException) cause;
+            }
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
+            throw new MuException("Unexpected response completion callback failure", cause);
         }
     }
 
