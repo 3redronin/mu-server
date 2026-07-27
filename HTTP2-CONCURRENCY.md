@@ -284,6 +284,10 @@ Credit is returned exactly once when bytes are consumed or discarded. The
 inbound component batches WINDOW_UPDATE increments at half of the advertised
 window and keeps connection-level accounting synchronized even when DATA is
 rejected with a stream error, as required by RFC 9113 Section 6.9.
+When the server resets one stream, unread queued body data is discarded and
+returned to the reusable connection window; the closed stream does not receive
+a WINDOW_UPDATE. A stream-local failure therefore cannot consume connection
+credit needed by unrelated streams.
 
 ## Exchange lifecycle
 

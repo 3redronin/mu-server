@@ -206,6 +206,88 @@ class RFC9113_5_2_FlowControlTest {
     }
 
     @Test
+    void locallyResettingAStreamRefundsUnreadConnectionCredit() throws Exception {
+        var failRequest = new CountDownLatch(1);
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/fail", (request, response, pathParams) -> {
+                response.sendChunk("partial");
+                assertNotTimedOut("waiting to fail request", failRequest);
+                throw new IllegalStateException("expected test failure");
+            })
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                response.write(request.readBodyAsString());
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(
+                    1,
+                    false,
+                    postHeaders(getPort(), "/fail")
+                ))
+                .flush();
+
+            assertThat(
+                readIgnoringWindowUpdates(con, Http2HeadersFrame.class)
+                    .headers().get(":status"),
+                equalTo("200")
+            );
+            assertThat(
+                readIgnoringWindowUpdates(con, Http2DataFrame.class).toUTF8(),
+                equalTo("partial")
+            );
+
+            byte[] sixteenKb = repeated('a', 16_384);
+            byte[] lastChunk = repeated('b', 16_383);
+            byte[] pingData = new byte[] {1, 2, 3, 4, 5, 6, 7, 8};
+            con.writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
+                .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
+                .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
+                .writeFrame(new Http2DataFrame(1, false, lastChunk, 0, lastChunk.length))
+                .writeFrame(new Http2Ping(false, pingData))
+                .flush();
+
+            assertThat(
+                con.readLogicalFrame(Http2Ping.class),
+                equalTo(new Http2Ping(true, pingData))
+            );
+            failRequest.countDown();
+
+            var reset =
+                readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.INTERNAL_ERROR));
+
+            con.writeFrame(new Http2HeadersFrame(
+                    3,
+                    false,
+                    postHelloHeaders(getPort())
+                ))
+                .writeFrame(utf8DataFrame(3, true, "x"))
+                .flush();
+
+            var headers =
+                readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(3));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+            assertThat(
+                readIgnoringWindowUpdates(con, Http2DataFrame.class).toUTF8(),
+                equalTo("x")
+            );
+            assertThat(
+                readIgnoringWindowUpdates(con, Http2DataFrame.class),
+                equalTo(Http2DataFrame.eos(3))
+            );
+        } finally {
+            failRequest.countDown();
+        }
+    }
+
+    @Test
     void dataFramesRejectedAtStreamLevelStillRefundConnectionCredit() throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())

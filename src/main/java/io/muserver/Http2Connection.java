@@ -1263,8 +1263,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 response.setState(ResponseState.ERRORED);
                 write(new Http2ResetStreamFrame(stream.id, Http2ErrorCode.INTERNAL_ERROR.code()));
                 stream.cancel(
-                    new IOException("Application executors rejected HTTP/2 stream completion", dispatchFailure),
-                    false
+                    new IOException("Application executors rejected HTTP/2 stream completion", dispatchFailure)
                 );
             }
             stream.abandonApplicationExchange();
@@ -1299,7 +1298,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                         ? Http2ErrorCode.CANCEL
                         : Http2ErrorCode.INTERNAL_ERROR;
                 write(new Http2ResetStreamFrame(stream.id, errorCode.code()));
-                stream.cancel(new IOException("Unhandled stream exception", e), false);
+                stream.cancel(new IOException("Unhandled stream exception", e));
             }
         } finally {
             onExchangeEnded(stream);
