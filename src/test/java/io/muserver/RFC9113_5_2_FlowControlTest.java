@@ -60,10 +60,21 @@ class RFC9113_5_2_FlowControlTest {
 
                 writerConnection.returnInboundCredit(1, 32_768, false);
 
+                var debitObservedDuringWrite =
+                    new AtomicReference<Http2InboundFlowControl.Result>();
                 var flushEntered = new CountDownLatch(1);
                 var debitObservedDuringFlush =
                     new AtomicReference<Http2InboundFlowControl.Result>();
                 var output = new ByteArrayOutputStream() {
+                    @Override
+                    public synchronized void write(byte[] data, int offset, int length) {
+                        debitObservedDuringWrite.compareAndSet(
+                            null,
+                            flow.reserve(1, 1)
+                        );
+                        super.write(data, offset, length);
+                    }
+
                     @Override
                     public void flush() {
                         debitObservedDuringFlush.set(flow.reserve(1, 1));
@@ -73,6 +84,10 @@ class RFC9113_5_2_FlowControlTest {
 
                 writerConnection.startWriteLoop(output);
                 assertNotTimedOut("waiting for WINDOW_UPDATE flush", flushEntered);
+                assertThat(
+                    debitObservedDuringWrite.get().error(),
+                    nullValue()
+                );
                 assertThat(
                     debitObservedDuringFlush.get().error(),
                     nullValue()

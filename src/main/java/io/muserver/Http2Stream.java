@@ -30,9 +30,9 @@ class Http2Stream implements ResponseInfo {
     private volatile boolean resetInitiated;
     private volatile boolean applicationExchangeEnded;
     private volatile boolean protocolStateClosed;
-    // Writer-published so the reader can recognize a fully closed stream as soon
-    // as it observes the peer's END_STREAM, before that command is applied.
-    private volatile boolean localEndStreamWritten;
+    // Writer-published after the complete END_STREAM frame is handed to output
+    // and before flush, matching the stream-admission publication boundary.
+    private volatile boolean localEndStreamPublished;
     private long endTime = 0;
     private final InputStream bodyInputStream;
     private final @Nullable Long declaredRequestBodyLength;
@@ -102,8 +102,8 @@ class Http2Stream implements ResponseInfo {
         protocolStateClosed = true;
     }
 
-    void onLocalEndStreamWritten() {
-        localEndStreamWritten = true;
+    void onLocalEndStreamPublished() {
+        localEndStreamPublished = true;
     }
 
     boolean protocolStateClosed() {
@@ -113,7 +113,7 @@ class Http2Stream implements ResponseInfo {
     boolean countsTowardsMaxConcurrentStreams() {
         return !protocolStateClosed
             && !peerResetRead
-            && !(remoteEndStreamRead && localEndStreamWritten);
+            && !(remoteEndStreamRead && localEndStreamPublished);
     }
 
     void onProtocolStreamRetired() {
