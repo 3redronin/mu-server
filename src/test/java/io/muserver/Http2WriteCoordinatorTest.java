@@ -166,6 +166,28 @@ class Http2WriteCoordinatorTest {
     }
 
     @Test
+    void streamWindowUpdateBypassesBlockedDataWithoutReorderingApplicationFrames() {
+        var coordinator = coordinator(100, 1, 0);
+        var blockedData = task(data(1, "first"));
+        var laterHeaders = task(headers(1));
+        var requestBodyCredit = task(new Http2WindowUpdate(1, 100));
+        coordinator.submit(blockedData);
+        coordinator.submit(laterHeaders);
+        coordinator.submit(requestBodyCredit);
+        coordinator.processAvailableCommands();
+
+        var writableCredit = coordinator.pollWritable();
+        assertThat(writableCredit.frame(), equalTo(requestBodyCredit.frame()));
+        writableCredit.complete();
+        assertThat(coordinator.pollWritable(), nullValue());
+
+        coordinator.applyStreamWindowUpdate(1, 100);
+        coordinator.processAvailableCommands();
+        assertThat(coordinator.pollWritable().frame(), equalTo(blockedData.frame()));
+        assertThat(coordinator.pollWritable().frame(), equalTo(laterHeaders.frame()));
+    }
+
+    @Test
     void resetOnlyDiscardsFramesForItsStream() {
         var coordinator = coordinator(100, 1, 100, 3, 100);
         var streamOneData = task(data(1, "one"));

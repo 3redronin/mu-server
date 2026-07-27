@@ -338,7 +338,9 @@ final class Http2WriteCoordinator {
      *
      * <p>A blocked frame prevents later frames for the same stream from overtaking it. Frames for other
      * streams and connection-level frames remain eligible, so one flow-controlled stream cannot block
-     * the connection.</p>
+     * the connection. A stream-level WINDOW_UPDATE is also eligible because it controls the independent
+     * inbound flow-control direction and delaying it behind outbound DATA can deadlock a bidirectional
+     * exchange.</p>
      */
     @Nullable WritableFrame pollWritable() {
         Set<Integer> blockedStreams = null;
@@ -350,7 +352,10 @@ final class Http2WriteCoordinator {
             if (connectionErrorPendingGoAway && !(frame instanceof Http2GoAway)) {
                 continue;
             }
-            if (streamId != 0 && blockedStreams != null && blockedStreams.contains(streamId)) {
+            if (!(frame instanceof Http2WindowUpdate)
+                && streamId != 0
+                && blockedStreams != null
+                && blockedStreams.contains(streamId)) {
                 continue;
             }
 
