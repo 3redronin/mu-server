@@ -47,11 +47,16 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private static final Logger log = LoggerFactory.getLogger(Http2Connection.class);
 
     private final Http2Settings serverSettings;
+    // Immutable reader-published snapshot used by application and writer domains.
     private volatile Http2Settings clientSettings = Http2Settings.DEFAULT_CLIENT_SETTINGS;
     private final ByteBuffer buffer;
+    // The writer freezes this boundary when it queues final GOAWAY; the reader
+    // observes it before dispatching subsequent frames.
     private volatile int maxAllowedStreamId = MAX_POSSIBLE_STREAM_ID;
-    private volatile int lastStreamId = 0;
-    private volatile int peerGoAwayLastStreamId = MAX_POSSIBLE_STREAM_ID;
+    // State-lock-owned admission and shutdown data. The reader is the only code
+    // that reads lastStreamId without the lock, and it is also the only writer.
+    private int lastStreamId;
+    private int peerGoAwayLastStreamId = MAX_POSSIBLE_STREAM_ID;
     private final Http2InboundFlowControl inboundFlowControl = new Http2InboundFlowControl(65_535);
     private final ConcurrentLinkedQueue<PendingSettingsAck> settingsAckQueue = new ConcurrentLinkedQueue<>();
     private final Http2StreamRegistry streamRegistry = new Http2StreamRegistry();
@@ -165,24 +170,33 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     void write(WriteTask writeTask) {
         stateLock.lock();
         try {
-            if (writeState.canSendFrames && canWriteFrame(writeTask.frame())) {
-                LogicalHttp2Frame frame = writeTask.frame();
-                boolean retireRejectedStream = frame instanceof Http2ResetStreamFrame
-                    && streamRegistry.removeRejectedRequestBody(frame.streamId());
-                boolean retainResetState = frame instanceof Http2ResetStreamFrame
-                    && streamRegistry.containsApplicationStream(frame.streamId());
-                if (frame instanceof Http2ResetStreamFrame) {
-                    inboundFlowControl.closeStream(frame.streamId());
-                }
-                writeCoordinator.submit(writeTask, retainResetState);
-                if (retireRejectedStream) {
-                    writeCoordinator.forgetStream(frame.streamId());
-                }
-            } else {
-                writeTask.fail(new IOException("HTTP/2 connection or stream is closed"));
-            }
+            writeLocked(writeTask);
         } finally {
             stateLock.unlock();
+        }
+    }
+
+    private void writeLocked(LogicalHttp2Frame frame) {
+        writeLocked(new WriteTask(frame, false));
+    }
+
+    // The caller holds stateLock, making admission and command publication one transition.
+    private void writeLocked(WriteTask writeTask) {
+        if (writeState.canSendFrames && canWriteFrame(writeTask.frame())) {
+            LogicalHttp2Frame frame = writeTask.frame();
+            boolean retireRejectedStream = frame instanceof Http2ResetStreamFrame
+                && streamRegistry.removeRejectedRequestBody(frame.streamId());
+            boolean retainResetState = frame instanceof Http2ResetStreamFrame
+                && streamRegistry.containsApplicationStream(frame.streamId());
+            if (frame instanceof Http2ResetStreamFrame) {
+                inboundFlowControl.closeStream(frame.streamId());
+            }
+            writeCoordinator.submit(writeTask, retainResetState);
+            if (retireRejectedStream) {
+                writeCoordinator.forgetStream(frame.streamId());
+            }
+        } else {
+            writeTask.fail(new IOException("HTTP/2 connection or stream is closed"));
         }
     }
 
@@ -197,24 +211,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             : !stream.resetWasInitiated();
     }
 
-    private void writeFirst(LogicalHttp2Frame frame) {
-        stateLock.lock();
-        try {
-            if (writeState.canSendFrames) {
-                writeCoordinator.submitFirst(new WriteTask(frame, false));
-            }
-        } finally {
-            stateLock.unlock();
-        }
-    }
-
     private void signalWriteLoop() {
-        stateLock.lock();
-        try {
-            writeCoordinator.wakeUp();
-        } finally {
-            stateLock.unlock();
-        }
+        writeCoordinator.wakeUp();
     }
 
     private void resetPendingWritesForStream(
@@ -486,7 +484,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             // in-flight stream creation (at least one round-trip time), the server MAY send another GOAWAY frame
             // with an updated last stream identifier. This ensures that a connection can be cleanly shut down
             // without losing requests.
-            write(GO_AWAY_WARNING);
+            writeLocked(GO_AWAY_WARNING);
         }
     }
 
@@ -546,7 +544,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         finalGoAwayQueued = true;
         maxAllowedStreamId = lastStreamId;
         log.info("Queuing final go away with last stream id {}", maxAllowedStreamId);
-        write(new Http2GoAway(maxAllowedStreamId, 0, null));
+        writeLocked(new Http2GoAway(maxAllowedStreamId, 0, null));
     }
 
     private boolean isTerminalAndDrainedLocked() {
@@ -1079,13 +1077,13 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             long now = System.nanoTime();
             if (!canStartNewStreamsLocked(now)) {
                 log.info("Refusing stream {} because graceful shutdown no longer allows new streams", streamId);
-                write(new Http2ResetStreamFrame(streamId, Http2ErrorCode.REFUSED_STREAM.code()));
+                writeLocked(new Http2ResetStreamFrame(streamId, Http2ErrorCode.REFUSED_STREAM.code()));
                 return false;
             }
             long activeStreams = streamRegistry.concurrentStreamCount();
             if (activeStreams >= serverSettings.maxConcurrentStreams) {
                 log.info("Max concurrent streams reached");
-                write(new Http2ResetStreamFrame(streamId, Http2ErrorCode.REFUSED_STREAM.code()));
+                writeLocked(new Http2ResetStreamFrame(streamId, Http2ErrorCode.REFUSED_STREAM.code()));
                 return false;
             }
             // An HTTP error response also means the stream was processed. Record every
