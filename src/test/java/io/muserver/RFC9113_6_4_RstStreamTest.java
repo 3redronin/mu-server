@@ -397,6 +397,8 @@ class RFC9113_6_4_RstStreamTest {
         var requestCount = new AtomicInteger();
         byte[] largeBody = new byte[16384];
         Arrays.fill(largeBody, (byte) 'x');
+        byte[] lastConnectionWindowChunk = new byte[16383];
+        Arrays.fill(lastConnectionWindowChunk, (byte) 'x');
 
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
@@ -436,12 +438,42 @@ class RFC9113_6_4_RstStreamTest {
             con.writeFrame(new Http2DataFrame(1, false, largeBody, 0, largeBody.length))
                 .writeFrame(new Http2DataFrame(1, false, largeBody, 0, largeBody.length))
                 .writeFrame(new Http2DataFrame(1, false, largeBody, 0, largeBody.length))
-                .writeFrame(new Http2DataFrame(1, false, largeBody, 0, largeBody.length))
-                .writeFrame(new Http2HeadersFrame(3, false, postHelloHeaders(getPort())))
-                .writeFrame(new Http2DataFrame(3, true, largeBody, 0, largeBody.length))
+                .writeFrame(new Http2DataFrame(
+                    1,
+                    false,
+                    lastConnectionWindowChunk,
+                    0,
+                    lastConnectionWindowChunk.length
+                ))
                 .flush();
 
             int resetsSeen = 0;
+            int returnedConnectionCredit = 0;
+            while (returnedConnectionCredit < largeBody.length) {
+                LogicalHttp2Frame frame = con.readLogicalFrame();
+                if (frame instanceof Http2WindowUpdate) {
+                    var update = (Http2WindowUpdate) frame;
+                    if (update.streamId() == 0) {
+                        returnedConnectionCredit += update.windowSizeIncrement();
+                    }
+                    continue;
+                }
+                if (frame instanceof Http2ResetStreamFrame) {
+                    var reset = (Http2ResetStreamFrame) frame;
+                    assertThat(reset.streamId(), equalTo(1));
+                    assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.STREAM_CLOSED));
+                    resetsSeen++;
+                    continue;
+                }
+                throw new AssertionError(
+                    "Expected returned connection credit, got " + frame
+                );
+            }
+
+            con.writeFrame(new Http2HeadersFrame(3, false, postHelloHeaders(getPort())))
+                .writeFrame(new Http2DataFrame(3, true, largeBody, 0, largeBody.length))
+                .flush();
+
             Http2HeadersFrame headers = null;
             Http2DataFrame data = null;
             Http2DataFrame eos = null;
