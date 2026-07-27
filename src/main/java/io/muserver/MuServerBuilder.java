@@ -203,8 +203,10 @@ public class MuServerBuilder {
 
     /**
      * Sets the thread executor service to run requests on. By default, a
-     * virtual-thread-per-task executor is used when the runtime supports virtual
-     * threads, otherwise {@link Executors#newCachedThreadPool()} is used.
+     * server-owned virtual-thread-per-task executor is used when the runtime supports
+     * virtual threads, otherwise {@link Executors#newCachedThreadPool()} is used. A
+     * caller-supplied executor remains owned by the caller and is not shut down when
+     * the server stops.
      *
      * @param executor The executor service to use to handle requests
      * @return The current Mu Server builder

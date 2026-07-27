@@ -36,6 +36,8 @@ class Mu3ServerImpl implements MuServer {
     private final int maxHeadersSize;
     final List<RateLimiterImpl> rateLimiters;
     final Path tempDir;
+    private final ExecutorService handlerExecutor;
+    private final boolean ownsHandlerExecutor;
     private final ExecutorService connectionExecutor;
     private final boolean ownsConnectionExecutor;
     private final ExecutorService http2WriterExecutor;
@@ -46,7 +48,7 @@ class Mu3ServerImpl implements MuServer {
     private final boolean ownsTimerExecutor;
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
 
-    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService connectionExecutor, boolean ownsConnectionExecutor, ExecutorService http2WriterExecutor, boolean ownsHttp2WriterExecutor, ExecutorService connectionMaintenanceExecutor, boolean ownsConnectionMaintenanceExecutor, ScheduledExecutorService timerExecutor, boolean ownsTimerExecutor) {
+    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService handlerExecutor, boolean ownsHandlerExecutor, ExecutorService connectionExecutor, boolean ownsConnectionExecutor, ExecutorService http2WriterExecutor, boolean ownsHttp2WriterExecutor, ExecutorService connectionMaintenanceExecutor, boolean ownsConnectionMaintenanceExecutor, ScheduledExecutorService timerExecutor, boolean ownsTimerExecutor) {
         this.acceptors = acceptors;
         this.handlers = handlers;
         this.responseCompleteListeners = responseCompleteListeners;
@@ -60,6 +62,8 @@ class Mu3ServerImpl implements MuServer {
         this.maxHeadersSize = maxHeadersSize;
         this.rateLimiters = rateLimiters;
         this.tempDir = tempDir;
+        this.handlerExecutor = handlerExecutor;
+        this.ownsHandlerExecutor = ownsHandlerExecutor;
         this.connectionExecutor = connectionExecutor;
         this.ownsConnectionExecutor = ownsConnectionExecutor;
         this.http2WriterExecutor = http2WriterExecutor;
@@ -116,6 +120,9 @@ class Mu3ServerImpl implements MuServer {
         }
         if (ownsConnectionMaintenanceExecutor) {
             connectionMaintenanceExecutor.shutdown();
+        }
+        if (ownsHandlerExecutor) {
+            handlerExecutor.shutdown();
         }
         return stoppedCleanly;
     }
@@ -306,7 +313,32 @@ class Mu3ServerImpl implements MuServer {
     static MuServer start(MuServerBuilder builder) throws IOException {
 
         var exceptionHandler = UnhandledExceptionHandler.getDefault(builder.unhandledExceptionHandler());
+        var tempDir = builder.tempDirectory();
+        if (tempDir == null) {
+            tempDir = Files.createTempDirectory("muservertemp");
+        }
+
+        var acceptors = new ArrayList<ConnectionAcceptor>(2);
+
+        var actualHandlers = new ArrayList<MuHandler>();
+        actualHandlers.add(RequestVerifierHandler.INSTANCE);
+        if (builder.autoHandleExpectContinue()) {
+            actualHandlers.add(0, new ExpectContinueHandler(builder.maxRequestSize()));
+        }
+        actualHandlers.addAll(builder.handlers());
+
+        List<ContentEncoder> contentEncoders = builder.contentEncoders();
+        if (contentEncoders == null) {
+            contentEncoders = List.of(gzipEncoder().build());
+        }
+
+        List<RateLimiterImpl> limiters = builder.rateLimiters;
+        if (limiters == null) {
+            limiters = emptyList();
+        }
+
         ExecutorService handlerExecutor = builder.executor();
+        boolean ownsHandlerExecutor = handlerExecutor == null;
         if (handlerExecutor == null) {
             handlerExecutor = MuServerBuilder.defaultExecutor();
         }
@@ -330,29 +362,6 @@ class Mu3ServerImpl implements MuServer {
         if (timerExecutor == null) {
             timerExecutor = MuServerBuilder.defaultTimerExecutor();
         }
-        var acceptors = new ArrayList<ConnectionAcceptor>(2);
-
-        var actualHandlers = new ArrayList<MuHandler>();
-        actualHandlers.add(RequestVerifierHandler.INSTANCE);
-        if (builder.autoHandleExpectContinue()) {
-            actualHandlers.add(0, new ExpectContinueHandler(builder.maxRequestSize()));
-        }
-        actualHandlers.addAll(builder.handlers());
-
-        List<ContentEncoder> contentEncoders = builder.contentEncoders();
-        if (contentEncoders == null) {
-            contentEncoders = List.of(gzipEncoder().build());
-        }
-
-        var tempDir = builder.tempDirectory();
-        if (tempDir == null) {
-            tempDir = Files.createTempDirectory("muservertemp");
-        }
-
-        List<RateLimiterImpl> limiters = builder.rateLimiters;
-        if (limiters == null) {
-            limiters = emptyList();
-        }
 
         var impl = new Mu3ServerImpl(
             acceptors,
@@ -368,6 +377,8 @@ class Mu3ServerImpl implements MuServer {
             builder.maxHeadersSize(),
             limiters,
             tempDir,
+            handlerExecutor,
+            ownsHandlerExecutor,
             connectionExecutor,
             ownsConnectionExecutor,
             http2WriterExecutor,
@@ -378,59 +389,68 @@ class Mu3ServerImpl implements MuServer {
             ownsTimerExecutor
             );
 
-        var ih = builder.interfaceHost();
-        var address = ih == null ? null : InetAddress.getByName(ih);
+        try {
+            var ih = builder.interfaceHost();
+            var address = ih == null ? null : InetAddress.getByName(ih);
 
-        var configuredHttp2 = builder.http2Config();
-        Http2Config http2ConfigForHttp = configuredHttp2;
-        if (http2ConfigForHttp != null && http2ConfigForHttp.maxHeaderListSize() == -1) {
-            http2ConfigForHttp = http2ConfigForHttp.toBuilder().withMaxHeaderListSize(builder.maxHeadersSize()).build();
-        }
-
-        if (builder.httpsPort() >= 0) {
-            var http2Config = configuredHttp2;
-            if (http2Config == null) {
-                http2Config = Http2ConfigBuilder.http2Config().withMaxHeaderListSize(builder.maxHeadersSize()).build();
-            }
-            if (http2Config.maxHeaderListSize() == -1) {
-                http2Config = http2Config.toBuilder().withMaxHeaderListSize(builder.maxHeadersSize()).build();
+            var configuredHttp2 = builder.http2Config();
+            Http2Config http2ConfigForHttp = configuredHttp2;
+            if (http2ConfigForHttp != null && http2ConfigForHttp.maxHeaderListSize() == -1) {
+                http2ConfigForHttp = http2ConfigForHttp.toBuilder().withMaxHeaderListSize(builder.maxHeadersSize()).build();
             }
 
-            var httpsConfigBuilder = builder.httpsConfigBuilder();
-            if (httpsConfigBuilder == null) {
-                httpsConfigBuilder = HttpsConfigBuilder.unsignedLocalhost();
-            }
-            var httpsConfig = httpsConfigBuilder.build3();
+            if (builder.httpsPort() >= 0) {
+                var http2Config = configuredHttp2;
+                if (http2Config == null) {
+                    http2Config = Http2ConfigBuilder.http2Config().withMaxHeaderListSize(builder.maxHeadersSize()).build();
+                }
+                if (http2Config.maxHeaderListSize() == -1) {
+                    http2Config = http2Config.toBuilder().withMaxHeaderListSize(builder.maxHeadersSize()).build();
+                }
 
-            var acceptor = ConnectionAcceptor.create(
-                impl,
-                address,
-                builder.httpsPort(),
-                httpsConfig,
-                http2Config,
-                handlerExecutor,
-                connectionExecutor,
-                http2WriterExecutor,
-                contentEncoders
-            );
-            acceptors.add(acceptor);
-            httpsConfig.setHttpsUri(acceptor.uri());
+                var httpsConfigBuilder = builder.httpsConfigBuilder();
+                if (httpsConfigBuilder == null) {
+                    httpsConfigBuilder = HttpsConfigBuilder.unsignedLocalhost();
+                }
+                var httpsConfig = httpsConfigBuilder.build3();
+
+                var acceptor = ConnectionAcceptor.create(
+                    impl,
+                    address,
+                    builder.httpsPort(),
+                    httpsConfig,
+                    http2Config,
+                    handlerExecutor,
+                    connectionExecutor,
+                    http2WriterExecutor,
+                    contentEncoders
+                );
+                acceptors.add(acceptor);
+                httpsConfig.setHttpsUri(acceptor.uri());
+            }
+            if (builder.httpPort() >= 0) {
+                acceptors.add(ConnectionAcceptor.create(
+                    impl,
+                    address,
+                    builder.httpPort(),
+                    null,
+                    http2ConfigForHttp,
+                    handlerExecutor,
+                    connectionExecutor,
+                    http2WriterExecutor,
+                    contentEncoders
+                ));
+            }
+            impl.startListening();
+            return impl;
+        } catch (IOException | RuntimeException | Error startFailure) {
+            try {
+                impl.stop(0, TimeUnit.MILLISECONDS);
+            } catch (RuntimeException | Error cleanupFailure) {
+                startFailure.addSuppressed(cleanupFailure);
+            }
+            throw startFailure;
         }
-        if (builder.httpPort() >= 0) {
-            acceptors.add(ConnectionAcceptor.create(
-                impl,
-                address,
-                builder.httpPort(),
-                null,
-                http2ConfigForHttp,
-                handlerExecutor,
-                connectionExecutor,
-                http2WriterExecutor,
-                contentEncoders
-            ));
-        }
-        impl.startListening();
-        return impl;
     }
 
     ScheduledFuture<?> scheduleConnectionTask(Runnable task, long delay, TimeUnit unit) {
