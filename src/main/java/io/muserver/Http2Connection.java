@@ -106,12 +106,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         try {
             if (writeState.canSendFrames && canWriteFrame(writeTask.frame())) {
                 LogicalHttp2Frame frame = writeTask.frame();
-                if (frame instanceof Http2ResetStreamFrame) {
-                    rejectedRequestBodies.remove(frame.streamId());
-                }
+                boolean retireRejectedStream = frame instanceof Http2ResetStreamFrame
+                    && rejectedRequestBodies.remove(frame.streamId()) != null;
                 boolean retainResetState = frame instanceof Http2ResetStreamFrame
                     && streams.containsKey(frame.streamId());
                 writeCoordinator.submit(writeTask, retainResetState);
+                if (retireRejectedStream) {
+                    writeCoordinator.forgetStream(frame.streamId());
+                }
             } else {
                 writeTask.fail(new IOException("HTTP/2 connection or stream is closed"));
             }
@@ -159,8 +161,11 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         stateLock.lock();
         try {
             if (writeState.canSendFrames) {
-                rejectedRequestBodies.remove(resetFrame.streamId());
+                boolean retireRejectedStream = rejectedRequestBodies.remove(resetFrame.streamId()) != null;
                 writeCoordinator.resetStream(resetFrame, reason, stream);
+                if (retireRejectedStream) {
+                    writeCoordinator.forgetStream(resetFrame.streamId());
+                }
                 return;
             }
             throw Http2Exception.connection(Http2ErrorCode.INTERNAL_ERROR, "HTTP/2 writer closed before peer reset was processed");

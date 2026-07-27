@@ -16,6 +16,7 @@ import static io.muserver.FieldBlockEncoderTest.hexToByteArray;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.anEmptyMap;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.nullValue;
 import static scaffolding.MuAssert.assertEventually;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -463,6 +464,40 @@ class RFC9113_6_2_HeadersTest {
                 con.readLogicalFrame(),
                 equalTo(new Http2ResetStreamFrame(3, Http2ErrorCode.REFUSED_STREAM.code()))
             );
+        }
+    }
+
+    @Test
+    void resettingARejectedRequestRetiresItsCoordinatorState() throws Exception {
+        server = httpsServer()
+            .withMaxHeadersSize(512)
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake();
+
+            var oversized = postHelloHeaders(getPort());
+            oversized.add("x-oversized", "x".repeat(1024));
+            con.writeFrame(new Http2HeadersFrame(1, false, oversized)).flush();
+            assertThat(con.readLogicalFrame(Http2HeadersFrame.class).streamId(), equalTo(1));
+            assertThat(con.readLogicalFrame(Http2DataFrame.class).streamId(), equalTo(1));
+
+            var connection = (Http2Connection) server.activeConnections().iterator().next();
+            Http2WriteCoordinator coordinator = getField(
+                connection,
+                "writeCoordinator",
+                Http2WriteCoordinator.class
+            );
+            assertThat(coordinator.streamState(1), equalTo(Http2StreamState.HALF_CLOSED_LOCAL));
+
+            byte[] barrierData = {1, 2, 3, 4, 5, 6, 7, 8};
+            con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()))
+                .writeFrame(new Http2Ping(false, barrierData))
+                .flush();
+            assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, barrierData)));
+            assertEventually(() -> coordinator.streamState(1), nullValue());
         }
     }
 
