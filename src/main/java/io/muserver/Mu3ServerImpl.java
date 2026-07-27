@@ -167,6 +167,7 @@ class Mu3ServerImpl implements MuServer {
         return true;
     }
 
+    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
     void executeResponseCompletionTask(Runnable task) {
         responseCompletionTasks.register();
         Runnable trackedTask = () -> {
@@ -178,10 +179,20 @@ class Mu3ServerImpl implements MuServer {
         };
         try {
             handlerExecutor.execute(trackedTask);
-        } catch (RejectedExecutionException rejected) {
-            // Internal exchange accounting is already complete. Preserve application
-            // notifications during shutdown or a transient capacity rejection.
-            trackedTask.run();
+        } catch (RejectedExecutionException handlerRejected) {
+            if (asyncExecutor != handlerExecutor) {
+                try {
+                    asyncExecutor.execute(trackedTask);
+                    return;
+                } catch (RejectedExecutionException asyncRejected) {
+                    asyncRejected.addSuppressed(handlerRejected);
+                    responseCompletionTasks.arriveAndDeregister();
+                    log.warn("Dropping response completion callback because its executors rejected it", asyncRejected);
+                    return;
+                }
+            }
+            responseCompletionTasks.arriveAndDeregister();
+            log.warn("Dropping response completion callback because its executor rejected it", handlerRejected);
         }
     }
 
