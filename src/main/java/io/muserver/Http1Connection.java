@@ -11,7 +11,6 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.security.cert.Certificate;
-import java.time.Instant;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -74,9 +73,9 @@ class Http1Connection extends BaseHttpConnection {
     }
 
     Http1Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket,
-                    @Nullable Certificate clientCertificate, Instant handshakeStartTime,
+                    @Nullable Certificate clientCertificate, ConnectionAcceptedTime acceptedTime,
                     ExecutorService handlerExecutor, boolean handlersRunOnConnectionTask) {
-        super(server, creator, clientSocket, clientCertificate, handshakeStartTime);
+        super(server, creator, clientSocket, clientCertificate, acceptedTime);
         this.handlerExecutor = handlerExecutor;
         this.handlersRunOnConnectionTask = handlersRunOnConnectionTask;
     }

@@ -27,8 +27,8 @@ abstract class BaseHttpConnection implements HttpConnection {
     protected final Socket clientSocket;
     @Nullable
     protected final Certificate clientCertificate;
-    protected final Instant handshakeStartTime;
-    protected final long connectionStartTime = System.currentTimeMillis();
+    private final ConnectionAcceptedTime acceptedTime;
+    private final long connectionReadyNanos = System.nanoTime();
     protected final InetSocketAddress remoteAddress;
     protected final InetSocketAddress localAddress;
     protected final AtomicLong lastIONanos = new AtomicLong(System.nanoTime());
@@ -38,12 +38,18 @@ abstract class BaseHttpConnection implements HttpConnection {
     protected final AtomicBoolean closed = new AtomicBoolean(false);
     protected final int requestTimeout;
 
-    BaseHttpConnection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime) {
+    BaseHttpConnection(
+        Mu3ServerImpl server,
+        ConnectionAcceptor creator,
+        Socket clientSocket,
+        @Nullable Certificate clientCertificate,
+        ConnectionAcceptedTime acceptedTime
+    ) {
         this.server = server;
         this.creator = creator;
         this.clientSocket = clientSocket;
         this.clientCertificate = clientCertificate;
-        this.handshakeStartTime = handshakeStartTime;
+        this.acceptedTime = acceptedTime;
         remoteAddress = (InetSocketAddress) clientSocket.getRemoteSocketAddress();
         localAddress = (InetSocketAddress) clientSocket.getLocalSocketAddress();
         requestTimeout = (int) Math.min(Integer.MAX_VALUE, server.requestIdleTimeoutMillis());
@@ -142,12 +148,12 @@ abstract class BaseHttpConnection implements HttpConnection {
 
     @Override
     public Instant startTime() {
-        return this.handshakeStartTime;
+        return acceptedTime.instant();
     }
 
     @Override
     public long handshakeDurationMillis() {
-        return connectionStartTime - handshakeStartTime.toEpochMilli();
+        return acceptedTime.elapsedMillisUntil(connectionReadyNanos);
     }
 
     @Override

@@ -77,6 +77,7 @@ public class HttpConnectionTest {
                 try {
                     HttpConnection con = request.connection();
                     assertThat(con.startTime().toEpochMilli(), lessThanOrEqualTo(Instant.now().toEpochMilli()));
+                    assertThat(con.handshakeDurationMillis(), greaterThanOrEqualTo(0L));
                     assertThat(con.remoteAddress().getAddress().getHostAddress(), is("127.0.0.1"));
 
                     assertThat(con.activeRequests(), contains(request));

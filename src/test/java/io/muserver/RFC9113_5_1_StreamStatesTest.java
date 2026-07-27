@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
@@ -52,7 +51,7 @@ class RFC9113_5_1_StreamStatesTest {
                     liveConnection.creator,
                     liveConnection.clientSocket,
                     liveConnection.clientCertificate,
-                    Instant.now(),
+                    ConnectionAcceptedTime.now(),
                     Http2Settings.DEFAULT_CLIENT_SETTINGS,
                     5000,
                     executor,
