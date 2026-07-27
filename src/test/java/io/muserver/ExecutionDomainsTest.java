@@ -354,6 +354,50 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void aSlowHttp1CompletionListenerDoesNotDelayTheNextRequest() throws Exception {
+        var handlerExecutor = track(Executors.newFixedThreadPool(2, namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
+        var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
+        var firstCompletionStarted = new CountDownLatch(1);
+        var releaseFirstCompletion = new CountDownLatch(1);
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addResponseCompleteListener(info -> {
+                if (info.request().relativePath().equals("/first")) {
+                    firstCompletionStarted.countDown();
+                    try {
+                        releaseFirstCompletion.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            })
+            .addHandler((request, response) -> {
+                response.write(request.relativePath());
+                return true;
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/first").flushHeaders();
+            assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
+            assertThat(client.readBody(client.readHeaders()), equalTo("/first"));
+            assertThat(firstCompletionStarted.await(5, TimeUnit.SECONDS), is(true));
+            assertThat(server.stats().completedRequests(), equalTo(1L));
+
+            Future<String> secondResponse = clientExecutor.submit(() -> {
+                client.writeRequestLine(Method.GET, "/second").flushHeaders();
+                assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
+                return client.readBody(client.readHeaders());
+            });
+            assertThat(secondResponse.get(2, TimeUnit.SECONDS), equalTo("/second"));
+        } finally {
+            releaseFirstCompletion.countDown();
+        }
+    }
+
+    @Test
     void oneAsyncWorkerCanReadAndEchoARequestBody() throws Exception {
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
         var callbackThreads = new CopyOnWriteArrayList<String>();
