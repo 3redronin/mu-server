@@ -60,7 +60,13 @@ class RFC9113_5_2_FlowControlTest {
                 .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
                 .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
                 .writeFrame(new Http2DataFrame(1, true, lastChunk, 0, lastChunk.length))
-                .writeFrame(new Http2HeadersFrame(3, false, postHelloHeaders(getPort())))
+                .flush();
+
+            Http2WindowUpdate reusableConnectionCredit =
+                readConnectionWindowUpdateIgnoringStreamOneResets(con);
+            assertThat(reusableConnectionCredit.streamId(), equalTo(0));
+
+            con.writeFrame(new Http2HeadersFrame(3, false, postHelloHeaders(getPort())))
                 .writeFrame(RFCTestUtils.utf8DataFrame(3, true, "x"))
                 .flush();
 
@@ -143,7 +149,7 @@ class RFC9113_5_2_FlowControlTest {
     }
 
     @Test
-    void cancellingAStreamWithUnreadQueuedDataRefundsConnectionCredit() throws Exception {
+    void cancellingAStreamWithUnreadQueuedDataAdvertisesRefundedConnectionCredit() throws Exception {
         var holdLatch = new CountDownLatch(1);
         var holdStarted = new CountDownLatch(1);
 
@@ -182,7 +188,14 @@ class RFC9113_5_2_FlowControlTest {
 
             assertNotTimedOut("waiting for held request to start", holdStarted);
             con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()))
-                .writeFrame(new Http2HeadersFrame(
+                .flush();
+
+            assertThat(
+                con.readLogicalFrame(),
+                equalTo(new Http2WindowUpdate(0, 65535))
+            );
+
+            con.writeFrame(new Http2HeadersFrame(
                     3,
                     false,
                     postHelloHeaders(getPort())
@@ -257,10 +270,13 @@ class RFC9113_5_2_FlowControlTest {
             );
             failRequest.countDown();
 
-            var reset =
-                readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
+            var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
             assertThat(reset.streamId(), equalTo(1));
             assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.INTERNAL_ERROR));
+            assertThat(
+                readConnectionWindowUpdateIgnoringStreamOneResets(con),
+                equalTo(new Http2WindowUpdate(0, 65_535))
+            );
 
             con.writeFrame(new Http2HeadersFrame(
                     3,
@@ -300,7 +316,9 @@ class RFC9113_5_2_FlowControlTest {
              var con = client.connect(server)) {
 
             byte[] sixteenKb = repeated('a', 16384);
-            byte[] lastChunk = repeated('b', 16383);
+            // The first request body used two bytes that were consumed below the
+            // update threshold, so the peer still has 65,533 advertised bytes.
+            byte[] lastChunk = repeated('b', 16381);
 
             con.handshake()
                 .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
@@ -317,7 +335,14 @@ class RFC9113_5_2_FlowControlTest {
                 .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
                 .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
                 .writeFrame(new Http2DataFrame(1, false, lastChunk, 0, lastChunk.length))
-                .writeFrame(new Http2HeadersFrame(3, false, postHelloHeaders(getPort())))
+                .flush();
+
+            assertThat(
+                readConnectionWindowUpdateIgnoringStreamOneResets(con).streamId(),
+                equalTo(0)
+            );
+
+            con.writeFrame(new Http2HeadersFrame(3, false, postHelloHeaders(getPort())))
                 .writeFrame(RFCTestUtils.utf8DataFrame(3, true, "x"))
                 .flush();
 
@@ -487,6 +512,28 @@ class RFC9113_5_2_FlowControlTest {
                 }
             }
             throw new IllegalStateException("Expected " + clazz.getName() + ", got " + frame);
+        }
+    }
+
+    private static Http2WindowUpdate readConnectionWindowUpdateIgnoringStreamOneResets(
+        H2ClientConnection con
+    ) throws Exception {
+        while (true) {
+            LogicalHttp2Frame frame = con.readLogicalFrame();
+            if (frame instanceof Http2WindowUpdate) {
+                var update = (Http2WindowUpdate) frame;
+                if (update.streamId() == 0) {
+                    return update;
+                }
+                continue;
+            }
+            if (frame instanceof Http2ResetStreamFrame
+                && frame.streamId() == 1) {
+                continue;
+            }
+            throw new IllegalStateException(
+                "Expected a connection WINDOW_UPDATE, got " + frame
+            );
         }
     }
 
