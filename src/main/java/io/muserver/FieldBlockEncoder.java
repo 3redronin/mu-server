@@ -16,12 +16,12 @@ class FieldBlockEncoder {
     void encodeTo(FieldBlock block, OutputStream out) throws IOException {
         writePendingTableSizeChanges(out);
         for (FieldLine line : block.lineIterator()) {
-            int lineCode = table.codeFor(line);
+            int lineCode = line.neverIndexed() ? -1 : table.codeFor(line);
             if (lineCode > 0) {
                 // indexed name and value
                 writeHpackInt(7, (byte)0b10000000, out, lineCode);
             } else {
-                int designation = table.isNeverIndex(line) ? 0b00010000 : 0b00000000;
+                int designation = line.neverIndexed() ? 0b00010000 : 0b00000000;
                 int headerCode = table.codeFor(line.name());
                 if (headerCode >= 0) {
                     // indexed name; literal value

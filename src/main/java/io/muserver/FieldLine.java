@@ -9,10 +9,16 @@ class FieldLine implements Map.Entry<String,String> {
 
     private final HeaderString name;
     private final HeaderString value;
+    private final boolean neverIndexed;
 
     FieldLine(HeaderString name, HeaderString value) {
+        this(name, value, false);
+    }
+
+    FieldLine(HeaderString name, HeaderString value, boolean neverIndexed) {
         this.name = name;
         this.value = value;
+        this.neverIndexed = neverIndexed;
     }
 
     int length() {
@@ -25,6 +31,10 @@ class FieldLine implements Map.Entry<String,String> {
 
     public HeaderString value() {
         return value;
+    }
+
+    boolean neverIndexed() {
+        return neverIndexed;
     }
 
     @Override
@@ -64,4 +74,3 @@ class FieldLine implements Map.Entry<String,String> {
     }
 
 }
-
