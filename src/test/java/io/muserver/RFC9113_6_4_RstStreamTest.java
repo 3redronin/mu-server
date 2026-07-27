@@ -6,19 +6,23 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.EOFException;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.Lock;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @DisplayName("RFC 9113 6.4 Frame Definitions: RST_STREAM")
 class RFC9113_6_4_RstStreamTest {
@@ -158,6 +162,55 @@ class RFC9113_6_4_RstStreamTest {
             assertThat(info.completedSuccessfully(), equalTo(false));
         }
 
+    }
+
+    @Test
+    void resetFenceRejectsWritesBeforeTheResetCommandReachesTheCoordinator() throws Exception {
+        var requestStarted = new CountDownLatch(1);
+        var connectionRef = new AtomicReference<Http2Connection>();
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                connectionRef.set((Http2Connection) request.connection());
+                request.handleAsync();
+                requestStarted.countDown();
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+            assertThat("The request did not start", requestStarted.await(5, TimeUnit.SECONDS), is(true));
+
+            Http2Connection connection = connectionRef.get();
+            Map<?, ?> streams = getField(connection, "streams", Map.class);
+            Http2Stream stream = (Http2Stream) streams.get(1);
+            Lock stateLock = getField(connection, "stateLock", Lock.class);
+            stateLock.lock();
+            try {
+                con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()))
+                    .flush();
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+                while (!stream.resetWasInitiated() && System.nanoTime() < deadline) {
+                    Thread.sleep(1);
+                }
+                assertThat("The reader did not publish the reset fence", stream.resetWasInitiated(), is(true));
+
+                var lateWrite = new WriteTask(utf8DataFrame(1, false, "late"), true);
+                connection.write(lateWrite);
+                var failure = assertThrows(
+                    IOException.class,
+                    () -> lateWrite.await(1, TimeUnit.SECONDS)
+                );
+                assertThat(failure.getMessage(), containsString("stream is closed"));
+            } finally {
+                stateLock.unlock();
+            }
+
+            assertNothingToRead(con.socket());
+        }
     }
 
     @Test
@@ -531,6 +584,12 @@ class RFC9113_6_4_RstStreamTest {
 
     private int getPort() {
         return server.uri().getPort();
+    }
+
+    private static <T> T getField(Object target, String name, Class<T> type) throws Exception {
+        var field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return type.cast(field.get(target));
     }
 
     @AfterEach

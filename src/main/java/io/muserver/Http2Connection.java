@@ -121,7 +121,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         if (streamId == 0 || frame instanceof Http2ResetStreamFrame) {
             return true;
         }
-        return streams.containsKey(streamId) || streamId > lastStreamId;
+        Http2Stream stream = streams.get(streamId);
+        return stream == null
+            ? streamId > lastStreamId
+            : !stream.resetWasInitiated();
     }
 
     private void writeFirst(LogicalHttp2Frame frame) {
