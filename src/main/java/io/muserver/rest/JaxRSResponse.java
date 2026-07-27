@@ -415,12 +415,11 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         if (value == null || value instanceof String) {
             return (String)value;
         }
-        try {
-            RuntimeDelegate.HeaderDelegate headerDelegate = MuRuntimeDelegate.getInstance().createHeaderDelegate(value.getClass());
+        RuntimeDelegate.HeaderDelegate headerDelegate = MuRuntimeDelegate.getInstance().createHeaderDelegate(value.getClass());
+        if (headerDelegate != null) {
             return headerDelegate.toString(value);
-        } catch (MuException e) {
-            return value.toString();
         }
+        return value.toString();
     }
 
     private static String headerValueToNonNullString(Object value) {

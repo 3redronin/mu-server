@@ -17,7 +17,7 @@ public class NewCookieHeaderDelegateTest {
             .value("ha%20ha")
             .path("/what")
             .domain("example.org")
-            .comment("Comments are ignored")
+            .comment("Comments are serialized")
             .maxAge(1234567)
             .secure(true)
             .httpOnly(true)
@@ -25,7 +25,8 @@ public class NewCookieHeaderDelegateTest {
             .build();
         String headerValue = delegate.toString(newCookie);
         assertThat(headerValue, startsWith("Blah=ha%20ha; Max-Age=1234567; Expires="));
-        assertThat(headerValue, endsWith("; Path=/what; Domain=example.org; Secure; HTTPOnly; SameSite=Strict"));
+        assertThat(headerValue, containsString("; Path=/what; Domain=example.org; Secure; HTTPOnly; SameSite=Strict"));
+        assertThat(headerValue, containsString("; Comment=\"Comments are serialized\""));
         NewCookie recreated = delegate.fromString(headerValue);
         assertThat(recreated.getName(), equalTo("Blah"));
         assertThat(recreated.getValue(), equalTo("ha%20ha"));
@@ -37,6 +38,26 @@ public class NewCookieHeaderDelegateTest {
         assertThat(recreated.getComment(), is(nullValue()));
         assertThat(recreated.getVersion(), is(1));
         assertThat(recreated.getSameSite(), is(NewCookie.SameSite.STRICT));
+    }
+
+    @Test
+    public void quotesAndEscapesComments() {
+        NewCookie cookie = new NewCookie.Builder("name")
+            .value("value")
+            .comment("A \"quoted\" \\ comment")
+            .build();
+
+        assertThat(delegate.toString(cookie), is("name=value; Comment=\"A \\\"quoted\\\" \\\\ comment\""));
+    }
+
+    @Test
+    public void rejectsLineBreaksInComments() {
+        NewCookie cookie = new NewCookie.Builder("name")
+            .value("value")
+            .comment("unsafe\r\ncomment")
+            .build();
+
+        assertThrows(IllegalArgumentException.class, () -> delegate.toString(cookie));
     }
 
     @Test

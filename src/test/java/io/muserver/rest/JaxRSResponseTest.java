@@ -293,6 +293,14 @@ public class JaxRSResponseTest {
     }
 
     @Test
+    public void getHeaderStringFallsBackToToStringWhenNoHeaderDelegateExists() {
+        Response response = JaxRSResponse.ok().header("X-Value", new StringBuilder("value")).build();
+
+        assertThat(MuRuntimeDelegate.getInstance().createHeaderDelegate(StringBuilder.class), is(nullValue()));
+        assertThat(response.getHeaderString("X-Value"), is("value"));
+    }
+
+    @Test
     public void getHeaderStringTreatsAnEmptyValueListAsPresentWithoutAValue() {
         Response response = JaxRSResponse.ok().build();
         response.getHeaders().put("X-Empty", new java.util.ArrayList<>());
