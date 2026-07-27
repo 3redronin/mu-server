@@ -21,12 +21,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.Phaser;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -62,7 +64,7 @@ class ExecutionDomainsTest {
             1,
             0,
             TimeUnit.MILLISECONDS,
-            new SynchronousQueue<>(),
+            new ArrayBlockingQueue<>(1),
             namedThreads("handler-")
         ));
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
@@ -82,6 +84,13 @@ class ExecutionDomainsTest {
             }
         });
         assertThat(blockerStarted.await(5, TimeUnit.SECONDS), is(true));
+        Future<?> queuedBlocker = handlerExecutor.submit(() -> {
+            try {
+                releaseBlocker.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
 
         server = httpServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
@@ -147,6 +156,7 @@ class ExecutionDomainsTest {
 
             releaseBlocker.countDown();
             blocker.get(5, TimeUnit.SECONDS);
+            queuedBlocker.get(5, TimeUnit.SECONDS);
 
             con.writeFrame(new Http2HeadersFrame(
                     3,
@@ -275,6 +285,213 @@ class ExecutionDomainsTest {
             con.writeFrame(new Http2Ping(false, pingData)).flush();
 
             assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, pingData)));
+        }
+    }
+
+    @Test
+    void gracefulStopWaitsForDispatchedRequestRejectionListeners() throws Exception {
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
+        var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
+        var listenerEntered = new CountDownLatch(1);
+        var releaseListener = new CountDownLatch(1);
+        server = httpServer()
+            .withMaxHeadersSize(1024)
+            .withAsyncExecutor(asyncExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addRequestRejectListener(info -> {
+                listenerEntered.countDown();
+                try {
+                    releaseListener.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            })
+            .start();
+
+        try {
+            try (var client = Http1Client.connect(server)) {
+                client.writeRequestLine(Method.GET, "/")
+                    .writeHeader("x-big", "a".repeat(2000))
+                    .flushHeaders();
+                assertThat(client.readLine(), startsWith("HTTP/1.1 431"));
+                client.readBody(client.readHeaders());
+                assertThat(listenerEntered.await(5, TimeUnit.SECONDS), is(true));
+            }
+
+            MuServer runningServer = Objects.requireNonNull(server);
+            Future<Boolean> stopped = clientExecutor.submit(() ->
+                runningServer.stop(2, TimeUnit.SECONDS)
+            );
+            assertThrows(TimeoutException.class, () ->
+                stopped.get(100, TimeUnit.MILLISECONDS)
+            );
+            releaseListener.countDown();
+            assertThat(stopped.get(5, TimeUnit.SECONDS), is(true));
+            server = null;
+        } finally {
+            releaseListener.countDown();
+        }
+    }
+
+    @Test
+    void detachedTaskWaitDoesNotWaitOnANewEmptyPhase() {
+        Phaser tasks = new Phaser(1) {
+            private boolean advanceBeforeReturningParties = true;
+
+            @Override
+            public int getRegisteredParties() {
+                int parties = super.getRegisteredParties();
+                if (advanceBeforeReturningParties) {
+                    advanceBeforeReturningParties = false;
+                    arriveAndDeregister();
+                }
+                return parties;
+            }
+        };
+
+        assertThat(
+            Mu3ServerImpl.awaitDetachedApplicationTasks(
+                tasks,
+                System.currentTimeMillis() + 100
+            ),
+            is(true)
+        );
+    }
+
+    @Test
+    void requestRejectionListenerCanStopItsServerWithoutWaitingForItself() throws Exception {
+        var runningServer = new CompletableFuture<MuServer>();
+        var stopResult = new CompletableFuture<Boolean>();
+        server = httpServer()
+            .withMaxHeadersSize(1024)
+            .addRequestRejectListener(info -> {
+                try {
+                    stopResult.complete(
+                        runningServer.get().stop(2, TimeUnit.SECONDS)
+                    );
+                } catch (Throwable failure) {
+                    stopResult.completeExceptionally(failure);
+                }
+            })
+            .start();
+        runningServer.complete(server);
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/")
+                .writeHeader("x-big", "a".repeat(2000))
+                .flushHeaders();
+            assertThat(client.readLine(), startsWith("HTTP/1.1 431"));
+            assertThat(stopResult.get(1, TimeUnit.SECONDS), is(true));
+            server = null;
+        }
+    }
+
+    @Test
+    void requestRejectionListenerDoesNotWaitForCallbackQueuedBehindIt() throws Exception {
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var blockerEntered = new CountDownLatch(1);
+        var releaseBlocker = new CountDownLatch(1);
+        asyncExecutor.execute(() -> {
+            blockerEntered.countDown();
+            try {
+                releaseBlocker.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        assertThat(blockerEntered.await(5, TimeUnit.SECONDS), is(true));
+
+        var runningServer = new CompletableFuture<MuServer>();
+        var stopResult = new CompletableFuture<Boolean>();
+        var callbackNumber = new AtomicInteger();
+        var secondCallbackRan = new CountDownLatch(1);
+        server = httpServer()
+            .withMaxHeadersSize(1024)
+            .withAsyncExecutor(asyncExecutor)
+            .addRequestRejectListener(info -> {
+                if (callbackNumber.incrementAndGet() == 1) {
+                    try {
+                        stopResult.complete(
+                            runningServer.get().stop(2, TimeUnit.SECONDS)
+                        );
+                    } catch (Throwable failure) {
+                        stopResult.completeExceptionally(failure);
+                    }
+                } else {
+                    secondCallbackRan.countDown();
+                }
+            })
+            .start();
+        runningServer.complete(server);
+
+        try {
+            for (int i = 0; i < 2; i++) {
+                try (var client = Http1Client.connect(server)) {
+                    client.writeRequestLine(Method.GET, "/")
+                        .writeHeader("x-big", "a".repeat(2000))
+                        .flushHeaders();
+                    assertThat(client.readLine(), startsWith("HTTP/1.1 431"));
+                }
+            }
+
+            releaseBlocker.countDown();
+            assertThat(stopResult.get(1, TimeUnit.SECONDS), is(true));
+            assertThat(secondCallbackRan.await(1, TimeUnit.SECONDS), is(true));
+            server = null;
+        } finally {
+            releaseBlocker.countDown();
+        }
+    }
+
+    @Test
+    void externalStopStillWaitsAfterCallbackLocalStopReturns() throws Exception {
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
+        var runningServer = new CompletableFuture<MuServer>();
+        var localStopResult = new CompletableFuture<Boolean>();
+        var localStopReturned = new CountDownLatch(1);
+        var releaseCallback = new CountDownLatch(1);
+        server = httpServer()
+            .withMaxHeadersSize(1024)
+            .withAsyncExecutor(asyncExecutor)
+            .addRequestRejectListener(info -> {
+                try {
+                    localStopResult.complete(
+                        runningServer.get().stop(2, TimeUnit.SECONDS)
+                    );
+                    localStopReturned.countDown();
+                    releaseCallback.await();
+                } catch (Throwable failure) {
+                    localStopResult.completeExceptionally(failure);
+                }
+            })
+            .start();
+        runningServer.complete(server);
+
+        try {
+            try (var client = Http1Client.connect(server)) {
+                client.writeRequestLine(Method.GET, "/")
+                    .writeHeader("x-big", "a".repeat(2000))
+                    .flushHeaders();
+                assertThat(client.readLine(), startsWith("HTTP/1.1 431"));
+            }
+
+            assertThat(localStopResult.get(1, TimeUnit.SECONDS), is(true));
+            assertThat(localStopReturned.await(1, TimeUnit.SECONDS), is(true));
+
+            Future<Boolean> externalStop = clientExecutor.submit(() ->
+                runningServer.get().stop(2, TimeUnit.SECONDS)
+            );
+            assertThrows(
+                TimeoutException.class,
+                () -> externalStop.get(100, TimeUnit.MILLISECONDS)
+            );
+            releaseCallback.countDown();
+            assertThat(externalStop.get(5, TimeUnit.SECONDS), is(true));
+            server = null;
+        } finally {
+            releaseCallback.countDown();
         }
     }
 

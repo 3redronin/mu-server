@@ -50,7 +50,7 @@ class Mu3ServerImpl implements MuServer {
     private final boolean ownsConnectionMaintenanceExecutor;
     private final ScheduledExecutorService timerExecutor;
     private final boolean ownsTimerExecutor;
-    private final Phaser responseCompletionTasks = new Phaser() {
+    private final Phaser detachedApplicationTasks = new Phaser() {
         @Override
         protected boolean onAdvance(int phase, int registeredParties) {
             // Keep accepting tasks after an idle phase. Server.stop() can also be called
@@ -58,6 +58,8 @@ class Mu3ServerImpl implements MuServer {
             return false;
         }
     };
+    private final ThreadLocal<@Nullable DetachedApplicationTask> activeDetachedApplicationTask =
+        new ThreadLocal<>();
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
 
     Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService handlerExecutor, boolean ownsHandlerExecutor, ExecutorService asyncExecutor, boolean ownsAsyncExecutor, ExecutorService connectionExecutor, boolean ownsConnectionExecutor, ExecutorService http2WriterExecutor, boolean ownsHttp2WriterExecutor, ExecutorService connectionMaintenanceExecutor, boolean ownsConnectionMaintenanceExecutor, ScheduledExecutorService timerExecutor, boolean ownsTimerExecutor) {
@@ -123,7 +125,7 @@ class Mu3ServerImpl implements MuServer {
                 stoppedCleanly = false;
             }
         }
-        if (!awaitResponseCompletionTasks(deadline)) {
+        if (!awaitDetachedApplicationTasks(deadline)) {
             stoppedCleanly = false;
         }
         if (ownsTimerExecutor) {
@@ -147,12 +149,27 @@ class Mu3ServerImpl implements MuServer {
         return stoppedCleanly;
     }
 
-    private boolean awaitResponseCompletionTasks(long deadline) {
-        while (responseCompletionTasks.getRegisteredParties() > 0) {
-            int phase = responseCompletionTasks.getPhase();
+    private boolean awaitDetachedApplicationTasks(long deadline) {
+        // A callback cannot safely wait for other detached callbacks: with a
+        // single-worker application executor, they may be queued behind this
+        // callback and cannot start until stop() returns. Leave every registration
+        // intact so a concurrent external stop caller still observes and waits for
+        // the callback until its wrapper finishes.
+        if (activeDetachedApplicationTask.get() != null) {
+            return true;
+        }
+        return awaitDetachedApplicationTasks(detachedApplicationTasks, deadline);
+    }
+
+    static boolean awaitDetachedApplicationTasks(Phaser tasks, long deadline) {
+        while (true) {
+            int phase = tasks.getPhase();
+            if (tasks.getRegisteredParties() == 0) {
+                return true;
+            }
             long remaining = Math.max(0L, deadline - System.currentTimeMillis());
             try {
-                responseCompletionTasks.awaitAdvanceInterruptibly(
+                tasks.awaitAdvanceInterruptibly(
                     phase,
                     remaining,
                     TimeUnit.MILLISECONDS
@@ -164,7 +181,6 @@ class Mu3ServerImpl implements MuServer {
                 return false;
             }
         }
-        return true;
     }
 
     void executeResponseCompletionTask(Runnable task) {
@@ -172,22 +188,67 @@ class Mu3ServerImpl implements MuServer {
     }
 
     void executeResponseCompletionTask(Runnable task, boolean alreadyOnApplicationExecutor) {
-        responseCompletionTasks.register();
+        executeTrackedApplicationTask(
+            task,
+            true,
+            "response completion callback",
+            alreadyOnApplicationExecutor
+        );
+    }
+
+    private void executeTrackedApplicationTask(
+        Runnable task,
+        boolean preferHandlerExecutor,
+        String description
+    ) {
+        executeTrackedApplicationTask(task, preferHandlerExecutor, description, false);
+    }
+
+    private void executeTrackedApplicationTask(
+        Runnable task,
+        boolean preferHandlerExecutor,
+        String description,
+        boolean alreadyOnApplicationExecutor
+    ) {
+        detachedApplicationTasks.register();
+        DetachedApplicationTask registration = new DetachedApplicationTask();
         Runnable trackedTask = () -> {
+            DetachedApplicationTask previous = activeDetachedApplicationTask.get();
+            registration.previous = previous;
+            activeDetachedApplicationTask.set(registration);
             try {
                 task.run();
             } finally {
-                responseCompletionTasks.arriveAndDeregister();
+                registration.deregister();
+                if (previous == null) {
+                    activeDetachedApplicationTask.remove();
+                } else {
+                    activeDetachedApplicationTask.set(previous);
+                }
             }
         };
         if (alreadyOnApplicationExecutor) {
             trackedTask.run();
             return;
         }
-        RejectedExecutionException rejected = tryExecuteHandlerTask(trackedTask);
+        RejectedExecutionException rejected = preferHandlerExecutor
+            ? tryExecuteHandlerTask(trackedTask)
+            : tryExecuteAsyncTask(trackedTask);
         if (rejected != null) {
-            responseCompletionTasks.arriveAndDeregister();
-            log.warn("Dropping response completion callback because its application executors rejected it", rejected);
+            registration.deregister();
+            log.warn("Dropping {} because its application executors rejected it", description, rejected);
+        }
+    }
+
+    private final class DetachedApplicationTask {
+        private @Nullable DetachedApplicationTask previous;
+        private boolean registered = true;
+
+        private void deregister() {
+            if (registered) {
+                registered = false;
+                detachedApplicationTasks.arriveAndDeregister();
+            }
         }
     }
 
@@ -196,22 +257,34 @@ class Mu3ServerImpl implements MuServer {
      * The async executor is the secondary application domain when handler dispatch
      * is unavailable; the returned rejection means neither domain can accept work.
      */
-    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
     @Nullable RejectedExecutionException tryExecuteHandlerTask(Runnable task) {
+        return tryExecuteApplicationTask(task, handlerExecutor, asyncExecutor);
+    }
+
+    private @Nullable RejectedExecutionException tryExecuteAsyncTask(Runnable task) {
+        return tryExecuteApplicationTask(task, asyncExecutor, handlerExecutor);
+    }
+
+    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
+    private static @Nullable RejectedExecutionException tryExecuteApplicationTask(
+        Runnable task,
+        ExecutorService primaryExecutor,
+        ExecutorService fallbackExecutor
+    ) {
         try {
-            handlerExecutor.execute(task);
+            primaryExecutor.execute(task);
             return null;
-        } catch (RejectedExecutionException handlerRejected) {
-            if (asyncExecutor != handlerExecutor) {
+        } catch (RejectedExecutionException primaryRejected) {
+            if (fallbackExecutor != primaryExecutor) {
                 try {
-                    asyncExecutor.execute(task);
+                    fallbackExecutor.execute(task);
                     return null;
-                } catch (RejectedExecutionException asyncRejected) {
-                    asyncRejected.addSuppressed(handlerRejected);
-                    return asyncRejected;
+                } catch (RejectedExecutionException fallbackRejected) {
+                    fallbackRejected.addSuppressed(primaryRejected);
+                    return fallbackRejected;
                 }
             }
-            return handlerRejected;
+            return primaryRejected;
         }
     }
 
@@ -395,29 +468,15 @@ class Mu3ServerImpl implements MuServer {
         }
     }
 
-    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
     void onRequestRejected(RejectedRequest info) {
         if (requestRejectListeners.isEmpty()) {
             return;
         }
-        Runnable notification = () -> notifyRequestRejected(info);
-        try {
-            asyncExecutor.execute(notification);
-        } catch (RejectedExecutionException asyncRejected) {
-            // Keep user callbacks off protocol readers even if a caller-supplied async
-            // executor is unavailable. The handler executor is the remaining application
-            // domain; if both reject, there is no safe executor on which to deliver this.
-            if (handlerExecutor == asyncExecutor) {
-                log.error("Request rejection notification was not delivered because the application executor rejected it", asyncRejected);
-                return;
-            }
-            try {
-                handlerExecutor.execute(notification);
-            } catch (RejectedExecutionException handlerRejected) {
-                handlerRejected.addSuppressed(asyncRejected);
-                log.error("Request rejection notification was not delivered because both application executors rejected it", handlerRejected);
-            }
-        }
+        executeTrackedApplicationTask(
+            () -> notifyRequestRejected(info),
+            false,
+            "request rejection notification"
+        );
     }
 
     private void notifyRequestRejected(RejectedRequest info) {
