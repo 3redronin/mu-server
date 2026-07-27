@@ -214,6 +214,52 @@ class RFC9113_6_4_RstStreamTest {
     }
 
     @Test
+    void peerCancellationIsPublishedBeforeBlockedResponseWritersAreReleased() throws Exception {
+        var requestStarted = new CountDownLatch(1);
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                request.handleAsync();
+                requestStarted.countDown();
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2Settings(false, 4096, 100, 0, 16384, 32768))
+                .flush();
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            con.writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort()))).flush();
+            assertThat("The request did not start", requestStarted.await(5, TimeUnit.SECONDS), is(true));
+
+            Http2Connection connection = (Http2Connection) server.activeConnections().iterator().next();
+            Map<?, ?> streams = getField(connection, "streams", Map.class);
+            Http2Stream stream = (Http2Stream) streams.get(1);
+            var stateAtWriteFailure = new AtomicReference<ResponseState>();
+            var blockedWrite = new WriteTask(utf8DataFrame(1, false, "blocked"), true) {
+                @Override
+                public void fail(Exception ex) {
+                    stateAtWriteFailure.set(stream.response().responseState());
+                    super.fail(ex);
+                }
+            };
+            connection.write(blockedWrite);
+
+            byte[] barrierData = {1, 2, 3, 4, 5, 6, 7, 8};
+            var barrier = new WriteTask(new Http2Ping(false, barrierData), true);
+            connection.write(barrier);
+            barrier.await(5, TimeUnit.SECONDS);
+            assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(false, barrierData)));
+
+            con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code())).flush();
+            assertThrows(IOException.class, () -> blockedWrite.await(5, TimeUnit.SECONDS));
+            assertThat(stateAtWriteFailure.get(), equalTo(ResponseState.CLIENT_CANCELLED));
+        }
+    }
+
+    @Test
     void whenTheClientSendsAResetFrameTheRequestInputStreamShouldThrow() throws Exception {
         var completedStreams = new LinkedBlockingQueue<ResponseInfo>(1);
         var exceptions = new LinkedBlockingQueue<Exception>();

@@ -427,10 +427,10 @@ final class Http2WriteCoordinator {
             streamCredits.remove(reset.streamId);
             applyResetState(reset.streamId);
             markProtocolStateClosed(reset.streamId);
-            failPendingStreamWrites(reset.streamId, reset.reason, true);
             if (reset.stream != null) {
                 reset.stream.applyPeerReset(reset.resetFrame);
             }
+            failPendingStreamWrites(reset.streamId, reset.reason, true);
             removeStreamIfReady(reset.streamId);
         } else if (command instanceof RemoteEndStream) {
             applyRemoteEndStream(((RemoteEndStream) command).streamId);
