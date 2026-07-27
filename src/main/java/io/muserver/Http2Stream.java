@@ -101,6 +101,10 @@ class Http2Stream implements ResponseInfo {
         protocolStateClosed = true;
     }
 
+    boolean protocolStateClosed() {
+        return protocolStateClosed;
+    }
+
     boolean countsTowardsMaxConcurrentStreams() {
         return !protocolStateClosed;
     }

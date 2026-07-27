@@ -802,6 +802,16 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                         headerFragment.streamId()
                     );
                 }
+                // Keep the established behavior for a reused historical stream ID even
+                // while its closed protocol record is briefly retained for application
+                // cleanup. A still-half-closed-local stream can continue below and accept
+                // valid trailers.
+                if (existing.protocolStateClosed()) {
+                    throw Http2Exception.connection(
+                        Http2ErrorCode.PROTOCOL_ERROR,
+                        "Invalid stream ID " + headerFragment.streamId()
+                    );
+                }
                 existing.onTrailers(headerFragment);
                 return;
             }
