@@ -10,7 +10,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.muserver.GZIPEncoderBuilder.gzipEncoder;
 import static java.util.Collections.emptyList;
@@ -34,10 +38,11 @@ class Mu3ServerImpl implements MuServer {
     final Path tempDir;
     private final ExecutorService connectionExecutor;
     private final boolean ownsConnectionExecutor;
+    private final ScheduledExecutorService timerExecutor;
+    private final boolean ownsTimerExecutor;
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
-    private final ScheduledExecutorService scheduledExecutor;
 
-    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService handlerExecutor, ExecutorService connectionExecutor, boolean ownsConnectionExecutor) {
+    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService connectionExecutor, boolean ownsConnectionExecutor, ScheduledExecutorService timerExecutor, boolean ownsTimerExecutor) {
         this.acceptors = acceptors;
         this.handlers = handlers;
         this.responseCompleteListeners = responseCompleteListeners;
@@ -53,13 +58,25 @@ class Mu3ServerImpl implements MuServer {
         this.tempDir = tempDir;
         this.connectionExecutor = connectionExecutor;
         this.ownsConnectionExecutor = ownsConnectionExecutor;
-        this.scheduledExecutor = new OffloadingScheduledExecutorService(handlerExecutor);
+        this.timerExecutor = timerExecutor;
+        this.ownsTimerExecutor = ownsTimerExecutor;
     }
 
     private void startListening() {
-        if (acceptors.isEmpty()) throw new IllegalStateException("No listener ports defined");
-        for (ConnectionAcceptor acceptor : acceptors) {
-            acceptor.start();
+        try {
+            if (acceptors.isEmpty()) {
+                throw new IllegalStateException("No listener ports defined");
+            }
+            for (ConnectionAcceptor acceptor : acceptors) {
+                acceptor.start();
+            }
+        } catch (RuntimeException | Error startFailure) {
+            try {
+                stop(0, TimeUnit.MILLISECONDS);
+            } catch (RuntimeException | Error cleanupFailure) {
+                startFailure.addSuppressed(cleanupFailure);
+            }
+            throw startFailure;
         }
     }
 
@@ -79,6 +96,9 @@ class Mu3ServerImpl implements MuServer {
             if (!acceptor.stop(remaining)) {
                 stoppedCleanly = false;
             }
+        }
+        if (ownsTimerExecutor) {
+            timerExecutor.shutdown();
         }
         if (ownsConnectionExecutor) {
             connectionExecutor.shutdown();
@@ -281,6 +301,11 @@ class Mu3ServerImpl implements MuServer {
         if (connectionExecutor == null) {
             connectionExecutor = MuServerBuilder.defaultExecutor();
         }
+        ScheduledExecutorService timerExecutor = builder.timerExecutor();
+        boolean ownsTimerExecutor = timerExecutor == null;
+        if (timerExecutor == null) {
+            timerExecutor = MuServerBuilder.defaultTimerExecutor();
+        }
         var acceptors = new ArrayList<ConnectionAcceptor>(2);
 
         var actualHandlers = new ArrayList<MuHandler>();
@@ -319,9 +344,10 @@ class Mu3ServerImpl implements MuServer {
             builder.maxHeadersSize(),
             limiters,
             tempDir,
-            handlerExecutor,
             connectionExecutor,
-            ownsConnectionExecutor
+            ownsConnectionExecutor,
+            timerExecutor,
+            ownsTimerExecutor
             );
 
         var ih = builder.interfaceHost();
@@ -377,8 +403,46 @@ class Mu3ServerImpl implements MuServer {
         return impl;
     }
 
-    public ScheduledExecutorService getScheduledExecutor() {
-        return scheduledExecutor;
+    ScheduledFuture<?> scheduleConnectionTask(Runnable task, long delay, TimeUnit unit) {
+        return timerExecutor.schedule(() -> tryDispatchConnectionTask(task), delay, unit);
+    }
+
+    ScheduledFuture<?> scheduleConnectionTaskAtFixedRate(
+        Runnable task,
+        long initialDelay,
+        long period,
+        TimeUnit unit
+    ) {
+        var pending = new AtomicBoolean();
+        return timerExecutor.scheduleAtFixedRate(
+            () -> {
+                if (pending.compareAndSet(false, true)) {
+                    boolean accepted = tryDispatchConnectionTask(() -> {
+                        try {
+                            task.run();
+                        } finally {
+                            pending.set(false);
+                        }
+                    });
+                    if (!accepted) {
+                        pending.set(false);
+                    }
+                }
+            },
+            initialDelay,
+            period,
+            unit
+        );
+    }
+
+    private boolean tryDispatchConnectionTask(Runnable task) {
+        try {
+            connectionExecutor.execute(task);
+            return true;
+        } catch (RejectedExecutionException e) {
+            log.debug("Connection executor rejected timed work because the server is stopping or overloaded");
+            return false;
+        }
     }
 
     public Mu3StatsImpl getStatsImpl() {

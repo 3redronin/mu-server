@@ -1,11 +1,17 @@
 package io.muserver;
 
 import okhttp3.Response;
+import okhttp3.WebSocket;
+import okhttp3.WebSocketListener;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -15,17 +21,21 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.muserver.MuServerBuilder.httpServer;
+import static io.muserver.WebSocketHandlerBuilder.webSocketHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.startsWith;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static scaffolding.ClientUtils.call;
+import static scaffolding.ClientUtils.client;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
 
@@ -145,16 +155,19 @@ class ExecutionDomainsTest {
     }
 
     @Test
-    void configuredConnectionExecutorDoesNotChangeTheHttp1HandlerExecutor() throws Exception {
+    void configuredExecutorsStayCallerOwnedAndHttp1UsesTheHandlerExecutor() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
+        var timerExecutor = track(Executors.newSingleThreadScheduledExecutor(namedThreads("timer-")));
 
         var builder = httpServer()
             .withHandlerExecutor(handlerExecutor)
             .withConnectionExecutor(connectionExecutor)
+            .withTimerExecutor(timerExecutor)
             .addHandler(Method.GET, "/", (request, response, pathParams) ->
                 response.write(Thread.currentThread().getName()));
         assertThat(builder.connectionExecutor(), is(connectionExecutor));
+        assertThat(builder.timerExecutor(), is(timerExecutor));
 
         server = builder.start();
         try (Response response = call(request(server.uri()))) {
@@ -166,11 +179,81 @@ class ExecutionDomainsTest {
         server = null;
         assertThat(connectionExecutor.isShutdown(), is(false));
         assertThat(handlerExecutor.isShutdown(), is(false));
+        assertThat(timerExecutor.isShutdown(), is(false));
     }
 
-    private ExecutorService track(ExecutorService executor) {
+    @Test
+    void rejectedTimerSchedulingRollsBackStartupWithoutTakingCallerExecutors() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
+        var timerExecutor = track(Executors.newSingleThreadScheduledExecutor(namedThreads("timer-")));
+        timerExecutor.shutdown();
+        int port = availablePort();
+
+        assertThrows(RejectedExecutionException.class, () -> httpServer()
+            .withHttpPort(port)
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .withTimerExecutor(timerExecutor)
+            .start());
+
+        assertThat(handlerExecutor.isShutdown(), is(false));
+        assertThat(connectionExecutor.isShutdown(), is(false));
+        try (var replacementListener = new ServerSocket(port)) {
+            assertThat(replacementListener.isBound(), is(true));
+        }
+    }
+
+    @RepeatedTest(5)
+    void timedConnectionWorkIsNotStarvedByTheHandlerExecutor() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
+        var pongReceived = new CountDownLatch(1);
+        var serverSocket = new SimpleWebSocket() {
+            @Override
+            public void onText(String message) {
+            }
+
+            @Override
+            public void onBinary(ByteBuffer payload) {
+            }
+
+            @Override
+            public void onPong(ByteBuffer payload) throws Exception {
+                super.onPong(payload);
+                pongReceived.countDown();
+            }
+        };
+
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
+                .withPingInterval(10, TimeUnit.MILLISECONDS))
+            .start();
+
+        String websocketUrl = "ws" + server.uri().toString().substring(4);
+        WebSocket clientSocket = client.newWebSocket(
+            request().url(websocketUrl).build(),
+            new WebSocketListener() {
+            }
+        );
+        try {
+            assertThat(pongReceived.await(2, TimeUnit.SECONDS), is(true));
+        } finally {
+            clientSocket.cancel();
+        }
+    }
+
+    private <T extends ExecutorService> T track(T executor) {
         executors.add(executor);
         return executor;
+    }
+
+    private static int availablePort() throws IOException {
+        try (var socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
+        }
     }
 
     private static java.util.concurrent.ThreadFactory namedThreads(String prefix) {

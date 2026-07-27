@@ -108,10 +108,10 @@ MuServerBuilder
    │
    └─► Mu3ServerImpl.start(builder)
          │
-         ├─ creates an ExecutorService (virtual-thread-per-task on JDK 21+, cached pool otherwise)
+         ├─ resolves separate handler, connection, and timer executors
          ├─ inserts RequestVerifierHandler + ExpectContinueHandler at the front of the chain
          ├─ for each port (https first, then http), creates a ConnectionAcceptor:
-         │     ServerSocket + acceptor thread + idle-timeout watcher thread
+         │     ServerSocket + acceptor thread + scheduled idle-timeout scan
          │     (HTTPS path also reads HttpsConfig; HTTP path may sniff the h2 preface)
          └─ acceptor.start() spawns the accept loop
 ```
@@ -119,12 +119,14 @@ MuServerBuilder
 **Threading model:**
 
 - One **acceptor thread** per port (platform thread, daemon=false).
-- One **timeout watcher thread** per port (only if `idleTimeoutMillis > 0`).
-- The configured **executor** runs everything else: per-connection handling, HTTP/2 write loop,
-  request handler bodies. By default this is `Executors.newVirtualThreadPerTaskExecutor()` on JDK 21+.
-- HTTP/2 uses an extra `Future<?>` for the **write loop** so reads and writes don't block each other.
-- A `ScheduledExecutorService` exists (`OffloadingScheduledExecutorService`) that submits scheduled tasks
-  back to the main executor, so timers don't pin platform threads either.
+- The **handler executor** runs request-handler tasks. Callback routing is still being normalized;
+  some rejection and connection-timeout notifications currently originate in connection work.
+- The **connection executor** runs connection setup and two long-lived tasks per HTTP/2 connection:
+  the socket reader and protocol/write coordinator. Both default executors use virtual threads on
+  JDK 21+ and a cached pool otherwise.
+- One server **timer executor** schedules idle-timeout scans and WebSocket pings. Its default is a
+  single platform thread. Timer callbacks only dispatch due work to the connection executor, and
+  periodic dispatch is coalesced while an earlier invocation is queued or running.
 
 If you change anything in the connection classes, remember: **the executor may be a virtual-thread
 executor**. Synchronized blocks pin carrier threads — prefer `ReentrantLock` (which is what
@@ -315,7 +317,7 @@ These are observations from reading the code, not committed work. Verify before 
 - `Http2OutgoingFlowController.waitUntilAvailable(...)` polls per-stream and per-connection separately
   in `Http2Stream.waitUntilWritableDataCreditAvailable()`. A combined waiter (single `Condition` shared
   across streams + connection) would avoid spurious wakeups when only the other side has credit.
-- `ConnectionAcceptor.timeoutLoop()` walks every connection every 200ms. A min-heap keyed on `lastIO`
+- `ConnectionAcceptor.checkIdleTimeouts()` walks every connection every 200ms. A min-heap keyed on `lastIO`
   would scale better with thousands of connections.
 
 **Bigger projects**
@@ -343,7 +345,7 @@ These are observations from reading the code, not committed work. Verify before 
 | "Where are URI templates compiled?"                 | `rest/UriPattern.uriTemplateToRegex`             |
 | "How does JAX-RS hook in?"                          | `rest/RestHandler` + `rest/RestHandlerBuilder`   |
 | "How are stats exposed?"                            | `Mu3StatsImpl`, surfaced via `MuServer.stats()`  |
-| "How does idle timeout work?"                       | `ConnectionAcceptor.timeoutLoop` + `BaseHttpConnection.lastIO` |
+| "How does idle timeout work?"                       | `ConnectionAcceptor.checkIdleTimeouts` + `Mu3ServerImpl.scheduleConnectionTaskAtFixedRate` + `BaseHttpConnection.lastIO` |
 
 ## 15. Conventions cheat sheet
 

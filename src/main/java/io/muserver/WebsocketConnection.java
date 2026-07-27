@@ -12,6 +12,7 @@ import java.net.ProtocolException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.locks.Lock;
@@ -24,7 +25,7 @@ class WebsocketConnection implements MuWebSocketSession {
     private @Nullable OutputStream outputStream;
     final WebSocketHandlerBuilder.Settings settings;
 
-    private WebsocketSessionState state = WebsocketSessionState.NOT_STARTED;
+    private volatile WebsocketSessionState state = WebsocketSessionState.NOT_STARTED;
     private final BaseHttpConnection httpConnection;
     private final MuWebSocket webSocket;
     private boolean closeReceived = false;
@@ -32,6 +33,7 @@ class WebsocketConnection implements MuWebSocketSession {
     private final Lock writeLock = new ReentrantLock();
     private final @Nullable ByteBuffer pingBuffer;
     private ReadState readState = ReadState.NONE;
+    private volatile @Nullable ScheduledFuture<?> pingFuture;
 
     private enum ReadState {
         NONE, TEXT, BINARY,
@@ -64,7 +66,7 @@ class WebsocketConnection implements MuWebSocketSession {
 
 
     private void startPinging() {
-        httpConnection.serverImpl().getScheduledExecutor().schedule(() -> {
+        pingFuture = httpConnection.serverImpl().scheduleConnectionTask(() -> {
             writeLock.lock();
             try {
                 if (state == WebsocketSessionState.OPEN) {
@@ -248,6 +250,12 @@ class WebsocketConnection implements MuWebSocketSession {
                 webSocket.onError(e);
                 state = (e instanceof TimeoutException || e instanceof SocketTimeoutException) ?
                     WebsocketSessionState.TIMED_OUT : WebsocketSessionState.ERRORED;
+            }
+        } finally {
+            ScheduledFuture<?> currentPing = pingFuture;
+            if (currentPing != null) {
+                currentPing.cancel(false);
+                pingFuture = null;
             }
         }
     }

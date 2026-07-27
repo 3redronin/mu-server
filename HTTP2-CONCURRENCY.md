@@ -14,12 +14,16 @@ application exchange lifetime are implemented. Connection setup and the two
 long-lived HTTP/2 I/O tasks now use a connection executor that is independent
 of `MuServerBuilder.withHandlerExecutor`. Handler-executor rejection is handled
 as a 503 response on the affected stream while the connection remains usable.
+Scheduled connection maintenance and connection idle-timeout scans now use a
+server timer that is independent of both executors; when work becomes due, the
+timer dispatches it to the connection executor.
 
-Still to be implemented are timer separation and migration of the remaining
-connection settings, stream registry, and inbound flow-control accounting to
-coordinator ownership. The reader and coordinator therefore have separate
-execution capacity from handlers, but do not yet have all of the final
-single-owner boundaries described below.
+Still to be implemented are coordinator timeout commands and migration of the
+remaining connection settings, stream registry, and inbound flow-control
+accounting to coordinator ownership. The HTTP/2 SETTINGS acknowledgement and
+request-body read deadlines therefore remain local blocking deadlines for now.
+The reader and coordinator have separate execution capacity from handlers, but
+do not yet have all of the final single-owner boundaries described below.
 
 ## Goals
 
@@ -35,7 +39,8 @@ The model must:
 
 ## Execution domains
 
-The executor separation in this section is implemented. Some finer-grained
+The executor allocation in this section is implemented. Routing every
+application callback to the application executor and some finer-grained
 ownership rules remain the target for later phases, as called out below.
 
 There are two execution domains and one timer facility.
@@ -61,8 +66,9 @@ Connection I/O uses a server-owned executor whose default provides prompt
 execution for long-lived tasks: virtual threads where available, otherwise a
 separate cached thread pool. A custom executor can be supplied through
 `MuServerBuilder.withConnectionExecutor`; it must provide independent progress
-for both long-lived tasks of every active HTTP/2 connection. Supplying a bounded
-executor without that capacity can starve one half of a connection.
+for both long-lived tasks of every active HTTP/2 connection, plus short
+connection setup and timed maintenance tasks. Supplying a bounded executor
+without that capacity can starve connection work.
 
 ### Application work
 
@@ -79,10 +85,26 @@ It never runs a connection reader or coordinator. Rejection by this executor is
 handled as rejection of an individual request, not failure of the HTTP/2
 connection.
 
+Callback routing is not yet complete: in particular, some request-rejection and
+connection-timeout notifications can still be made from connection work. Those
+paths must move to the application executor without making protocol progress
+depend on callback completion.
+
 ### Timers
 
-A single server timer schedules timeout commands into connection coordinators.
-Timer threads do not mutate protocol state and do not invoke user code.
+A single server timer determines when scheduled connection work is due. The
+default is one server-owned platform thread, and a custom
+`ScheduledExecutorService` can be supplied through
+`MuServerBuilder.withTimerExecutor`. Timer callbacks dispatch due work to the
+connection executor; periodic dispatch is coalesced so a delayed connection
+executor does not accumulate duplicate work. Timer threads do not mutate
+protocol state, perform socket I/O, or invoke user code.
+
+Connection idle-timeout scans and WebSocket pings use this facility. As
+coordinator ownership expands, HTTP/2 timeout expiry will enqueue coordinator
+commands through the same timer rather than mutating protocol state on the
+timer thread. The current local SETTINGS acknowledgement and request-body read
+deadlines are not yet scheduled by this facility.
 
 ## Ownership
 

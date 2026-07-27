@@ -10,8 +10,8 @@ import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.util.concurrent.CountDownLatch;
@@ -68,7 +68,9 @@ public class StopTest {
         while (System.nanoTime() < deadline) {
             try (Socket socket = new Socket()) {
                 socket.connect(address, 200);
-            } catch (ConnectException expected) {
+            } catch (IOException expected) {
+                // Depending on the race with ServerSocket.close(), the platform may report
+                // either connection refused or connection reset. Both mean connect failed.
                 return;
             }
             Thread.sleep(10);
