@@ -5,19 +5,83 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.lang.reflect.Field;
+import java.time.Instant;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.nullValue;
 import static scaffolding.MuAssert.assertNotTimedOut;
 
 @DisplayName("RFC 9113 5.2 Flow Control")
 class RFC9113_5_2_FlowControlTest {
 
     private @Nullable MuServer server;
+
+    @Test
+    void peerCanUseConnectionCreditBeforeWindowUpdateFlushReturns() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake();
+            var liveConnection =
+                (Http2Connection) server.activeConnections().iterator().next();
+            var executor = Executors.newSingleThreadExecutor();
+            try {
+                var writerConnection = new Http2Connection(
+                    liveConnection.server,
+                    liveConnection.creator,
+                    liveConnection.clientSocket,
+                    liveConnection.clientCertificate,
+                    Instant.now(),
+                    Http2Settings.DEFAULT_CLIENT_SETTINGS,
+                    5000,
+                    executor,
+                    executor
+                );
+                Http2InboundFlowControl flow = getField(
+                    writerConnection,
+                    "inboundFlowControl",
+                    Http2InboundFlowControl.class
+                );
+                flow.openStream(1, 100_000);
+                assertThat(flow.reserve(1, 65_535).error(), nullValue());
+
+                writerConnection.returnInboundCredit(1, 32_768, false);
+
+                var flushEntered = new CountDownLatch(1);
+                var debitObservedDuringFlush =
+                    new AtomicReference<Http2InboundFlowControl.Result>();
+                var output = new ByteArrayOutputStream() {
+                    @Override
+                    public void flush() {
+                        debitObservedDuringFlush.set(flow.reserve(1, 1));
+                        flushEntered.countDown();
+                    }
+                };
+
+                writerConnection.startWriteLoop(output);
+                assertNotTimedOut("waiting for WINDOW_UPDATE flush", flushEntered);
+                assertThat(
+                    debitObservedDuringFlush.get().error(),
+                    nullValue()
+                );
+            } finally {
+                executor.shutdownNow();
+            }
+        }
+    }
 
     @Test
     void earlyResponseDiscardsTheRemainingRequestWithoutExhaustingConnectionCredit() throws Exception {
@@ -559,6 +623,14 @@ class RFC9113_5_2_FlowControlTest {
 
     private int getPort() {
         return server.uri().getPort();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T getField(Object target, String name, Class<T> type)
+        throws Exception {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return (T) type.cast(field.get(target));
     }
 
     @AfterEach
