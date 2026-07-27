@@ -464,14 +464,41 @@ class Http1Connection extends BaseHttpConnection {
         ResponseState terminalState,
         Exception error
     ) {
+        markActiveResponse(terminalState);
         var cur = activeExchange.get();
         if (cur != null && cur.request != null) {
-            java.util.Objects.requireNonNull(cur.response).setState(terminalState);
             Mu3AsyncHandleImpl asyncHandle = cur.request.getAsyncHandle();
             if (asyncHandle != null) {
                 asyncHandle.complete(error);
             }
         }
+    }
+
+    private void markActiveResponse(ResponseState terminalState) {
+        var cur = activeExchange.get();
+        if (cur != null && cur.response != null) {
+            cur.response.setState(terminalState);
+        }
+    }
+
+    @Override
+    void onTransportInputEnd() {
+        markActiveResponse(ResponseState.CLIENT_DISCONNECTED);
+    }
+
+    @Override
+    void onTransportInputFailure(IOException failure) {
+        // The HTTP/1 request deadline is implemented as a socket read timeout.
+        // Leave that non-terminal so the parser can turn it into a 408 response;
+        // connection-idle timeout is published by abortWithTimeout().
+        if (!(failure instanceof java.net.SocketTimeoutException)) {
+            markActiveResponse(ResponseState.CLIENT_DISCONNECTED);
+        }
+    }
+
+    @Override
+    void onTransportOutputFailure(IOException failure) {
+        markActiveResponse(ResponseState.CLIENT_DISCONNECTED);
     }
 
     private void notifyWebsocketTimeout() {

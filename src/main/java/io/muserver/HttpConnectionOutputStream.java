@@ -20,7 +20,12 @@ class HttpConnectionOutputStream extends FilterOutputStream {
 
     @Override
     public void write(int b) throws IOException {
-        out.write(b);
+        try {
+            out.write(b);
+        } catch (IOException failure) {
+            httpConnection.onTransportOutputFailure(failure);
+            throw failure;
+        }
         httpConnection.onBytesSent(1);
     }
 
@@ -31,9 +36,24 @@ class HttpConnectionOutputStream extends FilterOutputStream {
 
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
-        out.write(b, off, len);
+        try {
+            out.write(b, off, len);
+        } catch (IOException failure) {
+            httpConnection.onTransportOutputFailure(failure);
+            throw failure;
+        }
         if (len > 0) {
             httpConnection.onBytesSent(len);
+        }
+    }
+
+    @Override
+    public void flush() throws IOException {
+        try {
+            out.flush();
+        } catch (IOException failure) {
+            httpConnection.onTransportOutputFailure(failure);
+            throw failure;
         }
     }
 }
