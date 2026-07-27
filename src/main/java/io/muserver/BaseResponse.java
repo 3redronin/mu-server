@@ -214,7 +214,9 @@ abstract class BaseResponse implements MuResponse {
                 return;
             }
         }
-        request.serverImpl().executeResponseCompletionTask(() -> listener.onComplete(completed));
+        request.serverImpl().executeResponseCompletionTask(() ->
+            request.serverImpl().invokeResponseCompletionListener(listener, completed)
+        );
     }
 
     void notifyCompletionListeners(ResponseInfo completed) {
@@ -234,7 +236,7 @@ abstract class BaseResponse implements MuResponse {
                     return;
                 }
             }
-            listener.onComplete(completed);
+            request.serverImpl().invokeResponseCompletionListener(listener, completed);
         }
     }
 }

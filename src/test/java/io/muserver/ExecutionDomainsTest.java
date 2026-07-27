@@ -710,6 +710,62 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void completionListenerFailureDoesNotStrandOtherListeners() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
+        var responseRef = new CompletableFuture<MuResponse>();
+        var events = new CopyOnWriteArrayList<String>();
+        var serverListenersFinished = new CompletableFuture<Void>();
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addResponseCompleteListener(info -> {
+                events.add("server-failing");
+                throw new IllegalStateException("deliberate server listener failure");
+            })
+            .addResponseCompleteListener(info -> {
+                events.add("server-second");
+                serverListenersFinished.complete(null);
+            })
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.addCompletionListener(info -> {
+                    events.add("response-failing");
+                    response.addCompletionListener(nested ->
+                        events.add("response-nested")
+                    );
+                    throw new IllegalStateException("deliberate response listener failure");
+                });
+                response.addCompletionListener(info ->
+                    events.add("response-second")
+                );
+                responseRef.complete(response);
+                response.write("done");
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/").flushHeaders();
+            assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
+            assertThat(client.readBody(client.readHeaders()), equalTo("done"));
+        }
+
+        serverListenersFinished.get(5, TimeUnit.SECONDS);
+        assertThat(events, equalTo(List.of(
+            "response-failing",
+            "response-second",
+            "response-nested",
+            "server-failing",
+            "server-second"
+        )));
+
+        var postCompletionListenerFinished = new CompletableFuture<Void>();
+        responseRef.get(5, TimeUnit.SECONDS).addCompletionListener(info ->
+            postCompletionListenerFinished.complete(null)
+        );
+        postCompletionListenerFinished.get(5, TimeUnit.SECONDS);
+    }
+
+    @Test
     void aSlowHttp1CompletionListenerDoesNotDelayTheNextRequest() throws Exception {
         var handlerExecutor = track(Executors.newFixedThreadPool(2, namedThreads("handler-")));
         var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));

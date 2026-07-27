@@ -610,7 +610,18 @@ class Mu3ServerImpl implements MuServer {
 
     void notifyExchangeEnded(ResponseInfo exchange) {
         for (var listener : responseCompleteListeners) {
+            invokeResponseCompletionListener(listener, exchange);
+        }
+    }
+
+    void invokeResponseCompletionListener(
+        ResponseCompleteListener listener,
+        ResponseInfo exchange
+    ) {
+        try {
             listener.onComplete(exchange);
+        } catch (Exception failure) {
+            log.error("Error from response completion listener", failure);
         }
     }
 
