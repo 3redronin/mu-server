@@ -185,6 +185,25 @@ public class RequestBodyReaderInputStreamAdapterTest {
     }
 
     @Test
+    void bodyClaimsTheInputStream() {
+        var request = new Mu3Request(
+            null,
+            Method.POST,
+            URI.create("/"),
+            URI.create("https://localhost/"),
+            HttpVersion.HTTP_1_1,
+            new FieldBlock(),
+            new BodySize(BodyType.FIXED_SIZE, 7L),
+            new ByteArrayInputStream("a=1&b=2".getBytes(StandardCharsets.UTF_8))
+        );
+
+        request.body();
+
+        var ex = assertThrows(IllegalStateException.class, request::inputStream);
+        assertThat(ex.getMessage(), containsString("cannot be read twice"));
+    }
+
+    @Test
     public void chunkedRequestBodiesCanBeRead() throws Exception {
         server = httpServer()
             .addHandler((request, response) -> {
