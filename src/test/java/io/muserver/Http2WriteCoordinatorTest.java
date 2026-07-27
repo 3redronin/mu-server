@@ -320,6 +320,26 @@ class Http2WriteCoordinatorTest {
     }
 
     @Test
+    void settingsTimeoutIsSerializedAsAConnectionError() {
+        var coordinator = coordinator(100, 1, 100);
+        coordinator.submit(task(headers(1)));
+        coordinator.settingsTimedOut();
+        coordinator.processAvailableCommands();
+
+        var writable = coordinator.pollWritable();
+        Http2Exception failure = writable.protocolError();
+        assertThat(failure.errorType(), equalTo(Http2Level.CONNECTION));
+        assertThat(failure.errorCode(), equalTo(Http2ErrorCode.SETTINGS_TIMEOUT));
+        assertThat(failure.getMessage(), containsString("SETTINGS ack"));
+        assertThat(
+            writable.frame(),
+            equalTo(new Http2GoAway(0, Http2ErrorCode.SETTINGS_TIMEOUT.code(), null))
+        );
+        writable.complete();
+        assertThat(coordinator.pollWritable(), nullValue());
+    }
+
+    @Test
     void streamWindowUpdateOverflowIsAStreamFlowControlErrorAndStopsThatStream() {
         var coordinator = coordinator(100, 1, Integer.MAX_VALUE - 1);
         var data = task(data(1, "must not be sent"));

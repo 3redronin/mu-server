@@ -18,12 +18,13 @@ Scheduled connection maintenance and connection idle-timeout scans now use a
 server timer that is independent of both executors; when work becomes due, the
 timer dispatches it to the connection executor.
 
-Still to be implemented are coordinator timeout commands and migration of the
-remaining connection settings, stream registry, and inbound flow-control
-accounting to coordinator ownership. The HTTP/2 SETTINGS acknowledgement and
-request-body read deadlines therefore remain local blocking deadlines for now.
-The reader and coordinator have separate execution capacity from handlers, but
-do not yet have all of the final single-owner boundaries described below.
+SETTINGS acknowledgement expiry now runs on the server timer and is serialized
+as a coordinator connection-error command; it no longer changes the socket
+reader's blocking timeout. Still to be implemented are migration of the
+remaining connection settings, stream registry, inbound flow-control
+accounting, and request-body read deadlines to coordinator ownership. The
+reader and coordinator have separate execution capacity from handlers, but do
+not yet have all of the final single-owner boundaries described below.
 
 ## Goals
 
@@ -100,11 +101,11 @@ connection executor; periodic dispatch is coalesced so a delayed connection
 executor does not accumulate duplicate work. Timer threads do not mutate
 protocol state, perform socket I/O, or invoke user code.
 
-Connection idle-timeout scans and WebSocket pings use this facility. As
-coordinator ownership expands, HTTP/2 timeout expiry will enqueue coordinator
-commands through the same timer rather than mutating protocol state on the
-timer thread. The current local SETTINGS acknowledgement and request-body read
-deadlines are not yet scheduled by this facility.
+Connection idle-timeout scans, WebSocket pings, and HTTP/2 SETTINGS
+acknowledgement deadlines use this facility. SETTINGS expiry atomically wins
+or loses a race with its ACK, then enqueues a connection-error command without
+mutating protocol state on the timer thread. Request-body read deadlines remain
+local blocking deadlines for now.
 
 ## Ownership
 
