@@ -165,7 +165,18 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
                 if (dataFrame.endStream()) {
                     requestBodyComplete = true;
                 }
-            } else if (dataFrame.payloadLength() > 0 || dataFrame.endStream()) {
+            } else if (dataFrame.payloadLength() == 0) {
+                // RFC 9113 Section 6.9.1 counts the complete DATA payload,
+                // including the Pad Length field and padding, against flow
+                // control. There are no application bytes to retain in this
+                // case, so all of that capacity is reusable immediately.
+                discardedCredit = flowControlSize;
+                if (dataFrame.endStream()) {
+                    requestBodyComplete = true;
+                    frames.add(END_OF_STREAM);
+                    hasData.signal();
+                }
+            } else {
                 frames.add(new PendingDataFrame(dataFrame, flowControlSize));
                 if (dataFrame.endStream()) {
                     requestBodyComplete = true;

@@ -156,6 +156,31 @@ class Http2BodyInputStreamTest {
         }
     }
 
+    @Test
+    void paddingOnlyDataReturnsFlowControlCreditImmediately() throws Exception {
+        var callbackValue = new AtomicLong();
+
+        try (var stream = new Http2BodyInputStream(10000, callbackValue::addAndGet, credit -> {})) {
+            stream.onData(data("", false), 8);
+
+            assertThat(callbackValue.get(), equalTo(8L));
+            assertThat(stream.isRequestBodyComplete(), equalTo(false));
+        }
+    }
+
+    @Test
+    void paddingOnlyEndStreamReturnsCreditAndPublishesEof() throws Exception {
+        var callbackValue = new AtomicLong();
+
+        try (var stream = new Http2BodyInputStream(10000, callbackValue::addAndGet, credit -> {})) {
+            stream.onData(data("", true), 8);
+
+            assertThat(callbackValue.get(), equalTo(8L));
+            assertThat(stream.read(), equalTo(-1));
+            assertThat(stream.isRequestBodyComplete(), equalTo(true));
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(ints = {1, 2, 4})
     void unreadQueuedDataIsRefundedOnCancel(int firstReadSize) throws Exception {

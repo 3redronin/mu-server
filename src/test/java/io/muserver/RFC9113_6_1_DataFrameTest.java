@@ -219,6 +219,42 @@ class RFC9113_6_1_DataFrameTest {
     }
 
     @Test
+    void paddingOnlyDataReturnsCreditBeforeApplicationDataArrives() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled().withInitialWindowSize(8))
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                response.write(request.readBodyAsString());
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .writeRaw(RFCTestUtils.paddedDataFrame(1, false, new byte[0], 7))
+                .flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(new Http2WindowUpdate(1, 8)));
+
+            con.writeFrame(new Http2DataFrame(
+                    1,
+                    true,
+                    "Goodbye!".getBytes(StandardCharsets.UTF_8),
+                    0,
+                    8
+                ))
+                .flush();
+
+            var headers = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(headers.streamId(), equalTo(1));
+            assertThat(headers.headers().get(":status"), equalTo("200"));
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).toUTF8(), equalTo("Goodbye!"));
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).endStream(), equalTo(true));
+        }
+    }
+
+    @Test
     void invalidPaddingOnALiveConnectionIsAConnectionError() throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
