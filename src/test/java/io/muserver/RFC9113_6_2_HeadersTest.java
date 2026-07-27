@@ -6,7 +6,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -14,7 +13,6 @@ import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.*;
 import static io.muserver.FieldBlockEncoderTest.hexToByteArray;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.hamcrest.Matchers.anEmptyMap;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
 import static scaffolding.MuAssert.assertEventually;
@@ -359,7 +357,8 @@ class RFC9113_6_2_HeadersTest {
             assertThat(handlerStarted.await(5, TimeUnit.SECONDS), equalTo(true));
 
             var connection = (Http2Connection) server.activeConnections().iterator().next();
-            Map<?, ?> streams = getField(connection, "streams", Map.class);
+            Http2StreamRegistry streamRegistry =
+                getField(connection, "streamRegistry", Http2StreamRegistry.class);
             var trailers = new FieldBlock();
             trailers.add("checksum", "x".repeat(1024));
             con.writeFrame(new Http2HeadersFrame(1, true, trailers)).flush();
@@ -370,7 +369,7 @@ class RFC9113_6_2_HeadersTest {
 
             releaseHandler.countDown();
             assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
-            assertEventually(() -> streams, anEmptyMap());
+            assertEventually(streamRegistry::isEmpty, equalTo(true));
         } finally {
             releaseHandler.countDown();
         }

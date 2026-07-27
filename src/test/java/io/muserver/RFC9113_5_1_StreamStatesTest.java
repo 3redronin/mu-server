@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
@@ -413,8 +413,9 @@ class RFC9113_5_1_StreamStatesTest {
             assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
 
             var connection = (Http2Connection) server.activeConnections().iterator().next();
-            Map<?, ?> streams = getField(connection, "streams", Map.class);
-            var stream = (Http2Stream) streams.get(1);
+            Http2StreamRegistry streamRegistry =
+                getField(connection, "streamRegistry", Http2StreamRegistry.class);
+            var stream = Objects.requireNonNull(streamRegistry.applicationStream(1));
             Lock stateLock = getField(connection, "stateLock", Lock.class);
             stateLock.lock();
             try {
@@ -518,8 +519,9 @@ class RFC9113_5_1_StreamStatesTest {
             assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).endStream(), equalTo(true));
 
             var connection = (Http2Connection) server.activeConnections().iterator().next();
-            Map<?, ?> streams = getField(connection, "streams", Map.class);
-            var stream = (Http2Stream) streams.get(1);
+            Http2StreamRegistry streamRegistry =
+                getField(connection, "streamRegistry", Http2StreamRegistry.class);
+            var stream = Objects.requireNonNull(streamRegistry.applicationStream(1));
             assertEventually(stream::protocolStateClosed, equalTo(true));
 
             con.socket().shutdownOutput();

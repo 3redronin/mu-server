@@ -10,7 +10,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -178,8 +178,10 @@ class RFC9113_6_4_RstStreamTest {
             assertThat("The request did not start", requestStarted.await(5, TimeUnit.SECONDS), is(true));
 
             Http2Connection connection = connectionRef.get();
-            Map<?, ?> streams = getField(connection, "streams", Map.class);
-            Http2Stream stream = (Http2Stream) streams.get(1);
+            Http2StreamRegistry streamRegistry =
+                getField(connection, "streamRegistry", Http2StreamRegistry.class);
+            Http2Stream stream =
+                Objects.requireNonNull(streamRegistry.applicationStream(1));
             Lock stateLock = getField(connection, "stateLock", Lock.class);
             stateLock.lock();
             try {
@@ -228,8 +230,10 @@ class RFC9113_6_4_RstStreamTest {
             assertThat("The request did not start", requestStarted.await(5, TimeUnit.SECONDS), is(true));
 
             Http2Connection connection = (Http2Connection) server.activeConnections().iterator().next();
-            Map<?, ?> streams = getField(connection, "streams", Map.class);
-            Http2Stream stream = (Http2Stream) streams.get(1);
+            Http2StreamRegistry streamRegistry =
+                getField(connection, "streamRegistry", Http2StreamRegistry.class);
+            Http2Stream stream =
+                Objects.requireNonNull(streamRegistry.applicationStream(1));
             var stateAtWriteFailure = new AtomicReference<ResponseState>();
             var blockedWrite = new WriteTask(utf8DataFrame(1, false, "blocked"), true) {
                 @Override
