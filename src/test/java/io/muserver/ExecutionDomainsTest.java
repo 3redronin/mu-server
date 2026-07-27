@@ -312,6 +312,35 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void requestRejectionListenerFailureDoesNotSkipLaterListeners() throws Exception {
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var firstListenerCalls = new AtomicInteger();
+        var laterListenerThread = new CompletableFuture<String>();
+        server = httpServer()
+            .withMaxHeadersSize(1024)
+            .withAsyncExecutor(asyncExecutor)
+            .addRequestRejectListener(info -> {
+                firstListenerCalls.incrementAndGet();
+                throw new AssertionError("deliberate request rejection listener failure");
+            })
+            .addRequestRejectListener(info ->
+                laterListenerThread.complete(Thread.currentThread().getName())
+            )
+            .start();
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/")
+                .writeHeader("x-big", "a".repeat(2000))
+                .flushHeaders();
+            assertThat(client.readLine(), startsWith("HTTP/1.1 431"));
+            client.readBody(client.readHeaders());
+        }
+
+        assertThat(laterListenerThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
+        assertThat(firstListenerCalls.get(), is(1));
+    }
+
+    @Test
     void http1RejectionResponsePrecedesFallbackListenerDelivery() throws Exception {
         var rejectedAsyncExecutor =
             track(Executors.newSingleThreadExecutor(namedThreads("rejected-async-")));

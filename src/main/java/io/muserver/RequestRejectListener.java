@@ -8,7 +8,8 @@ package io.muserver;
  * <p>Because no {@link MuRequest} or {@link MuResponse} is created for these requests, they are
  * never reported to a {@link ResponseCompleteListener}.</p>
  * <p>Listeners are dispatched asynchronously on the server's async executor after the rejection
- * response has been sent or queued.</p>
+ * response has been sent or queued. A failure from one listener is logged and does not prevent
+ * other listeners from being notified.</p>
  * @see MuServerBuilder#addRequestRejectListener(RequestRejectListener)
  */
 public interface RequestRejectListener {
