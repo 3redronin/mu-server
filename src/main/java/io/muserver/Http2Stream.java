@@ -101,6 +101,11 @@ class Http2Stream implements ResponseInfo {
         return applicationExchangeEnded;
     }
 
+    boolean applicationExchangeNeedsTermination() {
+        return !applicationExchangeEnded
+            && request.asyncCompletionIsPending();
+    }
+
     void onProtocolStateClosed() {
         protocolStateClosed = true;
     }
@@ -131,9 +136,7 @@ class Http2Stream implements ResponseInfo {
     void applyPeerReset(Http2ResetStreamFrame rstStream) {
         onProtocolResetApplied();
         Http2Response currentResponse = requiredResponse();
-        if (!currentResponse.responseState().endState()) {
-            currentResponse.setState(ResponseState.CLIENT_CANCELLED);
-        }
+        currentResponse.setState(ResponseState.CLIENT_CANCELLED);
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).onStreamReset(rstStream);
         }
@@ -151,6 +154,15 @@ class Http2Stream implements ResponseInfo {
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).cancel(reason, refundUnreadData);
         }
+    }
+
+    void onConnectionTerminated(IOException reason, ResponseState terminalState) {
+        cancel(reason, false);
+        Http2Response currentResponse = requiredResponse();
+        currentResponse.setState(terminalState);
+        // Complete the private async-exchange future. Its continuation is
+        // dispatched to the handler executor before application cleanup runs.
+        request.onClientCancelled();
     }
 
     boolean canReceiveData() {

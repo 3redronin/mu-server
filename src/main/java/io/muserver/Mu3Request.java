@@ -290,6 +290,11 @@ class Mu3Request implements MuRequest {
         return asyncHandle != null;
     }
 
+    boolean asyncCompletionIsPending() {
+        Mu3AsyncHandleImpl current = asyncHandle;
+        return current != null && current.completionIsPending();
+    }
+
     @Override
     public HttpVersion httpVersion() {
         return httpVersion;
