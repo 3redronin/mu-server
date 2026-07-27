@@ -17,7 +17,6 @@ import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static scaffolding.MuAssert.assertNotTimedOut;
 
@@ -87,7 +86,7 @@ class RFC9113_5_2_FlowControlTest {
                 assertNotTimedOut("waiting for WINDOW_UPDATE flush", flushEntered);
                 assertThat(
                     debitObservedDuringWrite.get().error(),
-                    notNullValue()
+                    nullValue()
                 );
                 assertThat(
                     debitObservedDuringFlush.get().error(),
