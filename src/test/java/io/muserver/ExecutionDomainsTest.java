@@ -8,6 +8,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import scaffolding.Http1Client;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -175,6 +176,50 @@ class ExecutionDomainsTest {
             con.writeFrame(new Http2Ping(false, pingData)).flush();
 
             assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, pingData)));
+        }
+    }
+
+    @Test
+    void anIdleHttp1ConnectionDoesNotRetainAHandlerWorker() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
+        var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addHandler(Method.GET, "/", (request, response, pathParams) ->
+                response.write(Thread.currentThread().getName()))
+            .start();
+
+        try (var first = Http1Client.connect(server);
+             var second = Http1Client.connect(server)) {
+            first.writeRequestLine(Method.GET, "/").flushHeaders();
+            assertThat(first.readLine(), equalTo("HTTP/1.1 200 OK"));
+            assertThat(first.readBody(first.readHeaders()), startsWith("handler-"));
+
+            Future<String> secondResponse = clientExecutor.submit(() -> {
+                second.writeRequestLine(Method.GET, "/").flushHeaders();
+                assertThat(second.readLine(), equalTo("HTTP/1.1 200 OK"));
+                return second.readBody(second.readHeaders());
+            });
+            assertThat(secondResponse.get(2, TimeUnit.SECONDS), startsWith("handler-"));
+        }
+    }
+
+    @Test
+    void aSharedConnectionAndHandlerExecutorDoesNotSubmitBackToItself() throws Exception {
+        var sharedExecutor = track(Executors.newSingleThreadExecutor(namedThreads("shared-")));
+        server = httpServer()
+            .withHandlerExecutor(sharedExecutor)
+            .withConnectionExecutor(sharedExecutor)
+            .addHandler(Method.GET, "/", (request, response, pathParams) ->
+                response.write(Thread.currentThread().getName()))
+            .start();
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/").flushHeaders();
+            assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
+            assertThat(client.readBody(client.readHeaders()), startsWith("shared-"));
         }
     }
 

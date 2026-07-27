@@ -208,6 +208,12 @@ public class MuServerBuilder {
      * caller-supplied executor remains owned by the caller and is not shut down when
      * the server stops.
      *
+     * <p>Use an executor that is independent from the executor configured by
+     * {@link #withConnectionExecutor(ExecutorService)} to keep request handling isolated
+     * from long-lived connection tasks. If the same executor instance is supplied for
+     * both, HTTP/1 handlers run on their connection task to avoid submitting work back
+     * to an executor that may already be at capacity.</p>
+     *
      * @param executor The executor service to use to handle requests
      * @return The current Mu Server builder
      */
@@ -217,21 +223,26 @@ public class MuServerBuilder {
     }
 
     /**
-     * Sets the executor used for connection setup and HTTP/2 connection reads.
+     * Sets the executor used for connection setup and connection input processing.
      *
-     * <p>HTTP/2 uses one long-lived reader task per connection on this executor. HTTP/2
-     * writes use the executor configured by
+     * <p>HTTP/1 uses one long-lived keep-alive connection task and HTTP/2 uses one
+     * long-lived reader task per connection on this executor. Request handlers are
+     * submitted separately to the executor configured by
+     * {@link #withHandlerExecutor(ExecutorService)}. HTTP/2 writes use the executor configured by
      * {@link #withHttp2WriterExecutor(ExecutorService)} so a fixed-size connection pool
-     * cannot be occupied by readers while their writers wait in the same queue. Request
-     * handlers use the executor configured by
-     * {@link #withHandlerExecutor(ExecutorService)}.</p>
+     * cannot be occupied by readers while their writers wait in the same queue.</p>
+     *
+     * <p>Use an executor that is independent from the executor configured by
+     * {@link #withHandlerExecutor(ExecutorService)} to keep long-lived connection tasks
+     * from consuming handler capacity. If the same executor instance is supplied for
+     * both, HTTP/1 handlers run on their connection task to avoid self-deadlock.</p>
      *
      * <p>By default, a server-owned virtual-thread-per-task executor is used when the
      * runtime supports virtual threads, otherwise a cached thread pool is used. A
      * caller-supplied executor remains owned by the caller and is not shut down when
      * the server stops.</p>
      *
-     * @param connectionExecutor The executor for connection setup and HTTP/2 reads, or
+     * @param connectionExecutor The executor for connection setup and input processing, or
      *                           <code>null</code> to use the default
      * @return The current Mu Server builder
      */
@@ -710,7 +721,7 @@ public class MuServerBuilder {
     }
 
     /**
-     * Gets the executor used for connection setup and HTTP/2 connection reads.
+     * Gets the executor used for connection setup and connection input processing.
      *
      * @return The configured executor, or <code>null</code> if the default executor will be used.
      */

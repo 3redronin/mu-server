@@ -263,26 +263,8 @@ class ConnectionAcceptor {
 
         if (rejectDueToOverload) {
             handleOverload(socket);
-        } else if (httpVersion == HttpVersion.HTTP_2) {
-            handleRequest(socket, clientCert, startTime, httpVersion, inputStream);
         } else {
-            Socket requestSocket = socket;
-            Certificate requestClientCert = clientCert;
-            PushbackInputStream requestInputStream = inputStream;
-            HttpVersion requestHttpVersion = httpVersion;
-            try {
-                handlerExecutor.submit(() ->
-                    handleRequest(
-                        requestSocket,
-                        requestClientCert,
-                        startTime,
-                        requestHttpVersion,
-                        requestInputStream
-                    )
-                );
-            } catch (RejectedExecutionException e) {
-                handleOverload(requestSocket);
-            }
+            handleRequest(socket, clientCert, startTime, httpVersion, inputStream);
         }
     }
 
@@ -335,6 +317,7 @@ class ConnectionAcceptor {
         }
     }
 
+    @SuppressWarnings("ReferenceEquality") // Sharing is defined by the exact configured executor instance.
     private void handleRequest(Socket socket, @Nullable Certificate clientCert, Instant startTime, HttpVersion httpVersion, @Nullable InputStream providedInputStream) {
         BaseHttpConnection con;
         if (httpVersion == HttpVersion.HTTP_2) {
@@ -353,7 +336,15 @@ class ConnectionAcceptor {
                 http2WriterExecutor
             );
         } else {
-            con = new Http1Connection(server, this, socket, clientCert, startTime);
+            con = new Http1Connection(
+                server,
+                this,
+                socket,
+                clientCert,
+                startTime,
+                handlerExecutor,
+                handlerExecutor == connectionExecutor
+            );
         }
 
         connections.add(con);
