@@ -19,4 +19,16 @@ class ResponseStateTest {
         assertThat(response.setState(ResponseState.FINISHED), equalTo(false));
         assertThat(response.responseState(), equalTo(ResponseState.CLIENT_DISCONNECTED));
     }
+
+    @Test
+    void firstTerminalCauseWins() {
+        var response = new Http1Response(null, new ByteArrayOutputStream());
+
+        assertThat(response.setState(ResponseState.TIMED_OUT), equalTo(true));
+        assertThat(
+            response.setState(ResponseState.CLIENT_DISCONNECTED),
+            equalTo(false)
+        );
+        assertThat(response.responseState(), equalTo(ResponseState.TIMED_OUT));
+    }
 }
