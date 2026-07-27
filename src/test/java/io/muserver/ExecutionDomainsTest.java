@@ -445,6 +445,57 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void externalStopStillWaitsAfterCallbackLocalStopReturns() throws Exception {
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
+        var runningServer = new CompletableFuture<MuServer>();
+        var localStopResult = new CompletableFuture<Boolean>();
+        var localStopReturned = new CountDownLatch(1);
+        var releaseCallback = new CountDownLatch(1);
+        server = httpServer()
+            .withMaxHeadersSize(1024)
+            .withAsyncExecutor(asyncExecutor)
+            .addRequestRejectListener(info -> {
+                try {
+                    localStopResult.complete(
+                        runningServer.get().stop(2, TimeUnit.SECONDS)
+                    );
+                    localStopReturned.countDown();
+                    releaseCallback.await();
+                } catch (Throwable failure) {
+                    localStopResult.completeExceptionally(failure);
+                }
+            })
+            .start();
+        runningServer.complete(server);
+
+        try {
+            try (var client = Http1Client.connect(server)) {
+                client.writeRequestLine(Method.GET, "/")
+                    .writeHeader("x-big", "a".repeat(2000))
+                    .flushHeaders();
+                assertThat(client.readLine(), startsWith("HTTP/1.1 431"));
+            }
+
+            assertThat(localStopResult.get(1, TimeUnit.SECONDS), is(true));
+            assertThat(localStopReturned.await(1, TimeUnit.SECONDS), is(true));
+
+            Future<Boolean> externalStop = clientExecutor.submit(() ->
+                runningServer.get().stop(2, TimeUnit.SECONDS)
+            );
+            assertThrows(
+                TimeoutException.class,
+                () -> externalStop.get(100, TimeUnit.MILLISECONDS)
+            );
+            releaseCallback.countDown();
+            assertThat(externalStop.get(5, TimeUnit.SECONDS), is(true));
+            server = null;
+        } finally {
+            releaseCallback.countDown();
+        }
+    }
+
+    @Test
     void anIdleHttp1ConnectionDoesNotRetainAHandlerWorker() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
