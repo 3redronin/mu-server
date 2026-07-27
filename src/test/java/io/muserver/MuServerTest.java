@@ -673,6 +673,7 @@ public class MuServerTest {
         ResponseInfo info = received.get(10, TimeUnit.SECONDS);
         assertThat(info, notNullValue());
         assertThat(info.completedSuccessfully(), is(false));
+        assertThat(info.response().responseState(), is(ResponseState.TIMED_OUT));
         assertThat(info.duration(), greaterThan(-1L));
 
     }

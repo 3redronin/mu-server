@@ -79,6 +79,10 @@ public class AsyncTest {
         }
         assertEventually(infoRef::get, not(nullValue()));
         assertThat(infoRef.get().completedSuccessfully(), is(false));
+        assertThat(
+            infoRef.get().response().responseState(),
+            is(ResponseState.TIMED_OUT)
+        );
     }
 
     @Test

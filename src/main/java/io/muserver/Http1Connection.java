@@ -38,19 +38,29 @@ class Http1Connection extends BaseHttpConnection {
         @Nullable
         final Mu3Request request;
         @Nullable
+        final BaseResponse response;
+        @Nullable
         final WebsocketConnection websocket;
 
-        private ActiveExchange(@Nullable Mu3Request request, @Nullable WebsocketConnection websocket) {
+        private ActiveExchange(
+            @Nullable Mu3Request request,
+            @Nullable BaseResponse response,
+            @Nullable WebsocketConnection websocket
+        ) {
             this.request = request;
+            this.response = response;
             this.websocket = websocket;
         }
 
-        static ActiveExchange forRequest(Mu3Request request) {
-            return new ActiveExchange(request, null);
+        static ActiveExchange forRequest(
+            Mu3Request request,
+            BaseResponse response
+        ) {
+            return new ActiveExchange(request, response, null);
         }
 
         static ActiveExchange forWebsocket(WebsocketConnection websocket) {
-            return new ActiveExchange(null, websocket);
+            return new ActiveExchange(null, null, websocket);
         }
     }
 
@@ -333,7 +343,10 @@ class Http1Connection extends BaseHttpConnection {
 
     @Override
     public void onRequestStarted(Mu3Request req) {
-        activeExchange.set(ActiveExchange.forRequest(req));
+        activeExchange.set(ActiveExchange.forRequest(
+            req,
+            req.responseForConnection()
+        ));
         super.onRequestStarted(req);
     }
 
@@ -369,7 +382,10 @@ class Http1Connection extends BaseHttpConnection {
     @Override
     public void abort() throws IOException {
         if (closed.compareAndSet(false, true)) {
-            completeAsyncRequest(new MuException("Connection aborted"));
+            terminateActiveRequest(
+                ResponseState.ERRORED,
+                new MuException("Connection aborted")
+            );
             state.set(HttpConnectionState.CLOSED);
             clientSocket.close();
         } else {
@@ -380,7 +396,10 @@ class Http1Connection extends BaseHttpConnection {
     @Override
     public void abortWithTimeout() throws IOException {
         if (closed.compareAndSet(false, true)) {
-            completeAsyncRequest(new TimeoutException("Idle timeout exceeded"));
+            terminateActiveRequest(
+                ResponseState.TIMED_OUT,
+                new TimeoutException("Idle timeout exceeded")
+            );
             notifyWebsocketTimeout();
             state.set(HttpConnectionState.CLOSED);
             clientSocket.close();
@@ -441,9 +460,13 @@ class Http1Connection extends BaseHttpConnection {
         }
     }
 
-    private void completeAsyncRequest(Exception error) {
+    private void terminateActiveRequest(
+        ResponseState terminalState,
+        Exception error
+    ) {
         var cur = activeExchange.get();
         if (cur != null && cur.request != null) {
+            java.util.Objects.requireNonNull(cur.response).setState(terminalState);
             Mu3AsyncHandleImpl asyncHandle = cur.request.getAsyncHandle();
             if (asyncHandle != null) {
                 asyncHandle.complete(error);

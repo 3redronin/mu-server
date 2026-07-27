@@ -375,4 +375,11 @@ class Mu3Request implements MuRequest {
     public void setResponse(BaseResponse response) {
         this.response = response;
     }
+
+    BaseResponse responseForConnection() {
+        return Objects.requireNonNull(
+            response,
+            "The response has not been initialized"
+        );
+    }
 }
