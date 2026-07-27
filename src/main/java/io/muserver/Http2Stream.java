@@ -101,6 +101,11 @@ class Http2Stream implements ResponseInfo {
         return applicationExchangeEnded;
     }
 
+    boolean applicationExchangeNeedsTermination() {
+        return !applicationExchangeEnded
+            && request.asyncCompletionIsPending();
+    }
+
     void onProtocolStateClosed() {
         protocolStateClosed = true;
     }

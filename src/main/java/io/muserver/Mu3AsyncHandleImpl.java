@@ -55,6 +55,15 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
         return exchangeCompletion;
     }
 
+    boolean completionIsPending() {
+        lock.lock();
+        try {
+            return !completionRequested;
+        } finally {
+            lock.unlock();
+        }
+    }
+
     @Override
     public void setReadListener(RequestBodyListener readListener) {
         Objects.requireNonNull(readListener, "readListener");
