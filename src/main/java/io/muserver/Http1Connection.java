@@ -464,6 +464,14 @@ class Http1Connection extends BaseHttpConnection {
         return handlerExecutor;
     }
 
+    void wakeWebSocketReader() {
+        try {
+            clientSocket.shutdownInput();
+        } catch (IOException e) {
+            log.debug("Could not wake WebSocket reader", e);
+        }
+    }
+
     boolean webSocketEventsRunOnConnectionTask() {
         return handlersRunOnConnectionTask;
     }

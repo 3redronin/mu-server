@@ -32,6 +32,7 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.muserver.MuServerBuilder.httpServer;
@@ -677,6 +678,124 @@ class ExecutionDomainsTest {
             assertThat(shutdownThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
             server = null;
         } finally {
+            webSocket.cancel();
+        }
+    }
+
+    @Test
+    void blockedWebSocketShutdownCallbackDoesNotBlockTheShutdownDeadline() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
+        var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
+        var connected = new CountDownLatch(1);
+        var shutdownEntered = new CountDownLatch(1);
+        var releaseShutdown = new CountDownLatch(1);
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
+                @Override
+                public void onConnect(MuWebSocketSession session) throws Exception {
+                    super.onConnect(session);
+                    connected.countDown();
+                }
+
+                @Override
+                public void onText(String message) {
+                }
+
+                @Override
+                public void onBinary(ByteBuffer payload) {
+                }
+
+                @Override
+                public void onServerShuttingDown() throws Exception {
+                    shutdownEntered.countDown();
+                    releaseShutdown.await();
+                }
+            }))
+            .start();
+
+        String websocketUrl = "ws" + server.uri().toString().substring(4);
+        WebSocket webSocket = client.newWebSocket(
+            request().url(websocketUrl).build(),
+            new WebSocketListener() {
+            }
+        );
+        try {
+            assertThat(connected.await(5, TimeUnit.SECONDS), is(true));
+            MuServer runningServer = Objects.requireNonNull(server);
+            Future<Boolean> stopped = clientExecutor.submit(() ->
+                runningServer.stop(100, TimeUnit.MILLISECONDS)
+            );
+            assertThat(shutdownEntered.await(5, TimeUnit.SECONDS), is(true));
+            assertThat(stopped.get(2, TimeUnit.SECONDS), is(false));
+            server = null;
+        } finally {
+            releaseShutdown.countDown();
+            webSocket.cancel();
+        }
+    }
+
+    @Test
+    void sharedExecutorSerializesShutdownBehindAnInFlightWebSocketCallback() throws Exception {
+        var sharedExecutor = track(Executors.newSingleThreadExecutor(namedThreads("shared-")));
+        var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
+        var textEntered = new CountDownLatch(1);
+        var releaseText = new CountDownLatch(1);
+        var shutdownCalled = new CompletableFuture<@Nullable Void>();
+        var callbackActive = new AtomicBoolean();
+        var callbacksOverlapped = new AtomicBoolean();
+        server = httpServer()
+            .withHandlerExecutor(sharedExecutor)
+            .withConnectionExecutor(sharedExecutor)
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
+                @Override
+                public void onText(String message) throws Exception {
+                    callbackActive.set(true);
+                    textEntered.countDown();
+                    try {
+                        releaseText.await();
+                    } finally {
+                        callbackActive.set(false);
+                    }
+                }
+
+                @Override
+                public void onBinary(ByteBuffer payload) {
+                }
+
+                @Override
+                public void onServerShuttingDown() {
+                    callbacksOverlapped.set(callbackActive.get());
+                    shutdownCalled.complete(null);
+                }
+            }))
+            .start();
+
+        String websocketUrl = "ws" + server.uri().toString().substring(4);
+        WebSocket webSocket = client.newWebSocket(
+            request().url(websocketUrl).build(),
+            new WebSocketListener() {
+            }
+        );
+        try {
+            assertThat(webSocket.send("hold"), is(true));
+            assertThat(textEntered.await(5, TimeUnit.SECONDS), is(true));
+            MuServer runningServer = Objects.requireNonNull(server);
+            Future<Boolean> stopped = clientExecutor.submit(() ->
+                runningServer.stop(2, TimeUnit.SECONDS)
+            );
+            assertThrows(TimeoutException.class, () ->
+                shutdownCalled.get(100, TimeUnit.MILLISECONDS)
+            );
+            releaseText.countDown();
+            shutdownCalled.get(5, TimeUnit.SECONDS);
+            assertThat(callbacksOverlapped.get(), is(false));
+            assertThat(stopped.get(5, TimeUnit.SECONDS), is(true));
+            server = null;
+        } finally {
+            releaseText.countDown();
             webSocket.cancel();
         }
     }
