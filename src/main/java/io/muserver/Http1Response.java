@@ -103,9 +103,7 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
                 out.close();
             }
         }
-        if (!responseState().endState()) {
-            setState(ResponseState.FINISHED);
-        }
+        setState(ResponseState.FINISHED);
     }
 
     @Override
