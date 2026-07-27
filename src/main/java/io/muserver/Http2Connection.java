@@ -1198,12 +1198,30 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             failure == null ? null : completionCause(failure),
             true
         );
+        RejectedExecutionException rejected = server.tryExecuteHandlerTask(completionTask);
+        if (rejected != null) {
+            abortAsyncStreamAfterDispatchFailure(stream, rejected);
+        }
+    }
+
+    private void abortAsyncStreamAfterDispatchFailure(
+        Http2Stream stream,
+        RejectedExecutionException dispatchFailure
+    ) {
+        log.warn("Aborting accepted HTTP/2 stream because its application executors rejected completion", dispatchFailure);
         try {
-            handlerExecutor.execute(completionTask);
-        } catch (RejectedExecutionException rejected) {
-            // The exchange was already accepted. Finishing on the completing thread is
-            // preferable to leaking the stream merely because handler capacity is transiently full.
-            completionTask.run();
+            BaseResponse response = stream.response();
+            if (!stream.resetWasInitiated() && !response.responseState().endState()) {
+                response.setState(ResponseState.ERRORED);
+                write(new Http2ResetStreamFrame(stream.id, Http2ErrorCode.INTERNAL_ERROR.code()));
+                stream.cancel(
+                    new IOException("Application executors rejected HTTP/2 stream completion", dispatchFailure),
+                    false
+                );
+            }
+            stream.abandonApplicationExchange();
+        } finally {
+            onExchangeEnded(stream, false);
         }
     }
 
@@ -1231,7 +1249,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                 stream.cancel(new IOException("Unhandled stream exception", e), false);
             }
         } finally {
-            onExchangeEnded(stream);
+            onExchangeEnded(stream, true);
         }
     }
 
@@ -1367,11 +1385,21 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     @Override
     protected void onExchangeEnded(ResponseInfo exchange) {
-        var stream = (Http2Stream) exchange;
+        onExchangeEnded((Http2Stream) exchange, false);
+    }
+
+    private void onExchangeEnded(
+        Http2Stream stream,
+        boolean alreadyOnApplicationExecutor
+    ) {
         stream.onApplicationExchangeEnded();
         applicationExchangeEndedForWrites(stream.id);
         signalWriteLoop();
-        super.onExchangeEnded(exchange);
+        recordExchangeEnded(stream);
+        server.executeResponseCompletionTask(
+            () -> notifyExchangeEnded(stream),
+            alreadyOnApplicationExecutor
+        );
     }
 
     void removeProtocolStream(Http2Stream stream) {
