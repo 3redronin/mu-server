@@ -110,14 +110,15 @@ abstract class BaseHttpConnection implements HttpConnection {
         Mu3Request request,
         BaseResponse response
     ) {
-        RateLimitRejectionAction first = null;
+        RateLimiterImpl.Decision first = null;
         for (RateLimiterImpl rateLimiter : server.rateLimiters) {
-            RateLimitRejectionAction action = rateLimiter.record(request);
-            if (action != null && first == null) {
-                first = action;
+            RateLimiterImpl.Decision decision = rateLimiter.record(request);
+            if (decision != null && first == null) {
+                first = decision;
             }
         }
-        if (first != RateLimitRejectionAction.SEND_429) {
+        if (first == null
+            || first.action() != RateLimitRejectionAction.SEND_429) {
             return false;
         }
 
@@ -126,7 +127,7 @@ abstract class BaseHttpConnection implements HttpConnection {
         onInvalidRequest(rejection);
         request.onRateLimitRejected();
         response.status(rejection.status());
-        String retryAfter = request.headers().get(HeaderNames.RETRY_AFTER);
+        String retryAfter = first.retryAfter();
         if (retryAfter != null) {
             response.headers().set(HeaderNames.RETRY_AFTER, retryAfter);
         }

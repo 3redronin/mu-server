@@ -42,7 +42,10 @@ public class RateLimiterTest {
         assertThat(limiter.record(null), nullValue());
         assertThat(limiter.record(null), nullValue());
         assertThat(limiter.record(null), nullValue());
-        assertThat(limiter.record(null), equalTo(RateLimitRejectionAction.SEND_429));
+        assertThat(
+            limiter.record(null).action(),
+            equalTo(RateLimitRejectionAction.SEND_429)
+        );
         nowNanos.addAndGet(TimeUnit.MILLISECONDS.toNanos(101L));
         assertThat(limiter.record(null), nullValue());
         nowNanos.addAndGet(TimeUnit.MILLISECONDS.toNanos(101L));
@@ -63,7 +66,7 @@ public class RateLimiterTest {
         assertThat(limiter.record(null), nullValue());
         nowNanos.addAndGet(TimeUnit.MILLISECONDS.toNanos(99L));
         assertThat(
-            limiter.record(null),
+            limiter.record(null).action(),
             is(RateLimitRejectionAction.SEND_429)
         );
         nowNanos.addAndGet(TimeUnit.MILLISECONDS.toNanos(2L));
@@ -103,7 +106,7 @@ public class RateLimiterTest {
         var executor = Executors.newFixedThreadPool(8);
         try {
             var decisions =
-                new ArrayList<Future<RateLimitRejectionAction>>();
+                new ArrayList<Future<RateLimiterImpl.Decision>>();
             for (int i = 0; i < 16; i++) {
                 decisions.add(executor.submit(() -> {
                     start.await();
@@ -177,6 +180,39 @@ public class RateLimiterTest {
             );
             assertThat(limitedServer.stats().rejectedDueToOverload(), is(1L));
             assertThat(limitedServer.stats().activeRequests(), empty());
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"http", "h2"})
+    void ignoredDecisionDoesNotExposeLaterRetryMetadataToHandler(
+        String protocol
+    ) throws Exception {
+        try (MuServer limitedServer = ServerUtils.httpsServerForTest(protocol)
+            .withRateLimiter(request -> rateLimit()
+                .withBucket("ignored-first")
+                .withRate(1)
+                .withWindow(1, TimeUnit.MINUTES)
+                .withRejectionAction(RateLimitRejectionAction.IGNORE)
+                .build())
+            .withRateLimiter(request -> rateLimit()
+                .withBucket("send-later")
+                .withRate(1)
+                .withWindow(1, TimeUnit.MINUTES)
+                .build())
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                String retryAfter =
+                    request.headers().get(HeaderNames.RETRY_AFTER);
+                response.write(retryAfter == null ? "absent" : retryAfter);
+            })
+            .start()) {
+            try (Response first = call(request(limitedServer.uri()))) {
+                assertThat(first.body().string(), is("absent"));
+            }
+            try (Response ignored = call(request(limitedServer.uri()))) {
+                assertThat(ignored.code(), is(200));
+                assertThat(ignored.body().string(), is("absent"));
+            }
         }
     }
 
@@ -336,7 +372,10 @@ public class RateLimiterTest {
             .build());
         assertThat(limiter.record(null), nullValue());
         for (int i = 1; i < 10; i++) {
-            assertThat(limiter.record(null), equalTo(RateLimitRejectionAction.IGNORE));
+            assertThat(
+                limiter.record(null).action(),
+                equalTo(RateLimitRejectionAction.IGNORE)
+            );
         }
         assertEventually(() -> limiter.currentBuckets().keySet(), is(empty()));
     }
