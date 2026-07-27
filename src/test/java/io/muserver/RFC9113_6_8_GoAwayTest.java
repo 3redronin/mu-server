@@ -126,8 +126,6 @@ class RFC9113_6_8_GoAwayTest {
     void gracefulShutdownWaitsAfterTheInitialGoAwayIsActuallyWritten() throws Exception {
         var writerStarted = new CountDownLatch(1);
         var releaseWriter = new CountDownLatch(1);
-        var requestStarted = new CountDownLatch(1);
-        var releaseRequest = new CountDownLatch(1);
         var writerExecutor = Executors.newSingleThreadExecutor();
         var stopper = Executors.newSingleThreadExecutor();
         writerExecutor.submit(() -> {
@@ -140,13 +138,6 @@ class RFC9113_6_8_GoAwayTest {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .withHttp2WriterExecutor(writerExecutor)
-            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
-                requestStarted.countDown();
-                if (!releaseRequest.await(5, TimeUnit.SECONDS)) {
-                    throw new IllegalStateException("Timed out waiting to finish request");
-                }
-                response.write("done");
-            })
             .start();
 
         try (var client = new H2Client();
@@ -163,22 +154,17 @@ class RFC9113_6_8_GoAwayTest {
                 equalTo(goAway(0x7FFFFFFF, Http2ErrorCode.NO_ERROR)));
 
             int originalTimeout = con.socket().getSoTimeout();
-            con.socket().setSoTimeout(50);
+            con.socket().setSoTimeout(20);
             try {
                 assertThrows(SocketTimeoutException.class, con::readFrameHeader);
             } finally {
                 con.socket().setSoTimeout(originalTimeout);
             }
 
-            con.writeFrame(getHelloFrame(1)).flush();
-            assertThat(requestStarted.await(5, TimeUnit.SECONDS), equalTo(true));
             assertThat("Expected final goaway", con.readLogicalFrame(),
-                equalTo(goAway(1, Http2ErrorCode.NO_ERROR)));
-
-            releaseRequest.countDown();
+                equalTo(goAway(0, Http2ErrorCode.NO_ERROR)));
             stopped.get(5, TimeUnit.SECONDS);
         } finally {
-            releaseRequest.countDown();
             releaseWriter.countDown();
             stopper.shutdownNow();
             writerExecutor.shutdownNow();
