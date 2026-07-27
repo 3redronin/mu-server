@@ -52,8 +52,8 @@ class Mu3Request implements MuRequest {
         this.mu3Headers = mu3Headers;
         this.bodySize = bodySize;
         this.body = body;
-        this.startTime = System.currentTimeMillis();
         this.startNanos = System.nanoTime();
+        this.startTime = System.currentTimeMillis();
         this.relativePath = requestUri.getRawPath();
     }
 
