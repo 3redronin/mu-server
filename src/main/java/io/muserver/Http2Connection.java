@@ -699,7 +699,11 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             // started, so no ACK can race this registration.
             registerInitialSettingsAck();
 
-            var fieldBlockDecoder = new FieldBlockDecoder(new HpackTable(serverSettings.headerTableSize), server.maxUrlSize(), server.maxRequestHeadersSize());
+            var fieldBlockDecoder = new FieldBlockDecoder(
+                new HpackTable(serverSettings.headerTableSize),
+                server.maxUrlSize(),
+                serverSettings.maxHeaderListSize
+            );
             writeEndedFuture = startWriteLoop(clientOut);
 
             // and now just read frames
@@ -1014,7 +1018,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 buffer,
                 clientIn,
                 Math.max(
-                    server.maxRequestHeadersSize(),
+                    serverSettings.maxHeaderListSize,
                     serverSettings.maxFrameSize
                 )
             );
