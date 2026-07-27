@@ -2,29 +2,36 @@ package io.muserver;
 
 import org.jspecify.annotations.Nullable;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
+import java.security.MessageDigest;
+import java.util.Arrays;
 
 /**
- * Creates self-identifying automatic ping payloads and measures their echoed
+ * Creates authenticated automatic ping payloads and measures their echoed
  * pongs. RFC 6455 section 5.5.3 requires a pong response to copy the ping's
- * application data, so each payload can carry its own monotonic send point
- * without shared outstanding-ping state.
+ * application data, so each payload can carry its own authenticated monotonic
+ * send point without shared outstanding-ping state.
  */
 final class WebsocketPingTracker {
-    private static final int TOKEN_LENGTH = 8;
-    private static final int PAYLOAD_LENGTH = TOKEN_LENGTH + Long.BYTES;
+    private static final String HMAC_ALGORITHM = "HmacSHA256";
+    private static final int SECRET_LENGTH = 32;
+    private static final int TAG_LENGTH = 8;
+    private static final int PAYLOAD_LENGTH = Long.BYTES + TAG_LENGTH;
 
-    private final byte[] connectionToken;
+    private final byte[] connectionSecret;
 
     WebsocketPingTracker() {
-        this(randomToken());
+        this(randomSecret());
     }
 
-    WebsocketPingTracker(byte[] connectionToken) {
-        if (connectionToken.length != TOKEN_LENGTH) {
-            throw new IllegalArgumentException("The connection token must be 8 bytes");
+    WebsocketPingTracker(byte[] connectionSecret) {
+        if (connectionSecret.length == 0) {
+            throw new IllegalArgumentException("The connection secret must not be empty");
         }
-        this.connectionToken = connectionToken.clone();
+        this.connectionSecret = connectionSecret.clone();
     }
 
     ByteBuffer newPingPayload() {
@@ -33,8 +40,8 @@ final class WebsocketPingTracker {
 
     ByteBuffer newPingPayload(long sentNanos) {
         return ByteBuffer.allocate(PAYLOAD_LENGTH)
-            .put(connectionToken)
             .putLong(sentNanos)
+            .put(authenticationTag(sentNanos))
             .flip();
     }
 
@@ -49,18 +56,36 @@ final class WebsocketPingTracker {
             return null;
         }
         int payloadOffset = pongPayload.position();
-        for (int i = 0; i < TOKEN_LENGTH; i++) {
-            if (connectionToken[i] != pongPayload.get(payloadOffset + i)) {
-                return null;
-            }
+        long sentNanos = pongPayload.getLong(payloadOffset);
+        byte[] suppliedTag = new byte[TAG_LENGTH];
+        ByteBuffer copy = pongPayload.duplicate();
+        copy.position(payloadOffset + Long.BYTES);
+        copy.get(suppliedTag);
+        if (!MessageDigest.isEqual(authenticationTag(sentNanos), suppliedTag)) {
+            return null;
         }
-        long sentNanos = pongPayload.getLong(payloadOffset + TOKEN_LENGTH);
         return MonotonicTime.elapsedMillis(sentNanos, receivedNanos);
     }
 
-    private static byte[] randomToken() {
-        byte[] token = new byte[TOKEN_LENGTH];
-        HttpsConfigBuilder.random.nextBytes(token);
-        return token;
+    private byte[] authenticationTag(long sentNanos) {
+        try {
+            Mac mac = Mac.getInstance(HMAC_ALGORITHM);
+            mac.init(new SecretKeySpec(connectionSecret, HMAC_ALGORITHM));
+            byte[] timestamp = ByteBuffer.allocate(Long.BYTES)
+                .putLong(sentNanos)
+                .array();
+            return Arrays.copyOf(mac.doFinal(timestamp), TAG_LENGTH);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException(
+                HMAC_ALGORITHM + " is unavailable",
+                e
+            );
+        }
+    }
+
+    private static byte[] randomSecret() {
+        byte[] secret = new byte[SECRET_LENGTH];
+        HttpsConfigBuilder.random.nextBytes(secret);
+        return secret;
     }
 }

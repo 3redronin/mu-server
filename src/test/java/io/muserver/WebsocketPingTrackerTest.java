@@ -10,8 +10,10 @@ import static org.hamcrest.Matchers.nullValue;
 
 class WebsocketPingTrackerTest {
 
+    private static final byte[] CONNECTION_SECRET =
+        new byte[]{1, 2, 3, 4, 5, 6, 7, 8};
     private final WebsocketPingTracker tracker = new WebsocketPingTracker(
-        new byte[]{1, 2, 3, 4, 5, 6, 7, 8}
+        CONNECTION_SECRET
     );
 
     @Test
@@ -21,7 +23,7 @@ class WebsocketPingTrackerTest {
 
         assertThat(tracker.pongLatencyMillis(secondPing, 6_000_000L), is(2L));
         assertThat(tracker.pongLatencyMillis(firstPing, 8_000_000L), is(7L));
-        assertThat(firstPing.getLong(8), is(1_000_000L));
+        assertThat(firstPing.getLong(0), is(1_000_000L));
     }
 
     @Test
@@ -38,11 +40,16 @@ class WebsocketPingTrackerTest {
     }
 
     @Test
-    void payloadsWithTheWrongIdentityOrLengthAreNotLatencyPongs() {
-        ByteBuffer wrongIdentity = tracker.newPingPayload(1L);
-        wrongIdentity.put(0, (byte) 9);
+    void forgedOrMalformedPayloadsAreNotLatencyPongs() {
+        ByteBuffer tamperedTimestamp = tracker.newPingPayload(1L);
+        tamperedTimestamp.putLong(0, 2L);
+        ByteBuffer peerChosenTimestamp = ByteBuffer.allocate(16)
+            .put(CONNECTION_SECRET)
+            .putLong(2L)
+            .flip();
 
-        assertThat(tracker.pongLatencyMillis(wrongIdentity, 2L), nullValue());
+        assertThat(tracker.pongLatencyMillis(tamperedTimestamp, 3L), nullValue());
+        assertThat(tracker.pongLatencyMillis(peerChosenTimestamp, 3L), nullValue());
         assertThat(tracker.pongLatencyMillis(ByteBuffer.allocate(15), 2L), nullValue());
     }
 }
