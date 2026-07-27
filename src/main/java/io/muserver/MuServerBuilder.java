@@ -12,7 +12,10 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -37,6 +40,7 @@ public class MuServerBuilder {
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(20);
     private @Nullable ExecutorService executor;
     private @Nullable ExecutorService connectionExecutor;
+    private @Nullable ScheduledExecutorService timerExecutor;
     private long maxRequestSize = 24 * 1024 * 1024;
     private @Nullable List<ResponseCompleteListener> responseCompleteListeners;
     private @Nullable List<RequestRejectListener> requestRejectListeners;
@@ -204,10 +208,11 @@ public class MuServerBuilder {
      * Sets the executor used for connection setup and HTTP/2 connection I/O.
      *
      * <p>HTTP/2 uses two long-lived tasks per connection: a socket reader and a write
-     * coordinator. The executor must allow both tasks to make progress independently
-     * for every active HTTP/2 connection. Request handlers do not run on this executor;
-     * they use the executor configured by {@link #withHandlerExecutor(ExecutorService)}.
-     * Supplying the same executor to both methods disables that isolation.</p>
+     * coordinator. The executor must allow both tasks to make progress independently for
+     * every active HTTP/2 connection, with additional capacity for short connection setup
+     * and timed maintenance tasks. Request handlers do not run on this executor; they use
+     * the executor configured by {@link #withHandlerExecutor(ExecutorService)}. Supplying
+     * the same executor to both methods disables that isolation.</p>
      *
      * <p>By default, a server-owned virtual-thread-per-task executor is used when the
      * runtime supports virtual threads, otherwise a cached thread pool is used. A
@@ -220,6 +225,30 @@ public class MuServerBuilder {
      */
     public MuServerBuilder withConnectionExecutor(@Nullable ExecutorService connectionExecutor) {
         this.connectionExecutor = connectionExecutor;
+        return this;
+    }
+
+    /**
+     * Sets the executor used to schedule server connection timers.
+     *
+     * <p>Timer threads only determine when work is due. Connection work is dispatched
+     * to the executor configured by {@link #withConnectionExecutor(ExecutorService)}
+     * so that timer threads do not perform socket I/O or invoke application handlers.</p>
+     *
+     * <p>The supplied scheduled executor must remain able to execute brief scheduling
+     * callbacks promptly. It should not be shared with an executor that can be occupied
+     * by long-running tasks.</p>
+     *
+     * <p>By default, a server-owned single-thread scheduled executor is used. A
+     * caller-supplied executor remains owned by the caller and is not shut down when
+     * the server stops.</p>
+     *
+     * @param timerExecutor The executor used to schedule connection timers, or
+     *                      <code>null</code> to use the default
+     * @return The current Mu Server builder
+     */
+    public MuServerBuilder withTimerExecutor(@Nullable ScheduledExecutorService timerExecutor) {
+        this.timerExecutor = timerExecutor;
         return this;
     }
 
@@ -622,6 +651,15 @@ public class MuServerBuilder {
     }
 
     /**
+     * Gets the executor used to schedule server connection timers.
+     *
+     * @return The configured executor, or <code>null</code> if the default executor will be used.
+     */
+    public @Nullable ScheduledExecutorService timerExecutor() {
+        return timerExecutor;
+    }
+
+    /**
      * Gets the maximum allowed request body size.
      *
      * @return The request body size limit in bytes.
@@ -730,6 +768,7 @@ public class MuServerBuilder {
             ", idleTimeoutMills=" + idleTimeoutMills +
             ", executor=" + executor +
             ", connectionExecutor=" + connectionExecutor +
+            ", timerExecutor=" + timerExecutor +
             ", maxRequestSize=" + maxRequestSize +
             ", responseCompleteListeners=" + responseCompleteListeners +
             ", requestRejectListeners=" + requestRejectListeners +
@@ -798,5 +837,17 @@ public class MuServerBuilder {
             // no worries; we'll use the default
         }
         return Executors.newCachedThreadPool();
+    }
+
+    private static final AtomicInteger TIMER_THREAD_IDS = new AtomicInteger();
+
+    static ScheduledExecutorService defaultTimerExecutor() {
+        var scheduler = new ScheduledThreadPoolExecutor(1, runnable ->
+            new Thread(runnable, "mu-timer-" + TIMER_THREAD_IDS.incrementAndGet())
+        );
+        scheduler.setRemoveOnCancelPolicy(true);
+        scheduler.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+        scheduler.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
+        return scheduler;
     }
 }

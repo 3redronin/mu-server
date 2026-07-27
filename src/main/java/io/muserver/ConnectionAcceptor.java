@@ -22,6 +22,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 class ConnectionAcceptor {
     private static final Logger log = LoggerFactory.getLogger(ConnectionAcceptor.class);
@@ -72,7 +74,7 @@ class ConnectionAcceptor {
     private final boolean isHttps;
 
     private final Thread acceptorThread;
-    private final @Nullable Thread timeoutThread;
+    private volatile @Nullable ScheduledFuture<?> timeoutTask;
 
     ConnectionAcceptor(Mu3ServerImpl server, ServerSocket socketServer, InetSocketAddress address, URI uri,
                        @Nullable HttpsConfig httpsConfig, @Nullable Http2Config http2Config,
@@ -90,8 +92,6 @@ class ConnectionAcceptor {
         this.isHttps = httpsConfig != null;
 
         this.acceptorThread = new Thread(this::acceptLoop, toString());
-        this.timeoutThread = server.idleTimeoutMillis() == 0 ? null :
-            new Thread(this::timeoutLoop, this + "-watcher");
     }
 
 
@@ -170,24 +170,21 @@ class ConnectionAcceptor {
         return drainedCleanly;
     }
 
-    private void timeoutLoop() {
-        while (state == State.STARTED) {
-            try {
-                long cutoff = System.currentTimeMillis() - server.idleTimeoutMillis();
-                for (BaseHttpConnection con : connections) {
-                    if (con.lastIO() < cutoff) {
-                        log.info("Timing out {}", con);
-                        con.abortWithTimeout();
-                    }
+    private void checkIdleTimeouts() {
+        if (state != State.STARTED) {
+            return;
+        }
+        try {
+            long cutoff = System.currentTimeMillis() - server.idleTimeoutMillis();
+            for (BaseHttpConnection con : connections) {
+                if (con.lastIO() < cutoff) {
+                    log.info("Timing out {}", con);
+                    con.abortWithTimeout();
                 }
-                Thread.sleep(200);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            } catch (Throwable t) {
-                if (state == State.STARTED) {
-                    log.error("Exception while doing timeouts", t);
-                }
+            }
+        } catch (Throwable t) {
+            if (state == State.STARTED) {
+                log.error("Exception while doing timeouts", t);
             }
         }
     }
@@ -369,9 +366,24 @@ class ConnectionAcceptor {
         }
         acceptorThread.setDaemon(false);
         state = State.STARTED;
-        acceptorThread.start();
-        if (timeoutThread != null) {
-            timeoutThread.start();
+        try {
+            if (server.idleTimeoutMillis() > 0) {
+                timeoutTask = server.scheduleConnectionTaskAtFixedRate(
+                    this::checkIdleTimeouts,
+                    0,
+                    200,
+                    TimeUnit.MILLISECONDS
+                );
+            }
+            acceptorThread.start();
+        } catch (RuntimeException | Error e) {
+            ScheduledFuture<?> currentTimeoutTask = timeoutTask;
+            if (currentTimeoutTask != null) {
+                currentTimeoutTask.cancel(false);
+                timeoutTask = null;
+            }
+            state = State.NOT_STARTED;
+            throw e;
         }
     }
 
@@ -384,16 +396,10 @@ class ConnectionAcceptor {
         gracefulShutdownTimeoutMillis = Math.max(0L, timeoutMillis);
         long deadline = System.currentTimeMillis() + gracefulShutdownTimeoutMillis;
         gracefulShutdownDeadlineMillis = deadline;
-        if (timeoutThread != null) {
-            timeoutThread.interrupt();
-            long remaining = Math.max(0L, deadline - System.currentTimeMillis());
-            if (remaining > 0) {
-                try {
-                    timeoutThread.join(remaining);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
+        ScheduledFuture<?> currentTimeoutTask = timeoutTask;
+        if (currentTimeoutTask != null) {
+            currentTimeoutTask.cancel(false);
+            timeoutTask = null;
         }
         try {
             socketServer.close();
