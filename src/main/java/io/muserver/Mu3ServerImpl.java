@@ -152,9 +152,17 @@ class Mu3ServerImpl implements MuServer {
 
     private boolean awaitDetachedApplicationTasks(long deadline) {
         DetachedApplicationTask currentTask = activeDetachedApplicationTask.get();
+        boolean calledFromDetachedTask = currentTask != null;
         while (currentTask != null) {
             currentTask.deregister();
             currentTask = currentTask.previous;
+        }
+        // A callback cannot safely wait for other detached callbacks: with a
+        // single-worker application executor, they may be queued behind this
+        // callback and cannot start until stop() returns. External stop callers
+        // still wait for every registered task.
+        if (calledFromDetachedTask) {
+            return true;
         }
         return awaitDetachedApplicationTasks(detachedApplicationTasks, deadline);
     }
