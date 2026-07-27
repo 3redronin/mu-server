@@ -10,10 +10,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Phaser;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.muserver.GZIPEncoderBuilder.gzipEncoder;
@@ -48,6 +50,14 @@ class Mu3ServerImpl implements MuServer {
     private final boolean ownsConnectionMaintenanceExecutor;
     private final ScheduledExecutorService timerExecutor;
     private final boolean ownsTimerExecutor;
+    private final Phaser responseCompletionTasks = new Phaser() {
+        @Override
+        protected boolean onAdvance(int phase, int registeredParties) {
+            // Keep accepting tasks after an idle phase. Server.stop() can also be called
+            // again after an earlier bounded stop timed out.
+            return false;
+        }
+    };
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
 
     Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService handlerExecutor, boolean ownsHandlerExecutor, ExecutorService asyncExecutor, boolean ownsAsyncExecutor, ExecutorService connectionExecutor, boolean ownsConnectionExecutor, ExecutorService http2WriterExecutor, boolean ownsHttp2WriterExecutor, ExecutorService connectionMaintenanceExecutor, boolean ownsConnectionMaintenanceExecutor, ScheduledExecutorService timerExecutor, boolean ownsTimerExecutor) {
@@ -113,6 +123,9 @@ class Mu3ServerImpl implements MuServer {
                 stoppedCleanly = false;
             }
         }
+        if (!awaitResponseCompletionTasks(deadline)) {
+            stoppedCleanly = false;
+        }
         if (ownsTimerExecutor) {
             timerExecutor.shutdown();
         }
@@ -132,6 +145,55 @@ class Mu3ServerImpl implements MuServer {
             asyncExecutor.shutdown();
         }
         return stoppedCleanly;
+    }
+
+    private boolean awaitResponseCompletionTasks(long deadline) {
+        while (responseCompletionTasks.getRegisteredParties() > 0) {
+            int phase = responseCompletionTasks.getPhase();
+            long remaining = Math.max(0L, deadline - System.currentTimeMillis());
+            try {
+                responseCompletionTasks.awaitAdvanceInterruptibly(
+                    phase,
+                    remaining,
+                    TimeUnit.MILLISECONDS
+                );
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            } catch (TimeoutException e) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
+    void executeResponseCompletionTask(Runnable task) {
+        responseCompletionTasks.register();
+        Runnable trackedTask = () -> {
+            try {
+                task.run();
+            } finally {
+                responseCompletionTasks.arriveAndDeregister();
+            }
+        };
+        try {
+            handlerExecutor.execute(trackedTask);
+        } catch (RejectedExecutionException handlerRejected) {
+            if (asyncExecutor != handlerExecutor) {
+                try {
+                    asyncExecutor.execute(trackedTask);
+                    return;
+                } catch (RejectedExecutionException asyncRejected) {
+                    asyncRejected.addSuppressed(handlerRejected);
+                    responseCompletionTasks.arriveAndDeregister();
+                    log.warn("Dropping response completion callback because its executors rejected it", asyncRejected);
+                    return;
+                }
+            }
+            responseCompletionTasks.arriveAndDeregister();
+            log.warn("Dropping response completion callback because its executor rejected it", handlerRejected);
+        }
     }
 
     ExecutorService asyncExecutor() {
@@ -304,8 +366,11 @@ class Mu3ServerImpl implements MuServer {
         statsImpl.onRequestSubmissionRejected(req);
     }
 
-    void onExchangeEnded(ResponseInfo exchange) {
+    void recordExchangeEnded(ResponseInfo exchange) {
         statsImpl.onRequestEnded(exchange);
+    }
+
+    void notifyExchangeEnded(ResponseInfo exchange) {
         for (var listener : responseCompleteListeners) {
             listener.onComplete(exchange);
         }

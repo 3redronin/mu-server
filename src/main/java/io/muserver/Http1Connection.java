@@ -187,7 +187,7 @@ class Http1Connection extends BaseHttpConnection {
                         muResponse.setState(ResponseState.ERRORED);
                     } finally {
                         if (!rejectedByHandlerExecutor) {
-                            onExchangeEnded(muResponse);
+                            onExchangeEndedOnHandler(muResponse);
                         }
                         clientSocket.setSoTimeout(0);
                     }
@@ -273,6 +273,15 @@ class Http1Connection extends BaseHttpConnection {
         }
     }
 
+    private void onExchangeEndedOnHandler(Http1Response response) {
+        recordExchangeEnded(response);
+        if (handlersRunOnConnectionTask) {
+            notifyExchangeEnded(response);
+            return;
+        }
+        server.executeResponseCompletionTask(() -> notifyExchangeEnded(response));
+    }
+
     private boolean rejectRequestDueToHandlerOverload(Mu3Request request, OutputStream outputStream) throws IOException {
         rejectedDueToOverload.incrementAndGet();
         server.getStatsImpl().onRejectedDueToOverload();
@@ -324,9 +333,9 @@ class Http1Connection extends BaseHttpConnection {
     }
 
     @Override
-    public void onExchangeEnded(ResponseInfo exchange) {
+    protected void recordExchangeEnded(ResponseInfo exchange) {
         activeExchange.updateAndGet(cur -> cur != null && isSameRequest(cur.request, exchange.request()) ? null : cur);
-        super.onExchangeEnded(exchange);
+        super.recordExchangeEnded(exchange);
     }
 
     @SuppressWarnings("ReferenceEquality") // Connection ownership belongs to the exact request instance.

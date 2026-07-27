@@ -31,6 +31,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.muserver.MuServerBuilder.httpServer;
@@ -215,9 +216,13 @@ class ExecutionDomainsTest {
     @Test
     void aSharedConnectionAndHandlerExecutorDoesNotSubmitBackToItself() throws Exception {
         var sharedExecutor = track(Executors.newSingleThreadExecutor(namedThreads("shared-")));
+        var completionThread = new CompletableFuture<String>();
         server = httpServer()
             .withHandlerExecutor(sharedExecutor)
             .withConnectionExecutor(sharedExecutor)
+            .addResponseCompleteListener(info ->
+                completionThread.complete(Thread.currentThread().getName())
+            )
             .addHandler(Method.GET, "/", (request, response, pathParams) ->
                 response.write(Thread.currentThread().getName()))
             .start();
@@ -227,6 +232,152 @@ class ExecutionDomainsTest {
             assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
             assertThat(client.readBody(client.readHeaders()), startsWith("shared-"));
         }
+        assertThat(completionThread.get(5, TimeUnit.SECONDS), startsWith("shared-"));
+    }
+
+    @Test
+    void http1ResponseCompletionCallbacksUseTheHandlerExecutor() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
+        var responseCompletionThread = new CompletableFuture<String>();
+        var serverCompletionThread = new CompletableFuture<String>();
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addResponseCompleteListener(info ->
+                serverCompletionThread.complete(Thread.currentThread().getName())
+            )
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.addCompletionListener(info ->
+                    responseCompletionThread.complete(Thread.currentThread().getName())
+                );
+                response.write("done");
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/").flushHeaders();
+            assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
+            assertThat(client.readBody(client.readHeaders()), equalTo("done"));
+        }
+
+        assertThat(responseCompletionThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
+        assertThat(serverCompletionThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
+    }
+
+    @Test
+    void aSlowHttp1CompletionListenerDoesNotDelayTheNextRequest() throws Exception {
+        var handlerExecutor = track(Executors.newFixedThreadPool(2, namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
+        var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
+        var firstCompletionStarted = new CountDownLatch(1);
+        var releaseFirstCompletion = new CountDownLatch(1);
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addResponseCompleteListener(info -> {
+                if (info.request().relativePath().equals("/first")) {
+                    firstCompletionStarted.countDown();
+                    try {
+                        releaseFirstCompletion.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            })
+            .addHandler((request, response) -> {
+                response.write(request.relativePath());
+                return true;
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/first").flushHeaders();
+            assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
+            assertThat(client.readBody(client.readHeaders()), equalTo("/first"));
+            assertThat(firstCompletionStarted.await(5, TimeUnit.SECONDS), is(true));
+            assertThat(server.stats().completedRequests(), equalTo(1L));
+
+            Future<String> secondResponse = clientExecutor.submit(() -> {
+                client.writeRequestLine(Method.GET, "/second").flushHeaders();
+                assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
+                return client.readBody(client.readHeaders());
+            });
+            assertThat(secondResponse.get(2, TimeUnit.SECONDS), equalTo("/second"));
+        } finally {
+            releaseFirstCompletion.countDown();
+        }
+    }
+
+    @Test
+    void gracefulStopWaitsForDispatchedHttp1CompletionListeners() throws Exception {
+        var handlerExecutor = track(Executors.newFixedThreadPool(2, namedThreads("handler-")));
+        var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
+        var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
+        var completionStarted = new CountDownLatch(1);
+        var releaseCompletion = new CountDownLatch(1);
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addResponseCompleteListener(info -> {
+                completionStarted.countDown();
+                try {
+                    releaseCompletion.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            })
+            .addHandler(Method.GET, "/", (request, response, pathParams) ->
+                response.write("done")
+            )
+            .start();
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/").flushHeaders();
+            assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
+            assertThat(client.readBody(client.readHeaders()), equalTo("done"));
+            assertThat(completionStarted.await(5, TimeUnit.SECONDS), is(true));
+
+            MuServer runningServer = Objects.requireNonNull(server);
+            Future<Boolean> stopped = clientExecutor.submit(() ->
+                runningServer.stop(2, TimeUnit.SECONDS)
+            );
+            assertThrows(TimeoutException.class, () ->
+                stopped.get(100, TimeUnit.MILLISECONDS)
+            );
+            releaseCompletion.countDown();
+            assertThat(stopped.get(5, TimeUnit.SECONDS), is(true));
+            server = null;
+        } finally {
+            releaseCompletion.countDown();
+        }
+    }
+
+    @Test
+    void rejectedHandlerDispatchFallsBackWithoutRunningCompletionListenersOnTheHttp1Reader() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
+        var completionThread = new CompletableFuture<String>();
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withAsyncExecutor(asyncExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addResponseCompleteListener(info ->
+                completionThread.complete(Thread.currentThread().getName())
+            )
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.write("done");
+                handlerExecutor.shutdown();
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/").flushHeaders();
+            assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
+            assertThat(client.readBody(client.readHeaders()), equalTo("done"));
+        }
+        assertThat(completionThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
     }
 
     @Test
@@ -313,11 +464,16 @@ class ExecutionDomainsTest {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
         var suspendedHandle = new CompletableFuture<AsyncHandle>();
+        var completionThread = new CompletableFuture<String>();
         server = httpServer()
             .withHandlerExecutor(handlerExecutor)
             .addHandler((request, response) -> {
                 if (request.relativePath().equals("/suspend")) {
-                    suspendedHandle.complete(request.handleAsync());
+                    AsyncHandle handle = request.handleAsync();
+                    handle.addResponseCompleteHandler(info ->
+                        completionThread.complete(Thread.currentThread().getName())
+                    );
+                    suspendedHandle.complete(handle);
                 } else {
                     response.write(Thread.currentThread().getName());
                 }
@@ -342,6 +498,7 @@ class ExecutionDomainsTest {
 
             assertThat(first.readLine(), equalTo("HTTP/1.1 200 OK"));
             assertThat(first.readBody(first.readHeaders()), equalTo(""));
+            assertThat(completionThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
         }
     }
 
