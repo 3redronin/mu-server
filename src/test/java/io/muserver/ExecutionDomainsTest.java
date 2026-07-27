@@ -388,6 +388,63 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void requestRejectionListenerDoesNotWaitForCallbackQueuedBehindIt() throws Exception {
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var blockerEntered = new CountDownLatch(1);
+        var releaseBlocker = new CountDownLatch(1);
+        asyncExecutor.execute(() -> {
+            blockerEntered.countDown();
+            try {
+                releaseBlocker.await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        assertThat(blockerEntered.await(5, TimeUnit.SECONDS), is(true));
+
+        var runningServer = new CompletableFuture<MuServer>();
+        var stopResult = new CompletableFuture<Boolean>();
+        var callbackNumber = new AtomicInteger();
+        var secondCallbackRan = new CountDownLatch(1);
+        server = httpServer()
+            .withMaxHeadersSize(1024)
+            .withAsyncExecutor(asyncExecutor)
+            .addRequestRejectListener(info -> {
+                if (callbackNumber.incrementAndGet() == 1) {
+                    try {
+                        stopResult.complete(
+                            runningServer.get().stop(2, TimeUnit.SECONDS)
+                        );
+                    } catch (Throwable failure) {
+                        stopResult.completeExceptionally(failure);
+                    }
+                } else {
+                    secondCallbackRan.countDown();
+                }
+            })
+            .start();
+        runningServer.complete(server);
+
+        try {
+            for (int i = 0; i < 2; i++) {
+                try (var client = Http1Client.connect(server)) {
+                    client.writeRequestLine(Method.GET, "/")
+                        .writeHeader("x-big", "a".repeat(2000))
+                        .flushHeaders();
+                    assertThat(client.readLine(), startsWith("HTTP/1.1 431"));
+                }
+            }
+
+            releaseBlocker.countDown();
+            assertThat(stopResult.get(1, TimeUnit.SECONDS), is(true));
+            assertThat(secondCallbackRan.await(1, TimeUnit.SECONDS), is(true));
+            server = null;
+        } finally {
+            releaseBlocker.countDown();
+        }
+    }
+
+    @Test
     void anIdleHttp1ConnectionDoesNotRetainAHandlerWorker() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
