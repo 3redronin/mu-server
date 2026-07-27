@@ -1293,7 +1293,12 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 && !stream.resetWasInitiated()
                 && !stream.response().responseState().endState()) {
                 stream.response().setState(ResponseState.ERRORED);
-                write(new Http2ResetStreamFrame(stream.id, Http2ErrorCode.INTERNAL_ERROR.code()));
+                Http2ErrorCode errorCode =
+                    e instanceof HttpException
+                        && ((HttpException) e).status().sameCode(HttpStatus.REQUEST_TIMEOUT_408)
+                        ? Http2ErrorCode.CANCEL
+                        : Http2ErrorCode.INTERNAL_ERROR;
+                write(new Http2ResetStreamFrame(stream.id, errorCode.code()));
                 stream.cancel(new IOException("Unhandled stream exception", e), false);
             }
         } finally {

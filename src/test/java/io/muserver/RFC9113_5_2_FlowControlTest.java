@@ -145,10 +145,12 @@ class RFC9113_5_2_FlowControlTest {
     @Test
     void cancellingAStreamWithUnreadQueuedDataRefundsConnectionCredit() throws Exception {
         var holdLatch = new CountDownLatch(1);
+        var holdStarted = new CountDownLatch(1);
 
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .addHandler(Method.POST, "/hold", (request, response, pathParams) -> {
+                holdStarted.countDown();
                 assertNotTimedOut("waiting for hold request to finish", holdLatch);
                 try {
                     request.readBodyAsString();
@@ -163,24 +165,28 @@ class RFC9113_5_2_FlowControlTest {
         try (var client = new H2Client();
              var con = client.connect(server)) {
 
-            var holdHeaders = postHelloHeaders(getPort());
-            holdHeaders.set(":path", "/hold");
-
-            var echoHeaders = postHelloHeaders(getPort());
-
             byte[] sixteenKb = repeated('a', 16384);
             byte[] lastChunk = repeated('b', 16383);
 
             con.handshake()
-                .writeFrame(new Http2HeadersFrame(1, false, holdHeaders))
+                .writeFrame(new Http2HeadersFrame(
+                    1,
+                    false,
+                    postHeaders(getPort(), "/hold")
+                ))
                 .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
                 .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
                 .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
                 .writeFrame(new Http2DataFrame(1, false, lastChunk, 0, lastChunk.length))
                 .flush();
 
+            assertNotTimedOut("waiting for held request to start", holdStarted);
             con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()))
-                .writeFrame(new Http2HeadersFrame(3, false, echoHeaders))
+                .writeFrame(new Http2HeadersFrame(
+                    3,
+                    false,
+                    postHelloHeaders(getPort())
+                ))
                 .writeFrame(RFCTestUtils.utf8DataFrame(3, true, "x"))
                 .flush();
 

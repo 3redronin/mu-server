@@ -29,7 +29,8 @@ debits both receive windows without depending on the blocking-output executor,
 and body consumers return credit through the same component. Live stream
 identity publication is similarly centralized in one short-held registry lock,
 while the coordinator remains the sole owner of RFC stream-state transitions.
-Still to be implemented are request-body read deadlines. The reader and
+Request-body read deadlines are monotonic timed waits owned by the body buffer:
+they do not require a scheduled task or coordinator round trip. The reader and
 coordinator have separate execution capacity from handlers, but do not yet have
 all of the final ownership boundaries described below.
 
@@ -138,8 +139,17 @@ protocol state, perform socket I/O, or invoke user code.
 Connection idle-timeout scans, WebSocket pings, and HTTP/2 SETTINGS
 acknowledgement deadlines use this facility. SETTINGS expiry atomically wins
 or loses a race with its ACK, then enqueues a connection-error command without
-mutating protocol state on the timer thread. Request-body read deadlines remain
-local blocking deadlines for now.
+mutating protocol state on the timer thread.
+
+Request-body read deadlines are intentionally not server timer tasks. They
+bound an application thread's blocking read on `Http2BodyInputStream`, so the
+body-buffer condition performs a monotonic timed wait. A zero request timeout
+waits indefinitely, as required by the public builder contract. Expiry raises
+the documented 408 response without the HTTP/1-only `Connection: close` field;
+RFC 9113 Section 8.2.2 prohibits connection-specific fields in HTTP/2. If a
+response has already started, the status cannot be replaced, so the coordinator
+resets only that stream with `CANCEL`, meaning the stream is no longer needed
+as defined by RFC 9113 Section 7.
 
 ## Ownership
 
@@ -155,7 +165,7 @@ local blocking deadlines for now.
 | Connection and stream inbound flow-control accounting | `Http2InboundFlowControl` lock |
 | Pending outbound frames and their ordering | Coordinator |
 | HPACK encoder and socket output | Coordinator |
-| Request-body producer/consumer buffer | `Http2BodyInputStream` lock |
+| Request-body producer/consumer buffer and read deadline | `Http2BodyInputStream` lock and condition |
 | Response API call ordering | Application-side response/async handle |
 | Connection and exchange completion | Coordinator |
 
@@ -327,7 +337,8 @@ Permitted cross-thread primitives are deliberately narrow:
 * one short-held lock for atomic connection-and-stream inbound flow-control
   accounting;
 * one short-held lock for the live stream identity index;
-* the existing request-body buffer lock and condition;
+* the request-body buffer lock and condition, including its monotonic blocking
+  read deadline;
 * an application-side lock that orders async response submissions; and
 * a thread-confined FIFO that drains nested application work without recursive
   calls or executor resubmission; and
