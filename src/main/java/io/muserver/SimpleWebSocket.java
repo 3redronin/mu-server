@@ -143,7 +143,7 @@ public abstract class SimpleWebSocket implements MuWebSocket {
         Long latency = session().pongLatencyMillis(payload);
         if (latency != null) {
             latencyChecks.incrementAndGet();
-            latencyTime.incrementAndGet();
+            latencyTime.addAndGet(latency);
         }
     }
 
