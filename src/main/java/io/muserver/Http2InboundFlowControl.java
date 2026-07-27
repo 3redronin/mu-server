@@ -12,9 +12,9 @@ import java.util.concurrent.locks.ReentrantLock;
  *
  * <p>The socket reader is the only caller that reserves credit, while request-body
  * consumers can report freed capacity from application threads. The socket writer
- * publishes that capacity after its WINDOW_UPDATE is flushed. A single short-held
- * lock keeps those transitions consistent without making DATA debits wait for the
- * independently scheduled, potentially blocking socket writer.</p>
+ * publishes that capacity immediately before writing its WINDOW_UPDATE. A single
+ * short-held lock keeps those transitions consistent without making DATA debits
+ * wait for the independently scheduled, potentially blocking socket writer.</p>
  */
 final class Http2InboundFlowControl {
 
@@ -60,7 +60,7 @@ final class Http2InboundFlowControl {
         private int credit;
         // Freed credit not yet large enough to advertise.
         private int pendingCredit;
-        // Credit selected for a WINDOW_UPDATE that has not yet been flushed.
+        // Credit selected for a WINDOW_UPDATE that the writer has not begun writing.
         private int updateInFlight;
 
         private Window(int streamId, int initialCredit) {
@@ -236,8 +236,8 @@ final class Http2InboundFlowControl {
         }
     }
 
-    // Called by the socket writer only after the WINDOW_UPDATE has been flushed.
-    void windowUpdateWritten(int streamId, int amount) {
+    // Called by the socket writer immediately before it writes the WINDOW_UPDATE.
+    void windowUpdateWriting(int streamId, int amount) {
         if (streamId < 0) {
             throw new IllegalArgumentException("A window update stream ID cannot be negative");
         }
