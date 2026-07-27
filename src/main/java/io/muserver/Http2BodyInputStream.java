@@ -164,7 +164,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
         } finally {
             lock.unlock();
         }
-        refundDiscardedCredit(discardedCredit);
+        returnReusableCredit(discardedCredit);
     }
 
     void discardRemaining() {
@@ -185,7 +185,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
         } finally {
             lock.unlock();
         }
-        refundDiscardedCredit(discardedCredit);
+        returnReusableCredit(discardedCredit);
     }
 
     void onTrailers(FieldBlock trailers) {
@@ -242,6 +242,16 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
         }
     }
 
+    private void returnReusableCredit(int credit) {
+        if (credit > 0) {
+            try {
+                onDataReadCallback.creditAvailable(credit);
+            } catch (Http2Exception e) {
+                throw new IllegalStateException("Could not return HTTP/2 data credit", e);
+            }
+        }
+    }
+
     private boolean isErrored() {
         return frames.size() == 1 && frames.peek() instanceof Exception;
     }
@@ -279,4 +289,8 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
     }
 
 
+}
+
+interface CreditAvailableListener {
+    void creditAvailable(int credit) throws Http2Exception;
 }

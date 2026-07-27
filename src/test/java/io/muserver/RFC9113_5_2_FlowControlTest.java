@@ -76,6 +76,73 @@ class RFC9113_5_2_FlowControlTest {
     }
 
     @Test
+    void earlyResponseReturnsStreamCreditWhileDiscardingTheRequestBody() throws Exception {
+        var exchangeCompleted = new CountDownLatch(1);
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addResponseCompleteListener(info -> exchangeCompleted.countDown())
+            .addHandler(Method.POST, "/early", (request, response, pathParams) -> {
+                response.status(204);
+            })
+            .addHandler(Method.GET, "/after", (request, response, pathParams) -> {
+                response.write("ok");
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            var headers = new FieldBlock();
+            headers.add(":scheme", "https");
+            headers.add(":authority", "localhost:" + getPort());
+            headers.add(":method", "POST");
+            headers.add(":path", "/early");
+            headers.add("content-type", "text/plain; charset=utf-8");
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, headers))
+                .flush();
+            assertThat(
+                con.readLogicalFrame(Http2HeadersFrame.class).headers().get(":status"),
+                equalTo("204")
+            );
+            assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
+
+            byte[] sixteenKb = repeated('a', 16_384);
+            con.writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
+                .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
+                .flush();
+
+            Http2WindowUpdate streamUpdate;
+            do {
+                streamUpdate = con.readLogicalFrame(Http2WindowUpdate.class);
+            } while (streamUpdate.streamId() == 0);
+            assertThat(streamUpdate, equalTo(new Http2WindowUpdate(1, 32_768)));
+
+            // The peer can use the returned stream credit to finish a body
+            // larger than the initial 65,535-byte stream window.
+            var afterRequest = getHelloHeaders("https", getPort());
+            afterRequest.set(":path", "/after");
+            con.writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
+                .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
+                .writeFrame(RFCTestUtils.utf8DataFrame(1, true, "done"))
+                .writeFrame(new Http2HeadersFrame(3, true, afterRequest))
+                .flush();
+
+            var afterHeaders = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(afterHeaders.streamId(), equalTo(3));
+            assertThat(afterHeaders.headers().get(":status"), equalTo("200"));
+            assertThat(
+                readIgnoringWindowUpdates(con, Http2DataFrame.class).toUTF8(),
+                equalTo("ok")
+            );
+            assertThat(
+                readIgnoringWindowUpdates(con, Http2DataFrame.class),
+                equalTo(Http2DataFrame.eos(3))
+            );
+        }
+    }
+
+    @Test
     void cancellingAStreamWithUnreadQueuedDataRefundsConnectionCredit() throws Exception {
         var holdLatch = new CountDownLatch(1);
 
@@ -364,6 +431,3 @@ class RFC9113_5_2_FlowControlTest {
         if (server != null) server.stop();
     }
 }
-
-
-

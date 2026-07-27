@@ -17,7 +17,6 @@ class Http2Stream implements ResponseInfo {
     final int id;
     private final Http2Connection connection;
     final Mu3Request request;
-    private final Http2IncomingFlowController incomingFlowControl;
 
     @Nullable
     private Http2Response response;
@@ -38,16 +37,15 @@ class Http2Stream implements ResponseInfo {
     private final InputStream bodyInputStream;
     private final @Nullable Long declaredRequestBodyLength;
     private long receivedRequestBodyLength;
-    Http2Stream(int id, Http2Connection connection, Http2StreamState state, Mu3Request request, Http2IncomingFlowController incomingFlowControl, InputStream bodyInputStream) {
-        this(id, connection, state, request, incomingFlowControl, bodyInputStream, request.declaredBodySize().size());
+    Http2Stream(int id, Http2Connection connection, Http2StreamState state, Mu3Request request, InputStream bodyInputStream) {
+        this(id, connection, state, request, bodyInputStream, request.declaredBodySize().size());
     }
 
-    Http2Stream(int id, Http2Connection connection, Http2StreamState state, Mu3Request request, Http2IncomingFlowController incomingFlowControl, InputStream bodyInputStream, @Nullable Long declaredRequestBodyLength) {
+    Http2Stream(int id, Http2Connection connection, Http2StreamState state, Mu3Request request, InputStream bodyInputStream, @Nullable Long declaredRequestBodyLength) {
         this.id = id;
         this.connection = connection;
         this.remoteEndStreamRead = !state.canReceiveEndStream();
         this.request = request;
-        this.incomingFlowControl = incomingFlowControl;
         this.bodyInputStream = bodyInputStream;
         this.declaredRequestBodyLength = declaredRequestBodyLength;
     }
@@ -182,10 +180,6 @@ class Http2Stream implements ResponseInfo {
             throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Invalid state for data", id);
         }
 
-        if (!incomingFlowControl.withdrawIfCan(flowControlSize)) {
-            throw new Http2Exception(Http2ErrorCode.FLOW_CONTROL_ERROR, "Not enough flow control credit for stream", id);
-        }
-
         if (bodyInputStream instanceof Http2BodyInputStream) {
             receivedRequestBodyLength += dataFrame.payloadLength();
             if (declaredRequestBodyLength != null && receivedRequestBodyLength > declaredRequestBodyLength) {
@@ -226,7 +220,7 @@ class Http2Stream implements ResponseInfo {
         return requiredResponse();
     }
 
-    static Http2Stream start(Http2Connection connection, Http2HeadersFrame headerFrame, Http2Settings serverSettings, Http2Settings clientSettings) throws Http2Exception {
+    static Http2Stream start(Http2Connection connection, Http2HeadersFrame headerFrame) throws Http2Exception {
         var id = headerFrame.streamId();
         FieldBlock headers = headerFrame.headers();
 
@@ -346,21 +340,13 @@ class Http2Stream implements ResponseInfo {
         var serverUri = connection.creator.uri().resolve(relativeUrl);
         var requestUri = Headtils.getUri(log, headers, relativeUrl, serverUri);
 
-        var incomingFlowControl = new Http2IncomingFlowController(id, serverSettings.initialWindowSize);
-
         // A content-length of zero describes the message body, but it does not close the
         // remote side of the HTTP/2 stream. Keep a private protocol-aware input until
         // END_STREAM while exposing the documented empty body to the application.
         InputStream protocolBody = headerFrame.endStream() ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(
             connection.server.requestIdleTimeoutMillis(),
-            read -> {
-                var update = incomingFlowControl.incrementCredit(read);
-                if (update > 0) {
-                    connection.write(new Http2WindowUpdate(id, update));
-                }
-                connection.creditAvailable(read);
-            },
-            connection
+            read -> connection.returnInboundCredit(id, read, true),
+            read -> connection.returnInboundCredit(id, read, false)
         );
         InputStream applicationBody = BodySize.NONE.equals(bodySize)
             ? EmptyInputStream.INSTANCE
@@ -382,7 +368,7 @@ class Http2Stream implements ResponseInfo {
 
 
         var state = headerFrame.endStream() ? Http2StreamState.HALF_CLOSED_REMOTE : Http2StreamState.OPEN;
-        Http2Stream stream = new Http2Stream(id, connection, state, request, incomingFlowControl, protocolBody, cl);
+        Http2Stream stream = new Http2Stream(id, connection, state, request, protocolBody, cl);
         stream.response = new Http2Response(stream, new FieldBlock(), request);
         request.setResponse(stream.response);
         return stream;

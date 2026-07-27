@@ -18,7 +18,7 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
-class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAvailableListener {
+class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private static final int MAX_POSSIBLE_STREAM_ID = 0x7fffffff;
     static final long GO_AWAY_GRACE_PERIOD_MILLIS = 200;
     private static final Http2GoAway GO_AWAY_WARNING = new Http2GoAway(MAX_POSSIBLE_STREAM_ID, Http2ErrorCode.NO_ERROR.code(), null);
@@ -52,10 +52,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     private volatile int maxAllowedStreamId = MAX_POSSIBLE_STREAM_ID;
     private volatile int lastStreamId = 0;
     private volatile int peerGoAwayLastStreamId = MAX_POSSIBLE_STREAM_ID;
-    private final Http2IncomingFlowController incomingFlowControl = new Http2IncomingFlowController(0, 65535);
+    private final Http2InboundFlowControl inboundFlowControl = new Http2InboundFlowControl(65_535);
     private final ConcurrentLinkedQueue<PendingSettingsAck> settingsAckQueue = new ConcurrentLinkedQueue<>();
     private final ConcurrentHashMap<Integer, Http2Stream> streams = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<Integer, Http2IncomingFlowController> rejectedRequestBodies = new ConcurrentHashMap<>();
+    private final Set<Integer> rejectedRequestBodies = ConcurrentHashMap.newKeySet();
     private final ExecutorService handlerExecutor;
     private final ExecutorService writerExecutor;
     private final long settingsAckTimeoutMillis;
@@ -116,15 +116,45 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         return writeCoordinator.fieldBlockEncoder();
     }
 
-    @Override
-    public void creditAvailable(int credit) throws Http2Exception {
-        refundDiscardedConnectionCredit(credit);
+    private void reserveInboundCredit(int streamId, int amount) throws Http2Exception {
+        applyInboundFlowResult(inboundFlowControl.reserve(streamId, amount));
     }
 
-    private void refundDiscardedConnectionCredit(int credit) throws Http2Exception {
-        var update = incomingFlowControl.incrementCredit(credit);
-        if (update > 0) {
-            write(new Http2WindowUpdate(0, update));
+    void returnInboundCredit(int streamId, int amount, boolean includeStream) throws Http2Exception {
+        if (amount <= 0) {
+            return;
+        }
+        applyInboundFlowResult(
+            inboundFlowControl.returnCredit(streamId, amount, includeStream)
+        );
+    }
+
+    private void applyInboundFlowResult(Http2InboundFlowControl.Result result)
+        throws Http2Exception {
+        if (result.connectionUpdate() > 0 || result.streamUpdate() > 0) {
+            stateLock.lock();
+            try {
+                if (writeState.canSendFrames) {
+                    if (result.connectionUpdate() > 0) {
+                        writeCoordinator.submit(new WriteTask(
+                            new Http2WindowUpdate(0, result.connectionUpdate()),
+                            false
+                        ));
+                    }
+                    if (result.streamUpdate() > 0) {
+                        writeCoordinator.submit(new WriteTask(
+                            new Http2WindowUpdate(result.streamId(), result.streamUpdate()),
+                            false
+                        ));
+                    }
+                }
+            } finally {
+                stateLock.unlock();
+            }
+        }
+        Http2Exception error = result.error();
+        if (error != null) {
+            throw error;
         }
     }
 
@@ -138,9 +168,12 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             if (writeState.canSendFrames && canWriteFrame(writeTask.frame())) {
                 LogicalHttp2Frame frame = writeTask.frame();
                 boolean retireRejectedStream = frame instanceof Http2ResetStreamFrame
-                    && rejectedRequestBodies.remove(frame.streamId()) != null;
+                    && rejectedRequestBodies.remove(frame.streamId());
                 boolean retainResetState = frame instanceof Http2ResetStreamFrame
                     && streams.containsKey(frame.streamId());
+                if (frame instanceof Http2ResetStreamFrame) {
+                    inboundFlowControl.closeStream(frame.streamId());
+                }
                 writeCoordinator.submit(writeTask, retainResetState);
                 if (retireRejectedStream) {
                     writeCoordinator.forgetStream(frame.streamId());
@@ -192,7 +225,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         stateLock.lock();
         try {
             if (writeState.canSendFrames) {
-                boolean retireRejectedStream = rejectedRequestBodies.remove(resetFrame.streamId()) != null;
+                boolean retireRejectedStream = rejectedRequestBodies.remove(resetFrame.streamId());
+                inboundFlowControl.closeStream(resetFrame.streamId());
                 writeCoordinator.resetStream(resetFrame, reason, stream);
                 if (retireRejectedStream) {
                     writeCoordinator.forgetStream(resetFrame.streamId());
@@ -217,28 +251,21 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             if (writeState.canSendFrames) {
                 // Rejected headers do not create an application-facing Http2Stream, so queue
                 // their complete protocol exchange directly as one ordered coordinator transaction.
-                writeCoordinator.openStream(streamId, initialCredit, initialState, null);
+                inboundFlowControl.openStream(streamId, serverSettings.initialWindowSize);
+                writeCoordinator.openStream(
+                    streamId,
+                    initialCredit,
+                    initialState,
+                    null
+                );
                 writeCoordinator.submit(new WriteTask(headers, false));
                 writeCoordinator.submit(new WriteTask(body, false));
                 if (initialState.canReceiveEndStream()) {
-                    rejectedRequestBodies.put(
-                        streamId,
-                        new Http2IncomingFlowController(streamId, serverSettings.initialWindowSize)
-                    );
+                    rejectedRequestBodies.add(streamId);
                 } else {
+                    inboundFlowControl.closeStream(streamId);
                     writeCoordinator.forgetStream(streamId);
                 }
-            }
-        } finally {
-            stateLock.unlock();
-        }
-    }
-
-    private void queueRejectedStreamWindowUpdate(int streamId, int increment) {
-        stateLock.lock();
-        try {
-            if (writeState.canSendFrames) {
-                writeCoordinator.submit(new WriteTask(new Http2WindowUpdate(streamId, increment), false));
             }
         } finally {
             stateLock.unlock();
@@ -250,6 +277,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         try {
             if (writeState.canSendFrames) {
                 rejectedRequestBodies.remove(streamId);
+                inboundFlowControl.closeStream(streamId);
                 writeCoordinator.remoteEndStream(streamId);
                 writeCoordinator.forgetStream(streamId);
                 return;
@@ -836,54 +864,54 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     private void readDataFrame(Http2FrameHeader fh) throws Http2Exception {
         var dataFrame = Http2DataFrame.readFrom(fh, buffer);
-
-        // note: checking the length on the header, not the payload length, as padding is discarded when reading data frames
-        if (!incomingFlowControl.withdrawIfCan(fh.length())) {
-            throw Http2Exception.connection(Http2ErrorCode.FLOW_CONTROL_ERROR, "Connection flow control credit breach");
+        int streamId = dataFrame.streamId();
+        boolean rejectedBody = rejectedRequestBodies.contains(streamId);
+        var stream = streams.get(streamId);
+        if (streamId == 0 || (streamId % 2) == 0
+            || (stream == null && !rejectedBody && streamId > lastStreamId)) {
+            throw Http2Exception.connection(
+                Http2ErrorCode.PROTOCOL_ERROR,
+                "Invalid stream ID on data frame"
+            );
         }
 
-        var rejectedBodyFlowControl = rejectedRequestBodies.get(dataFrame.streamId());
-        if (rejectedBodyFlowControl != null) {
-            if (!rejectedBodyFlowControl.withdrawIfCan(fh.length())) {
-                refundDiscardedConnectionCredit(fh.length());
-                throw new Http2Exception(
-                    Http2ErrorCode.FLOW_CONTROL_ERROR,
-                    "Not enough flow control credit for rejected request stream",
-                    dataFrame.streamId()
-                );
-            }
+        // Use the frame length rather than payload length because padding is
+        // flow-controlled even though it is discarded while decoding.
+        reserveInboundCredit(streamId, fh.length());
 
-            int streamUpdate = rejectedBodyFlowControl.incrementCredit(fh.length());
-            refundDiscardedConnectionCredit(fh.length());
+        if (rejectedBody) {
+            returnInboundCredit(
+                streamId,
+                fh.length(),
+                !dataFrame.endStream()
+            );
             if (dataFrame.endStream()) {
-                finishRejectedRequestBody(dataFrame.streamId());
-            } else if (streamUpdate > 0) {
-                queueRejectedStreamWindowUpdate(dataFrame.streamId(), streamUpdate);
+                finishRejectedRequestBody(streamId);
             }
             return;
         }
 
-        var stream = streams.get(dataFrame.streamId());
         if (stream == null) {
-            // From RFC9113 6.1: If a DATA frame is received whose Stream Identifier field is 0x00, the recipient MUST respond with a connection error
-            // From RFC9113 5.1: Receiving any frame other than HEADERS or PRIORITY on a stream in this [idle] state MUST be treated as a connection error
-            if (fh.streamId() == 0 || fh.streamId() > lastStreamId || (fh.streamId() % 2) == 0) {
-                throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID on data frame");
-            } else {
-                // From RFC9113 6.1: If a DATA frame is received whose stream is not in the "open" or "half-closed (local)" state, the recipient MUST respond with a stream error (Section 5.4.2) of type STREAM_CLOSED.
-                // As the stream is null, then most likely it is already closed. (Half-closed streams would not be here)
-                refundDiscardedConnectionCredit(fh.length());
-                throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Received data on closed stream", fh.streamId());
-            }
+            // The inbound flow controller normally reports this before returning from
+            // reserveInboundCredit. Retain the reader-side guard for a stream
+            // retired from the published application map immediately after.
+            returnInboundCredit(streamId, fh.length(), false);
+            throw new Http2Exception(
+                Http2ErrorCode.STREAM_CLOSED,
+                "Received data on closed stream",
+                streamId
+            );
         } else {
             if (stream.peerResetWasRead() || !stream.canReceiveData()) {
-                refundDiscardedConnectionCredit(fh.length());
+                returnInboundCredit(streamId, fh.length(), false);
                 throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Received data on closed stream", fh.streamId());
             }
             try {
                 stream.onData(fh.length(), dataFrame);
             } catch (Http2Exception e) {
-                refundDiscardedConnectionCredit(fh.length());
+                // The stream will be reset, so only connection credit remains
+                // reusable after this invalid DATA frame is discarded.
+                returnInboundCredit(streamId, fh.length(), false);
                 throw e;
             }
         }
@@ -901,7 +929,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         try {
             var headerFragment = Http2HeadersFrame.readLogicalFrame(fh, fieldBlockDecoder, buffer, clientIn);
             log.info("Got headers " + headerFragment);
-            if (rejectedRequestBodies.containsKey(headerFragment.streamId())) {
+            if (rejectedRequestBodies.contains(headerFragment.streamId())) {
                 if (!headerFragment.endStream()) {
                     throw new Http2Exception(
                         Http2ErrorCode.PROTOCOL_ERROR,
@@ -945,7 +973,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             // The header block could not be decoded (for example a 431 rejected during HPACK
             // decoding), so the method and target are not available here.
             String rejectReason = e.getMessage() != null ? e.getMessage() : e.status().toString();
-            if (rejectedRequestBodies.containsKey(fh.streamId())) {
+            if (rejectedRequestBodies.contains(fh.streamId())) {
                 if ((fh.flags() & 0b00000001) == 0) {
                     throw new Http2Exception(
                         Http2ErrorCode.PROTOCOL_ERROR,
@@ -1144,7 +1172,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     }
 
     private void startRequest(Http2HeadersFrame frame) throws Http2Exception {
-        var stream = Http2Stream.start(this, frame, serverSettings, clientSettings);
+        var stream = Http2Stream.start(this, frame);
         boolean registered;
         stateLock.lock();
         try {
@@ -1153,6 +1181,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                 Http2StreamState initialState = frame.endStream()
                     ? Http2StreamState.HALF_CLOSED_REMOTE
                     : Http2StreamState.OPEN;
+                inboundFlowControl.openStream(
+                    frame.streamId(),
+                    serverSettings.initialWindowSize
+                );
                 writeCoordinator.openStream(
                     frame.streamId(),
                     clientSettings.initialWindowSize,
@@ -1267,6 +1299,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         rejectedDueToOverload.incrementAndGet();
         server.getStatsImpl().onRejectedDueToOverload();
         streams.remove(frame.streamId(), stream);
+        // The application stream was registered before handler submission. Retire
+        // that receive-window identity before queueRejectedResponse installs the
+        // rejected-body identity for the same protocol stream.
+        inboundFlowControl.closeStream(frame.streamId());
         stream.cancel(new IOException("Request handler executor rejected the HTTP/2 stream"), false);
 
         String rejectionReason = "503 Service Unavailable";
@@ -1398,6 +1434,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     }
 
     void removeProtocolStream(Http2Stream stream) {
+        inboundFlowControl.closeStream(stream.id);
         streams.remove(stream.id, stream);
     }
 }
