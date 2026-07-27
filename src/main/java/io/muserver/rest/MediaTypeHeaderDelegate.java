@@ -43,10 +43,36 @@ class MediaTypeHeaderDelegate implements RuntimeDelegate.HeaderDelegate<MediaTyp
         return results;
     }
 
+    // MediaType only treats a bare "*" subtype as a wildcard, while the standard XML entity providers
+    // are required to support media types of the form application/*+xml.
+    static boolean isCompatible(MediaType first, MediaType second) {
+        if (first.isCompatible(second)) {
+            return true;
+        }
+        boolean typesCompatible = first.getType().equalsIgnoreCase(second.getType())
+            || first.isWildcardType()
+            || second.isWildcardType();
+        return typesCompatible
+            && (suffixWildcardMatches(first.getSubtype(), second.getSubtype())
+            || suffixWildcardMatches(second.getSubtype(), first.getSubtype()));
+    }
+
+    static boolean isWildcardSubtype(String subtype) {
+        return "*".equals(subtype) || (subtype.length() > 2 && subtype.startsWith("*+"));
+    }
+
+    private static boolean suffixWildcardMatches(String pattern, String concrete) {
+        return pattern.length() > 2
+            && pattern.startsWith("*+")
+            && concrete.length() > pattern.length() - 1
+            && concrete.regionMatches(true, concrete.length() - pattern.length() + 1,
+            pattern, 1, pattern.length() - 1);
+    }
+
     static boolean atLeastOneCompatible(List<MediaType> providerProduces, List<MediaType> consumerAccepts, @Nullable String checkParameter) {
         for (MediaType clientAccept : consumerAccepts) {
             for (MediaType produce : providerProduces) {
-                boolean compatible = produce.isCompatible(clientAccept);
+                boolean compatible = isCompatible(produce, clientAccept);
                 if (compatible) {
                     if (checkParameter != null) {
                         String clientParam = clientAccept.getParameters().get(checkParameter);
