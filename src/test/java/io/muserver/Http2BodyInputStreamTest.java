@@ -58,6 +58,42 @@ class Http2BodyInputStreamTest {
         }
     }
 
+    @Test
+    void returningFlowControlCreditDoesNotRetainTheBodyBufferLock() throws Exception {
+        var callbackStarted = new CountDownLatch(1);
+        var releaseCallback = new CountDownLatch(1);
+        var executor = Executors.newFixedThreadPool(2);
+
+        try (var stream = new Http2BodyInputStream(
+            10_000,
+            credit -> {
+                callbackStarted.countDown();
+                try {
+                    if (!releaseCallback.await(5, TimeUnit.SECONDS)) {
+                        throw new AssertionError("Timed out waiting to release credit callback");
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new AssertionError("Credit callback was interrupted", e);
+                }
+            },
+            credit -> {}
+        )) {
+            stream.onData(data("a", false));
+            var read = executor.submit(() -> stream.read());
+
+            assertThat(callbackStarted.await(5, TimeUnit.SECONDS), equalTo(true));
+            var producer = executor.submit(() -> stream.onData(data("b", true)));
+
+            assertThat(producer.get(1, TimeUnit.SECONDS), nullValue());
+            releaseCallback.countDown();
+            assertThat(read.get(5, TimeUnit.SECONDS), equalTo((int) 'a'));
+        } finally {
+            releaseCallback.countDown();
+            executor.shutdownNow();
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(ints = {1, 2, 11, 1024})
     void readsWhenDataIsAvailable(int copyBufferSize) throws Exception {

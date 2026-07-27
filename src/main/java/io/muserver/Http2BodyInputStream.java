@@ -74,6 +74,8 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
             return 0;
         }
 
+        int readAmount;
+        int creditToReturn;
         lock.lock();
         try {
             long remainingNanos = TimeUnit.MILLISECONDS.toNanos(readTimeoutMillis);
@@ -107,8 +109,6 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
                         frames.remove();
                         continue;
                     }
-                    int readAmount;
-                    int creditToReturn;
                     if (remaining < len) {
                         // the user wants more than what is available in the first frame, so give all the rest of it
                         System.arraycopy(data.payload(), offset, b, off, remaining);
@@ -131,13 +131,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
                         creditToReturn += pending.flowControlSize - data.payloadLength();
                     }
                     pending.creditReturned += creditToReturn;
-
-                    try {
-                        onDataReadCallback.creditAvailable(creditToReturn);
-                    } catch (Http2Exception e) {
-                        throw new IOException("Http2 error updating flow control", e);
-                    }
-                    return readAmount;
+                    break;
                 } else if (frame == END_OF_STREAM || frame == DISCARDING) {
                     return -1;
                 } else if (frame instanceof IOException) {
@@ -150,6 +144,12 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
         } finally {
             lock.unlock();
         }
+        try {
+            onDataReadCallback.creditAvailable(creditToReturn);
+        } catch (Http2Exception e) {
+            throw new IOException("Http2 error updating flow control", e);
+        }
+        return readAmount;
     }
 
     public void onData(Http2DataFrame dataFrame) {
@@ -296,7 +296,12 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
 
     @Override
     public @org.jspecify.annotations.Nullable Headers trailers() {
-        return trailers;
+        lock.lock();
+        try {
+            return trailers;
+        } finally {
+            lock.unlock();
+        }
     }
 
 

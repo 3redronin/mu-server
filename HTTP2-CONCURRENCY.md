@@ -156,6 +156,7 @@ as defined by RFC 9113 Section 7.
 | State or resource | Owner |
 | --- | --- |
 | Socket input, input buffer, HPACK decoder | Connection reader |
+| Connection shutdown and new-stream admission gate | `Http2Connection` state lock |
 | RFC stream protocol state | Coordinator |
 | Live application/rejected stream identity index | `Http2StreamRegistry` lock |
 | Inbound END_STREAM and reset-seen fences | Connection reader, with monotonic publication where another domain reads them |
@@ -167,7 +168,8 @@ as defined by RFC 9113 Section 7.
 | HPACK encoder and socket output | Coordinator |
 | Request-body producer/consumer buffer and read deadline | `Http2BodyInputStream` lock and condition |
 | Response API call ordering | Application-side response/async handle |
-| Connection and exchange completion | Coordinator |
+| Protocol stream completion | Coordinator |
+| Application exchange completion | Serialized application completion path |
 
 Coordinator-owned state uses ordinary collections and fields. It must not use
 concurrent collections, volatile fields, or locks as substitutes for ownership.
@@ -278,7 +280,10 @@ request-body buffer. One short-held lock makes the connection and stream debit
 atomic with credit returned by body-consumer threads. This is intentionally not
 a write-coordinator round trip: the socket writer can block, and input must
 continue reading and processing HTTP/2 frames promptly as required by RFC 9113
-Section 5.2.2. No lock is held while queuing WINDOW_UPDATE output.
+Section 5.2.2. A body consumer commits its buffer offset and releases the body
+lock before returning credit to the inbound component or queuing WINDOW_UPDATE
+output. Coordinator contention therefore cannot prevent the reader from
+publishing the next DATA frame to that body.
 
 Credit is returned exactly once when bytes are consumed or discarded. The
 inbound component batches WINDOW_UPDATE increments at half of the advertised
@@ -338,6 +343,8 @@ Permitted cross-thread primitives are deliberately narrow:
 
 * a blocking mailbox for coordinator commands;
 * a small promise backed by a latch and a result or error;
+* one short-held connection state lock for shutdown, admission, and atomic
+  publication across the protocol components;
 * one short-held lock for atomic connection-and-stream inbound flow-control
   accounting;
 * one short-held lock for the live stream identity index;
@@ -354,6 +361,9 @@ identity index is cross-thread publication rather than RFC stream state, and
 therefore uses its explicit registry lock. Inbound receive windows are the
 other deliberate lock-based boundary: DATA debits happen on the reader while
 credit is returned by body-consumer threads, so both windows share one lock.
+The connection state lock may enter the registry, inbound-flow component, or
+coordinator mailbox while publishing one transition. None of those components
+enters the connection state lock while holding its own lock.
 
 No lock is held while:
 
