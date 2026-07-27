@@ -75,7 +75,7 @@ public class ForwardedHeader {
     }
 
     /**
-     * Returns the forwarded port.
+     * Returns the extensions.
      *
      * @return Values not covered by <code>by</code>, <code>for</code>, <code>host</code>, or <code>proto</code>.
      */

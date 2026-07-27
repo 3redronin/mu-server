@@ -128,7 +128,7 @@ public interface MuResponse {
     boolean hasStartedSendingData();
 
     /**
-     * Returns whether response data has started being sent.
+     * Returns the current state of the response.
      *
      * @return The current state of this response
      */

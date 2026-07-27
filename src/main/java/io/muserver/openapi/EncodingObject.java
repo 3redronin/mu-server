@@ -46,7 +46,7 @@ public class EncodingObject implements JsonWriter {
     }
 
     /**
-     * Returns the encoding headers.
+     * Returns the content type.
      *
      * @return The value described by {@link EncodingObjectBuilder#withContentType}
      */
@@ -55,7 +55,7 @@ public class EncodingObject implements JsonWriter {
     }
 
     /**
-     * Returns the content type.
+     * Returns the encoding headers.
      *
      * @return The value described by {@link EncodingObjectBuilder#withHeaders}
      */
@@ -82,7 +82,7 @@ public class EncodingObject implements JsonWriter {
     }
 
     /**
-     * Returns the encoding's allowed headers.
+     * Indicates whether the encoding allows reserved characters.
      *
      * @return The value described by {@link EncodingObjectBuilder#withAllowReserved}
      */

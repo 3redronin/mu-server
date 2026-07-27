@@ -141,7 +141,7 @@ public interface RequestParameters {
     }
 
     /**
-     * Indicates whether any parameters are present.
+     * Indicates whether there are no parameters.
      *
      * @return True if there are no values
      */
