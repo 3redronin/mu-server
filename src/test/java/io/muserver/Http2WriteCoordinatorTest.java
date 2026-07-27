@@ -68,6 +68,73 @@ class Http2WriteCoordinatorTest {
         IOException lateFailure = assertThrows(IOException.class, () -> late.await(1, TimeUnit.SECONDS));
         assertThat(lateFailure.getMessage(), containsString("was reset"));
         assertThat(coordinator.pollWritable(), nullValue());
+        assertThat(coordinator.streamState(1), nullValue());
+    }
+
+    @Test
+    void remoteAndLocalEndStreamTransitionsAreSerializedInEitherOrder() {
+        var remoteFirst = coordinator(100, 1, 100);
+        remoteFirst.remoteEndStream(1);
+        remoteFirst.submit(task(new Http2HeadersFrame(1, true, new FieldBlock())));
+        remoteFirst.processAvailableCommands();
+        assertThat(remoteFirst.streamState(1), equalTo(Http2StreamState.CLOSED));
+
+        var localFirst = coordinator(100, 1, 100);
+        localFirst.submit(task(new Http2HeadersFrame(1, true, new FieldBlock())));
+        localFirst.remoteEndStream(1);
+        localFirst.processAvailableCommands();
+        assertThat(localFirst.streamState(1), equalTo(Http2StreamState.CLOSED));
+    }
+
+    @Test
+    void remoteEndStreamLeavesTheResponseSideWritableUntilItEnds() {
+        var coordinator = coordinator(100, 1, 100);
+        var headers = task(headers(1));
+        var end = task(new Http2HeadersFrame(1, true, new FieldBlock()));
+        coordinator.remoteEndStream(1);
+        coordinator.submit(headers);
+        coordinator.submit(end);
+        coordinator.processAvailableCommands();
+
+        assertThat(coordinator.pollWritable().frame(), equalTo(headers.frame()));
+        assertThat(coordinator.pollWritable().frame(), equalTo(end.frame()));
+        assertThat(coordinator.streamState(1), equalTo(Http2StreamState.CLOSED));
+    }
+
+    @Test
+    void outboundFramesAfterLocalEndStreamAreRejected() throws Exception {
+        var coordinator = coordinator(100, 1, 100);
+        var end = task(new Http2HeadersFrame(1, true, new FieldBlock()));
+        var late = task(headers(1));
+        coordinator.submit(end);
+        coordinator.submit(late);
+        coordinator.processAvailableCommands();
+
+        assertThat(coordinator.pollWritable().frame(), equalTo(end.frame()));
+        IOException failure = assertThrows(IOException.class, () -> late.await(1, TimeUnit.SECONDS));
+        assertThat(failure.getMessage(), containsString("was not open"));
+        assertThat(coordinator.streamState(1), equalTo(Http2StreamState.HALF_CLOSED_LOCAL));
+    }
+
+    @Test
+    void connectionFailureMakesGoAwayTheOnlyWritableFrame() throws Exception {
+        var coordinator = coordinator(100, 1, 100);
+        var pending = task(headers(1));
+        var goAway = task(new Http2GoAway(1, Http2ErrorCode.PROTOCOL_ERROR.code(), null));
+        var lateStream = task(headers(1));
+        var lateConnection = task(new Http2Ping(false, new byte[8]));
+        coordinator.submit(pending);
+        coordinator.failConnection(goAway, new IOException("connection failed"));
+        coordinator.submit(lateStream);
+        coordinator.submit(lateConnection);
+        coordinator.processAvailableCommands();
+
+        assertThat(coordinator.pollWritable().frame(), equalTo(goAway.frame()));
+        assertThat(coordinator.pollWritable(), nullValue());
+        assertThrows(IOException.class, () -> pending.await(1, TimeUnit.SECONDS));
+        assertThrows(IOException.class, () -> lateStream.await(1, TimeUnit.SECONDS));
+        assertThrows(IOException.class, () -> lateConnection.await(1, TimeUnit.SECONDS));
+        assertThat(coordinator.streamState(1), equalTo(Http2StreamState.CLOSED));
     }
 
     @Test
@@ -116,6 +183,7 @@ class Http2WriteCoordinatorTest {
         var next = coordinator.pollWritable();
         assertThat(next.frame(), equalTo(reset.frame()));
         assertThat(next.frame(), instanceOf(Http2ResetStreamFrame.class));
+        assertThat(coordinator.streamState(1), equalTo(Http2StreamState.CLOSED));
         assertThat(coordinator.isIdle(), is(true));
     }
 
@@ -302,6 +370,7 @@ class Http2WriteCoordinatorTest {
         coordinator.processAvailableCommands();
 
         assertThat(coordinator.pollWritable().frame(), equalTo(data.frame()));
+        assertThat(coordinator.streamState(1), nullValue());
         assertThat(coordinator.isIdle(), is(true));
     }
 

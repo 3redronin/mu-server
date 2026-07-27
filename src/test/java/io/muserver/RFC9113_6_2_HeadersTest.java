@@ -5,8 +5,13 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.*;
+import static io.muserver.FieldBlockEncoderTest.hexToByteArray;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -103,13 +108,28 @@ class RFC9113_6_2_HeadersTest {
         try (var client = new H2Client();
              var con = client.connect(server)) {
 
+            var rejectedFieldBlock = new ByteArrayOutputStream();
+            rejectedFieldBlock.write(encodeFieldBlock(getHelloHeaders(getPort())));
+            // Literal custom-key: custom-header with incremental indexing (RFC 7541 6.2.1).
+            rejectedFieldBlock.write(hexToByteArray("400a637573746f6d2d6b65790d637573746f6d2d686561646572"));
+
             con.handshake()
-                .writeRaw(priorityHeadersFrame(1, true, true, encodeFieldBlock(getHelloHeaders(getPort())), false, 1, 10))
+                .writeRaw(priorityHeadersFrame(1, true, true, rejectedFieldBlock.toByteArray(), false, 1, 10))
                 .flush();
 
             var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
             assertThat(reset.streamId(), equalTo(1));
             assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+
+            // The rejected field block was still decoded, so the shared HPACK context and
+            // reader position remain usable for the next stream.
+            var nextFieldBlock = new ByteArrayOutputStream();
+            nextFieldBlock.write(encodeFieldBlock(getHelloHeaders(getPort())));
+            nextFieldBlock.write(0xbe); // Indexed dynamic-table entry 62 from the rejected block.
+            con.writeRaw(headersFrame(3, true, true, nextFieldBlock.toByteArray())).flush();
+            var response = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(response.streamId(), equalTo(3));
+            assertThat(response.headers().get(":status"), equalTo("202"));
         }
     }
 
@@ -245,6 +265,43 @@ class RFC9113_6_2_HeadersTest {
     }
 
     @Test
+    void dataFollowingTrailersInTheSameWriteIsAStreamClosedError() throws Exception {
+        var requestStarted = new CountDownLatch(1);
+        var releaseHandler = new CountDownLatch(1);
+        byte[] opaqueData = {1, 2, 3, 4, 5, 6, 7, 8};
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                requestStarted.countDown();
+                releaseHandler.await(10, TimeUnit.SECONDS);
+            })
+            .start();
+
+        FieldBlock trailers = new FieldBlock();
+        trailers.add("checksum", "abc123");
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .flush();
+            assertThat(requestStarted.await(5, TimeUnit.SECONDS), equalTo(true));
+
+            con.writeFrame(new Http2HeadersFrame(1, true, trailers))
+                .writeFrame(utf8DataFrame(1, true, "late"))
+                .writeFrame(new Http2Ping(false, opaqueData))
+                .flush();
+
+            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.STREAM_CLOSED));
+            assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, opaqueData)));
+        } finally {
+            releaseHandler.countDown();
+        }
+    }
+
+    @Test
     void invalidTrailerFieldsAreStreamErrors() throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
@@ -342,7 +399,3 @@ class RFC9113_6_2_HeadersTest {
         if (server != null) server.stop();
     }
 }
-
-
-
-

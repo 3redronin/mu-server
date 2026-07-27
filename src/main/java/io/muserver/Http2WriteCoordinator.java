@@ -89,13 +89,30 @@ final class Http2WriteCoordinator {
         }
     }
 
+    private static final class RemoteEndStream implements Command {
+        private final int streamId;
+
+        private RemoteEndStream(int streamId) {
+            this.streamId = streamId;
+        }
+    }
+
     private static final class OpenStream implements Command {
         private final int streamId;
         private final int initialCredit;
+        private final Http2StreamState initialState;
+        private final @Nullable Http2Stream stream;
 
-        private OpenStream(int streamId, int initialCredit) {
+        private OpenStream(
+            int streamId,
+            int initialCredit,
+            Http2StreamState initialState,
+            @Nullable Http2Stream stream
+        ) {
             this.streamId = streamId;
             this.initialCredit = initialCredit;
+            this.initialState = initialState;
+            this.stream = stream;
         }
     }
 
@@ -139,6 +156,16 @@ final class Http2WriteCoordinator {
         }
     }
 
+    private static final class ConnectionFailure implements Command {
+        private final WriteTask goAway;
+        private final IOException reason;
+
+        private ConnectionFailure(WriteTask goAway, IOException reason) {
+            this.goAway = goAway;
+            this.reason = reason;
+        }
+    }
+
     private enum WakeUp implements Command {
         INSTANCE
     }
@@ -150,10 +177,13 @@ final class Http2WriteCoordinator {
     private final Set<Integer> localResetsPendingWrite = new HashSet<>();
     private final Set<Integer> forgottenStreams = new HashSet<>();
     private final Map<Integer, Integer> streamCredits = new HashMap<>();
+    private final Map<Integer, Http2StreamState> streamStates = new HashMap<>();
+    private final Map<Integer, Http2Stream> applicationStreams = new HashMap<>();
     private final ArrayList<Command> commandBatch = new ArrayList<>();
     private final AtomicBoolean wakeUpQueued = new AtomicBoolean();
     private int connectionCredit;
     private boolean connectionErrorPendingGoAway;
+    private @Nullable IOException connectionFailureReason;
 
     Http2WriteCoordinator(int initialConnectionCredit) {
         if (initialConnectionCredit < 0) {
@@ -183,13 +213,32 @@ final class Http2WriteCoordinator {
     }
 
     void openStream(int streamId, int initialCredit) {
+        openStream(streamId, initialCredit, Http2StreamState.OPEN, null);
+    }
+
+    void openStream(
+        int streamId,
+        int initialCredit,
+        Http2StreamState initialState,
+        @Nullable Http2Stream stream
+    ) {
         if (streamId <= 0) {
             throw new IllegalArgumentException("An open stream ID must be positive");
         }
         if (initialCredit < 0) {
             throw new IllegalArgumentException("Initial stream credit cannot be negative");
         }
-        mailbox.add(new OpenStream(streamId, initialCredit));
+        if (initialState == Http2StreamState.CLOSED) {
+            throw new IllegalArgumentException("A newly opened stream cannot be closed");
+        }
+        mailbox.add(new OpenStream(streamId, initialCredit, initialState, stream));
+    }
+
+    void remoteEndStream(int streamId) {
+        if (streamId <= 0) {
+            throw new IllegalArgumentException("An ended stream ID must be positive");
+        }
+        mailbox.add(new RemoteEndStream(streamId));
     }
 
     void forgetStream(int streamId) {
@@ -224,6 +273,13 @@ final class Http2WriteCoordinator {
             throw new IllegalArgumentException("The last stream ID cannot be negative");
         }
         mailbox.add(new InitialWindowSizeChange(difference, acknowledgement, lastStreamId));
+    }
+
+    void failConnection(WriteTask goAway, IOException reason) {
+        if (!(goAway.frame() instanceof Http2GoAway)) {
+            throw new IllegalArgumentException("A connection failure must carry GOAWAY");
+        }
+        mailbox.add(new ConnectionFailure(goAway, reason));
     }
 
     void wakeUp() {
@@ -342,25 +398,36 @@ final class Http2WriteCoordinator {
         } else if (command instanceof ResetStream) {
             ResetStream reset = (ResetStream) command;
             peerResetStreams.add(reset.streamId);
-            forgottenStreams.remove(reset.streamId);
+            boolean forgotten = forgottenStreams.remove(reset.streamId);
             streamCredits.remove(reset.streamId);
+            applyResetState(reset.streamId);
             failPendingStreamWrites(reset.streamId, reset.reason, true);
             if (reset.stream != null) {
                 reset.stream.applyPeerReset(reset.resetFrame);
             }
+            if (forgotten) {
+                removeStream(reset.streamId);
+            }
+        } else if (command instanceof RemoteEndStream) {
+            applyRemoteEndStream(((RemoteEndStream) command).streamId);
         } else if (command instanceof OpenStream) {
             OpenStream open = (OpenStream) command;
             forgetResetState(open.streamId);
             forgottenStreams.remove(open.streamId);
             streamCredits.put(open.streamId, open.initialCredit);
+            streamStates.put(open.streamId, open.initialState);
+            if (open.stream == null) {
+                applicationStreams.remove(open.streamId);
+            } else {
+                applicationStreams.put(open.streamId, open.stream);
+            }
         } else if (command instanceof ForgetStream) {
             int streamId = ((ForgetStream) command).streamId;
             forgetResetState(streamId);
             if (hasPendingWrite(streamId)) {
                 forgottenStreams.add(streamId);
             } else {
-                forgottenStreams.remove(streamId);
-                streamCredits.remove(streamId);
+                removeStream(streamId);
             }
         } else if (command instanceof ConnectionWindowUpdate) {
             ConnectionWindowUpdate update = (ConnectionWindowUpdate) command;
@@ -405,6 +472,13 @@ final class Http2WriteCoordinator {
                     change.lastStreamId
                 );
             }
+        } else if (command instanceof ConnectionFailure) {
+            ConnectionFailure failure = (ConnectionFailure) command;
+            if (beginConnectionError(failure.reason)) {
+                addPending(failure.goAway, true, null);
+            } else {
+                failure.goAway.fail(new IOException("A connection error is already being written"));
+            }
         } else if (command == WakeUp.INSTANCE) {
             wakeUpQueued.set(false);
         }
@@ -422,10 +496,13 @@ final class Http2WriteCoordinator {
     ) {
         LogicalHttp2Frame frame = task.frame();
         int streamId = frame.streamId();
-        if (frame instanceof Http2ResetStreamFrame) {
+        if (connectionFailureReason != null) {
+            task.fail(connectionFailureReason);
+        } else if (frame instanceof Http2ResetStreamFrame) {
             IOException resetReason = new IOException("Stream " + streamId + " was locally reset");
-            forgottenStreams.remove(streamId);
+            boolean forgotten = forgottenStreams.remove(streamId);
             streamCredits.remove(streamId);
+            applyResetState(streamId);
             localResetsPendingWrite.add(streamId);
             if (retainResetState) {
                 retainedLocalResetStreams.add(streamId);
@@ -434,30 +511,85 @@ final class Http2WriteCoordinator {
             // continue arriving on a closed stream. Preserve those resets while discarding
             // every other unsent frame for the stream.
             failPendingStreamWrites(streamId, resetReason, false);
+            if (forgotten) {
+                removeStream(streamId);
+            }
             addPending(task, first, protocolError);
         } else if (streamId != 0 && (peerResetStreams.contains(streamId)
             || retainedLocalResetStreams.contains(streamId)
             || localResetsPendingWrite.contains(streamId))) {
             task.fail(new IOException("Stream " + streamId + " was reset before " + frame.getClass().getSimpleName() + " could be written"));
-        } else if (frame instanceof Http2DataFrame && frame.flowControlSize() > 0
-            && !streamCredits.containsKey(streamId)) {
-            task.fail(new IOException("Stream " + streamId + " was not open when DATA was queued"));
+        } else if (streamId != 0 && !canQueueFrame(frame)) {
+            task.fail(new IOException("Stream " + streamId + " was not open for " + frame.getClass().getSimpleName()));
         } else {
+            if (frame.endStream()) {
+                Http2StreamState state = streamStates.get(streamId);
+                if (state == null) {
+                    throw new IllegalStateException("Missing protocol state for stream " + streamId);
+                }
+                streamStates.put(streamId, state.localEndStream());
+            }
             addPending(task, first, protocolError);
         }
     }
 
-    private void queueConnectionError(Http2Exception error, int lastStreamId) {
-        if (connectionErrorPendingGoAway) {
+    private boolean canQueueFrame(LogicalHttp2Frame frame) {
+        Http2StreamState state = streamStates.get(frame.streamId());
+        if (state == null || state == Http2StreamState.CLOSED) {
+            return false;
+        }
+        if (frame instanceof Http2HeadersFrame || frame instanceof Http2DataFrame) {
+            return state.canSendEndStream();
+        }
+        return true;
+    }
+
+    private void applyRemoteEndStream(int streamId) {
+        Http2StreamState state = streamStates.get(streamId);
+        if (state == null || state == Http2StreamState.CLOSED) {
             return;
         }
-        connectionErrorPendingGoAway = true;
-        queue(
+        streamStates.put(streamId, state.remoteEndStream());
+    }
+
+    private void applyResetState(int streamId) {
+        if (streamStates.containsKey(streamId)) {
+            streamStates.put(streamId, Http2StreamState.CLOSED);
+        }
+        Http2Stream stream = applicationStreams.get(streamId);
+        if (stream != null) {
+            stream.onProtocolResetApplied();
+        }
+    }
+
+    private void queueConnectionError(Http2Exception error, int lastStreamId) {
+        if (!beginConnectionError(new IOException("HTTP/2 connection error", error))) {
+            return;
+        }
+        addPending(
             new WriteTask(new Http2GoAway(lastStreamId, error.errorCode().code(), null), false),
             true,
-            false,
             error
         );
+    }
+
+    private boolean beginConnectionError(IOException reason) {
+        if (connectionErrorPendingGoAway) {
+            return false;
+        }
+        connectionErrorPendingGoAway = true;
+        connectionFailureReason = reason;
+        for (Map.Entry<Integer, Http2StreamState> entry : streamStates.entrySet()) {
+            entry.setValue(Http2StreamState.CLOSED);
+        }
+        for (Http2Stream stream : applicationStreams.values()) {
+            stream.onProtocolResetApplied();
+        }
+        PendingWrite pending;
+        while ((pending = pendingWrites.poll()) != null) {
+            pending.task.fail(reason);
+        }
+        return true;
     }
 
     private void queueStreamError(Http2Exception error) {
@@ -510,9 +642,19 @@ final class Http2WriteCoordinator {
 
     private void removeCreditIfForgottenAndDrained(int streamId) {
         if (forgottenStreams.contains(streamId) && !hasPendingWrite(streamId)) {
-            forgottenStreams.remove(streamId);
-            streamCredits.remove(streamId);
+            removeStream(streamId);
         }
+    }
+
+    private void removeStream(int streamId) {
+        forgottenStreams.remove(streamId);
+        streamCredits.remove(streamId);
+        streamStates.remove(streamId);
+        applicationStreams.remove(streamId);
+    }
+
+    @Nullable Http2StreamState streamState(int streamId) {
+        return streamStates.get(streamId);
     }
 
     private void forgetResetState(int streamId) {

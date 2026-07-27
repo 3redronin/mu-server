@@ -21,10 +21,14 @@ class Http2Stream implements ResponseInfo {
 
     @Nullable
     private Http2Response response;
-    private volatile Http2StreamState state;
-    // Reader-owned, monotonic fence. It prevents frames following RST_STREAM on the
-    // wire from reaching the body before the coordinator applies the reset command.
+    // Reader-owned monotonic fences. They prevent frames following END_STREAM or
+    // RST_STREAM on the wire from reaching the body before the coordinator applies
+    // the corresponding command.
+    private boolean remoteEndStreamRead;
     private boolean peerResetRead;
+    // A monotonic published fence used to stop input delivery and to avoid
+    // starting new response work after any thread has initiated a reset.
+    private volatile boolean resetInitiated;
     private long endTime = 0;
     private final InputStream bodyInputStream;
     private final @Nullable Long declaredRequestBodyLength;
@@ -36,7 +40,7 @@ class Http2Stream implements ResponseInfo {
     Http2Stream(int id, Http2Connection connection, Http2StreamState state, Mu3Request request, Http2IncomingFlowController incomingFlowControl, InputStream bodyInputStream, @Nullable Long declaredRequestBodyLength) {
         this.id = id;
         this.connection = connection;
-        this.state = state;
+        this.remoteEndStreamRead = !state.canReceiveEndStream();
         this.request = request;
         this.incomingFlowControl = incomingFlowControl;
         this.bodyInputStream = bodyInputStream;
@@ -61,19 +65,32 @@ class Http2Stream implements ResponseInfo {
 
     void recordPeerResetFromReader() {
         peerResetRead = true;
+        resetInitiated = true;
+    }
+
+    void recordLocalResetFromReader() {
+        resetInitiated = true;
     }
 
     boolean peerResetWasRead() {
         return peerResetRead;
     }
 
+    void onProtocolResetApplied() {
+        resetInitiated = true;
+    }
+
+    boolean resetWasInitiated() {
+        return resetInitiated;
+    }
+
     /**
-     * Applies the I/O-safe effects of a peer reset. This closes protocol state,
-     * wakes body or async waiters, and does not invoke completion listeners or
-     * other application callbacks.
+     * Applies the I/O-safe application effects after the coordinator closes the
+     * protocol stream. This wakes body or async waiters and does not invoke
+     * completion listeners or other application callbacks.
      */
     void applyPeerReset(Http2ResetStreamFrame rstStream) {
-        state = state.reset();
+        onProtocolResetApplied();
         Http2Response currentResponse = requiredResponse();
         if (!currentResponse.responseState().endState()) {
             currentResponse.setState(ResponseState.CLIENT_CANCELLED);
@@ -91,27 +108,18 @@ class Http2Stream implements ResponseInfo {
     }
 
     void cancel(IOException reason, boolean refundUnreadData) {
-        state = state.reset();
+        resetInitiated = true;
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).cancel(reason, refundUnreadData);
         }
     }
 
     boolean canReceiveData() {
-        return state.canReceiveEndStream();
-    }
-
-    boolean canSendFrames() {
-        return state.canSendEndStream();
-    }
-
-    boolean isClosed() {
-        return state == Http2StreamState.CLOSED;
+        return !remoteEndStreamRead && !resetInitiated;
     }
 
     void onTrailers(Http2HeadersFrame headersFrame) throws Http2Exception {
         if (!canReceiveData()) {
-            state = state.reset();
             throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Invalid state for trailers", id);
         }
         if (!headersFrame.endStream()) {
@@ -124,16 +132,15 @@ class Http2Stream implements ResponseInfo {
             }
         }
         validateRequestBodyLengthAtEnd();
+        recordRemoteEndStreamFromReader();
+        connection.remoteEndStream(id);
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).onTrailers(headersFrame.headers());
         }
-        state = state.remoteEndStream();
     }
 
     void onData(int flowControlSize, Http2DataFrame dataFrame) throws Http2Exception {
-        // todo: thread safety
         if (!canReceiveData()) {
-            state = state.reset();
             throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Invalid state for data", id);
         }
 
@@ -150,14 +157,19 @@ class Http2Stream implements ResponseInfo {
                 // Validate before making the terminal frame visible to the handler. Otherwise the
                 // handler can observe EOF and send a response before this stream error is raised.
                 validateRequestBodyLengthAtEnd();
+                recordRemoteEndStreamFromReader();
+                // The command is enqueued before EOF becomes visible, so any response awakened
+                // by EOF is ordered after the remote transition in the coordinator mailbox.
+                connection.remoteEndStream(id);
             }
             ((Http2BodyInputStream)bodyInputStream).onData(dataFrame, flowControlSize);
-            if (dataFrame.endStream()) {
-                state = state.remoteEndStream();
-            }
         } else {
             throw new Http2Exception(Http2ErrorCode.INTERNAL_ERROR, "Received data on a stream with no body", id);
         }
+    }
+
+    private void recordRemoteEndStreamFromReader() {
+        remoteEndStreamRead = true;
     }
 
     private void validateRequestBodyLengthAtEnd() throws Http2Exception {
@@ -352,25 +364,8 @@ class Http2Stream implements ResponseInfo {
      * Writes a frame, blocking if needed until there is enough flow control credit.
      */
     void blockingWrite(LogicalHttp2Frame frame) throws IOException, InterruptedException {
-
-        // DATA frames are subject to flow control and can only be sent when a stream is in the "open" or "half-closed (remote)" state
-
-        // todo: synchronise access to the state
-        if (state == Http2StreamState.HALF_CLOSED_LOCAL) {
-            if (!(frame instanceof Http2WindowUpdate) && !(frame instanceof Http2ResetStreamFrame)) {
-                throw new IllegalStateException("Cannot send data after the stream has been half closed locally. Tried to send " + frame);
-            }
-        } else if (state == Http2StreamState.CLOSED) {
-            throw new IllegalStateException("Cannot send data after the stream has been closed. Tried to send " + frame);
-        }
-
         WriteTask writeTask = new WriteTask(frame, true);
         connection.write(writeTask);
-        if (frame.endStream()) {
-            state = state.localEndStream();
-        } else if (frame instanceof Http2ResetStreamFrame) {
-            state = state.reset();
-        }
         writeTask.await(2, TimeUnit.HOURS);
     }
 

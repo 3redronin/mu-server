@@ -122,13 +122,17 @@ lifecycle. Initially supported states are:
 * `HALF_CLOSED_REMOTE`; and
 * `CLOSED`.
 
-Only coordinator processing can transition this state.
+Only coordinator processing can transition this state. Inbound `END_STREAM`
+and peer `RST_STREAM` commands are one-way. The reader enqueues a valid
+`END_STREAM` before making its EOF visible to the request handler, so a response
+awakened by EOF is necessarily ordered after the inbound transition. Local
+`END_STREAM` is reserved when the coordinator accepts its outbound frame.
 
-Peer `RST_STREAM` commands are one-way. Until all inbound stream frames are
-coordinator commands, the reader records a monotonic "reset seen" fence on the
-stream. This is input-ordering state, not a protocol-state transition: it only
-prevents later wire-ordered DATA or trailers from reaching the request body
-before the coordinator closes the stream and purges pending writes.
+Until all inbound stream frames are coordinator commands, the reader records
+monotonic "remote end seen" and "reset seen" fences on the stream. This is
+input-ordering state, not a protocol-state transition: it only prevents later
+wire-ordered DATA or trailers from reaching the request body before the
+coordinator applies the corresponding transition.
 
 An outbound frame command is validated and its state transition reserved by the
 coordinator before it becomes pending for socket output. A reset closes the
@@ -145,6 +149,11 @@ Applying a peer reset can close protocol state, error the request-body buffer,
 mark the response cancelled, and signal an async handler waiter on the
 coordinator because none of those operations invokes user code. Completion
 listeners and other application callbacks continue on the handler task.
+
+Reader-detected connection errors are also ordered coordinator commands. The
+command closes every protocol stream, fails pending writes, and makes the error
+`GOAWAY` the only writable frame before body cancellation can wake application
+work. A handler therefore cannot emit response frames after that `GOAWAY`.
 
 ## Flow control
 
