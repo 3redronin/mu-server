@@ -40,7 +40,7 @@ class RFC9113_6_9_WindowUpdateTest {
     }
 
     @Test
-    void streamWindowUpdateOf0IsNotAllowed() throws Exception {
+    void streamWindowUpdateOf0ResetsTheStreamWhenResponseWorkRaces() throws Exception {
         var completedStreams = new LinkedBlockingQueue<ResponseInfo>(1);
         server = httpsServer()
             .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
@@ -55,7 +55,7 @@ class RFC9113_6_9_WindowUpdateTest {
                 .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
                 .writeFrame(windowUpdate(1, 0))
                 .flush();
-            var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
+            var reset = readResetAfterAlreadyWrittenStreamFrames(con, 1);
             assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
 
             // The http exchange is considered failed
@@ -74,6 +74,30 @@ class RFC9113_6_9_WindowUpdateTest {
             assertThat(info, notNullValue());
             assertThat(info.completedSuccessfully(), equalTo(true));
             System.out.println("And now I'm about to close with EOF");
+        }
+    }
+
+    @Test
+    void streamErrorCanFollowAResponseThatWasAlreadyStarted() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .flush();
+
+            // The unmatched request can start its 404 response before the peer sends
+            // a later frame that makes the stream erroneous.
+            var responseHeaders = con.readLogicalFrame();
+            assertThat(responseHeaders.streamId(), equalTo(1));
+
+            con.writeFrame(windowUpdate(1, 0))
+                .flush();
+
+            var reset = readResetAfterAlreadyWrittenStreamFrames(con, 1);
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
         }
     }
 
@@ -346,6 +370,21 @@ class RFC9113_6_9_WindowUpdateTest {
 
     private int getPort() {
         return server.uri().getPort();
+    }
+
+    private static Http2ResetStreamFrame readResetAfterAlreadyWrittenStreamFrames(
+        H2ClientConnection connection,
+        int streamId
+    ) throws Exception {
+        // RFC 9113 §5.4.2 makes RST_STREAM the last frame sent on the stream. Frames
+        // that the writer committed before the reader detected the error remain valid.
+        while (true) {
+            LogicalHttp2Frame frame = connection.readLogicalFrame();
+            assertThat(frame.streamId(), equalTo(streamId));
+            if (frame instanceof Http2ResetStreamFrame) {
+                return (Http2ResetStreamFrame) frame;
+            }
+        }
     }
 
     @AfterEach
