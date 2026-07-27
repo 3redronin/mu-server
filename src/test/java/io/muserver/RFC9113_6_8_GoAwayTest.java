@@ -6,6 +6,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -118,6 +119,69 @@ class RFC9113_6_8_GoAwayTest {
             assertThrows(IOException.class, con::readFrameHeader);
 
             stopper.shutdownNow();
+        }
+    }
+
+    @Test
+    void gracefulShutdownWaitsAfterTheInitialGoAwayIsActuallyWritten() throws Exception {
+        var writerStarted = new CountDownLatch(1);
+        var releaseWriter = new CountDownLatch(1);
+        var requestStarted = new CountDownLatch(1);
+        var releaseRequest = new CountDownLatch(1);
+        var writerExecutor = Executors.newSingleThreadExecutor();
+        var stopper = Executors.newSingleThreadExecutor();
+        writerExecutor.submit(() -> {
+            writerStarted.countDown();
+            releaseWriter.await();
+            return null;
+        });
+        assertThat(writerStarted.await(5, TimeUnit.SECONDS), equalTo(true));
+
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .withHttp2WriterExecutor(writerExecutor)
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                requestStarted.countDown();
+                if (!releaseRequest.await(5, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Timed out waiting to finish request");
+                }
+                response.write("done");
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake();
+            var stopped = stopper.submit(() -> server.stop());
+
+            // Let the old initiation-based grace period expire while the writer cannot
+            // emit even the warning GOAWAY.
+            Thread.sleep(Http2Connection.GO_AWAY_GRACE_PERIOD_MILLIS * 2);
+            releaseWriter.countDown();
+
+            assertThat("Expected warning goaway", con.readLogicalFrame(),
+                equalTo(goAway(0x7FFFFFFF, Http2ErrorCode.NO_ERROR)));
+
+            int originalTimeout = con.socket().getSoTimeout();
+            con.socket().setSoTimeout(50);
+            try {
+                assertThrows(SocketTimeoutException.class, con::readFrameHeader);
+            } finally {
+                con.socket().setSoTimeout(originalTimeout);
+            }
+
+            con.writeFrame(getHelloFrame(1)).flush();
+            assertThat(requestStarted.await(5, TimeUnit.SECONDS), equalTo(true));
+            assertThat("Expected final goaway", con.readLogicalFrame(),
+                equalTo(goAway(1, Http2ErrorCode.NO_ERROR)));
+
+            releaseRequest.countDown();
+            stopped.get(5, TimeUnit.SECONDS);
+        } finally {
+            releaseRequest.countDown();
+            releaseWriter.countDown();
+            stopper.shutdownNow();
+            writerExecutor.shutdownNow();
         }
     }
 

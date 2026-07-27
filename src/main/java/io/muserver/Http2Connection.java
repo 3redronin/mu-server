@@ -64,8 +64,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private final AtomicBoolean writerTaskScheduled = new AtomicBoolean();
     private final CompletableFuture<@Nullable Void> writeLoopEnded = new CompletableFuture<>();
     private volatile @Nullable OutputStream writerOutput;
-    private volatile boolean finalGoAwayQueued;
-    private volatile long finalGoAwayEarliestTime = Long.MAX_VALUE;
+    private boolean initialGoAwayWritten;
+    private boolean finalGoAwayQueued;
+    private long finalGoAwayEarliestNanos;
     private boolean finalGoAwayWakeScheduled;
 
     private static final class PendingSettingsAck {
@@ -478,7 +479,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         if (writeState == HState.ACTIVE) {
             log.info("Graceful shutdown initiated with write state {}", writeState);
             writeState = HState.SHUTDOWN_INITIATED;
-            finalGoAwayEarliestTime = System.currentTimeMillis() + GO_AWAY_GRACE_PERIOD_MILLIS;
             // As per: https://datatracker.ietf.org/doc/html/rfc9113#section-6.8-18
             // A server that is attempting to gracefully shut down a connection SHOULD send an initial GOAWAY frame
             // with the last stream identifier set to 2^31-1 and a NO_ERROR code. This signals to the client that a
@@ -511,13 +511,16 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         return isLocalShutdownInitiatedLocked() || isPeerShutdownInitiatedLocked();
     }
 
-    private long localGoAwayGracePeriodMillisRemainingLocked(long now) {
-        return Math.max(0L, finalGoAwayEarliestTime - now);
+    private long localGoAwayGracePeriodNanosRemainingLocked(long now) {
+        if (!initialGoAwayWritten) {
+            return Long.MAX_VALUE;
+        }
+        return Math.max(0L, finalGoAwayEarliestNanos - now);
     }
 
     private boolean isStillAllowingInFlightStreamCreationLocked(long now) {
         return isLocalShutdownInitiatedLocked()
-            && localGoAwayGracePeriodMillisRemainingLocked(now) > 0L;
+            && localGoAwayGracePeriodNanosRemainingLocked(now) > 0L;
     }
 
     private boolean canStartNewStreamsLocked(long now) {
@@ -532,7 +535,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             return false;
         }
         if (isLocalShutdownInitiatedLocked()) {
-            return localGoAwayGracePeriodMillisRemainingLocked(now) == 0L;
+            return initialGoAwayWritten
+                && localGoAwayGracePeriodNanosRemainingLocked(now) == 0L;
         }
         return isPeerShutdownInitiatedLocked()
             && streamRegistry.isEmpty();
@@ -551,11 +555,26 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             && writeCoordinator.isIdle();
     }
 
-    private long millisUntilNextWriteActionLocked(long now) {
-        if (isLocalShutdownInitiatedLocked() && !finalGoAwayQueued) {
-            return localGoAwayGracePeriodMillisRemainingLocked(now);
+    private long nanosUntilNextWriteActionLocked(long now) {
+        if (isLocalShutdownInitiatedLocked()
+            && initialGoAwayWritten
+            && !finalGoAwayQueued) {
+            return localGoAwayGracePeriodNanosRemainingLocked(now);
         }
         return -1L;
+    }
+
+    private void recordInitialGoAwayWritten() {
+        stateLock.lock();
+        try {
+            if (isLocalShutdownInitiatedLocked() && !initialGoAwayWritten) {
+                initialGoAwayWritten = true;
+                finalGoAwayEarliestNanos = System.nanoTime()
+                    + TimeUnit.MILLISECONDS.toNanos(GO_AWAY_GRACE_PERIOD_MILLIS);
+            }
+        } finally {
+            stateLock.unlock();
+        }
     }
 
     private void completeShutdownLocked() {
@@ -581,6 +600,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     }
                 }
                 clientOut.flush();
+                if (GO_AWAY_WARNING.equals(frame)) {
+                    recordInitialGoAwayWritten();
+                }
                 candidate.complete();
                 if (protocolError != null && protocolError.errorType() == Http2Level.CONNECTION) {
                     return true;
@@ -1054,7 +1076,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private boolean acceptNewStream(int streamId) {
         stateLock.lock();
         try {
-            long now = System.currentTimeMillis();
+            long now = System.nanoTime();
             if (!canStartNewStreamsLocked(now)) {
                 log.info("Refusing stream {} because graceful shutdown no longer allows new streams", streamId);
                 write(new Http2ResetStreamFrame(streamId, Http2ErrorCode.REFUSED_STREAM.code()));
@@ -1105,7 +1127,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     continue;
                 }
 
-                long now = System.currentTimeMillis();
+                long now = System.nanoTime();
                 boolean continueWriting = false;
                 stateLock.lock();
                 try {
@@ -1115,7 +1137,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     } else if (isTerminalAndDrainedLocked()) {
                         completeShutdownLocked();
                     } else {
-                        long waitTime = millisUntilNextWriteActionLocked(now);
+                        long waitTime = nanosUntilNextWriteActionLocked(now);
                         if (waitTime > 0L && !finalGoAwayWakeScheduled) {
                             scheduleFinalGoAwayWakeLocked(waitTime);
                         }
@@ -1142,7 +1164,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         }
     }
 
-    private void scheduleFinalGoAwayWakeLocked(long delayMillis) {
+    private void scheduleFinalGoAwayWakeLocked(long delayNanos) {
         finalGoAwayWakeScheduled = true;
         try {
             server.scheduleTimerCallback(() -> {
@@ -1157,7 +1179,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 if (wakeWriter) {
                     signalWriteLoop();
                 }
-            }, delayMillis, TimeUnit.MILLISECONDS);
+            }, delayNanos, TimeUnit.NANOSECONDS);
         } catch (RuntimeException | Error e) {
             finalGoAwayWakeScheduled = false;
             throw e;
