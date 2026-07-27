@@ -213,6 +213,9 @@ class RFC9113_5_5_ExtensionsTest {
             final int maxFrameSize = 32768;
             final int maxHeaderListSize = 4000;
             final int anUnknownSetting = 88;
+            // This raw frame advertises the limit enforced by the test
+            // client's response decoder.
+            con.changeResponseHeaderTableSizeLimit(headerTableSize);
             con.writeRaw(new byte[] {
                 // header - 6 settings of 6 bytes each
                 0, 0, 6 * 6, 4, 0, 0, 0, 0, 0,

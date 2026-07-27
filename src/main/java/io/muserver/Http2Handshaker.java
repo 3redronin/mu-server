@@ -39,6 +39,7 @@ class Http2Handshaker {
         // handshake start
         readClientPreface(clientIn);
         var newClientSettings = readClientSettings(buffer, clientIn, clientSettings);
+        connection.initializeHandshakePeerSettings(newClientSettings);
         serverSettings.writeTo(connection, clientOut);
         Http2Settings.ACK.writeTo(connection, clientOut);
         clientOut.flush();

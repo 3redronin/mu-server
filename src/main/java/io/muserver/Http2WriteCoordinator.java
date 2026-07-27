@@ -152,13 +152,20 @@ final class Http2WriteCoordinator {
         }
     }
 
-    private static final class InitialWindowSizeChange implements Command {
-        private final int difference;
+    private static final class PeerSettingsChange implements Command {
+        private final int initialWindowDifference;
+        private final int headerTableSize;
         private final WriteTask acknowledgement;
         private final int lastStreamId;
 
-        private InitialWindowSizeChange(int difference, WriteTask acknowledgement, int lastStreamId) {
-            this.difference = difference;
+        private PeerSettingsChange(
+            int initialWindowDifference,
+            int headerTableSize,
+            WriteTask acknowledgement,
+            int lastStreamId
+        ) {
+            this.initialWindowDifference = initialWindowDifference;
+            this.headerTableSize = headerTableSize;
             this.acknowledgement = acknowledgement;
             this.lastStreamId = lastStreamId;
         }
@@ -194,6 +201,8 @@ final class Http2WriteCoordinator {
     private final Map<Integer, Http2Stream> applicationStreams = new HashMap<>();
     private final ArrayList<Command> commandBatch = new ArrayList<>();
     private final AtomicBoolean wakeUpQueued = new AtomicBoolean();
+    private final FieldBlockEncoder fieldBlockEncoder =
+        new FieldBlockEncoder(new HpackTable(Http2Settings.DEFAULT_CLIENT_SETTINGS.headerTableSize));
     private int connectionCredit;
     private boolean connectionErrorPendingGoAway;
     private @Nullable IOException connectionFailureReason;
@@ -294,11 +303,32 @@ final class Http2WriteCoordinator {
         enqueue(new StreamWindowUpdate(streamId, increment));
     }
 
-    void applyInitialWindowSizeChange(int difference, WriteTask acknowledgement, int lastStreamId) {
+    void initializePeerHeaderTableSize(int headerTableSize) {
+        fieldBlockEncoder.changeTableSize(headerTableSize);
+    }
+
+    FieldBlockEncoder fieldBlockEncoder() {
+        return fieldBlockEncoder;
+    }
+
+    void applyPeerSettingsChange(
+        int initialWindowDifference,
+        int headerTableSize,
+        WriteTask acknowledgement,
+        int lastStreamId
+    ) {
+        if (headerTableSize < 0) {
+            throw new IllegalArgumentException("The peer header table size cannot be negative");
+        }
         if (lastStreamId < 0) {
             throw new IllegalArgumentException("The last stream ID cannot be negative");
         }
-        enqueue(new InitialWindowSizeChange(difference, acknowledgement, lastStreamId));
+        enqueue(new PeerSettingsChange(
+            initialWindowDifference,
+            headerTableSize,
+            acknowledgement,
+            lastStreamId
+        ));
     }
 
     void settingsTimedOut() {
@@ -483,22 +513,27 @@ final class Http2WriteCoordinator {
                     queueStreamError(e);
                 }
             }
-        } else if (command instanceof InitialWindowSizeChange) {
-            InitialWindowSizeChange change = (InitialWindowSizeChange) command;
+        } else if (command instanceof PeerSettingsChange) {
+            PeerSettingsChange change = (PeerSettingsChange) command;
             if (connectionErrorPendingGoAway) {
                 return;
             }
             try {
-                if (change.difference != 0) {
+                if (change.initialWindowDifference != 0) {
                     Map<Integer, Integer> changedCredits = new HashMap<>(streamCredits.size());
                     for (Map.Entry<Integer, Integer> entry : streamCredits.entrySet()) {
                         changedCredits.put(
                             entry.getKey(),
-                            addCredit(entry.getValue(), change.difference, entry.getKey())
+                            addCredit(
+                                entry.getValue(),
+                                change.initialWindowDifference,
+                                entry.getKey()
+                            )
                         );
                     }
                     streamCredits.putAll(changedCredits);
                 }
+                fieldBlockEncoder.changeTableSize(change.headerTableSize);
                 queue(change.acknowledgement, true, false);
             } catch (Http2Exception e) {
                 queueConnectionError(

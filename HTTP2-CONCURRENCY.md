@@ -20,11 +20,14 @@ due work to a separate maintenance executor.
 
 SETTINGS acknowledgement expiry now runs on the server timer and is serialized
 as a coordinator connection-error command; it no longer changes the socket
-reader's blocking timeout. Still to be implemented are migration of the
-remaining connection settings, stream registry, inbound flow-control
-accounting, and request-body read deadlines to coordinator ownership. The
-reader and coordinator have separate execution capacity from handlers, but do
-not yet have all of the final single-owner boundaries described below.
+reader's blocking timeout. Peer SETTINGS are decoded into an immutable
+reader-published snapshot, while their outbound effects (existing-stream flow
+credit, the HPACK encoder limit, and the ACK) are applied in order by the
+coordinator. Still to be implemented are migration of the stream registry,
+inbound flow-control accounting, and request-body read deadlines to coordinator
+ownership. The reader and coordinator have separate execution capacity from
+handlers, but do not yet have all of the final single-owner boundaries described
+below.
 
 ## Goals
 
@@ -140,7 +143,8 @@ local blocking deadlines for now.
 | --- | --- |
 | Socket input, input buffer, HPACK decoder | Connection reader |
 | Stream map and stream protocol state | Coordinator |
-| Local and peer settings after decoding | Coordinator |
+| Peer settings snapshot after decoding | Connection reader (volatile publication) |
+| Outbound effects of peer settings and local settings lifecycle | Coordinator |
 | Connection and stream outbound flow-control credit | Coordinator |
 | Connection and stream inbound flow-control accounting | Coordinator |
 | Pending outbound frames and their ordering | Coordinator |

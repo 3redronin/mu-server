@@ -21,6 +21,30 @@ class FieldBlockEncoderTest {
     private final FieldBlockDecoder decoder = new FieldBlockDecoder(table, 8192, 4 * 8192);
 
     @Test
+    void tableSizeDecreaseIsSignalledAtTheStartOfTheNextFieldBlock() throws IOException {
+        encoder.changeTableSize(0);
+
+        assertThat(toHex(new FieldBlock()), equalTo("20"));
+        assertThat(toHex(new FieldBlock()), equalTo(""));
+    }
+
+    @Test
+    void smallestAndFinalTableSizesAreSignalledWhenChangedMoreThanOnce() throws IOException {
+        encoder.changeTableSize(100);
+        encoder.changeTableSize(200);
+
+        assertThat(toHex(new FieldBlock()), equalTo("3f453fa901"));
+        assertThat(toHex(new FieldBlock()), equalTo(""));
+    }
+
+    @Test
+    void unchangedTableSizeIsNotSignalled() throws IOException {
+        encoder.changeTableSize(4096);
+
+        assertThat(toHex(new FieldBlock()), equalTo(""));
+    }
+
+    @Test
     public void rfc7541ExampleC_2_1_literalHeaderWithIndexing() throws IOException, Http2Exception {
         byte[] array = hexToByteArray("400a637573746f6d2d6b65790d637573746f6d2d686561646572");
         var decoded = decoder.decodeFrom(ByteBuffer.wrap(array));

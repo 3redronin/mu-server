@@ -212,6 +212,67 @@ class RFC9113_6_5_SettingsTest {
     }
 
     @Test
+    void initialHeaderTableSizeIsAppliedBeforeTheHandshakeAck() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                response.status(204);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake(new Http2Settings(false, 0, 100, 65535, 16384, 32768))
+                .writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+
+            var header = con.readFrameHeader();
+            assertThat(header.frameType(), equalTo(Http2FrameType.HEADERS));
+            byte[] payload = con.readRawPayload(header);
+            assertThat(payload[0], equalTo((byte) 0x20));
+        }
+    }
+
+    @Test
+    void repeatedHeaderTableSizeChangesAreSignalledInTheNextFieldBlock() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                response.status(204);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeRaw(settingsFrame(1, 100))
+                .flush();
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            con.writeRaw(settingsFrame(1, 200))
+                .flush();
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            con.writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+
+            var header = con.readFrameHeader();
+            assertThat(header.frameType(), equalTo(Http2FrameType.HEADERS));
+            assertThat(header.streamId(), equalTo(1));
+            byte[] payload = con.readRawPayload(header);
+
+            // RFC 7541 Section 4.2: the smallest value since the previous
+            // field block (100) is followed by the final value (200).
+            assertThat(
+                Arrays.copyOf(payload, 5),
+                equalTo(new byte[] { 0x3f, 0x45, 0x3f, (byte) 0xa9, 0x01 })
+            );
+        }
+    }
+
+    @Test
     void maxFrameSizeChangesAffectSubsequentResponses() throws Exception {
         byte[] body = new byte[20001];
         Arrays.fill(body, (byte) 'x');

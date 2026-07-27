@@ -47,7 +47,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     private static final Logger log = LoggerFactory.getLogger(Http2Connection.class);
 
     private final Http2Settings serverSettings;
-    private Http2Settings clientSettings = Http2Settings.DEFAULT_CLIENT_SETTINGS;
+    private volatile Http2Settings clientSettings = Http2Settings.DEFAULT_CLIENT_SETTINGS;
     private final ByteBuffer buffer;
     private volatile int maxAllowedStreamId = MAX_POSSIBLE_STREAM_ID;
     private volatile int lastStreamId = 0;
@@ -68,8 +68,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     private volatile boolean finalGoAwayQueued;
     private volatile long finalGoAwayEarliestTime = Long.MAX_VALUE;
     private boolean finalGoAwayWakeScheduled;
-
-    final FieldBlockEncoder fieldBlockEncoder;
 
     private static final class PendingSettingsAck {
         private final AtomicBoolean pending = new AtomicBoolean(true);
@@ -106,7 +104,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         this.writerExecutor = writerExecutor;
         this.writeCoordinator = new Http2WriteCoordinator(65535, this::requestWriteRun);
         this.buffer = ByteBuffer.allocate(serverSettings.maxFrameSize).flip();
-        this.fieldBlockEncoder = new FieldBlockEncoder(new HpackTable(clientSettings.headerTableSize));
     }
 
     @Override
@@ -116,7 +113,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     @Override
     public FieldBlockEncoder fieldBlockEncoder() {
-        return fieldBlockEncoder;
+        return writeCoordinator.fieldBlockEncoder();
     }
 
     @Override
@@ -313,12 +310,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         }
     }
 
-    private void applyInitialWindowSizeChange(int difference) throws Http2Exception {
+    private void applyPeerSettingsChange(Http2Settings oldSettings, Http2Settings newSettings)
+        throws Http2Exception {
         stateLock.lock();
         try {
             if (writeState.canSendFrames) {
-                writeCoordinator.applyInitialWindowSizeChange(
-                    difference,
+                writeCoordinator.applyPeerSettingsChange(
+                    newSettings.initialWindowSize - oldSettings.initialWindowSize,
+                    newSettings.headerTableSize,
                     new WriteTask(Http2Settings.ACK, false),
                     lastStreamId
                 );
@@ -328,6 +327,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         } finally {
             stateLock.unlock();
         }
+    }
+
+    void initializeHandshakePeerSettings(Http2Settings settings) {
+        if (writerOutput != null) {
+            throw new IllegalStateException("The HTTP/2 writer has already started");
+        }
+        clientSettings = settings;
+        writeCoordinator.initializePeerHeaderTableSize(settings.headerTableSize);
     }
 
     private void failConnection(WriteTask goAway, IOException reason) {
@@ -581,7 +588,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             // do the handshake
             clientSettings = Http2Handshaker.handshake(this, serverSettings, clientSettings, buffer, clientIn, clientOut);
 
-            fieldBlockEncoder.changeTableSize(clientSettings.headerTableSize);
             queuePendingSettingsAck();
 
             var fieldBlockDecoder = new FieldBlockDecoder(new HpackTable(serverSettings.headerTableSize), server.maxUrlSize(), server.maxRequestHeadersSize());
@@ -810,19 +816,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             // copyIfChanged returns the input instance when no setting changed.
             @SuppressWarnings("ReferenceEquality")
             boolean settingsChanged = newSettings != oldSettings;
-            boolean initialWindowSizeChanged = settingsChanged
-                && newSettings.initialWindowSize != oldSettings.initialWindowSize;
             if (settingsChanged) {
                 clientSettings = newSettings;
             }
 
-            // The ACK is ordered ahead of DATA that the new initial window size might unblock.
-            if (initialWindowSizeChanged) {
-                int difference = newSettings.initialWindowSize - oldSettings.initialWindowSize;
-                applyInitialWindowSizeChange(difference);
-            } else {
-                writeFirst(Http2Settings.ACK);
-            }
+            // RFC 9113 Section 6.5.3 says an ACK confirms application, not only
+            // receipt. The coordinator therefore applies outbound flow credit
+            // and HPACK encoder limits before making the ACK writable.
+            applyPeerSettingsChange(oldSettings, newSettings);
         }
     }
 
