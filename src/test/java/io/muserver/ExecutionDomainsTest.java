@@ -446,6 +446,33 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void rejectedHandlerDispatchFallsBackWithoutRunningCompletionListenersOnTheHttp1Reader() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
+        var completionThread = new CompletableFuture<String>();
+        server = httpServer()
+            .withHandlerExecutor(handlerExecutor)
+            .withAsyncExecutor(asyncExecutor)
+            .withConnectionExecutor(connectionExecutor)
+            .addResponseCompleteListener(info ->
+                completionThread.complete(Thread.currentThread().getName())
+            )
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.write("done");
+                handlerExecutor.shutdown();
+            })
+            .start();
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/").flushHeaders();
+            assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
+            assertThat(client.readBody(client.readHeaders()), equalTo("done"));
+        }
+        assertThat(completionThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
+    }
+
+    @Test
     void oneAsyncWorkerCanReadAndEchoARequestBody() throws Exception {
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
         var callbackThreads = new CopyOnWriteArrayList<String>();
