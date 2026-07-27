@@ -148,6 +148,7 @@ public interface MuResponse {
 
     /**
      * Adds a completion listener which will be called at the end of this response
+     * (including when registration races with completion notification).
      * @param listener a completion listener
      * @throws NullPointerException completion listener is null
      */

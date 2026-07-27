@@ -182,6 +182,7 @@ as defined by RFC 9113 Section 7.
 | HPACK encoder and socket output | Coordinator |
 | Request-body producer/consumer buffer and read deadline | `Http2BodyInputStream` lock and condition |
 | Response API call ordering and async completion terminal gate | Application-side response/async handle lock |
+| Response completion-listener registration and notification gate | `BaseResponse` completion-listener lock |
 | Protocol stream completion | Coordinator |
 | Application exchange completion | Serialized application completion path |
 
@@ -379,6 +380,8 @@ Permitted cross-thread primitives are deliberately narrow:
 * an application-side lock that orders async response submissions with the
   terminal completion gate, so completion observes every accepted write and
   rejects every later write; and
+* one short-held response lock that orders completion-listener registration
+  against the notification snapshot; and
 * a thread-confined FIFO that drains nested application work without recursive
   calls or executor resubmission; and
 * atomics for idempotent resource closure.
