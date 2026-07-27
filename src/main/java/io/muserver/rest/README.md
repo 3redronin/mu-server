@@ -62,7 +62,7 @@ N/A Not applicable as only singletons supported
 - [x] Static valueOf method objects
 - [x] Single-string constructor objects
 - [x] `List<T>`, `Set<T>`, and `SortedSet<T>` for values satisfying above 3 cases. 
-- [ ] `T[]` parameters for `@CookieParam`, `@FormParam`, `@HeaderParam`, `@MatrixParam`, and `@QueryParam`
+- [x] `T[]` parameters for `@CookieParam`, `@FormParam`, `@HeaderParam`, `@MatrixParam`, and `@QueryParam`
 - [x] `@DefaultValue`
 - [x] `@Encoded`
 
