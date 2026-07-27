@@ -1347,8 +1347,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         log.warn("Aborting accepted HTTP/2 stream because its application executors rejected completion", dispatchFailure);
         try {
             BaseResponse response = stream.response();
-            if (!stream.resetWasInitiated() && !response.responseState().endState()) {
-                response.setState(ResponseState.ERRORED);
+            if (!stream.resetWasInitiated()
+                && response.setState(ResponseState.ERRORED)) {
                 write(new Http2ResetStreamFrame(stream.id, Http2ErrorCode.INTERNAL_ERROR.code()));
                 stream.cancel(
                     new IOException("Application executors rejected HTTP/2 stream completion", dispatchFailure)
@@ -1395,8 +1395,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             log.info("Unhandled stream exception", e);
             if (stream.response().hasStartedSendingData()
                 && !stream.resetWasInitiated()
-                && !stream.response().responseState().endState()) {
-                stream.response().setState(ResponseState.ERRORED);
+                && stream.response().setState(ResponseState.ERRORED)) {
                 Http2ErrorCode errorCode =
                     e instanceof HttpException
                         && ((HttpException) e).status().sameCode(HttpStatus.REQUEST_TIMEOUT_408)
