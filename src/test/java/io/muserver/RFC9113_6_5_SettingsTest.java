@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Queue;
@@ -704,7 +703,7 @@ class RFC9113_6_5_SettingsTest {
                     liveConnection.creator,
                     liveConnection.clientSocket,
                     liveConnection.clientCertificate,
-                    Instant.now(),
+                    ConnectionAcceptedTime.now(),
                     Http2Settings.DEFAULT_CLIENT_SETTINGS,
                     5000,
                     executor,

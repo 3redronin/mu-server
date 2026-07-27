@@ -14,7 +14,6 @@ import java.io.PushbackInputStream;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.Certificate;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -121,15 +120,15 @@ class ConnectionAcceptor {
                     closeQuietly(clientSocket);
                     continue;
                 }
-                Instant startTime = Instant.now();
+                ConnectionAcceptedTime acceptedTime = ConnectionAcceptedTime.now();
                 try {
                     connectionExecutor.submit(
-                        () -> runAcceptedSocket(clientSocket, startTime, h2, false)
+                        () -> runAcceptedSocket(clientSocket, acceptedTime, h2, false)
                     );
                 } catch (RejectedExecutionException e) {
                     try {
                         clientSocket.setSoTimeout(2000);
-                        runAcceptedSocket(clientSocket, startTime, false, true);
+                        runAcceptedSocket(clientSocket, acceptedTime, false, true);
                     } catch (Exception e2) {
                         log.info("Exception while writing 503 when executor is full: {}", e2.getMessage());
                     }
@@ -174,14 +173,14 @@ class ConnectionAcceptor {
 
     private void runAcceptedSocket(
         Socket socket,
-        Instant startTime,
+        ConnectionAcceptedTime acceptedTime,
         boolean http2Enabled,
         boolean rejectDueToOverload
     ) {
         try {
             handleClientSocket(
                 socket,
-                startTime,
+                acceptedTime,
                 http2Enabled,
                 rejectDueToOverload
             );
@@ -302,7 +301,12 @@ class ConnectionAcceptor {
         }
     }
 
-    private void handleClientSocket(Socket clientSocket, Instant startTime, boolean http2Enabled, boolean rejectDueToOverload) {
+    private void handleClientSocket(
+        Socket clientSocket,
+        ConnectionAcceptedTime acceptedTime,
+        boolean http2Enabled,
+        boolean rejectDueToOverload
+    ) {
         Socket socket = clientSocket;
         Certificate clientCert = null;
         PushbackInputStream inputStream = null;
@@ -378,7 +382,7 @@ class ConnectionAcceptor {
                 clientSocket,
                 socket,
                 clientCert,
-                startTime,
+                acceptedTime,
                 httpVersion,
                 inputStream
             );
@@ -439,7 +443,7 @@ class ConnectionAcceptor {
         Socket acceptedSocket,
         Socket socket,
         @Nullable Certificate clientCert,
-        Instant startTime,
+        ConnectionAcceptedTime acceptedTime,
         HttpVersion httpVersion,
         @Nullable InputStream providedInputStream
     ) {
@@ -453,7 +457,7 @@ class ConnectionAcceptor {
                 this,
                 socket,
                 clientCert,
-                startTime,
+                acceptedTime,
                 http2Config.initialSettings(),
                 http2Config.settingsAckTimeoutMillis(),
                 handlerExecutor,
@@ -465,7 +469,7 @@ class ConnectionAcceptor {
                 this,
                 socket,
                 clientCert,
-                startTime,
+                acceptedTime,
                 handlerExecutor,
                 handlerExecutor == connectionExecutor
             );

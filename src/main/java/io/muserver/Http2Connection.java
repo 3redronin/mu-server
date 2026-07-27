@@ -10,7 +10,6 @@ import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.Certificate;
-import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -101,8 +100,18 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         }
     }
 
-    Http2Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime, Http2Settings initialServerSettings, long settingsAckTimeoutMillis, ExecutorService handlerExecutor, ExecutorService writerExecutor) {
-        super(server, creator, clientSocket, clientCertificate, handshakeStartTime);
+    Http2Connection(
+        Mu3ServerImpl server,
+        ConnectionAcceptor creator,
+        Socket clientSocket,
+        @Nullable Certificate clientCertificate,
+        ConnectionAcceptedTime acceptedTime,
+        Http2Settings initialServerSettings,
+        long settingsAckTimeoutMillis,
+        ExecutorService handlerExecutor,
+        ExecutorService writerExecutor
+    ) {
+        super(server, creator, clientSocket, clientCertificate, acceptedTime);
         this.serverSettings = initialServerSettings;
         this.settingsAckTimeoutMillis = settingsAckTimeoutMillis;
         this.handlerExecutor = handlerExecutor;
