@@ -96,12 +96,21 @@ abstract class BaseHttpConnection implements HttpConnection {
     }
 
     protected void onExchangeEnded(ResponseInfo exchange) {
+        recordExchangeEnded(exchange);
+        notifyExchangeEnded(exchange);
+    }
+
+    protected void recordExchangeEnded(ResponseInfo exchange) {
         completedRequests.incrementAndGet();
+        server.recordExchangeEnded(exchange);
+    }
+
+    protected void notifyExchangeEnded(ResponseInfo exchange) {
         BaseResponse resp = (BaseResponse) exchange.response();
         for (var listener : resp.completionListeners()) {
             listener.onComplete(exchange);
         }
-        server.onExchangeEnded(exchange);
+        server.notifyExchangeEnded(exchange);
     }
 
 

@@ -304,8 +304,11 @@ class Mu3ServerImpl implements MuServer {
         statsImpl.onRequestSubmissionRejected(req);
     }
 
-    void onExchangeEnded(ResponseInfo exchange) {
+    void recordExchangeEnded(ResponseInfo exchange) {
         statsImpl.onRequestEnded(exchange);
+    }
+
+    void notifyExchangeEnded(ResponseInfo exchange) {
         for (var listener : responseCompleteListeners) {
             listener.onComplete(exchange);
         }
