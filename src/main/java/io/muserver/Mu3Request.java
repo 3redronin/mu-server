@@ -25,6 +25,7 @@ class Mu3Request implements MuRequest {
     @Nullable
     private BaseResponse response;
     private final long startTime;
+    private final long startNanos;
     @Nullable private QueryString query;
     @Nullable private Map<String, Object> attributes;
     private String contextPath = "";
@@ -52,6 +53,7 @@ class Mu3Request implements MuRequest {
         this.bodySize = bodySize;
         this.body = body;
         this.startTime = System.currentTimeMillis();
+        this.startNanos = System.nanoTime();
         this.relativePath = requestUri.getRawPath();
     }
 
@@ -71,6 +73,10 @@ class Mu3Request implements MuRequest {
     @Override
     public long startTime() {
         return startTime;
+    }
+
+    long startNanos() {
+        return startNanos;
     }
 
     @Override

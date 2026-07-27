@@ -33,7 +33,8 @@ class Http2Stream implements ResponseInfo {
     // Writer-published after the complete END_STREAM frame is handed to output
     // and before flush, matching the stream-admission publication boundary.
     private volatile boolean localEndStreamPublished;
-    private long endTime = 0;
+    @Nullable
+    private Long endNanos;
     private final InputStream bodyInputStream;
     private final @Nullable Long declaredRequestBodyLength;
     private long receivedRequestBodyLength;
@@ -56,8 +57,10 @@ class Http2Stream implements ResponseInfo {
 
     @Override
     public long duration() {
-        var end = endTime;
-        return (end == 0L ? System.currentTimeMillis() : end) - request.startTime();
+        Long end = endNanos;
+        return end == null
+            ? MonotonicTime.elapsedMillisSince(request.startNanos())
+            : MonotonicTime.elapsedMillis(request.startNanos(), end);
     }
 
 
@@ -380,7 +383,7 @@ class Http2Stream implements ResponseInfo {
             request.cleanup();
             requiredResponse().cleanup();
         } finally {
-            endTime = System.currentTimeMillis();
+            endNanos = System.nanoTime();
         }
     }
 
@@ -388,7 +391,7 @@ class Http2Stream implements ResponseInfo {
         try {
             request.cleanup();
         } finally {
-            endTime = System.currentTimeMillis();
+            endNanos = System.nanoTime();
         }
     }
 
