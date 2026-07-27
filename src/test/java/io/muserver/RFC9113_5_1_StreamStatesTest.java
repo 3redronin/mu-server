@@ -34,7 +34,7 @@ class RFC9113_5_1_StreamStatesTest {
     private @Nullable MuServer server;
 
     @Test
-    void localEndStreamStopsCountingBeforeFlushReturns() throws Exception {
+    void localEndStreamPublicationBracketsOutputAndFlush() throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .start();
@@ -92,9 +92,19 @@ class RFC9113_5_1_StreamStatesTest {
                 );
 
                 assertThat(stream.countsTowardsMaxConcurrentStreams(), equalTo(true));
+                var countedDuringFirstWrite = new AtomicReference<Boolean>();
                 var flushEntered = new CountDownLatch(1);
                 var countedDuringFlush = new AtomicReference<Boolean>();
                 var output = new ByteArrayOutputStream() {
+                    @Override
+                    public synchronized void write(byte[] data, int offset, int length) {
+                        countedDuringFirstWrite.compareAndSet(
+                            null,
+                            stream.countsTowardsMaxConcurrentStreams()
+                        );
+                        super.write(data, offset, length);
+                    }
+
                     @Override
                     public void flush() {
                         countedDuringFlush.set(
@@ -106,6 +116,7 @@ class RFC9113_5_1_StreamStatesTest {
 
                 writerConnection.startWriteLoop(output);
                 assertThat(flushEntered.await(5, TimeUnit.SECONDS), equalTo(true));
+                assertThat(countedDuringFirstWrite.get(), equalTo(true));
                 assertThat(countedDuringFlush.get(), equalTo(false));
             } finally {
                 executor.shutdownNow();

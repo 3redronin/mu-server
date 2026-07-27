@@ -602,21 +602,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     ? candidate.frame()
                     : prepareCoordinatorErrorFrame(protocolError);
                 log.info("Writing {}", frame);
-                // Publish reader-facing monotonic output fences before bytes
-                // can reach the peer. Protocol completion still occurs only
-                // in candidate.complete() after flush.
-                candidate.publishBeforeWrite(frame);
                 PendingSettingsAck pendingSettingsAck = null;
-                if (frame instanceof Http2WindowUpdate) {
-                    var update = (Http2WindowUpdate) frame;
-                    // OutputStream writes can make a complete frame visible
-                    // before flush() returns. Publish the matching receive
-                    // credit first so the reader accepts DATA enabled by it.
-                    inboundFlowControl.windowUpdateWriting(
-                        update.streamId(),
-                        update.windowSizeIncrement()
-                    );
-                }
                 if (frame instanceof Http2Settings) {
                     var settings = (Http2Settings) frame;
                     if (!settings.isAck) {
@@ -626,6 +612,19 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     }
                 }
                 frame.writeTo(this, clientOut);
+                // Publish reader-facing monotonic output fences after the
+                // complete frame has been handed to the OutputStream, but
+                // before flush can expose it and block. Publishing before the
+                // first write would release state while output had made no
+                // progress. Protocol completion still occurs only after flush.
+                candidate.publishAfterWrite(frame);
+                if (frame instanceof Http2WindowUpdate) {
+                    var update = (Http2WindowUpdate) frame;
+                    inboundFlowControl.windowUpdateWriting(
+                        update.streamId(),
+                        update.windowSizeIncrement()
+                    );
+                }
                 clientOut.flush();
                 if (pendingSettingsAck != null) {
                     // The peer cannot be late until the SETTINGS frame has
