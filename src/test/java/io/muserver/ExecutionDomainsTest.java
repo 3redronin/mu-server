@@ -845,6 +845,65 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void sharedExecutorDrainsAWriteFailureCaughtInsideAWebSocketCallback() throws Exception {
+        var sharedExecutor = track(Executors.newSingleThreadExecutor(namedThreads("shared-")));
+        var textEntered = new CountDownLatch(1);
+        var attemptWrite = new CountDownLatch(1);
+        var writeFailure = new CompletableFuture<IOException>();
+        var errorCallback = new CompletableFuture<Throwable>();
+        server = httpServer()
+            .withHandlerExecutor(sharedExecutor)
+            .withConnectionExecutor(sharedExecutor)
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
+                @Override
+                public void onText(String message) throws Exception {
+                    textEntered.countDown();
+                    attemptWrite.await();
+                    try {
+                        session().sendBinary(ByteBuffer.allocate(1024 * 1024));
+                    } catch (IOException e) {
+                        writeFailure.complete(e);
+                    }
+                }
+
+                @Override
+                public void onBinary(ByteBuffer payload) {
+                }
+
+                @Override
+                public void onError(Throwable cause) {
+                    errorCallback.complete(cause);
+                }
+            }))
+            .start();
+
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.GET, "/")
+                .writeHeader("Upgrade", "websocket")
+                .writeHeader("Connection", "Upgrade")
+                .writeHeader("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+                .writeHeader("Sec-WebSocket-Version", "13")
+                .flushHeaders();
+            assertThat(client.readLine(), equalTo("HTTP/1.1 101 Switching Protocols"));
+            client.readHeaders();
+
+            // A masked "hold" frame. A zero mask is valid and leaves the payload unchanged.
+            client.out().write(new byte[]{
+                (byte) 0x81, (byte) 0x84, 0, 0, 0, 0, 'h', 'o', 'l', 'd'
+            });
+            client.out().flush();
+            assertThat(textEntered.await(5, TimeUnit.SECONDS), is(true));
+            client.abort();
+            attemptWrite.countDown();
+
+            IOException expected = writeFailure.get(5, TimeUnit.SECONDS);
+            assertThat(errorCallback.get(5, TimeUnit.SECONDS), is(expected));
+        } finally {
+            attemptWrite.countDown();
+        }
+    }
+
+    @Test
     void sharedConnectionAndHandlerExecutorDoesNotDeadlockWebSocketEvents() throws Exception {
         var sharedExecutor = track(Executors.newSingleThreadExecutor(namedThreads("shared-")));
         var callbackThread = new CompletableFuture<String>();
