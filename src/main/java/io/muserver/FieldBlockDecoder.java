@@ -128,7 +128,8 @@ class FieldBlockDecoder {
             return I;
         }
 
-        var M = 0;
+        int shift = 0;
+        long value = I;
 
         // repeat
         int B;
@@ -143,15 +144,23 @@ class FieldBlockDecoder {
             B = buffer.get() & 0xFF;
 
             // I = I + (B & 127) * 2^M
-            I = I + ((B & 127) * (1 << M));
-            if (I < 0) {
+            value += (long) (B & 127) << shift;
+            if (value > Integer.MAX_VALUE) {
                 throw new Http2Exception(Http2ErrorCode.COMPRESSION_ERROR, "hpack integer overflow");
             }
 
-            M = M + 7;
-            if (M > 80) throw new Http2Exception(Http2ErrorCode.COMPRESSION_ERROR, "hpack integer too long");
+            shift += 7;
+            if (shift >= 35 && (B & 128) == 128) {
+                // Five continuation octets can represent every non-negative
+                // Java int. RFC 7541 Section 5.1 requires encodings beyond an
+                // implementation's value or octet-length limit to fail.
+                throw new Http2Exception(
+                    Http2ErrorCode.COMPRESSION_ERROR,
+                    "hpack integer too long"
+                );
+            }
         } while ((B & 128) == 128);
-        return I;
+        return (int) value;
     }
 
     private static HeaderString readHeaderString(ByteBuffer buffer, HeaderString.Type type) throws Http2Exception {

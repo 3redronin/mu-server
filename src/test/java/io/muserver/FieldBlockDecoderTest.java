@@ -117,6 +117,29 @@ class FieldBlockDecoderTest {
     }
 
     @Test
+    void shiftsBeyondAnIntegerDoNotWrapIntoAnAcceptedValue() {
+        var ex = assertThrows(
+            Http2Exception.class,
+            () -> readHpackInt(
+                7,
+                (byte) 0x7f,
+                buffed(
+                    (byte) 0x80,
+                    (byte) 0x80,
+                    (byte) 0x80,
+                    (byte) 0x80,
+                    (byte) 0x80,
+                    (byte) 0x01
+                )
+            )
+        );
+
+        assertThat(ex.errorType(), equalTo(Http2Level.CONNECTION));
+        assertThat(ex.errorCode(), equalTo(Http2ErrorCode.COMPRESSION_ERROR));
+        assertThat(ex.getMessage(), equalTo("hpack integer too long"));
+    }
+
+    @Test
     public void rfc7541_c_3_Request_Examples_without_Huffman_Coding() throws Exception {
         /*
            C.3.1.  First Request
