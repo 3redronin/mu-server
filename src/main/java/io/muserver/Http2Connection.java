@@ -952,9 +952,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             if (!acceptNewStream(fh.streamId())) {
                 return;
             }
-            server.onRequestRejected(new RejectedRequestImpl(e.status().code(), rejectReason, null, null, this));
+            var rejectedRequest =
+                new RejectedRequestImpl(e.status().code(), rejectReason, null, null, this);
             FieldBlock errorHeaders = new FieldBlock();
-            errorHeaders.add(HeaderNames.PSEUDO_STATUS, e.status());
+            errorHeaders.add(HeaderNames.PSEUDO_STATUS, Integer.toString(e.status().code()));
             errorHeaders.add(e.responseHeaders());
             byte[] message = rejectReason.getBytes(StandardCharsets.UTF_8);
             errorHeaders.set(HeaderNames.CONTENT_TYPE, "text/plain;charset=utf-8");
@@ -970,6 +971,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                 new Http2HeadersFrame(fh.streamId(), false, errorHeaders),
                 new Http2DataFrame(fh.streamId(), true, message, 0, message.length)
             );
+            server.onRequestRejected(rejectedRequest);
         }
     }
 

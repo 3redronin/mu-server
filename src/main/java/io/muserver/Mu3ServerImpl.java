@@ -312,6 +312,20 @@ class Mu3ServerImpl implements MuServer {
     }
 
     void onRequestRejected(RejectedRequest info) {
+        if (requestRejectListeners.isEmpty()) {
+            return;
+        }
+        Runnable notification = () -> notifyRequestRejected(info);
+        try {
+            asyncExecutor.execute(notification);
+        } catch (RejectedExecutionException rejected) {
+            // The protocol response has already been sent or queued. Preserve notification
+            // delivery if a caller-supplied executor rejects during shutdown or overload.
+            notification.run();
+        }
+    }
+
+    private void notifyRequestRejected(RejectedRequest info) {
         for (var listener : requestRejectListeners) {
             try {
                 listener.onRejected(info);

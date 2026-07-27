@@ -156,14 +156,20 @@ class Http1Connection extends BaseHttpConnection {
                     onInvalidRequest(rejectException);
                     String rejectedMethod = method.name();
                     String rejectReason = rejectException.getMessage() != null ? rejectException.getMessage() : rejectException.status().toString();
-                    server.onRequestRejected(new RejectedRequestImpl(rejectException.status().code(),
-                        rejectReason, rejectedMethod, requestUri.toString(), this));
+                    var rejectedRequest = new RejectedRequestImpl(
+                        rejectException.status().code(),
+                        rejectReason,
+                        rejectedMethod,
+                        requestUri.toString(),
+                        this
+                    );
                     muResponse.status(rejectException.status());
                     muResponse.headers().set(rejectException.responseHeaders());
                     if (rejectException.getMessage() != null) {
                         muResponse.write(rejectException.getMessage());
                     }
                     closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest);
+                    server.onRequestRejected(rejectedRequest);
                 } else {
 
                     onRequestStarted(muRequest);
