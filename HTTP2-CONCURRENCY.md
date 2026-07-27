@@ -1,8 +1,22 @@
 # HTTP/2 concurrency model
 
-This document defines the concurrency and ownership rules for the direct HTTP/2
-implementation. It is an implementation contract: changes to HTTP/2 connection,
-stream, flow-control, response, or shutdown code must preserve these rules.
+This document defines the target concurrency and ownership rules for the direct
+HTTP/2 implementation. It is the design contract for a staged migration, not an
+inventory of guarantees that have all landed: completed slices must preserve the
+rules they implement, and later changes must move the remaining code towards
+this model.
+
+## Implementation status
+
+The outbound coordinator, outbound flow-control ownership, stream-state
+transitions, reset ordering, and separation of protocol lifetime from
+application exchange lifetime are implemented.
+
+Still to be implemented are the execution-domain and timer separation described
+below, plus migration of the remaining connection settings, stream registry, and
+inbound flow-control accounting to coordinator ownership. In particular,
+connection I/O and handlers still share the executor configured by
+`MuServerBuilder.withHandlerExecutor`.
 
 ## Goals
 
@@ -17,6 +31,12 @@ The model must:
 * use only JDK concurrency primitives.
 
 ## Execution domains
+
+**Target design — not yet implemented.** The reader, write coordinator, and
+request handlers currently use the same executor supplied through
+`MuServerBuilder.withHandlerExecutor`. The separation described in this section
+is the next implementation phase; handler-executor saturation can still delay
+connection I/O until that work lands.
 
 There are two execution domains and one timer facility.
 
@@ -238,6 +258,10 @@ No lock is held while:
 
 ## Required invariants
 
+These are required end-state invariants. Full single-owner enforcement in
+invariant 2, and invariants 9 and 10, depend on the future ownership and
+execution-domain phases identified above.
+
 1. Inbound frame events from the reader are processed in wire order.
 2. Every protocol state mutation has the coordinator as its linearization point.
 3. No frame other than permitted priority information or a permitted additional
@@ -265,7 +289,7 @@ Socket integration tests then cover:
 * early responses with a still-open request side;
 * resets while handlers are reading or writing;
 * multiple streams with independent progress;
-* handler-executor saturation and rejection;
+* handler-executor saturation and rejection (after execution-domain separation);
 * graceful and forced connection shutdown; and
 * completion callback state and exactly-once behaviour.
 
