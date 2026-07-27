@@ -888,7 +888,6 @@ class ExecutionDomainsTest {
     void rejectedApplicationExecutorsAbortAnAcceptedHttp2AsyncStream() throws Exception {
         var sharedExecutor = track(Executors.newSingleThreadExecutor(namedThreads("application-")));
         var suspendedHandle = new CompletableFuture<AsyncHandle>();
-        var executorStopped = new CompletableFuture<@Nullable Void>();
         server = httpServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .withHandlerExecutor(sharedExecutor)
@@ -896,7 +895,6 @@ class ExecutionDomainsTest {
             .addHandler((request, response) -> {
                 suspendedHandle.complete(request.handleAsync());
                 sharedExecutor.shutdown();
-                executorStopped.complete(null);
                 return true;
             })
             .start();
@@ -911,7 +909,7 @@ class ExecutionDomainsTest {
                 RFCTestUtils.getHelloHeaders("http", server.uri().getPort())
             )).flush();
             AsyncHandle handle = suspendedHandle.get(5, TimeUnit.SECONDS);
-            executorStopped.get(5, TimeUnit.SECONDS);
+            assertThat(sharedExecutor.awaitTermination(5, TimeUnit.SECONDS), is(true));
             handle.complete();
 
             Http2ResetStreamFrame reset =
