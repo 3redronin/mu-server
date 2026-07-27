@@ -10,13 +10,16 @@ this model.
 
 The outbound coordinator, outbound flow-control ownership, stream-state
 transitions, reset ordering, and separation of protocol lifetime from
-application exchange lifetime are implemented.
+application exchange lifetime are implemented. Connection setup and the two
+long-lived HTTP/2 I/O tasks now use a connection executor that is independent
+of `MuServerBuilder.withHandlerExecutor`. Handler-executor rejection is handled
+as a 503 response on the affected stream while the connection remains usable.
 
-Still to be implemented are the execution-domain and timer separation described
-below, plus migration of the remaining connection settings, stream registry, and
-inbound flow-control accounting to coordinator ownership. In particular,
-connection I/O and handlers still share the executor configured by
-`MuServerBuilder.withHandlerExecutor`.
+Still to be implemented are timer separation and migration of the remaining
+connection settings, stream registry, and inbound flow-control accounting to
+coordinator ownership. The reader and coordinator therefore have separate
+execution capacity from handlers, but do not yet have all of the final
+single-owner boundaries described below.
 
 ## Goals
 
@@ -32,11 +35,8 @@ The model must:
 
 ## Execution domains
 
-**Target design — not yet implemented.** The reader, write coordinator, and
-request handlers currently use the same executor supplied through
-`MuServerBuilder.withHandlerExecutor`. The separation described in this section
-is the next implementation phase; handler-executor saturation can still delay
-connection I/O until that work lands.
+The executor separation in this section is implemented. Some finer-grained
+ownership rules remain the target for later phases, as called out below.
 
 There are two execution domains and one timer facility.
 
@@ -48,17 +48,21 @@ Each HTTP/2 connection has:
 * one protocol coordinator that also owns socket writes.
 
 These tasks run independently of request handlers. The connection reader owns
-only input parsing state: the input stream, read buffer, and HPACK decoder. It
-turns logical frames into coordinator commands and does not mutate connection or
-stream protocol state.
+the input stream, read buffer, and HPACK decoder. The target end state is for it
+to turn every logical frame into a coordinator command without mutating
+connection or stream protocol state; migration of the remaining reader-owned
+protocol mutations is not complete.
 
-The coordinator is the sole owner of connection and stream protocol state. It
-processes commands serially and is the only code that writes to the socket.
+The coordinator already serializes outbound protocol state and is the only code
+that writes to the socket. It will become the sole owner of all connection and
+stream protocol state as the remaining state is migrated.
 
 Connection I/O uses a server-owned executor whose default provides prompt
 execution for long-lived tasks: virtual threads where available, otherwise a
-separate cached thread pool. An arbitrary bounded executor is not initially
-exposed because starving either half of a connection can deadlock it.
+separate cached thread pool. A custom executor can be supplied through
+`MuServerBuilder.withConnectionExecutor`; it must provide independent progress
+for both long-lived tasks of every active HTTP/2 connection. Supplying a bounded
+executor without that capacity can starve one half of a connection.
 
 ### Application work
 

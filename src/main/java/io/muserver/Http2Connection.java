@@ -56,7 +56,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     private final ConcurrentLinkedQueue<Long> settingsAckQueue = new ConcurrentLinkedQueue<>();
     private final ConcurrentHashMap<Integer, Http2Stream> streams = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Integer, Http2IncomingFlowController> rejectedRequestBodies = new ConcurrentHashMap<>();
-    private final ExecutorService executorService;
+    private final ExecutorService handlerExecutor;
+    private final ExecutorService connectionExecutor;
     private final long settingsAckTimeoutMillis;
 
     private final Lock stateLock = new ReentrantLock();
@@ -66,11 +67,12 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
     final FieldBlockEncoder fieldBlockEncoder;
 
-    Http2Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime, Http2Settings initialServerSettings, long settingsAckTimeoutMillis, ExecutorService executorService) {
+    Http2Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime, Http2Settings initialServerSettings, long settingsAckTimeoutMillis, ExecutorService handlerExecutor, ExecutorService connectionExecutor) {
         super(server, creator, clientSocket, clientCertificate, handshakeStartTime);
         this.serverSettings = initialServerSettings;
         this.settingsAckTimeoutMillis = settingsAckTimeoutMillis;
-        this.executorService = executorService;
+        this.handlerExecutor = handlerExecutor;
+        this.connectionExecutor = connectionExecutor;
         this.buffer = ByteBuffer.allocate(serverSettings.maxFrameSize).flip();
         this.fieldBlockEncoder = new FieldBlockEncoder(new HpackTable(clientSettings.headerTableSize));
     }
@@ -995,7 +997,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
     }
 
     private Future<?> startWriteLoop(OutputStream clientOut) {
-        return executorService.submit(() -> {
+        return connectionExecutor.submit(() -> {
             while (writeState.canSendFrames) {
                 try {
                     writeCoordinator.processAvailableCommands();
@@ -1068,27 +1070,72 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             stream.cancel(new IOException("HTTP/2 connection closed before request could start"), false);
             return;
         }
+
         onRequestStarted(stream.request);
-        executorService.submit(() -> {
-            try {
-                handleExchange(stream.request, stream.response());
-                stream.cleanup();
-            } catch (Throwable e) {
-                if (e instanceof InterruptedException) {
-                    Thread.currentThread().interrupt();
+        try {
+            handlerExecutor.submit(() -> {
+                try {
+                    handleExchange(stream.request, stream.response());
+                    stream.cleanup();
+                } catch (Throwable e) {
+                    if (e instanceof InterruptedException) {
+                        Thread.currentThread().interrupt();
+                    }
+                    log.info("Unhandled stream exception", e);
+                    if (stream.response().hasStartedSendingData()
+                        && !stream.resetWasInitiated()
+                        && !stream.response().responseState().endState()) {
+                        stream.response().setState(ResponseState.ERRORED);
+                        write(new Http2ResetStreamFrame(stream.id, Http2ErrorCode.INTERNAL_ERROR.code()));
+                        stream.cancel(new IOException("Unhandled stream exception", e), false);
+                    }
+                } finally {
+                    onExchangeEnded(stream);
                 }
-                log.info("Unhandled stream exception", e);
-                if (stream.response().hasStartedSendingData()
-                    && !stream.resetWasInitiated()
-                    && !stream.response().responseState().endState()) {
-                    stream.response().setState(ResponseState.ERRORED);
-                    write(new Http2ResetStreamFrame(stream.id, Http2ErrorCode.INTERNAL_ERROR.code()));
-                    stream.cancel(new IOException("Unhandled stream exception", e), false);
-                }
-            } finally {
-                onExchangeEnded(stream);
-            }
-        });
+            });
+        } catch (RejectedExecutionException e) {
+            server.onRequestSubmissionRejected(stream.request);
+            rejectRequestDueToHandlerOverload(frame, stream);
+        }
+    }
+
+    private void rejectRequestDueToHandlerOverload(Http2HeadersFrame frame, Http2Stream stream) {
+        rejectedDueToOverload.incrementAndGet();
+        server.getStatsImpl().onRejectedDueToOverload();
+        streams.remove(frame.streamId(), stream);
+        stream.cancel(new IOException("Request handler executor rejected the HTTP/2 stream"), false);
+
+        String rejectionReason = "503 Service Unavailable";
+        byte[] message = rejectionReason.getBytes(StandardCharsets.UTF_8);
+        FieldBlock headers = FieldBlock.newWithDate();
+        headers.add(0, new FieldLine(
+            HeaderNames.PSEUDO_STATUS,
+            HeaderString.valueOf(
+                Integer.toString(HttpStatus.SERVICE_UNAVAILABLE_503.code()),
+                HeaderString.Type.VALUE
+            )
+        ));
+        headers.set(HeaderNames.CONTENT_TYPE, "text/plain;charset=utf-8");
+        headers.set(HeaderNames.CONTENT_LENGTH, message.length);
+        Http2StreamState initialState = frame.endStream()
+            ? Http2StreamState.HALF_CLOSED_REMOTE
+            : Http2StreamState.OPEN;
+        queueRejectedResponse(
+            frame.streamId(),
+            clientSettings.initialWindowSize,
+            initialState,
+            new Http2HeadersFrame(frame.streamId(), false, headers),
+            new Http2DataFrame(frame.streamId(), true, message, 0, message.length)
+        );
+        // Queue the response before invoking application code so the independent writer can
+        // make progress even if a reject listener is slow.
+        server.onRequestRejected(new RejectedRequestImpl(
+            HttpStatus.SERVICE_UNAVAILABLE_503.code(),
+            rejectionReason,
+            stream.request.method().name(),
+            stream.request.uri().toString(),
+            this
+        ));
     }
 
     private void discardPayload(ByteBuffer buffer, InputStream clientIn, int len) throws IOException {

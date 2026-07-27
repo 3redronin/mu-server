@@ -69,6 +69,10 @@ class Mu3StatsImpl implements MuStats {
         activeRequests.add(request);
     }
 
+    void onRequestSubmissionRejected(MuRequest request) {
+        activeRequests.remove(request);
+    }
+
     private static final Logger log = LoggerFactory.getLogger(Mu3StatsImpl.class);
     void onRequestEnded(ResponseInfo exchange) {
         if (activeRequests.remove(exchange.request())) {

@@ -36,6 +36,7 @@ public class MuServerBuilder {
     private long requestReadTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(20);
     private @Nullable ExecutorService executor;
+    private @Nullable ExecutorService connectionExecutor;
     private long maxRequestSize = 24 * 1024 * 1024;
     private @Nullable List<ResponseCompleteListener> responseCompleteListeners;
     private @Nullable List<RequestRejectListener> requestRejectListeners;
@@ -195,14 +196,38 @@ public class MuServerBuilder {
     }
 
     /**
-     * Sets the thread executor service to run requests on. By default {@link Executors#newCachedThreadPool()}
-     * is used.
+     * Sets the thread executor service to run requests on. By default, a
+     * virtual-thread-per-task executor is used when the runtime supports virtual
+     * threads, otherwise {@link Executors#newCachedThreadPool()} is used.
      *
      * @param executor The executor service to use to handle requests
      * @return The current Mu Server builder
      */
     public MuServerBuilder withHandlerExecutor(@Nullable ExecutorService executor) {
         this.executor = executor;
+        return this;
+    }
+
+    /**
+     * Sets the executor used for connection setup and HTTP/2 connection I/O.
+     *
+     * <p>HTTP/2 uses two long-lived tasks per connection: a socket reader and a write
+     * coordinator. The executor must allow both tasks to make progress independently
+     * for every active HTTP/2 connection. Request handlers do not run on this executor;
+     * they use the executor configured by {@link #withHandlerExecutor(ExecutorService)}.
+     * Supplying the same executor to both methods disables that isolation.</p>
+     *
+     * <p>By default, a server-owned virtual-thread-per-task executor is used when the
+     * runtime supports virtual threads, otherwise a cached thread pool is used. A
+     * caller-supplied executor remains owned by the caller and is not shut down when
+     * the server stops.</p>
+     *
+     * @param connectionExecutor The executor for connection setup and HTTP/2 I/O, or
+     *                           <code>null</code> to use the default
+     * @return The current Mu Server builder
+     */
+    public MuServerBuilder withConnectionExecutor(@Nullable ExecutorService connectionExecutor) {
+        this.connectionExecutor = connectionExecutor;
         return this;
     }
 
@@ -598,6 +623,15 @@ public class MuServerBuilder {
     }
 
     /**
+     * Gets the executor used for connection setup and HTTP/2 connection I/O.
+     *
+     * @return The configured executor, or <code>null</code> if the default executor will be used.
+     */
+    public @Nullable ExecutorService connectionExecutor() {
+        return connectionExecutor;
+    }
+
+    /**
      * Gets the maximum allowed request body size.
      *
      * @return The request body size limit in bytes.
@@ -705,6 +739,7 @@ public class MuServerBuilder {
             ", requestReadTimeoutMillis=" + requestReadTimeoutMillis +
             ", idleTimeoutMills=" + idleTimeoutMills +
             ", executor=" + executor +
+            ", connectionExecutor=" + connectionExecutor +
             ", maxRequestSize=" + maxRequestSize +
             ", responseCompleteListeners=" + responseCompleteListeners +
             ", requestRejectListeners=" + requestRejectListeners +

@@ -32,11 +32,12 @@ class Mu3ServerImpl implements MuServer {
     private final int maxHeadersSize;
     final List<RateLimiterImpl> rateLimiters;
     final Path tempDir;
-    private final ExecutorService executorService;
+    private final ExecutorService connectionExecutor;
+    private final boolean ownsConnectionExecutor;
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
     private final ScheduledExecutorService scheduledExecutor;
 
-    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService executorService) {
+    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService handlerExecutor, ExecutorService connectionExecutor, boolean ownsConnectionExecutor) {
         this.acceptors = acceptors;
         this.handlers = handlers;
         this.responseCompleteListeners = responseCompleteListeners;
@@ -50,8 +51,9 @@ class Mu3ServerImpl implements MuServer {
         this.maxHeadersSize = maxHeadersSize;
         this.rateLimiters = rateLimiters;
         this.tempDir = tempDir;
-        this.executorService = executorService;
-        this.scheduledExecutor = new OffloadingScheduledExecutorService(executorService);
+        this.connectionExecutor = connectionExecutor;
+        this.ownsConnectionExecutor = ownsConnectionExecutor;
+        this.scheduledExecutor = new OffloadingScheduledExecutorService(handlerExecutor);
     }
 
     private void startListening() {
@@ -77,6 +79,9 @@ class Mu3ServerImpl implements MuServer {
             if (!acceptor.stop(remaining)) {
                 stoppedCleanly = false;
             }
+        }
+        if (ownsConnectionExecutor) {
+            connectionExecutor.shutdown();
         }
         return stoppedCleanly;
     }
@@ -243,6 +248,10 @@ class Mu3ServerImpl implements MuServer {
         statsImpl.onRequestStarted(req);
     }
 
+    void onRequestSubmissionRejected(Mu3Request req) {
+        statsImpl.onRequestSubmissionRejected(req);
+    }
+
     void onExchangeEnded(ResponseInfo exchange) {
         statsImpl.onRequestEnded(exchange);
         for (var listener : responseCompleteListeners) {
@@ -263,9 +272,14 @@ class Mu3ServerImpl implements MuServer {
     static MuServer start(MuServerBuilder builder) throws IOException {
 
         var exceptionHandler = UnhandledExceptionHandler.getDefault(builder.unhandledExceptionHandler());
-        ExecutorService executor = builder.executor();
-        if (executor == null) {
-            executor = MuServerBuilder.defaultExecutor();
+        ExecutorService handlerExecutor = builder.executor();
+        if (handlerExecutor == null) {
+            handlerExecutor = MuServerBuilder.defaultExecutor();
+        }
+        ExecutorService connectionExecutor = builder.connectionExecutor();
+        boolean ownsConnectionExecutor = connectionExecutor == null;
+        if (connectionExecutor == null) {
+            connectionExecutor = MuServerBuilder.defaultExecutor();
         }
         var acceptors = new ArrayList<ConnectionAcceptor>(2);
 
@@ -305,7 +319,9 @@ class Mu3ServerImpl implements MuServer {
             builder.maxHeadersSize(),
             limiters,
             tempDir,
-            executor
+            handlerExecutor,
+            connectionExecutor,
+            ownsConnectionExecutor
             );
 
         var ih = builder.interfaceHost();
@@ -332,12 +348,30 @@ class Mu3ServerImpl implements MuServer {
             }
             var httpsConfig = httpsConfigBuilder.build3();
 
-            var acceptor = ConnectionAcceptor.create(impl, address, builder.httpsPort(), httpsConfig, http2Config, executor, contentEncoders);
+            var acceptor = ConnectionAcceptor.create(
+                impl,
+                address,
+                builder.httpsPort(),
+                httpsConfig,
+                http2Config,
+                handlerExecutor,
+                connectionExecutor,
+                contentEncoders
+            );
             acceptors.add(acceptor);
             httpsConfig.setHttpsUri(acceptor.uri());
         }
         if (builder.httpPort() >= 0) {
-            acceptors.add(ConnectionAcceptor.create(impl, address, builder.httpPort(), null, http2ConfigForHttp, executor, contentEncoders));
+            acceptors.add(ConnectionAcceptor.create(
+                impl,
+                address,
+                builder.httpPort(),
+                null,
+                http2ConfigForHttp,
+                handlerExecutor,
+                connectionExecutor,
+                contentEncoders
+            ));
         }
         impl.startListening();
         return impl;
