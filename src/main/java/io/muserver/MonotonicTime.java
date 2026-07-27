@@ -28,6 +28,17 @@ final class MonotonicTime {
         return System.nanoTime() - startNanos;
     }
 
+    static long elapsedMillis(long startNanos, long endNanos) {
+        long elapsedNanos = endNanos - startNanos;
+        return elapsedNanos <= 0L
+            ? 0L
+            : TimeUnit.NANOSECONDS.toMillis(elapsedNanos);
+    }
+
+    static long elapsedMillisSince(long startNanos) {
+        return elapsedMillis(startNanos, System.nanoTime());
+    }
+
     static boolean isAfter(long candidateNanos, long referenceNanos) {
         return candidateNanos - referenceNanos > 0L;
     }
