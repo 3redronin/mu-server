@@ -65,7 +65,7 @@ class MediaTypeDeterminer {
             for (MediaType mediaTypeP : p) {
                 //  If a is compatible with p, add S(a,p) to M, where the function S returns the most specific media
                 //  type of the pair with the q-value of a and server-side qs-value of p.
-                if (mediaTypeA.isCompatible(mediaTypeP)) {
+                if (MediaTypeHeaderDelegate.isCompatible(mediaTypeA, mediaTypeP)) {
                     m.add(CombinedMediaType.s(mediaTypeA, mediaTypeP));
                 }
             }
@@ -88,7 +88,7 @@ class MediaTypeDeterminer {
 
         // 9. If M contains ‘*/*’ or ‘application/*’, set Mselected = ‘application/octet-stream’, finish
         for (CombinedMediaType mediaType : m) {
-            if ((mediaType.isWildcardType || "application".equals(mediaType.type)) && mediaType.isWildcardSubtype) {
+            if ((mediaType.isWildcardType || "application".equals(mediaType.type)) && "*".equals(mediaType.subType)) {
                 return MediaType.APPLICATION_OCTET_STREAM_TYPE;
             }
         }

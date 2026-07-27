@@ -9,6 +9,8 @@ import java.util.Map;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Describes a possible link from a response to another operation.
+ *
  * @see LinkObjectBuilder
  */
 public class LinkObject implements JsonWriter {
@@ -40,6 +42,8 @@ public class LinkObject implements JsonWriter {
     }
 
     /**
+     * Gets the linked operation identifier.
+     *
      * @return the value described by {@link LinkObjectBuilder#withOperationId}
      */
     public @Nullable String operationId() {
@@ -47,28 +51,36 @@ public class LinkObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link LinkObjectBuilder#withParameters}
+     * Gets the linked operation parameters.
+     *
+     * @return the value described by {@link LinkObjectBuilder#withParameters}
      */
     public @Nullable Map<String, Object> parameters() {
         return parameters;
     }
 
     /**
-      @return the value described by {@link LinkObjectBuilder#withRequestBody}
+     * Gets the linked operation request body override.
+     *
+     * @return the value described by {@link LinkObjectBuilder#withRequestBody}
      */
     public @Nullable Object requestBody() {
         return requestBody;
     }
 
     /**
-      @return the value described by {@link LinkObjectBuilder#withDescription}
+     * Gets the link description.
+     *
+     * @return the value described by {@link LinkObjectBuilder#withDescription}
      */
     public @Nullable String description() {
         return description;
     }
 
     /**
-      @return the value described by {@link LinkObjectBuilder#withServer}
+     * Gets the server override for the linked operation.
+     *
+     * @return the value described by {@link LinkObjectBuilder#withServer}
      */
     public @Nullable ServerObject server() {
         return server;

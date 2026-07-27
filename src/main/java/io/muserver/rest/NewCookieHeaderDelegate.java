@@ -44,7 +44,16 @@ class NewCookieHeaderDelegate implements RuntimeDelegate.HeaderDelegate<NewCooki
         if (cookie.getSameSite() != null) {
             builder.withSameSite(Cookie.SameSite.valueOf(cookie.getSameSite().name()));
         }
-        return builder.build().toString();
+        String encoded = builder.build().toString();
+        String comment = cookie.getComment();
+        return comment == null ? encoded : encoded + "; Comment=\"" + escapeQuotedString(comment) + "\"";
+    }
+
+    private static String escapeQuotedString(String value) {
+        if (value.indexOf('\r') >= 0 || value.indexOf('\n') >= 0) {
+            throw new IllegalArgumentException("Cookie comments cannot contain CR or LF characters");
+        }
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
 }

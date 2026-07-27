@@ -25,6 +25,14 @@ public class OperationObjectBuilder {
     private @Nullable List<ServerObject> servers;
 
     /**
+     * Creates an empty operation object builder.
+     */
+    public OperationObjectBuilder() {
+    }
+
+    /**
+     * Sets the tags for the operation.
+     *
      * @param tags A list of tags for API documentation control. Tags can be used for logical grouping of operations by resources or any other qualifier.
      * @return The current builder
      */
@@ -34,6 +42,8 @@ public class OperationObjectBuilder {
     }
 
     /**
+     * Sets the short summary for the operation.
+     *
      * @param summary A short summary of what the operation does.
      * @return The current builder
      */
@@ -43,6 +53,8 @@ public class OperationObjectBuilder {
     }
 
     /**
+     * Sets the detailed description for the operation.
+     *
      * @param description A verbose explanation of the operation behavior.
      *                    <a href="http://spec.commonmark.org/">CommonMark syntax</a> MAY be used for rich text representation.
      * @return The current builder
@@ -53,6 +65,8 @@ public class OperationObjectBuilder {
     }
 
     /**
+     * Sets the external documentation for the operation.
+     *
      * @param externalDocs Additional external documentation for this operation.
      * @return The current builder
      */
@@ -62,6 +76,8 @@ public class OperationObjectBuilder {
     }
 
     /**
+     * Sets the unique operation identifier.
+     *
      * @param operationId Unique string used to identify the operation. The id MUST be unique among all operations
      *                    described in the API. Tools and libraries MAY use the operationId to uniquely identify an
      *                    operation, therefore, it is RECOMMENDED to follow common programming naming conventions.
@@ -73,6 +89,8 @@ public class OperationObjectBuilder {
     }
 
     /**
+     * Sets the parameters accepted by the operation.
+     *
      * @param parameters A list of parameters that are applicable for this operation. If a parameter is already
      *                   defined at the Path Item, the new definition will override it but can never remove it.
      *                   The list MUST NOT include duplicated parameters. A unique parameter is defined by a combination
@@ -85,6 +103,8 @@ public class OperationObjectBuilder {
     }
 
     /**
+     * Sets the request body description for the operation.
+     *
      * @param requestBody The request body applicable for this operation.  The <code>requestBody</code> is only
      *                    supported in HTTP methods where the HTTP 1.1 specification
      *                    <a href="https://tools.ietf.org/html/rfc7231#section-4.3.1">RFC7231</a> has explicitly
@@ -98,6 +118,8 @@ public class OperationObjectBuilder {
     }
 
     /**
+     * Sets the response definitions for the operation.
+     *
      * @param responses <strong>REQUIRED</strong>. The list of possible responses as they are returned from executing this operation.
      * @return The current builder
      */
@@ -107,6 +129,8 @@ public class OperationObjectBuilder {
     }
 
     /**
+     * Sets the callbacks associated with the operation.
+     *
      * @param callbacks A map of possible out-of band callbacks related to the parent operation. The key is a unique
      *                  identifier for the {@link CallbackObject}. Each value in the map is a Callback Object that
      *                  describes a request that may be initiated by the API provider and the expected responses.
@@ -120,6 +144,8 @@ public class OperationObjectBuilder {
     }
 
     /**
+     * Sets whether the operation is deprecated.
+     *
      * @param deprecated Declares this operation to be deprecated. Consumers SHOULD refrain from usage of the declared operation. Default value is <code>false</code>.
      * @return The current builder
      */
@@ -129,6 +155,8 @@ public class OperationObjectBuilder {
     }
 
     /**
+     * Sets the security requirements for the operation.
+     *
      * @param security A declaration of which security mechanisms can be used for this operation. The list of values
      *                 includes alternative security requirement objects that can be used. Only one of the security
      *                 requirement objects need to be satisfied to authorize a request. This definition overrides
@@ -142,6 +170,8 @@ public class OperationObjectBuilder {
     }
 
     /**
+     * Sets the servers that can service the operation.
+     *
      * @param servers An alternative <code>server</code> array to service this operation. If an alternative
      *                <code>server</code> object is specified at the Path Item Object or Root level, it will be
      *                overridden by this value.
@@ -153,6 +183,8 @@ public class OperationObjectBuilder {
     }
 
     /**
+     * Builds an operation object from the configured values.
+     *
      * @return A new object
      */
     public OperationObject build() {

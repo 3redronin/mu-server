@@ -8,6 +8,8 @@ import java.util.Map;
 import static io.muserver.Mutils.notNull;
 
 /**
+ * Describes callback path items keyed by runtime expressions.
+ *
  * @see CallbackObjectBuilder
  */
 public class CallbackObject implements JsonWriter {
@@ -33,6 +35,8 @@ public class CallbackObject implements JsonWriter {
     }
 
     /**
+     * Returns the callback path items keyed by runtime expression.
+     *
      * @return the value described by {@link CallbackObjectBuilder#withCallbacks}
      */
     public Map<String, PathItemObject> callbacks() {

@@ -12,6 +12,14 @@ public class ExternalDocumentationObjectBuilder {
     private @Nullable URI url;
 
     /**
+     * Creates an empty external documentation builder.
+     */
+    public ExternalDocumentationObjectBuilder() {
+    }
+
+    /**
+     * Sets the documentation description.
+     *
      * @param description A short description of the target documentation. <a href="http://spec.commonmark.org/">CommonMark syntax</a>
      *                    MAY be used for rich text representation.
      * @return The current builder
@@ -22,6 +30,8 @@ public class ExternalDocumentationObjectBuilder {
     }
 
     /**
+     * Sets the target documentation URL.
+     *
      * @param url <strong>REQUIRED</strong>. The URL for the target documentation.
      * @return The current builder
      */
@@ -31,6 +41,8 @@ public class ExternalDocumentationObjectBuilder {
     }
 
     /**
+     * Builds the external documentation object.
+     *
      * @return A new object
      */
     public ExternalDocumentationObject build() {

@@ -10,6 +10,8 @@ import java.util.regex.Pattern;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Holds reusable OpenAPI components referenced by the rest of the document.
+ *
  * @see ComponentsObjectBuilder
  */
 public class ComponentsObject implements JsonWriter {
@@ -68,6 +70,8 @@ public class ComponentsObject implements JsonWriter {
     }
 
     /**
+     * Returns reusable schema definitions.
+     *
      * @return The value described by {@link ComponentsObjectBuilder#withSchemas}
      */
     public @Nullable Map<String, SchemaObject> schemas() {
@@ -75,6 +79,8 @@ public class ComponentsObject implements JsonWriter {
     }
 
     /**
+      * Returns reusable response definitions.
+      *
       @return The value described by {@link ComponentsObjectBuilder#withResponses}
      */
     public @Nullable Map<String, ResponseObject> responses() {
@@ -82,6 +88,8 @@ public class ComponentsObject implements JsonWriter {
     }
 
     /**
+      * Returns reusable parameter definitions.
+      *
       @return The value described by {@link ComponentsObjectBuilder#withParameters}
      */
     public @Nullable Map<String, ParameterObject> parameters() {
@@ -89,6 +97,8 @@ public class ComponentsObject implements JsonWriter {
     }
 
     /**
+      * Returns reusable example definitions.
+      *
       @return The value described by {@link ComponentsObjectBuilder#withExamples}
      */
     public @Nullable Map<String, ExampleObject> examples() {
@@ -96,6 +106,8 @@ public class ComponentsObject implements JsonWriter {
     }
 
     /**
+      * Returns reusable request-body definitions.
+      *
       @return The value described by {@link ComponentsObjectBuilder#withRequestBodies}
      */
     public @Nullable Map<String, RequestBodyObject> requestBodies() {
@@ -103,6 +115,8 @@ public class ComponentsObject implements JsonWriter {
     }
 
     /**
+      * Returns reusable header definitions.
+      *
       @return The value described by {@link ComponentsObjectBuilder#withHeaders}
      */
     public @Nullable Map<String, HeaderObject> headers() {
@@ -110,6 +124,8 @@ public class ComponentsObject implements JsonWriter {
     }
 
     /**
+      * Returns reusable security-scheme definitions.
+      *
       @return The value described by {@link ComponentsObjectBuilder#withSecuritySchemes}
      */
     public @Nullable Map<String, SecuritySchemeObject> securitySchemes() {
@@ -117,6 +133,8 @@ public class ComponentsObject implements JsonWriter {
     }
 
     /**
+      * Returns reusable link definitions.
+      *
       @return The value described by {@link ComponentsObjectBuilder#withLinks}
      */
     public @Nullable Map<String, LinkObject> links() {
@@ -124,6 +142,8 @@ public class ComponentsObject implements JsonWriter {
     }
 
     /**
+      * Returns reusable callback definitions.
+      *
       @return The value described by {@link ComponentsObjectBuilder#withCallbacks}
      */
     public @Nullable Map<String, CallbackObject> callbacks() {

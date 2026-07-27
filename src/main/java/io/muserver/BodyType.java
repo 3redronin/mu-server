@@ -32,10 +32,11 @@ public enum BodyType {
     }
 
     /**
+     * Indicates whether this body type has a known size.
+     *
      * @return <code>true</code> if this is a fixed size or empty body; otherwise <code>false</code>
      */
     public boolean sizeKnown() {
         return sizeKnown;
     }
 }
-

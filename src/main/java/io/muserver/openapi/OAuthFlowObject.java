@@ -11,6 +11,8 @@ import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
+ * Describes one OAuth 2.0 authorization flow.
+ *
  * @see OAuthFlowObjectBuilder
  */
 public class OAuthFlowObject implements JsonWriter {
@@ -42,6 +44,8 @@ public class OAuthFlowObject implements JsonWriter {
     }
 
     /**
+     * Gets the authorization URL for the flow.
+     *
      * @return the value described by {@link OAuthFlowObjectBuilder#withAuthorizationUrl}
      */
     public URI authorizationUrl() {
@@ -49,21 +53,27 @@ public class OAuthFlowObject implements JsonWriter {
     }
 
     /**
-      @return the value described by {@link OAuthFlowObjectBuilder#withTokenUrl}
+     * Gets the token URL for the flow.
+     *
+     * @return the value described by {@link OAuthFlowObjectBuilder#withTokenUrl}
      */
     public URI tokenUrl() {
         return tokenUrl;
     }
 
     /**
-      @return the value described by {@link OAuthFlowObjectBuilder#withRefreshUrl}
+     * Gets the refresh URL for the flow.
+     *
+     * @return the value described by {@link OAuthFlowObjectBuilder#withRefreshUrl}
      */
     public @Nullable URI refreshUrl() {
         return refreshUrl;
     }
 
     /**
-      @return the value described by {@link OAuthFlowObjectBuilder#withScopes}
+     * Gets the scopes advertised by the flow.
+     *
+     * @return the value described by {@link OAuthFlowObjectBuilder#withScopes}
      */
     public Map<String, String> scopes() {
         return scopes;

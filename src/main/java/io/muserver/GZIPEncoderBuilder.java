@@ -15,6 +15,12 @@ import java.util.Set;
  * you may wish to add a GZIP encoder using this builder.</p>
  */
 public class GZIPEncoderBuilder {
+
+    /**
+     * Creates a GZIP encoder builder.
+     */
+    public GZIPEncoderBuilder() {
+    }
     private @Nullable Set<String> mimeTypesToGzip;
     private long minGzipSize = 1400;
     private int bufferSize = 512;

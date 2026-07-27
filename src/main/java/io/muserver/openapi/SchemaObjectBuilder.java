@@ -64,6 +64,14 @@ public class SchemaObjectBuilder {
     private @Nullable Boolean deprecated;
 
     /**
+     * Creates an empty schema object builder.
+     */
+    public SchemaObjectBuilder() {
+    }
+
+    /**
+     * Gets the configured schema title.
+     *
      * @return the value set by {@link #withTitle}
      */
     public @Nullable String title() {
@@ -71,6 +79,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured multiple-of constraint.
+     *
      * @return the value set by {@link #withMultipleOf}
      */
     public @Nullable Double multipleOf() {
@@ -78,6 +88,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured maximum numeric value.
+     *
      * @return the value set by {@link #withMaximum}
      */
     public @Nullable Double maximum() {
@@ -85,6 +97,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets whether the configured maximum is exclusive.
+     *
      * @return the value set by {@link #withExclusiveMaximum}
      */
     public @Nullable Boolean exclusiveMaximum() {
@@ -92,6 +106,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured minimum numeric value.
+     *
      * @return the value set by {@link #withMinimum}
      */
     public @Nullable Double minimum() {
@@ -99,6 +115,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets whether the configured minimum is exclusive.
+     *
      * @return the value set by {@link #withExclusiveMinimum}
      */
     public @Nullable Boolean exclusiveMinimum() {
@@ -106,6 +124,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured maximum string length.
+     *
      * @return the value set by {@link #withMaxLength}
      */
     public @Nullable Integer maxLength() {
@@ -113,6 +133,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured minimum string length.
+     *
      * @return the value set by {@link #withMinLength}
      */
     public @Nullable Integer minLength() {
@@ -120,6 +142,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured string pattern.
+     *
      * @return the value set by {@link #withPattern}
      */
     public @Nullable Pattern pattern() {
@@ -127,6 +151,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured maximum array size.
+     *
      * @return the value set by {@link #withMaxItems}
      */
     public @Nullable Integer maxItems() {
@@ -134,6 +160,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured minimum array size.
+     *
      * @return the value set by {@link #withMinItems}
      */
     public @Nullable Integer minItems() {
@@ -141,6 +169,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets whether array items must be unique.
+     *
      * @return the value set by {@link #withUniqueItems}
      */
     public @Nullable Boolean uniqueItems() {
@@ -148,6 +178,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured maximum property count.
+     *
      * @return the value set by {@link #withMaxProperties}
      */
     public @Nullable Integer maxProperties() {
@@ -155,6 +187,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured minimum property count.
+     *
      * @return the value set by {@link #withMinProperties}
      */
     public @Nullable Integer minProperties() {
@@ -162,6 +196,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured required property names.
+     *
      * @return the value set by {@link #withRequired}
      */
     public @Nullable List<String> required() {
@@ -169,6 +205,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured enum values.
+     *
      * @return the value set by {@link #withEnumValue}
      */
     public @Nullable List<Object> enumValue() {
@@ -176,6 +214,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured schema type.
+     *
      * @return the value set by {@link #withType}
      */
     public @Nullable String type() {
@@ -183,6 +223,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured all-of schema list.
+     *
      * @return the value set by {@link #withAllOf}
      */
     public @Nullable List<SchemaObject> allOf() {
@@ -190,6 +232,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured one-of schema list.
+     *
      * @return the value set by {@link #withOneOf}
      */
     public @Nullable List<SchemaObject> oneOf() {
@@ -197,6 +241,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured any-of schema list.
+     *
      * @return the value set by {@link #withAnyOf}
      */
     public @Nullable List<SchemaObject> anyOf() {
@@ -204,6 +250,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured not schema list.
+     *
      * @return the value set by {@link #withNot}
      */
     public @Nullable List<SchemaObject> not() {
@@ -211,6 +259,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured item schema.
+     *
      * @return the value set by {@link #withItems}
      */
     public @Nullable SchemaObject items() {
@@ -218,6 +268,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured object properties.
+     *
      * @return the value set by {@link #withProperties}
      */
     public @Nullable Map<String, SchemaObject> properties() {
@@ -225,6 +277,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured additional-properties rule.
+     *
      * @return the value set by {@link #withAdditionalProperties}
      */
     public @Nullable Object additionalProperties() {
@@ -232,6 +286,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured schema description.
+     *
      * @return the value set by {@link #withDescription}
      */
     public @Nullable String description() {
@@ -239,6 +295,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured schema format.
+     *
      * @return the value set by {@link #withFormat}
      */
     public @Nullable String format() {
@@ -246,6 +304,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured default value.
+     *
      * @return the value set by {@link #withDefaultValue}
      */
     public @Nullable Object defaultValue() {
@@ -253,6 +313,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets whether the schema is nullable.
+     *
      * @return the value set by {@link #withNullable}
      */
     public @Nullable Boolean nullable() {
@@ -260,6 +322,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured discriminator.
+     *
      * @return the value set by {@link #withDiscriminator}
      */
     public @Nullable DiscriminatorObject discriminator() {
@@ -267,6 +331,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets whether the schema is read-only.
+     *
      * @return the value set by {@link #withReadOnly}
      */
     public @Nullable Boolean readOnly() {
@@ -274,6 +340,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets whether the schema is write-only.
+     *
      * @return the value set by {@link #withWriteOnly}
      */
     public @Nullable Boolean writeOnly() {
@@ -281,6 +349,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured XML metadata.
+     *
      * @return the value set by {@link #withXml}
      */
     public @Nullable XmlObject xml() {
@@ -288,6 +358,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured external documentation.
+     *
      * @return the value set by {@link #withExternalDocs}
      */
     public @Nullable ExternalDocumentationObject externalDocs() {
@@ -295,6 +367,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets the configured example value.
+     *
      * @return the value set by {@link #withExample}
      */
     public @Nullable Object example() {
@@ -302,6 +376,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Gets whether the schema is deprecated.
+     *
      * @return the value set by {@link #withDeprecated}
      */
     public @Nullable Boolean deprecated() {
@@ -309,6 +385,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the schema title.
+     *
      * @param title the name of this object type
      * @return this builder
      */
@@ -328,6 +406,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the maximum numeric value.
+     *
      * @param maximum The maximum allowed value for numeric values
      * @return this builder
      * @see #withExclusiveMaximum(Boolean)
@@ -338,7 +418,9 @@ public class SchemaObjectBuilder {
     }
 
     /**
-      * @param exclusiveMaximum <code>true</code> if the value specified with {@link #withMaximum(Double)} is exclusive;
+     * Sets whether the maximum numeric value is exclusive.
+     *
+     * @param exclusiveMaximum <code>true</code> if the value specified with {@link #withMaximum(Double)} is exclusive;
      *                         otherwise the default <code>false</code> means it is an inclusive number.
      * @return this builder
      * @see #withMaximum(Double)
@@ -349,6 +431,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the minimum numeric value.
+     *
      * @param minimum The minimum allowed value for numeric values
      * @return this builder
      * @see #withExclusiveMinimum(Boolean)
@@ -359,7 +443,9 @@ public class SchemaObjectBuilder {
     }
 
     /**
-      * @param exclusiveMinimum <code>true</code> if the value specified with {@link #withMinimum(Double)} is exclusive;
+     * Sets whether the minimum numeric value is exclusive.
+     *
+     * @param exclusiveMinimum <code>true</code> if the value specified with {@link #withMinimum(Double)} is exclusive;
      *                         otherwise the default <code>false</code> means it is an inclusive number.
      * @return this builder
      * @see #withMinimum(Double)
@@ -370,6 +456,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the maximum string length.
+     *
      * @param maxLength the maximum allowed length of string values
      * @return this builder
      */
@@ -379,6 +467,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the minimum string length.
+     *
      * @param minLength the minimum allowed length of string values
      * @return this builder
      */
@@ -388,6 +478,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the string pattern constraint.
+     *
      * @param pattern a regular expression that string values must match against
      * @return this builder
      */
@@ -397,6 +489,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the maximum array size.
+     *
      * @param maxItems the maximum number of items allowed in an array value
      * @return this builder
      */
@@ -406,6 +500,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the minimum array size.
+     *
      * @param minItems the minimum number of items allowed in an array value
      * @return this builder
      */
@@ -415,6 +511,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets whether array items must be unique.
+     *
      * @param uniqueItems if true, then all items in an array value must be unique
      * @return this builder
      */
@@ -424,6 +522,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the maximum property count.
+     *
      * @param maxProperties the maximum number of properties allowed for an &quot;object&quot; type.
      * @return this builder
      */
@@ -433,6 +533,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the minimum property count.
+     *
      * @param minProperties the minimum number of properties allowed for an &quot;object&quot; type.
      * @return this builder
      */
@@ -442,6 +544,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the required property names.
+     *
      * @param required the list of properties that are required to have a value for an &quot;object&quot; type.
      * @return this builder
      */
@@ -451,6 +555,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the allowed enum values.
+     *
      * @param enumValue the allowed values for an &quot;enum&quot; type
      * @return this builder
      */
@@ -460,6 +566,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the schema type.
+     *
      * @param type the type of this schema object. One of <code>string</code>, <code>number</code>, <code>integer</code>, <code>boolean</code>, <code>array</code> or <code>object</code>
      * @return this builder
      */
@@ -469,6 +577,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the schemas that must all match.
+     *
      * @param allOf the schemas that the value must match
      * @return this builder
      */
@@ -500,6 +610,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the schemas that the value must not match.
+     *
      * @param not schemas the value must not validate against
      * @return this builder
      */
@@ -509,6 +621,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the schema for array items.
+     *
      * @param items the schema that items in an array object must validate against
      * @return this builder
      */
@@ -518,6 +632,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the object property schemas.
+     *
      * @param properties the schema objects of each property for an <code>object</code> type
      * @return this builder
      */
@@ -540,6 +656,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the schema description.
+     *
      * @param description a description of this type
      * @return this builder
      * @see #withTitle(String)
@@ -658,6 +776,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the default value.
+     *
      * @param defaultValue The default value to use when none is specified
      * @return this builder
      */
@@ -667,6 +787,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets whether the schema is nullable.
+     *
      * @param nullable A <code>true</code> value adds <code>&quot;null&quot;</code> to the allowed type specified by the
      *                 <code>type</code> keyword, only if <code>type</code> is explicitly defined within the same Schema
      *                 Object. Other Schema Object constraints retain their defined behavior, and therefore may disallow
@@ -680,6 +802,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the discriminator metadata.
+     *
      * @param discriminator Adds support for polymorphism. The discriminator is an object name that is used to differentiate between other schemas which may satisfy the payload description.
      * @return The current builder
      */
@@ -689,6 +813,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets whether the schema is read-only.
+     *
      * @param readOnly Relevant only for Schema <code>"properties"</code> definitions. Declares the property as "read only".
      *                 This means that it MAY be sent as part of a response but SHOULD NOT be sent as part of the request.
      *                 If the property is marked as <code>readOnly</code> being <code>true</code> and is in the <code>required</code>
@@ -702,6 +828,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets whether the schema is write-only.
+     *
      * @param writeOnly Relevant only for Schema <code>"properties"</code> definitions. Declares the property as "write only".
      *                  Therefore, it MAY be sent as part of a request but SHOULD NOT be sent as part of the response. If
      *                  the property is marked as <code>writeOnly</code> being <code>true</code> and is in the
@@ -716,6 +844,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the XML metadata for the schema.
+     *
      * @param xml This MAY be used only on properties schemas. It has no effect on root schemas. Adds additional metadata
      *            to describe the XML representation of this property.
      * @return The current builder
@@ -726,6 +856,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets the external documentation for the schema.
+     *
      * @param externalDocs Additional external documentation for this schema.
      * @return The current builder
      */
@@ -735,6 +867,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets an example value for the schema.
+     *
      * @param example A free-form property to include an example of an instance for this schema. To represent examples
      *                that cannot be naturally represented in JSON or YAML, a string value can be used to contain the
      *                example with escaping where necessary.
@@ -746,6 +880,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Sets whether the schema is deprecated.
+     *
      * @param deprecated Specifies that a schema is deprecated and SHOULD be transitioned out of usage. Default value is <code>false</code>.
      * @return The current builder
      */
@@ -755,6 +891,8 @@ public class SchemaObjectBuilder {
     }
 
     /**
+     * Builds a schema object from the configured values.
+     *
      * @return A new object
      */
     public SchemaObject build() {

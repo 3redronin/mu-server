@@ -47,6 +47,12 @@ public class MuServerBuilder {
     private @Nullable Path tempDirectory;
 
     /**
+     * Creates an empty Mu Server builder.
+     */
+    public MuServerBuilder() {
+    }
+
+    /**
      * Sets the HTTP port to listen on.
      *
      * @param port The HTTP port to use. A value of <code>0</code> asks the operating system to assign an
@@ -140,6 +146,8 @@ public class MuServerBuilder {
         return this;
     }
     /**
+     * Returns the directory used for request temporary data.
+     *
      * @return The directory for temporary storage of data, for example uploaded files that exist on disk for the lifetime
      * of a request, or <code>null</code> to use the default java temporary location
      */
@@ -579,6 +587,8 @@ public class MuServerBuilder {
     }
 
     /**
+     * Returns the configured HTTP/2 settings.
+     *
      * @return The current HTTP2 configuration
      */
     public @Nullable Http2Config http2Config() {

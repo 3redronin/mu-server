@@ -37,6 +37,12 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     private BareDirectoryRequestAction bareDirectoryRequestAction = BareDirectoryRequestAction.REDIRECT_WITH_TRAILING_SLASH;
 
     /**
+     * Creates an empty resource handler builder.
+     */
+    public ResourceHandlerBuilder() {
+    }
+
+    /**
      * Specify custom filename extension to mime-type mappings. By default {@link ResourceType#DEFAULT_EXTENSION_MAPPINGS}
      * are used.
      * @param extensionToResourceType The mappings to use.
@@ -160,6 +166,8 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
     }
 
     /**
+     * Gets the action used when directory requests omit a trailing slash.
+     *
      * @return The action to take when a directory is requested without a trailing slash
      */
     public BareDirectoryRequestAction bareDirectoryRequestAction() {

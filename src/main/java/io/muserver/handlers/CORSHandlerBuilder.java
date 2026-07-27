@@ -24,6 +24,12 @@ public class CORSHandlerBuilder implements MuHandlerBuilder<CORSHandler> {
     private Set<Method> allowedMethods;
 
     /**
+     * Creates an empty CORS handler builder.
+     */
+    public CORSHandlerBuilder() {
+    }
+
+    /**
      * Sets the CORS configuration for the handler
      * @param corsConfig The config to use
      * @return This builder

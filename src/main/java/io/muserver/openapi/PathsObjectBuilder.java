@@ -15,6 +15,14 @@ public class PathsObjectBuilder {
     private @Nullable Map<String, PathItemObject> pathItemObjects;
 
     /**
+     * Creates an empty paths object builder.
+     */
+    public PathsObjectBuilder() {
+    }
+
+    /**
+     * Sets the path-item mappings for the API.
+     *
      * @param pathItemObjects A relative path to an individual endpoint. The field name MUST begin with a slash.
      *                        The path is <strong>appended</strong> (no relative URL resolution) to the expanded
      *                        URL from the {@link ServerObject}'s <code>url</code> field in order to construct the
@@ -30,6 +38,8 @@ public class PathsObjectBuilder {
     }
 
     /**
+     * Builds a paths object from the configured mappings.
+     *
      * @return A new object
      */
     public PathsObject build() {

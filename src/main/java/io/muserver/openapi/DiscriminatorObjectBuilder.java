@@ -13,10 +13,18 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * <p>When using the discriminator, <em>inline</em> schemas will not be considered.</p>
  */
 public class DiscriminatorObjectBuilder {
+
+    /**
+     * Creates an empty discriminator builder.
+     */
+    public DiscriminatorObjectBuilder() {
+    }
     private @Nullable String propertyName;
     private @Nullable Map<String, String> mapping;
 
     /**
+     * Sets the discriminator property name.
+     *
      * @param propertyName <strong>REQUIRED</strong>. The name of the property in the payload that will hold the discriminator value.
      * @return The current builder
      */
@@ -26,6 +34,8 @@ public class DiscriminatorObjectBuilder {
     }
 
     /**
+     * Sets the discriminator mapping.
+     *
      * @param mapping An object to hold mappings between payload values and schema names or references.
      * @return The current builder
      */
@@ -35,6 +45,8 @@ public class DiscriminatorObjectBuilder {
     }
 
     /**
+     * Builds the discriminator object.
+     *
      * @return A new object
      */
     public DiscriminatorObject build() {

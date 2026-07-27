@@ -22,11 +22,15 @@ public interface ResponseInfo {
     boolean completedSuccessfully();
 
     /**
+     * Returns the request associated with this response.
+     *
      * @return The request
      */
     MuRequest request();
 
     /**
+     * Returns the response being tracked.
+     *
      * @return The response
      */
     MuResponse response();

@@ -23,6 +23,14 @@ public class SecurityRequirementObjectBuilder {
     private @Nullable Map<String, List<String>> requirements;
 
     /**
+     * Creates an empty security requirement object builder.
+     */
+    public SecurityRequirementObjectBuilder() {
+    }
+
+    /**
+     * Sets the required security schemes and scopes.
+     *
      * @param requirements Each name MUST correspond to a security scheme which is declared in the {@link ComponentsObject#securitySchemes}
      *                    under the {@link ComponentsObject}. If the security scheme is of type <code>"oauth2"</code> or
      *                     <code>"openIdConnect"</code>, then the value is a list of scope names required for the execution.
@@ -35,6 +43,8 @@ public class SecurityRequirementObjectBuilder {
     }
 
     /**
+     * Builds a security requirement object from the configured values.
+     *
      * @return A new object
      */
     public SecurityRequirementObject build() {

@@ -212,6 +212,41 @@ public class FormUploadTest {
         }
     }
 
+    @Test
+    public void arraysOfFilesAreAllowed() throws IOException {
+        @Path("/images")
+        class ImageResource {
+            @POST
+            @Consumes(jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            public String create(@FormParam("image") UploadedFile[] files) {
+                return files.length + " files: " + java.util.Arrays.stream(files)
+                    .map(UploadedFile::filename)
+                    .collect(Collectors.joining(", "));
+            }
+        }
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.restHandler(new ImageResource()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/images"))
+            .post(new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("Hello", "World")
+                .build()))) {
+            assertThat(resp.body().string(), is("0 files: "));
+        }
+        try (Response resp = call(request(server.uri().resolve("/images"))
+            .post(new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addPart(Headers.of("Content-Disposition", "form-data; name=\"image\"; filename=\"guangzhou.jpeg\""),
+                    RequestBody.create(guangzhou, MediaType.parse("image/jpeg")))
+                .addPart(Headers.of("Content-Disposition", "form-data; name=\"image\"; filename=\"friends.jpg\""),
+                    RequestBody.create(friends, MediaType.parse("image/jpeg")))
+                .build()))) {
+            assertThat(resp.body().string(), is("2 files: guangzhou.jpeg, friends.jpg"));
+        }
+    }
+
     @AfterEach
     public void stopIt() {
         scaffolding.MuAssert.stopAndCheck(server);

@@ -11,6 +11,12 @@ import static java.util.Collections.emptyList;
  */
 public class CookieBuilder {
 
+    /**
+     * Creates an empty cookie builder.
+     */
+    public CookieBuilder() {
+    }
+
     private @Nullable String name;
     private @Nullable String value;
     private @Nullable String domain;
@@ -202,6 +208,8 @@ public class CookieBuilder {
     }
 
     /**
+     * Builds a cookie from the configured attributes.
+     *
      * @return Returns a newly created cookie.
      */
     public Cookie build() {

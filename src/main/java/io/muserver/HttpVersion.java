@@ -33,6 +33,8 @@ public enum HttpVersion {
     }
 
     /**
+     * Gets the HTTP version token.
+     *
      * @return The version as a string in the way it appears in the HTTP Protocol, for example <code>HTTP/1.1</code>
      */
     public String version() {

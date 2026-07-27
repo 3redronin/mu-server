@@ -29,6 +29,8 @@ public class ParameterizedHeader {
     }
 
     /**
+     * Gets all header parameters.
+     *
      * @return Gets all the parameters
      */
     public Map<String, @Nullable String> parameters() {
@@ -36,6 +38,8 @@ public class ParameterizedHeader {
     }
 
     /**
+     * Gets a single parameter value.
+     *
      * @param name The name of the parameter to get
      * @return Gets a single parameter, or <code>null</code> if there is no value
      */
@@ -44,6 +48,8 @@ public class ParameterizedHeader {
     }
 
     /**
+     * Gets a single parameter value with a fallback.
+     *
      * @param name The name of the parameter to get
      * @param defaultValue The value to return if no parameter was set
      * @return Gets a single parameter, or the default value, if there is no value
@@ -53,6 +59,8 @@ public class ParameterizedHeader {
     }
 
     /**
+     * Indicates whether a named parameter is present.
+     *
      * @param name The name of the parameter to look up
      * @return True if the parameter exists (with or without a value); otherwise false
      */
@@ -61,6 +69,8 @@ public class ParameterizedHeader {
     }
 
     /**
+     * Gets the parameter names in declaration order.
+     *
      * @return Gets the parameters in the order declared (without the parameter values)
      */
     public List<String> parameterNames() {

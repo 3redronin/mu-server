@@ -25,6 +25,14 @@ public class ResponsesObjectBuilder {
     private @Nullable Map<String, ResponseObject> httpStatusCodes;
 
     /**
+     * Creates an empty responses object builder.
+     */
+    public ResponsesObjectBuilder() {
+    }
+
+    /**
+     * Sets the default response definition.
+     *
      * @param defaultValue The documentation of responses other than the ones declared for specific HTTP response codes.
      *                     Use this field to cover undeclared responses.
      * @return The current builder
@@ -35,6 +43,8 @@ public class ResponsesObjectBuilder {
     }
 
     /**
+     * Sets the response definitions keyed by status code.
+     *
      * @param httpStatusCodes To define a range of response codes, this field MAY contain the uppercase wildcard character
      *                        <code>X</code>. For example, <code>2XX</code> represents all response codes between
      *                        <code>[200-299]</code>. The following range definitions are allowed: <code>1XX</code>,
@@ -49,6 +59,8 @@ public class ResponsesObjectBuilder {
     }
 
     /**
+     * Builds a responses object from the configured values.
+     *
      * @return A new object
      */
     public ResponsesObject build() {

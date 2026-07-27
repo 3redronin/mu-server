@@ -35,6 +35,14 @@ public abstract class SimpleWebSocket implements MuWebSocket {
     private @Nullable NiceByteArrayOutputStream fragmentBuffer;
 
     /**
+     * Creates a websocket that can be subclassed to handle server-side events.
+     */
+    public SimpleWebSocket() {
+    }
+
+    /**
+     * Gets the current lifecycle state of the websocket session.
+     *
      * @return The state of the current session
      */
     protected WebsocketSessionState state() {
@@ -140,6 +148,8 @@ public abstract class SimpleWebSocket implements MuWebSocket {
     }
 
     /**
+     * Gets the average ping/pong latency for the current websocket session.
+     *
      * Gets the average latency in milliseconds.
      *
      * <p>This is the average time taken for this websocket to send a ping message to a client
