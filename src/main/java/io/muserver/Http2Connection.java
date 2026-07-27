@@ -550,9 +550,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
                     var stream = streams.get(h2e.streamId());
                     if (stream != null && !stream.peerResetWasRead()) {
                         stream.recordLocalResetFromReader();
+                    }
+                    // Queue the reset before cancellation wakes the request handler. Any
+                    // response work triggered by the body failure is then ordered behind
+                    // the reset and rejected by the coordinator.
+                    write(new Http2ResetStreamFrame(h2e.streamId(), h2e.errorCode().code()));
+                    if (stream != null && !stream.peerResetWasRead()) {
                         stream.cancel(new IOException("Stream error", h2e));
                     }
-                    write(new Http2ResetStreamFrame(h2e.streamId(), h2e.errorCode().code()));
                 } catch (SocketTimeoutException e) {
                     if (!settingsAckQueue.isEmpty()) {
                         throw Http2Exception.connection(Http2ErrorCode.SETTINGS_TIMEOUT, "Timed out waiting for SETTINGS ack");

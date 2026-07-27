@@ -154,6 +154,8 @@ Reader-detected connection errors are also ordered coordinator commands. The
 command closes every protocol stream, fails pending writes, and makes the error
 `GOAWAY` the only writable frame before body cancellation can wake application
 work. A handler therefore cannot emit response frames after that `GOAWAY`.
+Reader-detected stream errors follow the same rule: the reader records its reset
+fence and enqueues `RST_STREAM` before body cancellation can wake the handler.
 
 ## Flow control
 
