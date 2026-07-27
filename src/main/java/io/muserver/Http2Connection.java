@@ -1105,7 +1105,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
         streams.remove(frame.streamId(), stream);
         stream.cancel(new IOException("Request handler executor rejected the HTTP/2 stream"), false);
 
-        byte[] message = "503 Service Unavailable".getBytes(StandardCharsets.UTF_8);
+        String rejectionReason = "503 Service Unavailable";
+        byte[] message = rejectionReason.getBytes(StandardCharsets.UTF_8);
         FieldBlock headers = FieldBlock.newWithDate();
         headers.add(0, new FieldLine(
             HeaderNames.PSEUDO_STATUS,
@@ -1126,6 +1127,15 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
             new Http2HeadersFrame(frame.streamId(), false, headers),
             new Http2DataFrame(frame.streamId(), true, message, 0, message.length)
         );
+        // Queue the response before invoking application code so the independent writer can
+        // make progress even if a reject listener is slow.
+        server.onRequestRejected(new RejectedRequestImpl(
+            HttpStatus.SERVICE_UNAVAILABLE_503.code(),
+            rejectionReason,
+            stream.request.method().name(),
+            stream.request.uri().toString(),
+            this
+        ));
     }
 
     private void discardPayload(ByteBuffer buffer, InputStream clientIn, int len) throws IOException {

@@ -9,6 +9,8 @@ import org.junit.jupiter.api.Timeout;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -46,6 +48,9 @@ class ExecutionDomainsTest {
         var connectionExecutor = track(Executors.newFixedThreadPool(2, namedThreads("connection-")));
         var blockerStarted = new CountDownLatch(1);
         var releaseBlocker = new CountDownLatch(1);
+        var releaseRejectListener = new CountDownLatch(1);
+        var rejectedRequest = new CompletableFuture<RejectedRequest>();
+        var completedResponses = new AtomicInteger();
         Future<?> blocker = handlerExecutor.submit(() -> {
             blockerStarted.countDown();
             try {
@@ -60,6 +65,15 @@ class ExecutionDomainsTest {
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .withHandlerExecutor(handlerExecutor)
             .withConnectionExecutor(connectionExecutor)
+            .addRequestRejectListener(info -> {
+                rejectedRequest.complete(info);
+                try {
+                    releaseRejectListener.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            })
+            .addResponseCompleteListener(info -> completedResponses.incrementAndGet())
             .addHandler(Method.GET, "/hello", (request, response, pathParams) ->
                 response.write(Thread.currentThread().getName()))
             .start();
@@ -89,6 +103,15 @@ class ExecutionDomainsTest {
             assertThat(rejectedBody.endStream(), is(true));
             assertThat(server.stats().activeRequests().isEmpty(), is(true));
             assertThat(server.stats().completedRequests(), equalTo(0L));
+            assertThat(completedResponses.get(), equalTo(0));
+
+            var rejection = rejectedRequest.get(5, TimeUnit.SECONDS);
+            assertThat(rejection.status(), equalTo(503));
+            assertThat(rejection.reason(), equalTo("503 Service Unavailable"));
+            assertThat(rejection.method(), equalTo(Optional.of("GET")));
+            assertThat(rejection.uri().orElseThrow().getPath(), equalTo("/hello"));
+            assertThat(rejection.connection().protocol(), equalTo("HTTP/2"));
+            releaseRejectListener.countDown();
 
             byte[] secondPing = {7, 6, 5, 4, 3, 2, 1, 0};
             con.writeFrame(RFCTestUtils.utf8DataFrame(1, true, "discarded"))
@@ -113,9 +136,11 @@ class ExecutionDomainsTest {
             assertThat(RFCTestUtils.readIgnoringWindowUpdates(con, Http2DataFrame.class).endStream(), is(true));
         } finally {
             releaseBlocker.countDown();
+            releaseRejectListener.countDown();
         }
 
         assertEventually(() -> server.stats().completedRequests(), equalTo(1L));
+        assertEventually(completedResponses::get, equalTo(1));
         assertThat(server.stats().rejectedDueToOverload(), equalTo(1L));
     }
 
