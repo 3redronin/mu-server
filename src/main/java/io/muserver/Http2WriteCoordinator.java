@@ -12,14 +12,13 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * The multiple-producer, single-consumer mailbox and pending-write scheduler for an HTTP/2 connection.
  *
- * <p>Application and reader threads only submit commands. The connection writer is the sole caller of
- * the command-processing, scheduling, and failure methods.</p>
+ * <p>Application and reader threads only submit commands. Serialized writer drain tasks are the sole
+ * callers of the command-processing, scheduling, and failure methods.</p>
  */
 final class Http2WriteCoordinator {
 
@@ -180,6 +179,7 @@ final class Http2WriteCoordinator {
     }
 
     private final BlockingQueue<Command> mailbox = new LinkedBlockingQueue<>();
+    private final Runnable commandQueued;
     private final ArrayDeque<PendingWrite> pendingWrites = new ArrayDeque<>();
     private final Set<Integer> peerResetStreams = new HashSet<>();
     private final Set<Integer> retainedLocalResetStreams = new HashSet<>();
@@ -195,10 +195,16 @@ final class Http2WriteCoordinator {
     private @Nullable IOException connectionFailureReason;
 
     Http2WriteCoordinator(int initialConnectionCredit) {
+        this(initialConnectionCredit, () -> {
+        });
+    }
+
+    Http2WriteCoordinator(int initialConnectionCredit, Runnable commandQueued) {
         if (initialConnectionCredit < 0) {
             throw new IllegalArgumentException("Initial connection credit cannot be negative");
         }
         this.connectionCredit = initialConnectionCredit;
+        this.commandQueued = commandQueued;
     }
 
     void submit(WriteTask task) {
@@ -206,11 +212,11 @@ final class Http2WriteCoordinator {
     }
 
     void submit(WriteTask task, boolean retainResetState) {
-        mailbox.add(new QueueWrite(task, false, retainResetState));
+        enqueue(new QueueWrite(task, false, retainResetState));
     }
 
     void submitFirst(WriteTask task) {
-        mailbox.add(new QueueWrite(task, true, false));
+        enqueue(new QueueWrite(task, true, false));
     }
 
     void resetStream(Http2ResetStreamFrame resetFrame, IOException reason, @Nullable Http2Stream stream) {
@@ -218,7 +224,7 @@ final class Http2WriteCoordinator {
         if (streamId <= 0) {
             throw new IllegalArgumentException("A reset stream ID must be positive");
         }
-        mailbox.add(new ResetStream(resetFrame, reason, stream));
+        enqueue(new ResetStream(resetFrame, reason, stream));
     }
 
     void openStream(int streamId, int initialCredit) {
@@ -240,28 +246,28 @@ final class Http2WriteCoordinator {
         if (initialState == Http2StreamState.CLOSED) {
             throw new IllegalArgumentException("A newly opened stream cannot be closed");
         }
-        mailbox.add(new OpenStream(streamId, initialCredit, initialState, stream));
+        enqueue(new OpenStream(streamId, initialCredit, initialState, stream));
     }
 
     void remoteEndStream(int streamId) {
         if (streamId <= 0) {
             throw new IllegalArgumentException("An ended stream ID must be positive");
         }
-        mailbox.add(new RemoteEndStream(streamId));
+        enqueue(new RemoteEndStream(streamId));
     }
 
     void forgetStream(int streamId) {
         if (streamId <= 0) {
             throw new IllegalArgumentException("A forgotten stream ID must be positive");
         }
-        mailbox.add(new ForgetStream(streamId));
+        enqueue(new ForgetStream(streamId));
     }
 
     void applicationExchangeEnded(int streamId) {
         if (streamId <= 0) {
             throw new IllegalArgumentException("An ended application exchange stream ID must be positive");
         }
-        mailbox.add(new ApplicationExchangeEnded(streamId));
+        enqueue(new ApplicationExchangeEnded(streamId));
     }
 
     void applyConnectionWindowUpdate(int increment, int lastStreamId) {
@@ -271,7 +277,7 @@ final class Http2WriteCoordinator {
         if (lastStreamId < 0) {
             throw new IllegalArgumentException("The last stream ID cannot be negative");
         }
-        mailbox.add(new ConnectionWindowUpdate(increment, lastStreamId));
+        enqueue(new ConnectionWindowUpdate(increment, lastStreamId));
     }
 
     void applyStreamWindowUpdate(int streamId, int increment) {
@@ -281,27 +287,32 @@ final class Http2WriteCoordinator {
         if (increment <= 0) {
             throw new IllegalArgumentException("A stream window increment must be positive");
         }
-        mailbox.add(new StreamWindowUpdate(streamId, increment));
+        enqueue(new StreamWindowUpdate(streamId, increment));
     }
 
     void applyInitialWindowSizeChange(int difference, WriteTask acknowledgement, int lastStreamId) {
         if (lastStreamId < 0) {
             throw new IllegalArgumentException("The last stream ID cannot be negative");
         }
-        mailbox.add(new InitialWindowSizeChange(difference, acknowledgement, lastStreamId));
+        enqueue(new InitialWindowSizeChange(difference, acknowledgement, lastStreamId));
     }
 
     void failConnection(WriteTask goAway, IOException reason) {
         if (!(goAway.frame() instanceof Http2GoAway)) {
             throw new IllegalArgumentException("A connection failure must carry GOAWAY");
         }
-        mailbox.add(new ConnectionFailure(goAway, reason));
+        enqueue(new ConnectionFailure(goAway, reason));
     }
 
     void wakeUp() {
         if (wakeUpQueued.compareAndSet(false, true)) {
-            mailbox.add(WakeUp.INSTANCE);
+            enqueue(WakeUp.INSTANCE);
         }
+    }
+
+    private void enqueue(Command command) {
+        mailbox.add(command);
+        commandQueued.run();
     }
 
     /**
@@ -316,21 +327,6 @@ final class Http2WriteCoordinator {
             apply(command);
         }
         commandBatch.clear();
-    }
-
-    /**
-     * Waits for a command and applies it and the commands that arrived with it.
-     *
-     * @param timeoutMillis a positive timeout, or a negative value to wait indefinitely
-     */
-    void awaitCommand(long timeoutMillis) throws InterruptedException {
-        Command command = timeoutMillis < 0
-            ? mailbox.take()
-            : mailbox.poll(timeoutMillis, TimeUnit.MILLISECONDS);
-        if (command != null) {
-            apply(command);
-            processAvailableCommands();
-        }
     }
 
     /**
@@ -407,6 +403,10 @@ final class Http2WriteCoordinator {
 
     boolean isIdle() {
         return mailbox.isEmpty() && pendingWrites.isEmpty();
+    }
+
+    boolean hasCommands() {
+        return !mailbox.isEmpty();
     }
 
     void failAll(Exception reason) {
