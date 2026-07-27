@@ -8,8 +8,10 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Lock;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.goAway;
@@ -364,6 +366,77 @@ class RFC9113_5_1_StreamStatesTest {
     }
 
     @Test
+    public void readerObservedEndStreamReleasesMaxConcurrentStreamSlotWithoutACoordinatorBarrier() throws Exception {
+        readerObservedClosureReleasesMaxConcurrentStreamSlot(Http2DataFrame.eos(1));
+    }
+
+    @Test
+    public void readerObservedResetReleasesMaxConcurrentStreamSlotWithoutACoordinatorBarrier() throws Exception {
+        readerObservedClosureReleasesMaxConcurrentStreamSlot(
+            new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code())
+        );
+    }
+
+    private void readerObservedClosureReleasesMaxConcurrentStreamSlot(
+        LogicalHttp2Frame terminalFrame
+    ) throws Exception {
+        var exchangeCompleted = new CountDownLatch(1);
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder
+                .http2Enabled()
+                .withMaxConcurrentStreams(1)
+            )
+            .addResponseCompleteListener(info -> exchangeCompleted.countDown())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                response.status(204);
+            })
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                response.status(202);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(
+                    1,
+                    false,
+                    RFCTestUtils.postHelloHeaders(server.uri().getPort())
+                ))
+                .flush();
+
+            var earlyResponse = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(earlyResponse.streamId(), equalTo(1));
+            assertThat(earlyResponse.headers().get(":status"), equalTo("204"));
+            assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
+
+            var connection = (Http2Connection) server.activeConnections().iterator().next();
+            Map<?, ?> streams = getField(connection, "streams", Map.class);
+            var stream = (Http2Stream) streams.get(1);
+            Lock stateLock = getField(connection, "stateLock", Lock.class);
+            stateLock.lock();
+            try {
+                con.writeFrame(terminalFrame)
+                    .writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders()))
+                    .flush();
+
+                long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+                while (stream.canReceiveData() && System.nanoTime() < deadline) {
+                    Thread.sleep(1);
+                }
+                assertThat("The reader did not observe stream closure", stream.canReceiveData(), equalTo(false));
+                assertThat(stream.countsTowardsMaxConcurrentStreams(), equalTo(false));
+            } finally {
+                stateLock.unlock();
+            }
+
+            var accepted = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(accepted.streamId(), equalTo(3));
+            assertThat(accepted.headers().get(":status"), equalTo("202"));
+        }
+    }
+
+    @Test
     public void closedStreamsDoNotCountTowardsMaxConcurrentStreamsWhileTheirHandlerFinishes() throws Exception {
         var handlerStarted = new CountDownLatch(1);
         var releaseHandler = new CountDownLatch(1);
@@ -435,6 +508,12 @@ class RFC9113_5_1_StreamStatesTest {
 
     private @NonNull FieldBlock getHelloHeaders() {
         return RFCTestUtils.getHelloHeaders(server.uri().getPort());
+    }
+
+    private static <T> T getField(Object target, String name, Class<T> type) throws Exception {
+        var field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return type.cast(field.get(target));
     }
 
     @AfterEach

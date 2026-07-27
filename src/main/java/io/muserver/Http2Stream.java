@@ -31,6 +31,9 @@ class Http2Stream implements ResponseInfo {
     private volatile boolean resetInitiated;
     private volatile boolean applicationExchangeEnded;
     private volatile boolean protocolStateClosed;
+    // Writer-published so the reader can recognize a fully closed stream as soon
+    // as it observes the peer's END_STREAM, before that command is applied.
+    private volatile boolean localEndStreamWritten;
     private long endTime = 0;
     private final InputStream bodyInputStream;
     private final @Nullable Long declaredRequestBodyLength;
@@ -101,12 +104,18 @@ class Http2Stream implements ResponseInfo {
         protocolStateClosed = true;
     }
 
+    void onLocalEndStreamWritten() {
+        localEndStreamWritten = true;
+    }
+
     boolean protocolStateClosed() {
         return protocolStateClosed;
     }
 
     boolean countsTowardsMaxConcurrentStreams() {
-        return !protocolStateClosed;
+        return !protocolStateClosed
+            && !peerResetRead
+            && !(remoteEndStreamRead && localEndStreamWritten);
     }
 
     void onProtocolStreamRetired() {
@@ -340,8 +349,9 @@ class Http2Stream implements ResponseInfo {
         var incomingFlowControl = new Http2IncomingFlowController(id, serverSettings.initialWindowSize);
 
         // A content-length of zero describes the message body, but it does not close the
-        // remote side of the HTTP/2 stream. Keep a protocol-aware input until END_STREAM.
-        InputStream body = headerFrame.endStream() ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(
+        // remote side of the HTTP/2 stream. Keep a private protocol-aware input until
+        // END_STREAM while exposing the documented empty body to the application.
+        InputStream protocolBody = headerFrame.endStream() ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(
             connection.server.requestIdleTimeoutMillis(),
             read -> {
                 var update = incomingFlowControl.incrementCredit(read);
@@ -352,7 +362,19 @@ class Http2Stream implements ResponseInfo {
             },
             connection
         );
-        var request = new Mu3Request(connection, method, requestUri, serverUri, HttpVersion.HTTP_2, headers, bodySize, body);
+        InputStream applicationBody = BodySize.NONE.equals(bodySize)
+            ? EmptyInputStream.INSTANCE
+            : protocolBody;
+        var request = new Mu3Request(
+            connection,
+            method,
+            requestUri,
+            serverUri,
+            HttpVersion.HTTP_2,
+            headers,
+            bodySize,
+            applicationBody
+        );
 
         if (headerFrame.endStream() && cl != null && cl != 0L) {
             throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "content-length does not match received DATA", id);
@@ -360,7 +382,7 @@ class Http2Stream implements ResponseInfo {
 
 
         var state = headerFrame.endStream() ? Http2StreamState.HALF_CLOSED_REMOTE : Http2StreamState.OPEN;
-        Http2Stream stream = new Http2Stream(id, connection, state, request, incomingFlowControl, body, cl);
+        Http2Stream stream = new Http2Stream(id, connection, state, request, incomingFlowControl, protocolBody, cl);
         stream.response = new Http2Response(stream, new FieldBlock(), request);
         request.setResponse(stream.response);
         return stream;

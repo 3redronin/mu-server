@@ -680,6 +680,12 @@ final class Http2WriteCoordinator {
 
     private void onWriteCompleted(LogicalHttp2Frame frame) {
         int streamId = frame.streamId();
+        if (frame.endStream()) {
+            Http2Stream stream = applicationStreams.get(streamId);
+            if (stream != null) {
+                stream.onLocalEndStreamWritten();
+            }
+        }
         if (frame instanceof Http2ResetStreamFrame
             || (frame.endStream() && streamStates.get(streamId) == Http2StreamState.CLOSED)) {
             markProtocolStateClosed(streamId);
