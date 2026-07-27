@@ -71,8 +71,22 @@ abstract class BaseHttpConnection implements HttpConnection {
         server.onRequestStarted(req);
     }
 
+    protected RejectedRequest rateLimitRejection(Mu3Request request) {
+        String reason = HttpStatus.TOO_MANY_REQUESTS_429.toString();
+        return new RejectedRequestImpl(
+            HttpStatus.TOO_MANY_REQUESTS_429.code(),
+            reason,
+            request.method().name(),
+            request.uri().toString(),
+            this
+        );
+    }
+
     protected @Nullable CompletableFuture<@Nullable Void> handleExchange(Mu3Request muRequest, BaseResponse muResponse) throws Throwable {
         try {
+            if (applyRateLimits(muRequest, muResponse)) {
+                return null;
+            }
             var handled = false;
             for (var handler : server.handlers()) {
                 if (handler.handle(muRequest, muResponse)) {
@@ -90,6 +104,35 @@ abstract class BaseHttpConnection implements HttpConnection {
             handleExchangeException(muRequest, muResponse, e);
         }
         return null;
+    }
+
+    private boolean applyRateLimits(
+        Mu3Request request,
+        BaseResponse response
+    ) {
+        RateLimiterImpl.Decision first = null;
+        for (RateLimiterImpl rateLimiter : server.rateLimiters) {
+            RateLimiterImpl.Decision decision = rateLimiter.record(request);
+            if (decision != null && first == null) {
+                first = decision;
+            }
+        }
+        if (first == null
+            || first.action() != RateLimitRejectionAction.SEND_429) {
+            return false;
+        }
+
+        HttpException rejection =
+            new HttpException(HttpStatus.TOO_MANY_REQUESTS_429);
+        onInvalidRequest(rejection);
+        request.onRateLimitRejected();
+        response.status(rejection.status());
+        String retryAfter = first.retryAfter();
+        if (retryAfter != null) {
+            response.headers().set(HeaderNames.RETRY_AFTER, retryAfter);
+        }
+        response.write(java.util.Objects.requireNonNull(rejection.getMessage()));
+        return true;
     }
 
     protected void handleExchangeException(Mu3Request muRequest, BaseResponse muResponse, Exception failure) throws Throwable {

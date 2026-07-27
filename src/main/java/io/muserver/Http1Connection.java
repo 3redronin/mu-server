@@ -135,22 +135,6 @@ class Http1Connection extends BaseHttpConnection {
                 muRequest.setResponse(muResponse);
                 closeConnection = muRequest.headers().closeConnectionRequested(httpVersion);
 
-                if (rejectException == null) {
-                    RateLimitRejectionAction first = null;
-                    for (RateLimiterImpl rateLimiter : server.rateLimiters) {
-                        var action = rateLimiter.record(muRequest);
-                        if (action != null && first == null) {
-                            first = action;
-                        }
-                    }
-                    if (first != null) {
-                        if (first == RateLimitRejectionAction.SEND_429) {
-                            rejectException = new HttpException(HttpStatus.TOO_MANY_REQUESTS_429);
-                            rejectException.responseHeaders().setAll(request.headers());
-                        }
-                    }
-                }
-
                 if (rejectException != null) {
                     onInvalidRequest(rejectException);
                     String rejectedMethod = method.name();
@@ -196,7 +180,10 @@ class Http1Connection extends BaseHttpConnection {
                         log.warn("Unrecoverable error for " + muRequest, e);
                         muResponse.setState(ResponseState.ERRORED);
                     } finally {
-                        if (!rejectedByHandlerExecutor) {
+                        if (muRequest.wasRateLimitRejected()) {
+                            onApplicationRequestRejected(muRequest);
+                            server.onRequestRejected(rateLimitRejection(muRequest));
+                        } else if (!rejectedByHandlerExecutor) {
                             onExchangeEndedOnHandler(muResponse);
                         }
                         clientSocket.setSoTimeout(0);
@@ -299,10 +286,7 @@ class Http1Connection extends BaseHttpConnection {
     private boolean rejectRequestDueToHandlerOverload(Mu3Request request, OutputStream outputStream) throws IOException {
         rejectedDueToOverload.incrementAndGet();
         server.getStatsImpl().onRejectedDueToOverload();
-        server.onRequestSubmissionRejected(request);
-        activeExchange.updateAndGet(cur ->
-            cur != null && isSameRequest(cur.request, request) ? null : cur
-        );
+        onApplicationRequestRejected(request);
 
         String rejectionReason = "503 Service Unavailable";
         outputStream.write(ConnectionAcceptor.serverUnavailableResponse);
@@ -315,6 +299,13 @@ class Http1Connection extends BaseHttpConnection {
             this
         ));
         return true;
+    }
+
+    private void onApplicationRequestRejected(Mu3Request request) {
+        server.onRequestSubmissionRejected(request);
+        activeExchange.updateAndGet(cur ->
+            cur != null && isSameRequest(cur.request, request) ? null : cur
+        );
     }
 
     private boolean cleanUpNicely(Boolean closeConnection, Http1Response muResponse, Mu3Request muRequest) {
