@@ -15,9 +15,17 @@ class HttpConnectionInputStream extends FilterInputStream {
     @Override
     public int read() throws IOException {
         if (httpConnection.isClosed()) throw new IOException("The connection is closed");
-        int read = in.read();
+        int read;
+        try {
+            read = in.read();
+        } catch (IOException failure) {
+            httpConnection.onTransportInputFailure(failure);
+            throw failure;
+        }
         if (read != -1) {
             httpConnection.onBytesRead(1);
+        } else {
+            httpConnection.onTransportInputEnd();
         }
         return read;
     }
@@ -30,9 +38,17 @@ class HttpConnectionInputStream extends FilterInputStream {
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
         if (httpConnection.isClosed()) throw new IOException("The connection is closed");
-        int read = in.read(b, off, len);
+        int read;
+        try {
+            read = in.read(b, off, len);
+        } catch (IOException failure) {
+            httpConnection.onTransportInputFailure(failure);
+            throw failure;
+        }
         if (read > 0) {
             httpConnection.onBytesRead(read);
+        } else if (read == -1) {
+            httpConnection.onTransportInputEnd();
         }
         return read;
     }

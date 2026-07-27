@@ -248,6 +248,15 @@ abstract class BaseHttpConnection implements HttpConnection {
         server.getStatsImpl().onBytesSent(sent);
     }
 
+    void onTransportInputEnd() {
+    }
+
+    void onTransportInputFailure(IOException failure) {
+    }
+
+    void onTransportOutputFailure(IOException failure) {
+    }
+
     private void onIO() {
         MonotonicTime.publishLatest(lastIONanos, System.nanoTime());
     }
