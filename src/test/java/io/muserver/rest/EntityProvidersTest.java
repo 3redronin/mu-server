@@ -32,10 +32,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import javax.xml.transform.Source;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.sax.SAXSource;
 import javax.xml.transform.stream.StreamSource;
 
 import static io.muserver.Mutils.NEWLINE;
@@ -70,9 +73,23 @@ public class EntityProvidersTest {
         @Path("source")
         class Sample {
             @POST
+            @Consumes({
+                "text/xml", "application/xml", "application/atom+xml",
+                "application/svg+xml", "application/vnd.mu+xml", "application/*+xml"
+            })
+            @Produces({
+                "text/xml", "application/xml", "application/atom+xml",
+                "application/svg+xml", "application/vnd.mu+xml", "application/*+xml"
+            })
+            public Source echo(Source source) {
+                return source;
+            }
+
+            @POST
+            @Path("stream")
             @Consumes("application/xml")
             @Produces("application/xml")
-            public Source echo(Source source) {
+            public Source echoStreamSource(StreamSource source) {
                 return source;
             }
 
@@ -86,18 +103,280 @@ public class EntityProvidersTest {
 
         startServer(new Sample());
 
+        for (String xmlMediaType : asList(
+            "text/xml", "application/xml", "application/atom+xml",
+            "application/svg+xml", "application/vnd.mu+xml", "application/*+xml")) {
+            try (Response response = call(request()
+                .header("Accept", xmlMediaType)
+                .post(RequestBody.create("<message>echo</message>", MediaType.get(xmlMediaType)))
+                .url(server.uri().resolve("/source").toString()))) {
+                assertThat(xmlMediaType, response.code(), equalTo(200));
+                String expectedContentType = xmlMediaType.equals("text/xml") ? "text/xml;charset=utf-8" : xmlMediaType;
+                assertThat(xmlMediaType, response.header("Content-Type"), equalTo(expectedContentType));
+                assertThat(xmlMediaType, response.body().string(), Matchers.containsString("<message>echo</message>"));
+            }
+        }
+
         try (Response response = call(request()
-            .post(RequestBody.create("<message>echo</message>", MediaType.get("application/xml")))
-            .url(server.uri().resolve("/source").toString()))) {
+            .post(RequestBody.create("<message>stream</message>", MediaType.get("application/xml")))
+            .url(server.uri().resolve("/source/stream").toString()))) {
             assertThat(response.code(), equalTo(200));
-            assertThat(response.header("Content-Type"), equalTo("application/xml"));
-            assertThat(response.body().string(), Matchers.containsString("<message>echo</message>"));
+            assertThat(response.body().string(), Matchers.containsString("<message>stream</message>"));
         }
 
         try (Response response = call(request(server.uri().resolve("/source/suffix")))) {
             assertThat(response.code(), equalTo(200));
             assertThat(response.header("Content-Type"), equalTo("application/vnd.mu+xml"));
             assertThat(response.body().string(), Matchers.containsString("<message>suffix</message>"));
+        }
+    }
+
+    @Test
+    public void unsupportedSourceSubtypeIsRejectedBeforeResourceInvocation() throws Exception {
+        AtomicBoolean invoked = new AtomicBoolean();
+        @Path("source")
+        class Sample {
+            @POST
+            @Consumes("application/xml")
+            public String read(DOMSource source) {
+                invoked.set(true);
+                return "unexpected";
+            }
+        }
+        startServer(new Sample());
+
+        try (Response response = call(request()
+            .post(RequestBody.create("<message>dom</message>", MediaType.get("application/xml")))
+            .url(server.uri().resolve("/source").toString()))) {
+            assertThat(response.code(), equalTo(415));
+            assertThat(invoked.get(), Matchers.is(false));
+        }
+    }
+
+    @Test
+    public void sourceReaderHonorsTheRequestCharset() throws Exception {
+        @Path("source")
+        class Sample {
+            @POST
+            @Consumes("application/xml")
+            @Produces("application/xml")
+            public Source echo(Source source) {
+                return source;
+            }
+        }
+        startServer(new Sample());
+        byte[] body = "<message>café</message>".getBytes(StandardCharsets.ISO_8859_1);
+
+        try (Response response = call(request()
+            .post(RequestBody.create(body, MediaType.get("application/xml;charset=ISO-8859-1")))
+            .url(server.uri().resolve("/source").toString()))) {
+            assertThat(response.code(), equalTo(200));
+            assertThat(response.body().string(), Matchers.containsString("<message>café</message>"));
+        }
+    }
+
+    @Test
+    public void sourceReaderLetsABomOverrideTheRequestCharset() throws Exception {
+        @Path("source")
+        class Sample {
+            @POST
+            @Consumes("application/xml")
+            @Produces("application/xml")
+            public Source echo(Source source) {
+                return source;
+            }
+        }
+        startServer(new Sample());
+        byte[] body = "<message>雪</message>".getBytes(StandardCharsets.UTF_16);
+
+        try (Response response = call(request()
+            .post(RequestBody.create(body, MediaType.get("application/xml;charset=ISO-8859-1")))
+            .url(server.uri().resolve("/source").toString()))) {
+            assertThat(response.code(), equalTo(200));
+            assertThat(response.body().string(), Matchers.containsString("<message>雪</message>"));
+        }
+    }
+
+    @Test
+    public void sourceReaderLetsABomOverrideAnUnsupportedRequestCharset() throws Exception {
+        @Path("source")
+        class Sample {
+            @POST
+            @Consumes("application/xml")
+            @Produces("application/xml")
+            public Source echo(Source source) {
+                return source;
+            }
+        }
+        startServer(new Sample());
+        byte[] body = "<message>雪</message>".getBytes(StandardCharsets.UTF_16);
+
+        try (Response response = call(request()
+            .post(RequestBody.create(body, MediaType.get("application/xml;charset=not-a-charset")))
+            .url(server.uri().resolve("/source").toString()))) {
+            assertThat(response.code(), equalTo(200));
+            assertThat(response.body().string(), Matchers.containsString("<message>雪</message>"));
+        }
+    }
+
+    @Test
+    public void sourceReaderRejectsAnUnsupportedRequestCharset() throws Exception {
+        @Path("source")
+        class Sample {
+            @POST
+            @Consumes("application/xml")
+            @Produces("application/xml")
+            public Source echo(Source source) {
+                return source;
+            }
+        }
+        startServer(new Sample());
+
+        try (Response response = call(request()
+            .post(RequestBody.create("<message/>".getBytes(StandardCharsets.UTF_8),
+                MediaType.get("application/xml;charset=not-a-charset")))
+            .url(server.uri().resolve("/source").toString()))) {
+            assertThat(response.code(), equalTo(415));
+        }
+    }
+
+    @Test
+    public void sourceWriterDoesNotResolveExternalEntities() throws Exception {
+        @Path("source")
+        class Sample {
+            @POST
+            @Consumes("application/xml")
+            @Produces("application/xml")
+            public Source echo(Source source) {
+                return source;
+            }
+        }
+        startServer(new Sample());
+        File externalEntity = new File("src/test/resources/something.txt");
+        String body = "<!DOCTYPE message [<!ENTITY xxe SYSTEM \"" + externalEntity.toURI()
+            + "\">]><message>&xxe;</message>";
+
+        try (Response response = call(request()
+            .post(RequestBody.create(body, MediaType.get("application/xml")))
+            .url(server.uri().resolve("/source").toString()))) {
+            assertThat(response.code(), equalTo(500));
+            assertThat(response.body().string(), Matchers.not(Matchers.containsString(
+                "This file exists for ResourceHandler tests.")));
+        }
+    }
+
+    @Test
+    public void sourceProviderAdvertisesOnlyTheTypesAndMediaTypesItCanHandle() {
+        Annotation[] noAnnotations = new Annotation[0];
+        SourceEntityProviders.SourceReader reader = new SourceEntityProviders.SourceReader();
+        SourceEntityProviders.SourceWriter writer = new SourceEntityProviders.SourceWriter();
+        jakarta.ws.rs.core.MediaType applicationXml = jakarta.ws.rs.core.MediaType.APPLICATION_XML_TYPE;
+
+        assertThat(reader.isReadable(Source.class, Source.class, noAnnotations, applicationXml), Matchers.is(true));
+        assertThat(reader.isReadable(StreamSource.class, StreamSource.class, noAnnotations, applicationXml), Matchers.is(true));
+        assertThat(reader.isReadable(DOMSource.class, DOMSource.class, noAnnotations, applicationXml), Matchers.is(false));
+        assertThat(reader.isReadable(SAXSource.class, SAXSource.class, noAnnotations, applicationXml), Matchers.is(false));
+
+        assertThat(writer.isWriteable(StreamSource.class, StreamSource.class, noAnnotations, applicationXml), Matchers.is(true));
+        assertThat(writer.isWriteable(DOMSource.class, DOMSource.class, noAnnotations, applicationXml), Matchers.is(true));
+        assertThat(writer.isWriteable(SAXSource.class, SAXSource.class, noAnnotations, applicationXml), Matchers.is(true));
+        assertThat(writer.isWriteable(StreamSource.class, StreamSource.class, noAnnotations,
+            jakarta.ws.rs.core.MediaType.WILDCARD_TYPE), Matchers.is(true));
+
+        for (String xmlMediaType : asList(
+            "text/xml", "application/xml", "application/vnd.mu+xml", "application/*+xml", "application/vnd.mu+XML")) {
+            String[] typeAndSubtype = xmlMediaType.split("/", 2);
+            jakarta.ws.rs.core.MediaType mediaType =
+                new jakarta.ws.rs.core.MediaType(typeAndSubtype[0], typeAndSubtype[1]);
+            assertThat(xmlMediaType, reader.isReadable(Source.class, Source.class, noAnnotations, mediaType), Matchers.is(true));
+            assertThat(xmlMediaType, writer.isWriteable(StreamSource.class, StreamSource.class, noAnnotations, mediaType), Matchers.is(true));
+        }
+        for (String nonXmlMediaType : asList("text/plain", "application/json", "image/svg+xml", "application/+xml")) {
+            String[] typeAndSubtype = nonXmlMediaType.split("/", 2);
+            jakarta.ws.rs.core.MediaType mediaType =
+                new jakarta.ws.rs.core.MediaType(typeAndSubtype[0], typeAndSubtype[1]);
+            assertThat(nonXmlMediaType, reader.isReadable(Source.class, Source.class, noAnnotations, mediaType), Matchers.is(false));
+            assertThat(nonXmlMediaType, writer.isWriteable(StreamSource.class, StreamSource.class, noAnnotations, mediaType), Matchers.is(false));
+        }
+    }
+
+    @Test
+    public void sourceReaderReturnsAnObjectForAZeroLengthEntity() throws Exception {
+        Source source = new SourceEntityProviders.SourceReader().readFrom(
+            Source.class,
+            Source.class,
+            new Annotation[0],
+            jakarta.ws.rs.core.MediaType.APPLICATION_XML_TYPE,
+            new jakarta.ws.rs.core.MultivaluedHashMap<>(),
+            new ByteArrayInputStream(new byte[0]));
+
+        assertThat(source, Matchers.instanceOf(StreamSource.class));
+    }
+
+    @Test
+    public void sourceWithoutProducesUsesTheWritersConcreteXmlMediaType() throws Exception {
+        @Path("source")
+        class Sample {
+            @GET
+            public Source get() {
+                return new StreamSource(new StringReader("<message>default</message>"));
+            }
+        }
+        startServer(new Sample());
+
+        try (Response response = call(request(server.uri().resolve("/source")))) {
+            assertThat(response.code(), equalTo(200));
+            assertThat(response.header("Content-Type"), equalTo("application/xml"));
+            assertThat(response.body().string(), Matchers.containsString("<message>default</message>"));
+        }
+
+        try (Response response = call(request(server.uri().resolve("/source"))
+            .header("Accept", "application/vnd.mu+xml"))) {
+            assertThat(response.code(), equalTo(200));
+            assertThat(response.header("Content-Type"), equalTo("application/vnd.mu+xml"));
+            assertThat(response.body().string(), Matchers.containsString("<message>default</message>"));
+        }
+    }
+
+    @Test
+    public void sourceWriterHonorsTheResponseCharset() throws Exception {
+        @Path("source")
+        class Sample {
+            @GET
+            @Produces("application/xml;charset=ISO-8859-1")
+            public Source get() {
+                return new StreamSource(new StringReader("<message>café</message>"));
+            }
+        }
+        startServer(new Sample());
+
+        try (Response response = call(request(server.uri().resolve("/source")))) {
+            assertThat(response.code(), equalTo(200));
+            assertThat(response.header("Content-Type"), equalTo("application/xml;charset=ISO-8859-1"));
+            String body = new String(response.body().bytes(), StandardCharsets.ISO_8859_1);
+            assertThat(body, Matchers.containsString("encoding=\"ISO-8859-1\""));
+            assertThat(body, Matchers.containsString("<message>café</message>"));
+        }
+    }
+
+    @Test
+    public void sourceWriterUsesUtf8WhenTheResponseCharsetIsUnsupported() throws Exception {
+        @Path("source")
+        class Sample {
+            @GET
+            @Produces("application/xml;charset=not-a-charset")
+            public Source get() {
+                return new StreamSource(new StringReader("<message>雪</message>"));
+            }
+        }
+        startServer(new Sample());
+
+        try (Response response = call(request(server.uri().resolve("/source")))) {
+            assertThat(response.code(), equalTo(200));
+            assertThat(response.header("Content-Type"), equalTo("application/xml;charset=utf-8"));
+            String body = new String(response.body().bytes(), StandardCharsets.UTF_8);
+            assertThat(body, Matchers.containsString("encoding=\"UTF-8\""));
+            assertThat(body, Matchers.containsString("<message>雪</message>"));
         }
     }
 
