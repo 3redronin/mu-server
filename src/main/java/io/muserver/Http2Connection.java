@@ -1138,30 +1138,78 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer, CreditAva
 
         onRequestStarted(stream.request);
         try {
-            handlerExecutor.submit(() -> {
-                try {
-                    handleExchange(stream.request, stream.response());
-                    stream.cleanup();
-                } catch (Throwable e) {
-                    if (e instanceof InterruptedException) {
-                        Thread.currentThread().interrupt();
-                    }
-                    log.info("Unhandled stream exception", e);
-                    if (stream.response().hasStartedSendingData()
-                        && !stream.resetWasInitiated()
-                        && !stream.response().responseState().endState()) {
-                        stream.response().setState(ResponseState.ERRORED);
-                        write(new Http2ResetStreamFrame(stream.id, Http2ErrorCode.INTERNAL_ERROR.code()));
-                        stream.cancel(new IOException("Unhandled stream exception", e), false);
-                    }
-                } finally {
-                    onExchangeEnded(stream);
-                }
-            });
+            handlerExecutor.submit(() -> startHandledStream(stream));
         } catch (RejectedExecutionException e) {
             server.onRequestSubmissionRejected(stream.request);
             rejectRequestDueToHandlerOverload(frame, stream);
         }
+    }
+
+    private void startHandledStream(Http2Stream stream) {
+        try {
+            CompletableFuture<Void> asyncCompletion = handleExchange(stream.request, stream.response());
+            if (asyncCompletion == null) {
+                finishHandledStream(stream, null, false);
+            } else {
+                asyncCompletion.whenComplete((ignored, failure) ->
+                    scheduleAsyncStreamCompletion(stream, failure)
+                );
+            }
+        } catch (Throwable failure) {
+            finishHandledStream(stream, failure, false);
+        }
+    }
+
+    private void scheduleAsyncStreamCompletion(Http2Stream stream, @Nullable Throwable failure) {
+        Runnable completionTask = () -> finishHandledStream(
+            stream,
+            failure == null ? null : completionCause(failure),
+            true
+        );
+        try {
+            handlerExecutor.execute(completionTask);
+        } catch (RejectedExecutionException rejected) {
+            // The exchange was already accepted. Finishing on the completing thread is
+            // preferable to leaking the stream merely because handler capacity is transiently full.
+            completionTask.run();
+        }
+    }
+
+    private void finishHandledStream(Http2Stream stream, @Nullable Throwable failure,
+                                     boolean handleAsyncFailure) {
+        try {
+            if (failure != null) {
+                if (handleAsyncFailure && failure instanceof Exception) {
+                    handleExchangeException(stream.request, stream.response(), (Exception) failure);
+                } else {
+                    throw failure;
+                }
+            }
+            stream.cleanup();
+        } catch (Throwable e) {
+            if (e instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            log.info("Unhandled stream exception", e);
+            if (stream.response().hasStartedSendingData()
+                && !stream.resetWasInitiated()
+                && !stream.response().responseState().endState()) {
+                stream.response().setState(ResponseState.ERRORED);
+                write(new Http2ResetStreamFrame(stream.id, Http2ErrorCode.INTERNAL_ERROR.code()));
+                stream.cancel(new IOException("Unhandled stream exception", e), false);
+            }
+        } finally {
+            onExchangeEnded(stream);
+        }
+    }
+
+    private static Throwable completionCause(Throwable failure) {
+        Throwable cause = failure;
+        while ((cause instanceof CompletionException || cause instanceof ExecutionException)
+            && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause;
     }
 
     private void rejectRequestDueToHandlerOverload(Http2HeadersFrame frame, Http2Stream stream) {

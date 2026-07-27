@@ -16,6 +16,7 @@ import java.net.Socket;
 import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -64,7 +65,7 @@ abstract class BaseHttpConnection implements HttpConnection {
         server.onRequestStarted(req);
     }
 
-    protected void handleExchange(Mu3Request muRequest, BaseResponse muResponse) throws Throwable {
+    protected @Nullable CompletableFuture<Void> handleExchange(Mu3Request muRequest, BaseResponse muResponse) throws Throwable {
         try {
             var handled = false;
             for (var handler : server.handlers()) {
@@ -77,17 +78,20 @@ abstract class BaseHttpConnection implements HttpConnection {
 
             if (muRequest.isAsync()) {
                 var asyncHandle = java.util.Objects.requireNonNull(muRequest.getAsyncHandle());
-                    // TODO set proper timeout
-                asyncHandle.waitForCompletion(Long.MAX_VALUE);
+                return asyncHandle.exchangeCompletion();
             }
-
         } catch (Exception e) {
-            if (muResponse.hasStartedSendingData()) {
-                // can't write a custom error at this point
-                throw e;
-            } else {
-                server.exceptionHandler().handle(muRequest, muResponse, e);
-            }
+            handleExchangeException(muRequest, muResponse, e);
+        }
+        return null;
+    }
+
+    protected void handleExchangeException(Mu3Request muRequest, BaseResponse muResponse, Exception failure) throws Throwable {
+        if (muResponse.hasStartedSendingData()) {
+            // can't write a custom error at this point
+            throw failure;
+        } else {
+            server.exceptionHandler().handle(muRequest, muResponse, failure);
         }
     }
 

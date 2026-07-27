@@ -25,22 +25,29 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
         this.asyncExecutor = asyncExecutor;
     }
 
-    public void waitForCompletion(long timeoutMillis) throws Throwable {
-        try {
-            var before = System.currentTimeMillis();
-            completionFuture.get(timeoutMillis, TimeUnit.MILLISECONDS);
-            var duration = System.currentTimeMillis() - before;
-            var newTimeout = timeoutMillis - duration;
-            if (newTimeout <= 0) throw new TimeoutException("Timeout on completion future");
+    CompletableFuture<@Nullable Void> exchangeCompletion() {
+        CompletableFuture<@Nullable Void> exchangeCompletion = new CompletableFuture<>();
+        completionFuture.whenComplete((ignored, completionFailure) -> {
+            if (completionFailure != null) {
+                exchangeCompletion.completeExceptionally(completionCause(completionFailure));
+                return;
+            }
+            CompletableFuture<@Nullable Void> writes;
             lock.lock();
             try {
-                responseFuture.get(newTimeout, TimeUnit.MILLISECONDS);
+                writes = responseFuture;
             } finally {
                 lock.unlock();
             }
-        } catch (ExecutionException e) {
-            throw e.getCause();
-        }
+            writes.whenComplete((writeIgnored, writeFailure) -> {
+                if (writeFailure == null) {
+                    exchangeCompletion.complete(null);
+                } else {
+                    exchangeCompletion.completeExceptionally(completionCause(writeFailure));
+                }
+            });
+        });
+        return exchangeCompletion;
     }
 
     @Override
