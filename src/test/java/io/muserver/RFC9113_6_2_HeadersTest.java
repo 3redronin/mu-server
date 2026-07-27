@@ -406,6 +406,24 @@ class RFC9113_6_2_HeadersTest {
     }
 
     @Test
+    void maxHeaderListSizeIncludesPerFieldOverhead() throws Exception {
+        server = httpsServer()
+            .withMaxHeadersSize(150)
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+
+            var responseHeaders = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(responseHeaders.headers().get(":status"), equalTo("431"));
+        }
+    }
+
+    @Test
     void rejectedInitialHeadersDiscardTheRemainingRequestBody() throws Exception {
         server = httpsServer()
             .withMaxHeadersSize(512)

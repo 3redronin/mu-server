@@ -31,8 +31,8 @@ class FieldBlockDecoder {
     private FieldBlock decodeCompleteBlock(ByteBuffer buffer)
         throws HttpException, Http2Exception {
         var fb = new FieldBlock();
-        int totalLen = 0;
-        int uriLen = 0;
+        long totalLen = 0;
+        long uriLen = 0;
         boolean canChangeTableSize = true;
 
         while (buffer.hasRemaining()) {
@@ -46,7 +46,7 @@ class FieldBlockDecoder {
                 if (HeaderNames.PSEUDO_PATH.equals(line.name())) {
                     uriLen += line.value().length();
                 }
-                totalLen += line.length();
+                totalLen += line.hpackSize();
                 if (totalLen <= maxHeadersSize) {
                     fb.add(line);
                 }
@@ -88,9 +88,8 @@ class FieldBlockDecoder {
                         uriLen += value.length();
                     }
 
-                    totalLen += name.length() + value.length();
-
                     var line = new FieldLine(name, value, litNever);
+                    totalLen += line.hpackSize();
                     if (totalLen <= maxHeadersSize) {
                         fb.add(line);
                     }

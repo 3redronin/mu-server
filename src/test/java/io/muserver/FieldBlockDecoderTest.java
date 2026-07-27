@@ -283,6 +283,26 @@ class FieldBlockDecoderTest {
     }
 
     @Test
+    void maxHeaderSizeIncludesThePerFieldOverhead() throws Exception {
+        var indexedAcceptEncoding = ByteBuffer.wrap(new byte[] {(byte) 0x90});
+        var table = new HpackTable(4096);
+        int fieldSize = table.getValue(16).hpackSize();
+
+        var exactLimit = new FieldBlockDecoder(table, 8192, fieldSize);
+        assertThat(
+            exactLimit.decodeFrom(indexedAcceptEncoding.duplicate()).get("accept-encoding"),
+            equalTo("gzip, deflate")
+        );
+
+        var belowLimit = new FieldBlockDecoder(new HpackTable(4096), 8192, fieldSize - 1);
+        var ex = assertThrows(
+            HttpException.class,
+            () -> belowLimit.decodeFrom(indexedAcceptEncoding.duplicate())
+        );
+        assertThat(ex.status(), equalTo(HttpStatus.REQUEST_HEADER_FIELDS_TOO_LARGE_431));
+    }
+
+    @Test
     void indexedHpackPathFieldsCountTowardMaxUrlSize() {
         byte[] indexedRootPaths = new byte[20];
         Arrays.fill(indexedRootPaths, (byte) 0x84); // static index 4: :path: /

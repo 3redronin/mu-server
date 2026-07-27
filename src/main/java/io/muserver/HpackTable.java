@@ -169,7 +169,7 @@ class HpackTable {
     public int dynamicTableSizeInBytes() {
         int size = 0;
         for (FieldLine line : dynamicQueue) {
-            size += line.length() + 32;
+            size += line.hpackSize();
         }
         return size;
     }
