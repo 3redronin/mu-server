@@ -12,7 +12,6 @@ import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpServerKeepAliveHandler;
-import io.netty.handler.flow.FlowControlHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.timeout.IdleStateHandler;
 import io.netty.handler.traffic.GlobalTrafficShapingHandler;
@@ -801,7 +800,7 @@ private  boolean gracefulWait(Duration gracefulDuration, MuStatsImpl stats) thro
             p.addLast("compressor", new SelectiveHttpContentCompressor(server.settings()));
         }
         p.addLast("keepalive", new HttpServerKeepAliveHandler());
-        p.addLast("flowControl", new FlowControlHandler());
+        p.addLast("flowControl", new MuFlowControlHandler());
         p.addLast(BackPressureHandler.NAME, new BackPressureHandler());
         p.addLast("preread", new PreReader());
         p.addLast("muhandler", new Http1Connection(nettyHandlerAdapter, server, proto));

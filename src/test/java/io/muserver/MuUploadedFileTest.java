@@ -17,7 +17,7 @@ public class MuUploadedFileTest {
 
     @Test
     public void canGetInfoWhenItIsInMemory() throws IOException {
-        MemoryFileUpload fileUpload = new MemoryFileUpload("something", "C:\\data\\my-file.jpg", "image/jpeg", "Chunked", UTF_8, 1L);
+        MemoryFileUpload fileUpload = new MemoryFileUpload("something", "my-file.jpg", "image/jpeg", "Chunked", UTF_8, 1L);
         fileUpload.setContent(UploadTest.guangzhou);
         MuUploadedFile muf = new MuUploadedFile(fileUpload);
 
