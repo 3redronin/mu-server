@@ -895,7 +895,7 @@ public class OpenApiDocumentorTest {
         class ChildResource {
             @GET
             @Path("children")
-            public void children(@PathParam("id") String id, @MatrixParam("idType") MatrixOpenApiIdType idType) { }
+            public void children(@PathParam("id") String id) { }
         }
         @Path("resources")
         class ResourceRoot {
@@ -925,6 +925,33 @@ public class OpenApiDocumentorTest {
             assertThat(parameters.toString(), containsString("\"external\""));
             assertThat(parameters.toString(), not(containsString("\"nullable\":true")));
             assertThat(parameters.toString(), not(containsString("null")));
+        }
+    }
+
+    @Test
+    public void openApiPlacesMatrixParamsOnTheSegmentMatchedByTheDeclaringMethodOrLocator() throws Exception {
+        class ChildResource {
+            @GET
+            @Path("children/{childId}")
+            public void children(@PathParam("childId") String childId, @MatrixParam("childType") String childType) { }
+        }
+        @Path("resources")
+        class ResourceRoot {
+            @Path("{id}")
+            public ChildResource locate(@PathParam("id") String id, @MatrixParam("idType") String idType) {
+                return new ChildResource();
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new ResourceRoot()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject doc = new JSONObject(resp.body().string());
+            JSONObject paths = doc.getJSONObject("paths");
+            assertThat(paths.has("/resources/{id};idType={idType}/children/{childId};childType={childType}"), is(true));
+            assertThat(paths.has("/resources/{id};idType={idType};childType={childType}/children/{childId}"), is(false));
         }
     }
 

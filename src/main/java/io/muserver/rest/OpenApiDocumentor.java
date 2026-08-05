@@ -216,23 +216,44 @@ class OpenApiDocumentor implements MuHandler {
     static String getPathWithoutRegex(ResourceClass rc, ResourceMethod rm, String parentResourcePath) {
         String resourcePath = rc.pathPattern == null ? null : rc.pathPattern.pathWithoutRegex;
         if (resourcePath != null) {
-            List<String> matrixParams = rm.paramsIncludingLocators().stream()
-                .filter(p -> p.source() == ResourceMethodParam.ValueSource.MATRIX_PARAM)
-                .map(ResourceMethodParam.RequestBasedParam.class::cast)
-                .map(ResourceMethodParam.RequestBasedParam::key)
-                .distinct()
-                .collect(Collectors.toList());
-            for (String matrixParam : matrixParams) {
-                resourcePath = appendMatrixTemplateToLastSegment(resourcePath, matrixParam);
+            resourcePath = appendMatrixTemplates(resourcePath,
+                rc.locatorMethod == null ? Collections.emptyList() : matrixParamNames(rc.locatorMethod.params));
+        }
+        @Nullable String methodPath = rm.pathPattern() == null ? null : rm.pathPattern().pathWithoutRegex;
+        List<String> methodMatrixParams = matrixParamNames(rm.params);
+        if (!methodMatrixParams.isEmpty()) {
+            if (methodPath == null) {
+                resourcePath = appendMatrixTemplates(resourcePath, methodMatrixParams);
+            } else {
+                methodPath = appendMatrixTemplates(methodPath, methodMatrixParams);
             }
         }
         return "/" + Mutils.trim(Mutils.join(parentResourcePath, "/",
             Mutils.join(resourcePath,
-                "/", rm.pathPattern() == null ? null : rm.pathPattern().pathWithoutRegex)), "/");
+                "/", methodPath)), "/");
     }
 
-    private static String appendMatrixTemplateToLastSegment(String path, String matrixParam) {
+    private static List<String> matrixParamNames(List<ResourceMethodParam> params) {
+        return params.stream()
+            .filter(p -> p.source() == ResourceMethodParam.ValueSource.MATRIX_PARAM)
+            .map(ResourceMethodParam.RequestBasedParam.class::cast)
+            .map(ResourceMethodParam.RequestBasedParam::key)
+            .distinct()
+            .collect(Collectors.toList());
+    }
+
+    private static @Nullable String appendMatrixTemplates(@Nullable String path, List<String> matrixParams) {
+        for (String matrixParam : matrixParams) {
+            path = appendMatrixTemplateToLastSegment(path, matrixParam);
+        }
+        return path;
+    }
+
+    private static String appendMatrixTemplateToLastSegment(@Nullable String path, String matrixParam) {
         String template = ";" + matrixParam + "={" + matrixParam + "}";
+        if (path == null) {
+            return template;
+        }
         if (path.contains(template)) {
             return path;
         }
