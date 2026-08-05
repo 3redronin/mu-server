@@ -923,6 +923,8 @@ public class OpenApiDocumentorTest {
             assertThat(parameters.toString(), not(containsString("\"style\":\"matrix\"")));
             assertThat(parameters.toString(), containsString("\"legacy\""));
             assertThat(parameters.toString(), containsString("\"external\""));
+            assertThat(parameters.toString(), not(containsString("\"nullable\":true")));
+            assertThat(parameters.toString(), not(containsString("null")));
         }
     }
 

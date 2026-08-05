@@ -262,7 +262,7 @@ abstract class ResourceMethodParam {
             @Nullable Pattern pattern = pattern();
             @Nullable Pattern patternIfNotDefault = pattern == null || UriPattern.DEFAULT_CAPTURING_GROUP_PATTERN.equals(pattern.pattern()) ? null : pattern;
             return builder.withSchema(
-                schemaObjectFrom(type(), genericType(), isRequired())
+                schemaObjectFrom(type(), genericType(), source() == ValueSource.MATRIX_PARAM || isRequired())
                     .withDefaultValue(documentationDefaultValue())
                     .withExternalDocs(externalDoc)
                     .withPattern(patternIfNotDefault)
