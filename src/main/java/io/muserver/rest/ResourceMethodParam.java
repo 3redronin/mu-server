@@ -247,8 +247,8 @@ abstract class ResourceMethodParam {
 
         ParameterObjectBuilder createDocumentationBuilder() {
             ParameterObjectBuilder builder = parameterObject()
-                .withIn(requireNonNull(source().openAPIIn, "Parameter source is not represented as an OpenAPI parameter"))
-                .withRequired(isRequired())
+                .withIn(source() == ValueSource.MATRIX_PARAM ? "path" : requireNonNull(source().openAPIIn, "Parameter source is not represented as an OpenAPI parameter"))
+                .withRequired(source() == ValueSource.MATRIX_PARAM || isRequired())
                 .withDeprecated(deprecated() ? true : null)
                 .withName(key());
             @Nullable ExternalDocumentationObject externalDoc = null;
@@ -382,7 +382,7 @@ abstract class ResourceMethodParam {
                     : source() == ValueSource.HEADER_PARAM ? getParamValues(jaxRequest.getHeaders(), key(), cps, collection != null || array)
                     : source() == ValueSource.FORM_PARAM ? muRequest.form().getAll(key())
                     : source() == ValueSource.COOKIE_PARAM ? cookieValue(muRequest, key())
-                    : source() == ValueSource.MATRIX_PARAM ? matrixParamValue(key(), jaxRequest.relativePath())
+                    : source() == ValueSource.MATRIX_PARAM ? matrixParamValue(key(), matchedMethod.pathMatch)
                     : emptyList();
             boolean isSpecified = specifiedValue != null && !specifiedValue.isEmpty();
             if (encodedRequested() && isSpecified) {
@@ -461,11 +461,13 @@ abstract class ResourceMethodParam {
             return cookie.map(Collections::singletonList).orElse(emptyList());
         }
 
-        private List<String> matrixParamValue(String key, String path) {
-            MuPathSegment last = MuUriInfo.pathStringToSegments(path, false).reduce((first, second) -> second).orElse(null);
+        private List<String> matrixParamValue(String key, PathMatch pathMatch) {
+            // Jakarta REST defines @MatrixParam against the last matched path segment.
+            // Resolve from the current PathMatch rather than the request URI's final segment, so
+            // sub-resource locators and methods with the same matrix name remain segment-local.
+            PathSegment last = pathMatch.lastMatchedSegment();
             if (last != null && last.getMatrixParameters().containsKey(key)) {
                 return last.getMatrixParameters().get(key).stream()
-                    .map(Jaxutils::leniantUrlDecode)
                     .collect(Collectors.toList());
             }
             return emptyList();

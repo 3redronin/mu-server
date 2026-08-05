@@ -41,6 +41,7 @@ import static scaffolding.ServerUtils.httpsServerForTest;
 public class OpenApiDocumentorTest {
 
     private MuServer server;
+    enum MatrixOpenApiIdType { legacy, external }
 
     private static MuServer serverWithPetStore() {
         return httpsServerForTest()
@@ -886,6 +887,42 @@ public class OpenApiDocumentorTest {
             assertThat(doc.query("/paths/~1widgets~1{id}~1category~1{cat}/get/tags/0"), equalTo("WidgetsResource"));
             assertThat(doc.query("/paths/~1widgets~1{id}~1recursive~1{anotherId}~1category~1{cat}/get/tags/0"), equalTo("WidgetsResource"));
             assertThat(doc.query("/paths/~1widgets~1{id}~1recursive~1{anotherId}~1recursive~1{anotherId}~1category~1{cat}/get/tags/0"), equalTo("WidgetsResource"));
+        }
+    }
+
+    @Test
+    public void openApiRepresentsMatrixParamsAsPathTemplateParametersForUsableSubstitution() throws Exception {
+        class ChildResource {
+            @GET
+            @Path("children")
+            public void children(@PathParam("id") String id, @MatrixParam("idType") MatrixOpenApiIdType idType) { }
+        }
+        @Path("resources")
+        class ResourceRoot {
+            @Path("{id}")
+            public ChildResource locate(@PathParam("id") String id, @MatrixParam("idType") MatrixOpenApiIdType idType) {
+                return new ChildResource();
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new ResourceRoot()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject doc = new JSONObject(resp.body().string());
+            JSONObject get = doc.getJSONObject("paths")
+                .getJSONObject("/resources/{id};idType={idType}/children")
+                .getJSONObject("get");
+            JSONArray parameters = get.getJSONArray("parameters");
+            assertThat(parameters.length(), is(2));
+            assertThat(parameters.toString(), containsString("\"name\":\"id\""));
+            assertThat(parameters.toString(), containsString("\"name\":\"idType\""));
+            assertThat(parameters.toString(), containsString("\"in\":\"path\""));
+            assertThat(parameters.toString(), not(containsString("\"in\":\"query\"")));
+            assertThat(parameters.toString(), not(containsString("\"style\":\"matrix\"")));
+            assertThat(parameters.toString(), containsString("\"legacy\""));
+            assertThat(parameters.toString(), containsString("\"external\""));
         }
     }
 

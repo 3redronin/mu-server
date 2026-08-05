@@ -77,6 +77,18 @@ public class PathMatch {
         return allParams;
     }
 
+    @Nullable PathSegment lastMatchedSegment() {
+        String remainder = lastGroup();
+        String matchedPath = matcher.group();
+        if (remainder != null && matchedPath.endsWith(remainder)) {
+            matchedPath = matchedPath.substring(0, matchedPath.length() - remainder.length());
+        }
+        while (matchedPath.endsWith("/")) {
+            matchedPath = matchedPath.substring(0, matchedPath.length() - 1);
+        }
+        return MuUriInfo.pathStringToSegments(matchedPath, false, true).reduce((first, second) -> second).orElse(null);
+    }
+
     PathMatch withParams(Map<String, PathSegment> combinedParams, Map<String, List<PathSegment>> combinedAllParams) {
         return new PathMatch(matches, combinedParams, combinedAllParams, matcher);
     }
