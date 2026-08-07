@@ -991,6 +991,7 @@ public class OpenApiDocumentorTest {
             JSONObject get = doc.getJSONObject("paths")
                 .getJSONObject("/resources/{id};type={id_type}/children/{childId};type={childId_type}")
                 .getJSONObject("get");
+            assertThat(get.getString("operationId"), is("GET_resources__id__children__childId_"));
             JSONArray parameters = get.getJSONArray("parameters");
             assertThat(parameters.length(), is(4));
 
@@ -1003,6 +1004,41 @@ public class OpenApiDocumentorTest {
             JSONObject componentType = parameterNamed(parameters, "childId_type");
             assertThat(componentType.getString("description"), is("Matrix parameter \"type\". Component type"));
             assertThat(componentType.getString("example"), is("x"));
+        }
+    }
+
+    @Test
+    public void openApiOperationIdsIgnoreMatrixDecorationsAndRemainUnique() throws Exception {
+        @Path("resources/{id}")
+        class ResourceRoot {
+            @GET
+            @Produces("application/json")
+            public String asJson(@PathParam("id") String id, @MatrixParam("view") String view) {
+                return "{}";
+            }
+
+            @GET
+            @Produces("text/plain")
+            public String asText(@PathParam("id") String id, @MatrixParam("format") String format) {
+                return "text";
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new ResourceRoot()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject paths = new JSONObject(resp.body().string()).getJSONObject("paths");
+            String viewOperationId = paths.getJSONObject("/resources/{id};view={view}")
+                .getJSONObject("get")
+                .getString("operationId");
+            String formatOperationId = paths.getJSONObject("/resources/{id};format={format}")
+                .getJSONObject("get")
+                .getString("operationId");
+
+            assertThat(List.of(viewOperationId, formatOperationId),
+                containsInAnyOrder("GET_resources__id_", "GET_resources__id__2"));
         }
     }
 

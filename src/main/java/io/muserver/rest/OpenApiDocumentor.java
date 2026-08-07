@@ -61,8 +61,9 @@ class OpenApiDocumentor implements MuHandler {
         List<TagObject> tags = new ArrayList<>();
 
         Map<String, PathItemObjectBuilder> pathItemBuilders = new LinkedHashMap<>();
+        Set<String> operationIds = new HashSet<>();
         for (ResourceClass root : roots) {
-            addResourceClass(0, Collections.emptyList(), tags, pathItemBuilders, root);
+            addResourceClass(0, Collections.emptyList(), tags, pathItemBuilders, operationIds, root);
         }
         Map<String, PathItemObject> pathItems = pathItemBuilders.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, v -> v.getValue().build()));
 
@@ -122,7 +123,9 @@ class OpenApiDocumentor implements MuHandler {
         return true;
     }
 
-    private void addResourceClass(int recursiveLevel, List<PathPart> parentPathParts, List<TagObject> tags, Map<String, PathItemObjectBuilder> pathItems, ResourceClass root) {
+    private void addResourceClass(int recursiveLevel, List<PathPart> parentPathParts, List<TagObject> tags,
+                                  Map<String, PathItemObjectBuilder> pathItems, Set<String> operationIds,
+                                  ResourceClass root) {
         if (recursiveLevel == 5) {
             return;
         }
@@ -135,7 +138,7 @@ class OpenApiDocumentor implements MuHandler {
                 ResourceClass rc = ResourceClass.forSubResourceLocator(method, method.methodHandle().getReturnType(), null, schemaObjectCustomizer, paramConverterProviders);
                 List<PathPart> newParentPathParts = new ArrayList<>(parentPathParts);
                 newParentPathParts.add(resourcePathPart(root));
-                addResourceClass(recursiveLevel + 1, newParentPathParts, tags, pathItems, rc);
+                addResourceClass(recursiveLevel + 1, newParentPathParts, tags, pathItems, operationIds, rc);
                 continue;
             }
 
@@ -177,13 +180,15 @@ class OpenApiDocumentor implements MuHandler {
                     return list1;
                 });
 
-            String opIdPath = path.replace("{", "_").replace("}", "_");
+            String opIdPath = documentedPath.plainPath.replace("{", "_").replace("}", "_");
             String opPath = Mutils.trim(opIdPath, "/").replace("/", "_");
             String opKey = method.requiredHttpMethod().name().toLowerCase(Locale.ROOT);
             OperationObject existing = operations.get(opKey);
             if (existing == null) {
+                String operationId = uniqueName(method.requiredHttpMethod().name() + "_" + opPath, operationIds);
+                operationIds.add(operationId);
                 existing = method.createOperationBuilder(customSchemas)
-                    .withOperationId(method.requiredHttpMethod().name() + "_" + opPath)
+                    .withOperationId(operationId)
                     .withTags(singletonList(root.tag.name()))
                     .withParameters(parameters)
                     .build();
@@ -257,8 +262,10 @@ class OpenApiDocumentor implements MuHandler {
         String plainPath = "";
         String decoratedPath = "";
         for (PathPart part : parts) {
-            plainPath = Mutils.join(plainPath, "/", part.path);
-            decoratedPath = Mutils.join(decoratedPath, "/", part.path);
+            if (part.path != null && !part.path.equals("/")) {
+                plainPath = Mutils.join(plainPath, "/", part.path);
+                decoratedPath = Mutils.join(decoratedPath, "/", part.path);
+            }
             for (Map.Entry<String, List<ResourceMethodParam.RequestBasedParam>> entry : paramsByWireName(part.matrixParams).entrySet()) {
                 String wireName = entry.getKey();
                 List<ResourceMethodParam.RequestBasedParam> params = entry.getValue();
@@ -272,7 +279,7 @@ class OpenApiDocumentor implements MuHandler {
                 }
 
                 String parameterName = needsAlias
-                    ? uniqueParameterName(matrixAliasBase(plainPath, wireName), usedPathParameterNames)
+                    ? uniqueName(matrixAliasBase(plainPath, wireName), usedPathParameterNames)
                     : wireName;
                 usedPathParameterNames.add(parameterName);
                 ResourceMethodParam.RequestBasedParam representative = params.stream()
@@ -295,7 +302,10 @@ class OpenApiDocumentor implements MuHandler {
                 }
             }
         }
-        return new DocumentedPath("/" + Mutils.trim(decoratedPath, "/"), documentedMatrixParams);
+        return new DocumentedPath(
+            "/" + Mutils.trim(decoratedPath, "/"),
+            "/" + Mutils.trim(plainPath, "/"),
+            documentedMatrixParams);
     }
 
     private static PathPart resourcePathPart(ResourceClass resourceClass) {
@@ -337,7 +347,7 @@ class OpenApiDocumentor implements MuHandler {
         return !safeName.isEmpty() && Character.isDigit(safeName.charAt(0)) ? "_" + safeName : safeName;
     }
 
-    private static String uniqueParameterName(String base, Set<String> usedNames) {
+    private static String uniqueName(String base, Set<String> usedNames) {
         String candidate = base;
         for (int suffix = 2; usedNames.contains(candidate); suffix++) {
             candidate = base + "_" + suffix;
@@ -367,10 +377,13 @@ class OpenApiDocumentor implements MuHandler {
 
     private static final class DocumentedPath {
         private final String path;
+        private final String plainPath;
         private final IdentityHashMap<ResourceMethodParam.RequestBasedParam, MatrixParamDocumentation> matrixParams;
 
-        private DocumentedPath(String path, IdentityHashMap<ResourceMethodParam.RequestBasedParam, MatrixParamDocumentation> matrixParams) {
+        private DocumentedPath(String path, String plainPath,
+                               IdentityHashMap<ResourceMethodParam.RequestBasedParam, MatrixParamDocumentation> matrixParams) {
             this.path = path;
+            this.plainPath = plainPath;
             this.matrixParams = matrixParams;
         }
     }
