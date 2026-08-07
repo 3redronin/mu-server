@@ -245,24 +245,37 @@ abstract class ResourceMethodParam {
             return introspection().pattern;
         }
 
+        boolean isMultiValued() {
+            return array || createCollection(type()) != null;
+        }
+
         ParameterObjectBuilder createDocumentationBuilder() {
+            return createDocumentationBuilder(key());
+        }
+
+        ParameterObjectBuilder createDocumentationBuilder(String documentationName) {
             ParameterObjectBuilder builder = parameterObject()
-                .withIn(requireNonNull(source().openAPIIn, "Parameter source is not represented as an OpenAPI parameter"))
-                .withRequired(isRequired())
+                .withIn(source() == ValueSource.MATRIX_PARAM ? "path" : requireNonNull(source().openAPIIn, "Parameter source is not represented as an OpenAPI parameter"))
+                .withRequired(source() == ValueSource.MATRIX_PARAM || isRequired())
                 .withDeprecated(deprecated() ? true : null)
-                .withName(key());
+                .withName(documentationName);
+            @Nullable String description = null;
             @Nullable ExternalDocumentationObject externalDoc = null;
             if (descriptionData != null) {
                 String desc = descriptionData.summaryAndDescription();
-                builder
-                    .withDescription(key().equals(desc) ? null : desc)
-                    .withExample(descriptionData.example);
+                description = key().equals(desc) ? null : desc;
+                builder.withExample(descriptionData.example);
                 externalDoc = descriptionData.externalDocumentation;
             }
+            if (source() == ValueSource.MATRIX_PARAM && !documentationName.equals(key())) {
+                String matrixDescription = "Matrix parameter \"" + key() + "\".";
+                description = description == null ? matrixDescription : matrixDescription + " " + description;
+            }
+            builder.withDescription(description);
             @Nullable Pattern pattern = pattern();
             @Nullable Pattern patternIfNotDefault = pattern == null || UriPattern.DEFAULT_CAPTURING_GROUP_PATTERN.equals(pattern.pattern()) ? null : pattern;
             return builder.withSchema(
-                schemaObjectFrom(type(), genericType(), isRequired())
+                schemaObjectFrom(type(), genericType(), source() == ValueSource.MATRIX_PARAM || isRequired())
                     .withDefaultValue(documentationDefaultValue())
                     .withExternalDocs(externalDoc)
                     .withPattern(patternIfNotDefault)
@@ -382,7 +395,7 @@ abstract class ResourceMethodParam {
                     : source() == ValueSource.HEADER_PARAM ? getParamValues(jaxRequest.getHeaders(), key(), cps, collection != null || array)
                     : source() == ValueSource.FORM_PARAM ? muRequest.form().getAll(key())
                     : source() == ValueSource.COOKIE_PARAM ? cookieValue(muRequest, key())
-                    : source() == ValueSource.MATRIX_PARAM ? matrixParamValue(key(), jaxRequest.relativePath())
+                    : source() == ValueSource.MATRIX_PARAM ? matrixParamValue(key(), matchedMethod.pathMatch)
                     : emptyList();
             boolean isSpecified = specifiedValue != null && !specifiedValue.isEmpty();
             if (encodedRequested() && isSpecified) {
@@ -461,11 +474,13 @@ abstract class ResourceMethodParam {
             return cookie.map(Collections::singletonList).orElse(emptyList());
         }
 
-        private List<String> matrixParamValue(String key, String path) {
-            MuPathSegment last = MuUriInfo.pathStringToSegments(path, false).reduce((first, second) -> second).orElse(null);
+        private List<String> matrixParamValue(String key, PathMatch pathMatch) {
+            // Jakarta REST defines @MatrixParam against the last matched path segment.
+            // Resolve from the current PathMatch rather than the request URI's final segment, so
+            // sub-resource locators and methods with the same matrix name remain segment-local.
+            PathSegment last = pathMatch.lastMatchedSegment();
             if (last != null && last.getMatrixParameters().containsKey(key)) {
                 return last.getMatrixParameters().get(key).stream()
-                    .map(Jaxutils::leniantUrlDecode)
                     .collect(Collectors.toList());
             }
             return emptyList();
