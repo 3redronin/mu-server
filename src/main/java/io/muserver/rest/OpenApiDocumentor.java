@@ -263,7 +263,7 @@ class OpenApiDocumentor implements MuHandler {
                 String wireName = entry.getKey();
                 List<ResourceMethodParam.RequestBasedParam> params = entry.getValue();
                 boolean multiValued = params.stream().anyMatch(ResourceMethodParam.RequestBasedParam::isMultiValued);
-                boolean needsAlias = matrixParamSiteCounts.get(wireName) > 1 || usedPathParameterNames.contains(wireName);
+                boolean needsAlias = Objects.requireNonNull(matrixParamSiteCounts.get(wireName)) > 1 || usedPathParameterNames.contains(wireName);
 
                 // Matrix-style arrays use the OpenAPI parameter name as their wire name. If that name
                 // needs an alias, OpenAPI cannot express the repeated values without changing the wire URI.
