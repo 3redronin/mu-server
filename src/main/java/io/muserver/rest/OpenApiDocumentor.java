@@ -9,6 +9,8 @@ import java.io.OutputStreamWriter;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.jspecify.annotations.Nullable;
@@ -24,6 +26,7 @@ import static java.util.Collections.emptySet;
 import static java.util.Collections.singletonList;
 
 class OpenApiDocumentor implements MuHandler {
+    private static final Pattern PATH_TEMPLATE_PATTERN = Pattern.compile("\\{([^{}]+)}");
     private final List<ResourceClass> roots;
     private final @Nullable String openApiJsonUrl;
     private final OpenAPIObject openAPIObject;
@@ -59,7 +62,7 @@ class OpenApiDocumentor implements MuHandler {
 
         Map<String, PathItemObjectBuilder> pathItemBuilders = new LinkedHashMap<>();
         for (ResourceClass root : roots) {
-            addResourceClass(0, "", tags, pathItemBuilders, root);
+            addResourceClass(0, Collections.emptyList(), tags, pathItemBuilders, root);
         }
         Map<String, PathItemObject> pathItems = pathItemBuilders.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, v -> v.getValue().build()));
 
@@ -119,7 +122,7 @@ class OpenApiDocumentor implements MuHandler {
         return true;
     }
 
-    private void addResourceClass(int recursiveLevel, String parentResourcePath, List<TagObject> tags, Map<String, PathItemObjectBuilder> pathItems, ResourceClass root) {
+    private void addResourceClass(int recursiveLevel, List<PathPart> parentPathParts, List<TagObject> tags, Map<String, PathItemObjectBuilder> pathItems, ResourceClass root) {
         if (recursiveLevel == 5) {
             return;
         }
@@ -130,12 +133,14 @@ class OpenApiDocumentor implements MuHandler {
         for (ResourceMethod method : root.resourceMethods) {
             if (method.isSubResourceLocator()) {
                 ResourceClass rc = ResourceClass.forSubResourceLocator(method, method.methodHandle().getReturnType(), null, schemaObjectCustomizer, paramConverterProviders);
-                String newParentResourcePath = Mutils.join(parentResourcePath, "/", method.resourceClass.pathPattern.pathWithoutRegex);
-                addResourceClass(recursiveLevel + 1, newParentResourcePath, tags, pathItems, rc);
+                List<PathPart> newParentPathParts = new ArrayList<>(parentPathParts);
+                newParentPathParts.add(resourcePathPart(root));
+                addResourceClass(recursiveLevel + 1, newParentPathParts, tags, pathItems, rc);
                 continue;
             }
 
-            String path = getPathWithoutRegex(root, method, parentResourcePath);
+            DocumentedPath documentedPath = documentedPath(parentPathParts, root, method);
+            String path = documentedPath.path;
 
             Map<String, OperationObject> operations;
             if (pathItems.containsKey(path)) {
@@ -152,9 +157,17 @@ class OpenApiDocumentor implements MuHandler {
                 pathItems.put(path, pathItem);
             }
             List<ParameterObject> parameters = method.paramsIncludingLocators().stream()
-                .filter(p -> (p.source().openAPIIn != null || p.source() == ResourceMethodParam.ValueSource.MATRIX_PARAM) && p instanceof ResourceMethodParam.RequestBasedParam)
+                .filter(p -> p instanceof ResourceMethodParam.RequestBasedParam)
                 .map(ResourceMethodParam.RequestBasedParam.class::cast)
-                .map(p -> p.createDocumentationBuilder().build())
+                .filter(p -> p.source().openAPIIn != null || documentedPath.matrixParams.containsKey(p))
+                .map(p -> {
+                    MatrixParamDocumentation matrixParam = documentedPath.matrixParams.get(p);
+                    ParameterObjectBuilder builder = p.createDocumentationBuilder(matrixParam == null ? p.key() : matrixParam.parameterName);
+                    if (matrixParam != null && matrixParam.nativeMatrixStyle) {
+                        builder.withStyle("matrix").withExplode(true);
+                    }
+                    return builder.build();
+                })
                 .reduce(new ArrayList<>(), (parameterObjects, parameterObject) -> {
                     if (parameterObjects.stream().noneMatch(existing -> existing.name().equals(parameterObject.name()) && existing.in().equals(parameterObject.in())))
                     parameterObjects.add(parameterObject);
@@ -164,7 +177,7 @@ class OpenApiDocumentor implements MuHandler {
                     return list1;
                 });
 
-            String opIdPath = getPathWithoutRegex(root, method, parentResourcePath).replace("{", "_").replace("}", "_");
+            String opIdPath = path.replace("{", "_").replace("}", "_");
             String opPath = Mutils.trim(opIdPath, "/").replace("/", "_");
             String opKey = method.requiredHttpMethod().name().toLowerCase(Locale.ROOT);
             OperationObject existing = operations.get(opKey);
@@ -213,51 +226,153 @@ class OpenApiDocumentor implements MuHandler {
         }
     }
 
-    static String getPathWithoutRegex(ResourceClass rc, ResourceMethod rm, String parentResourcePath) {
-        String resourcePath = rc.pathPattern == null ? null : rc.pathPattern.pathWithoutRegex;
-        if (resourcePath != null) {
-            resourcePath = appendMatrixTemplates(resourcePath,
-                rc.locatorMethod == null ? Collections.emptyList() : matrixParamNames(rc.locatorMethod.params));
-        }
-        @Nullable String methodPath = rm.pathPattern() == null ? null : rm.pathPattern().pathWithoutRegex;
-        List<String> methodMatrixParams = matrixParamNames(rm.params);
-        if (!methodMatrixParams.isEmpty()) {
-            if (methodPath == null) {
-                resourcePath = appendMatrixTemplates(resourcePath, methodMatrixParams);
-            } else {
-                methodPath = appendMatrixTemplates(methodPath, methodMatrixParams);
+    private static DocumentedPath documentedPath(List<PathPart> parentPathParts, ResourceClass resourceClass, ResourceMethod resourceMethod) {
+        List<PathPart> parts = new ArrayList<>(parentPathParts);
+        parts.add(resourcePathPart(resourceClass));
+        parts.add(new PathPart(resourceMethod.pathPattern() == null ? null : resourceMethod.pathPattern().pathWithoutRegex,
+            matrixParams(resourceMethod.params)));
+
+        Map<String, Integer> matrixParamSiteCounts = new HashMap<>();
+        for (PathPart part : parts) {
+            for (String wireName : paramsByWireName(part.matrixParams).keySet()) {
+                matrixParamSiteCounts.merge(wireName, 1, Integer::sum);
             }
         }
-        return "/" + Mutils.trim(Mutils.join(parentResourcePath, "/",
-            Mutils.join(resourcePath,
-                "/", methodPath)), "/");
+
+        Set<String> usedPathParameterNames = resourceMethod.paramsIncludingLocators().stream()
+            .filter(p -> p.source() == ResourceMethodParam.ValueSource.PATH_PARAM)
+            .map(ResourceMethodParam.RequestBasedParam.class::cast)
+            .map(ResourceMethodParam.RequestBasedParam::key)
+            .collect(Collectors.toCollection(LinkedHashSet::new));
+        for (PathPart part : parts) {
+            if (part.path != null) {
+                Matcher matcher = PATH_TEMPLATE_PATTERN.matcher(part.path);
+                while (matcher.find()) {
+                    usedPathParameterNames.add(matcher.group(1));
+                }
+            }
+        }
+        IdentityHashMap<ResourceMethodParam.RequestBasedParam, MatrixParamDocumentation> documentedMatrixParams = new IdentityHashMap<>();
+
+        String plainPath = "";
+        String decoratedPath = "";
+        for (PathPart part : parts) {
+            plainPath = Mutils.join(plainPath, "/", part.path);
+            decoratedPath = Mutils.join(decoratedPath, "/", part.path);
+            for (Map.Entry<String, List<ResourceMethodParam.RequestBasedParam>> entry : paramsByWireName(part.matrixParams).entrySet()) {
+                String wireName = entry.getKey();
+                List<ResourceMethodParam.RequestBasedParam> params = entry.getValue();
+                boolean multiValued = params.stream().anyMatch(ResourceMethodParam.RequestBasedParam::isMultiValued);
+                boolean needsAlias = matrixParamSiteCounts.get(wireName) > 1 || usedPathParameterNames.contains(wireName);
+
+                // Matrix-style arrays use the OpenAPI parameter name as their wire name. If that name
+                // needs an alias, OpenAPI cannot express the repeated values without changing the wire URI.
+                if (multiValued && needsAlias) {
+                    continue;
+                }
+
+                String parameterName = needsAlias
+                    ? uniqueParameterName(matrixAliasBase(plainPath, wireName), usedPathParameterNames)
+                    : wireName;
+                usedPathParameterNames.add(parameterName);
+                ResourceMethodParam.RequestBasedParam representative = params.stream()
+                    .filter(ResourceMethodParam.RequestBasedParam::isMultiValued)
+                    .findFirst()
+                    .orElse(params.get(0));
+                MatrixParamDocumentation documentation = new MatrixParamDocumentation(parameterName, multiValued);
+                documentedMatrixParams.put(representative, documentation);
+
+                if (multiValued) {
+                    String template = "{" + parameterName + "}";
+                    if (!decoratedPath.endsWith(template)) {
+                        decoratedPath += template;
+                    }
+                } else {
+                    String template = ";" + wireName + "={" + parameterName + "}";
+                    if (!decoratedPath.contains(template)) {
+                        decoratedPath += template;
+                    }
+                }
+            }
+        }
+        return new DocumentedPath("/" + Mutils.trim(decoratedPath, "/"), documentedMatrixParams);
     }
 
-    private static List<String> matrixParamNames(List<ResourceMethodParam> params) {
+    private static PathPart resourcePathPart(ResourceClass resourceClass) {
+        return new PathPart(resourceClass.pathPattern.pathWithoutRegex,
+            resourceClass.locatorMethod == null ? Collections.emptyList() : matrixParams(resourceClass.locatorMethod.params));
+    }
+
+    private static List<ResourceMethodParam.RequestBasedParam> matrixParams(List<ResourceMethodParam> params) {
         return params.stream()
             .filter(p -> p.source() == ResourceMethodParam.ValueSource.MATRIX_PARAM)
             .map(ResourceMethodParam.RequestBasedParam.class::cast)
-            .map(ResourceMethodParam.RequestBasedParam::key)
-            .distinct()
             .collect(Collectors.toList());
     }
 
-    private static @Nullable String appendMatrixTemplates(@Nullable String path, List<String> matrixParams) {
-        for (String matrixParam : matrixParams) {
-            path = appendMatrixTemplateToLastSegment(path, matrixParam);
+    private static Map<String, List<ResourceMethodParam.RequestBasedParam>> paramsByWireName(List<ResourceMethodParam.RequestBasedParam> params) {
+        Map<String, List<ResourceMethodParam.RequestBasedParam>> byName = new LinkedHashMap<>();
+        for (ResourceMethodParam.RequestBasedParam param : params) {
+            byName.computeIfAbsent(param.key(), ignored -> new ArrayList<>()).add(param);
         }
-        return path;
+        return byName;
     }
 
-    private static String appendMatrixTemplateToLastSegment(@Nullable String path, String matrixParam) {
-        String template = ";" + matrixParam + "={" + matrixParam + "}";
-        if (path == null) {
-            return template;
+    private static String matrixAliasBase(String path, String wireName) {
+        String lastSegment = path.substring(path.lastIndexOf('/') + 1);
+        Matcher matcher = PATH_TEMPLATE_PATTERN.matcher(lastSegment);
+        @Nullable String segmentName = null;
+        while (matcher.find()) {
+            segmentName = matcher.group(1);
         }
-        if (path.contains(template)) {
-            return path;
+        if (segmentName == null) {
+            segmentName = lastSegment;
         }
-        return path + template;
+        String safeSegmentName = safeParameterName(segmentName);
+        return (safeSegmentName.isEmpty() ? "matrix" : safeSegmentName) + "_" + safeParameterName(wireName);
+    }
+
+    private static String safeParameterName(String name) {
+        String safeName = name.replaceAll("[^A-Za-z0-9_]", "_");
+        return !safeName.isEmpty() && Character.isDigit(safeName.charAt(0)) ? "_" + safeName : safeName;
+    }
+
+    private static String uniqueParameterName(String base, Set<String> usedNames) {
+        String candidate = base;
+        for (int suffix = 2; usedNames.contains(candidate); suffix++) {
+            candidate = base + "_" + suffix;
+        }
+        return candidate;
+    }
+
+    private static final class PathPart {
+        private final @Nullable String path;
+        private final List<ResourceMethodParam.RequestBasedParam> matrixParams;
+
+        private PathPart(@Nullable String path, List<ResourceMethodParam.RequestBasedParam> matrixParams) {
+            this.path = path;
+            this.matrixParams = matrixParams;
+        }
+    }
+
+    private static final class MatrixParamDocumentation {
+        private final String parameterName;
+        private final boolean nativeMatrixStyle;
+
+        private MatrixParamDocumentation(String parameterName, boolean nativeMatrixStyle) {
+            this.parameterName = parameterName;
+            this.nativeMatrixStyle = nativeMatrixStyle;
+        }
+    }
+
+    private static final class DocumentedPath {
+        private final String path;
+        private final IdentityHashMap<ResourceMethodParam.RequestBasedParam, MatrixParamDocumentation> matrixParams;
+
+        private DocumentedPath(String path, IdentityHashMap<ResourceMethodParam.RequestBasedParam, MatrixParamDocumentation> matrixParams) {
+            this.path = path;
+            this.matrixParams = matrixParams;
+        }
     }
 
 }

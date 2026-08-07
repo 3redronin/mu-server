@@ -245,20 +245,33 @@ abstract class ResourceMethodParam {
             return introspection().pattern;
         }
 
+        boolean isMultiValued() {
+            return array || createCollection(type()) != null;
+        }
+
         ParameterObjectBuilder createDocumentationBuilder() {
+            return createDocumentationBuilder(key());
+        }
+
+        ParameterObjectBuilder createDocumentationBuilder(String documentationName) {
             ParameterObjectBuilder builder = parameterObject()
                 .withIn(source() == ValueSource.MATRIX_PARAM ? "path" : requireNonNull(source().openAPIIn, "Parameter source is not represented as an OpenAPI parameter"))
                 .withRequired(source() == ValueSource.MATRIX_PARAM || isRequired())
                 .withDeprecated(deprecated() ? true : null)
-                .withName(key());
+                .withName(documentationName);
+            @Nullable String description = null;
             @Nullable ExternalDocumentationObject externalDoc = null;
             if (descriptionData != null) {
                 String desc = descriptionData.summaryAndDescription();
-                builder
-                    .withDescription(key().equals(desc) ? null : desc)
-                    .withExample(descriptionData.example);
+                description = key().equals(desc) ? null : desc;
+                builder.withExample(descriptionData.example);
                 externalDoc = descriptionData.externalDocumentation;
             }
+            if (source() == ValueSource.MATRIX_PARAM && !documentationName.equals(key())) {
+                String matrixDescription = "Matrix parameter \"" + key() + "\".";
+                description = description == null ? matrixDescription : matrixDescription + " " + description;
+            }
+            builder.withDescription(description);
             @Nullable Pattern pattern = pattern();
             @Nullable Pattern patternIfNotDefault = pattern == null || UriPattern.DEFAULT_CAPTURING_GROUP_PATTERN.equals(pattern.pattern()) ? null : pattern;
             return builder.withSchema(
