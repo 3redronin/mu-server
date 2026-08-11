@@ -57,7 +57,7 @@ class ParseUtils {
                 break;
             }
         }
-        return needsQuoting ? '"' + value.replace("\"", "\\\"") + '"' : value;
+        return needsQuoting ? '"' + value.replace("\\", "\\\\").replace("\"", "\\\"") + '"' : value;
     }
 }
 

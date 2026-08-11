@@ -348,6 +348,39 @@ public class MuUriBuilderTest {
     }
 
     @Test
+    public void matrixParamsAttachToCurrentFinalSegmentAndSurviveLaterPathOperations() {
+        URI uri = UriBuilder.fromPath("/resources/{id}")
+            .resolveTemplate("id", "123")
+            .matrixParam("idType", "legacy")
+            .path("children")
+            .segment("456;opaque")
+            .matrixParam("idType", "external", "canonical")
+            .build();
+
+        assertThat(uri.toString(), equalTo("/resources/123;idType=legacy/children/456%3Bopaque;idType=external;idType=canonical"));
+    }
+
+    @Test
+    public void matrixParamsWorkWithBuildBuildFromMapCloneAndLiteralPathSyntax() {
+        UriBuilder builder = UriBuilder.fromPath("/resources/{id};literal={literal}/children")
+            .matrixParam("idType", "{idType}");
+
+        assertThat(builder.build("a b", "kept", "legacy").toString(),
+            equalTo("/resources/a%20b;literal=kept/children;idType=legacy"));
+        assertThat(builder.buildFromMap(new HashMap<String, Object>() {{
+            put("id", "a/b");
+            put("literal", "x=y");
+            put("idType", "leg;acy");
+        }}).toString(), equalTo("/resources/a%2Fb;literal=x%3Dy/children;idType=leg%3Bacy"));
+
+        UriBuilder clone = builder.clone().replaceMatrixParam("idType", "external");
+        assertThat(clone.buildFromMap(new HashMap<String, Object>() {{
+            put("id", "123");
+            put("literal", "kept");
+        }}).toString(), equalTo("/resources/123;literal=kept/children;idType=external"));
+    }
+
+    @Test
     public void replaceQueryWithNullValueClearsParams() {
         URI uri = MuUriBuilder.fromUri(u("http://example.org/blah?hah=ba"))
             .queryParam("a", "b")

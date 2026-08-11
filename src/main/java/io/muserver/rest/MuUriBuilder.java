@@ -188,7 +188,7 @@ class MuUriBuilder extends UriBuilder {
         Mutils.notNull("segments", segments);
         for (String segment : segments) {
             Mutils.notNull("segment", segment);
-            this.pathSegments.addAll(MuUriInfo.pathStringToSegments(Objects.requireNonNull(decode(segment)), true).collect(toList()));
+            this.pathSegments.add(new MuPathSegment(Objects.requireNonNull(decode(segment)), new MultivaluedHashMap<>()));
         }
         this.hasTrailingSlash = false;
         return this;

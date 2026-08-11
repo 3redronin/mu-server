@@ -42,6 +42,17 @@ import static scaffolding.ServerUtils.httpsServerForTest;
 public class OpenApiDocumentorTest {
 
     private MuServer server;
+    enum MatrixOpenApiIdType { legacy, external }
+
+    private static JSONObject parameterNamed(JSONArray parameters, String name) {
+        for (int i = 0; i < parameters.length(); i++) {
+            JSONObject parameter = parameters.getJSONObject(i);
+            if (name.equals(parameter.getString("name"))) {
+                return parameter;
+            }
+        }
+        throw new AssertionError("No parameter named " + name + " in " + parameters);
+    }
 
     private static MuServer serverWithPetStore() {
         return httpsServerForTest()
@@ -909,6 +920,270 @@ public class OpenApiDocumentorTest {
             assertThat(doc.query("/paths/~1widgets~1{id}~1category~1{cat}/get/tags/0"), equalTo("WidgetsResource"));
             assertThat(doc.query("/paths/~1widgets~1{id}~1recursive~1{anotherId}~1category~1{cat}/get/tags/0"), equalTo("WidgetsResource"));
             assertThat(doc.query("/paths/~1widgets~1{id}~1recursive~1{anotherId}~1recursive~1{anotherId}~1category~1{cat}/get/tags/0"), equalTo("WidgetsResource"));
+        }
+    }
+
+    @Test
+    public void openApiRepresentsMatrixParamsAsPathTemplateParametersForUsableSubstitution() throws Exception {
+        class ChildResource {
+            @GET
+            @Path("children")
+            public void children(@PathParam("id") String id) { }
+        }
+        @Path("resources")
+        class ResourceRoot {
+            @Path("{id}")
+            public ChildResource locate(@PathParam("id") String id, @MatrixParam("idType") MatrixOpenApiIdType idType) {
+                return new ChildResource();
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new ResourceRoot()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject doc = new JSONObject(resp.body().string());
+            JSONObject get = doc.getJSONObject("paths")
+                .getJSONObject("/resources/{id};idType={idType}/children")
+                .getJSONObject("get");
+            JSONArray parameters = get.getJSONArray("parameters");
+            assertThat(parameters.length(), is(2));
+            assertThat(parameters.toString(), containsString("\"name\":\"id\""));
+            assertThat(parameters.toString(), containsString("\"name\":\"idType\""));
+            assertThat(parameters.toString(), containsString("\"in\":\"path\""));
+            assertThat(parameters.toString(), not(containsString("\"in\":\"query\"")));
+            assertThat(parameters.toString(), not(containsString("\"style\":\"matrix\"")));
+            assertThat(parameters.toString(), containsString("\"legacy\""));
+            assertThat(parameters.toString(), containsString("\"external\""));
+            assertThat(parameters.toString(), not(containsString("\"nullable\":true")));
+            assertThat(parameters.toString(), not(containsString("null")));
+        }
+    }
+
+    @Test
+    public void openApiPlacesMatrixParamsOnTheSegmentMatchedByTheDeclaringMethodOrLocator() throws Exception {
+        class ChildResource {
+            @GET
+            @Path("children/{childId}")
+            public void children(@PathParam("childId") String childId, @MatrixParam("childType") String childType) { }
+        }
+        @Path("resources")
+        class ResourceRoot {
+            @Path("{id}")
+            public ChildResource locate(@PathParam("id") String id, @MatrixParam("idType") String idType) {
+                return new ChildResource();
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new ResourceRoot()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject doc = new JSONObject(resp.body().string());
+            JSONObject paths = doc.getJSONObject("paths");
+            assertThat(paths.has("/resources/{id};idType={idType}/children/{childId};childType={childType}"), is(true));
+            assertThat(paths.has("/resources/{id};idType={idType};childType={childType}/children/{childId}"), is(false));
+        }
+    }
+
+    @Test
+    public void openApiAliasesTheSameMatrixNameOnDifferentSegments() throws Exception {
+        class ChildResource {
+            @GET
+            @Path("children/{childId}")
+            public void children(@PathParam("childId") String childId,
+                                 @MatrixParam("type") @Description(value = "Component type", example = "x") String type) { }
+        }
+        @Path("resources")
+        class ResourceRoot {
+            @Path("{id}")
+            public ChildResource locate(@PathParam("id") String id,
+                                        @MatrixParam("type") @Description(value = "Product type", example = "legacy") String type) {
+                return new ChildResource();
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new ResourceRoot()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject doc = new JSONObject(resp.body().string());
+            JSONObject get = doc.getJSONObject("paths")
+                .getJSONObject("/resources/{id};type={id_type}/children/{childId};type={childId_type}")
+                .getJSONObject("get");
+            assertThat(get.getString("operationId"), is("GET_resources__id__children__childId_"));
+            JSONArray parameters = get.getJSONArray("parameters");
+            assertThat(parameters.length(), is(4));
+
+            JSONObject productType = parameterNamed(parameters, "id_type");
+            assertThat(productType.getString("in"), is("path"));
+            assertThat(productType.getBoolean("required"), is(true));
+            assertThat(productType.getString("description"), is("Matrix parameter \"type\". Product type"));
+            assertThat(productType.getString("example"), is("legacy"));
+
+            JSONObject componentType = parameterNamed(parameters, "childId_type");
+            assertThat(componentType.getString("description"), is("Matrix parameter \"type\". Component type"));
+            assertThat(componentType.getString("example"), is("x"));
+        }
+    }
+
+    @Test
+    public void openApiOperationIdsIgnoreMatrixDecorationsAndRemainUnique() throws Exception {
+        @Path("resources/{id}")
+        class ResourceRoot {
+            @GET
+            @Produces("application/json")
+            public String asJson(@PathParam("id") String id, @MatrixParam("view") String view) {
+                return "{}";
+            }
+
+            @GET
+            @Produces("text/plain")
+            public String asText(@PathParam("id") String id, @MatrixParam("format") String format) {
+                return "text";
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new ResourceRoot()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject paths = new JSONObject(resp.body().string()).getJSONObject("paths");
+            String viewOperationId = paths.getJSONObject("/resources/{id};view={view}")
+                .getJSONObject("get")
+                .getString("operationId");
+            String formatOperationId = paths.getJSONObject("/resources/{id};format={format}")
+                .getJSONObject("get")
+                .getString("operationId");
+
+            assertThat(List.of(viewOperationId, formatOperationId),
+                containsInAnyOrder("GET_resources__id_", "GET_resources__id__2"));
+        }
+    }
+
+    @Test
+    public void openApiAliasesMatrixNamesThatCollideWithPathParameterNames() throws Exception {
+        @Path("resources")
+        class ResourceRoot {
+            @GET
+            @Path("{type}")
+            public void get(@PathParam("type") String type, @MatrixParam("type") String matrixType) { }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new ResourceRoot()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject doc = new JSONObject(resp.body().string());
+            JSONArray parameters = doc.getJSONObject("paths")
+                .getJSONObject("/resources/{type};type={type_type}")
+                .getJSONObject("get")
+                .getJSONArray("parameters");
+            assertThat(parameters.length(), is(2));
+            assertThat(parameterNamed(parameters, "type").getString("in"), is("path"));
+            assertThat(parameterNamed(parameters, "type_type").getString("description"), is("Matrix parameter \"type\"."));
+        }
+    }
+
+    @Test
+    public void openApiKeepsMatrixParamsFromNestedSubResourceLocators() throws Exception {
+        class LeafResource {
+            @GET
+            @Path("leaves/{leafId}")
+            public void leaf(@PathParam("leafId") String leafId, @MatrixParam("type") String leafType) { }
+        }
+        class ChildResource {
+            @Path("children/{childId}")
+            public LeafResource child(@PathParam("childId") String childId, @MatrixParam("type") String childType) {
+                return new LeafResource();
+            }
+        }
+        @Path("roots")
+        class RootResource {
+            @Path("{rootId}")
+            public ChildResource root(@PathParam("rootId") String rootId, @MatrixParam("type") String rootType) {
+                return new ChildResource();
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new RootResource()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject doc = new JSONObject(resp.body().string());
+            JSONObject get = doc.getJSONObject("paths")
+                .getJSONObject("/roots/{rootId};type={rootId_type}/children/{childId};type={childId_type}/leaves/{leafId};type={leafId_type}")
+                .getJSONObject("get");
+            JSONArray parameters = get.getJSONArray("parameters");
+            assertThat(parameters.length(), is(6));
+            assertThat(parameterNamed(parameters, "rootId_type").getString("description"), is("Matrix parameter \"type\"."));
+            assertThat(parameterNamed(parameters, "childId_type").getString("description"), is("Matrix parameter \"type\"."));
+            assertThat(parameterNamed(parameters, "leafId_type").getString("description"), is("Matrix parameter \"type\"."));
+        }
+    }
+
+    @Test
+    public void openApiUsesNativeMatrixStyleForCollectionValues() throws Exception {
+        @Path("resources")
+        class ResourceRoot {
+            @GET
+            @Path("{id}")
+            public void get(@PathParam("id") String id, @MatrixParam("tag") List<String> tags) { }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new ResourceRoot()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject doc = new JSONObject(resp.body().string());
+            JSONArray parameters = doc.getJSONObject("paths")
+                .getJSONObject("/resources/{id}{tag}")
+                .getJSONObject("get")
+                .getJSONArray("parameters");
+            JSONObject tags = parameterNamed(parameters, "tag");
+            assertThat(tags.getString("in"), is("path"));
+            assertThat(tags.getString("style"), is("matrix"));
+            assertThat(tags.getBoolean("explode"), is(true));
+            assertThat(tags.getJSONObject("schema").getString("type"), is("array"));
+        }
+    }
+
+    @Test
+    public void openApiOmitsCollectionMatrixParamsWhenTheirWireNameWouldNeedAnAlias() throws Exception {
+        class ChildResource {
+            @GET
+            @Path("children/{childId}")
+            public void children(@PathParam("childId") String childId, @MatrixParam("tag") List<String> tags) { }
+        }
+        @Path("resources")
+        class ResourceRoot {
+            @Path("{id}")
+            public ChildResource locate(@PathParam("id") String id, @MatrixParam("tag") List<String> tags) {
+                return new ChildResource();
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new ResourceRoot()).withOpenApiJsonUrl("/openapi.json"))
+            .start();
+
+        try (okhttp3.Response resp = call(request(server.uri().resolve("/openapi.json")))) {
+            JSONObject doc = new JSONObject(resp.body().string());
+            JSONObject get = doc.getJSONObject("paths")
+                .getJSONObject("/resources/{id}/children/{childId}")
+                .getJSONObject("get");
+            JSONArray parameters = get.getJSONArray("parameters");
+            assertThat(parameters.length(), is(2));
+            assertThat(parameterNamed(parameters, "id").getString("in"), is("path"));
+            assertThat(parameterNamed(parameters, "childId").getString("in"), is("path"));
+            assertThat(parameters.toString(), not(containsString("\"name\":\"tag\"")));
         }
     }
 

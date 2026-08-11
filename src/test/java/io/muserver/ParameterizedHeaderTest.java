@@ -32,6 +32,15 @@ public class ParameterizedHeaderTest {
     }
 
     @Test
+    public void quotedValuesCanContainEscapedBackslashes() {
+        ParameterizedHeader parsed = fromString("path=\"a\\\\b\"");
+
+        assertThat(parsed.parameter("path"), is("a\\b"));
+        assertThat(parsed.toString(), is("path=\"a\\\\b\""));
+        assertThat(fromString(parsed.toString()), is(parsed));
+    }
+
+    @Test
     public void emptyNullAndBlankStringReturnsEmptyMap() {
         assertThat(fromString(null).parameters().entrySet(), hasSize(0));
         assertThat(fromString("").parameters().entrySet(), hasSize(0));
@@ -40,7 +49,7 @@ public class ParameterizedHeaderTest {
 
     @Test
     public void errorsThrowIllegalArgumentExceptions() {
-        String[] bads = { "你/好", "text/html; q", "text/html; q=好", "badly-quoted-boy=I'm \" bad at quoting", "badly-quoted-boy=\"I'm \" bad at quoting\"" };
+        String[] bads = { "你/好", "text/html; q", "text/html; q=好", "badly-quoted-boy=I'm \" bad at quoting", "badly-quoted-boy=\"I'm \" bad at quoting\"", "unclosed=\"quoted", "dangling=\"escape\\", "quoted=\"value\"trailing" };
         for (String bad : bads) {
             try {
                 ParameterizedHeader parameterizedHeader = fromString(bad);

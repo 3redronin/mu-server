@@ -4,7 +4,10 @@ import jakarta.ws.rs.core.CacheControl;
 import org.junit.jupiter.api.Test;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.nullValue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class CacheControlHeaderDelegateTest {
     static {
@@ -36,6 +39,79 @@ public class CacheControlHeaderDelegateTest {
     public void allCanBeMixed() {
         assertThat(CacheControl.valueOf("stale-while-revalidate=13, max-age=30, stale-if-error=10, private, no-cache,no-store,  no-transform , must-revalidate   ,   proxy-revalidate ").toString(),
             is("private, no-cache, no-store, no-transform, must-revalidate, proxy-revalidate, max-age=30, stale-if-error=10, stale-while-revalidate=13"));
+    }
+
+    @Test
+    public void fieldNamesOnPrivateAndNoCacheArePreserved() {
+        CacheControl value = CacheControl.valueOf("private=\"Authorization, Cookie\", no-cache=\"ETag, Set-Cookie\"");
+
+        assertThat(value.getPrivateFields(), contains("Authorization", "Cookie"));
+        assertThat(value.getNoCacheFields(), contains("ETag", "Set-Cookie"));
+        assertThat(value.toString(), is("private=\"Authorization, Cookie\", no-cache=\"ETag, Set-Cookie\""));
+    }
+
+    @Test
+    public void standardDirectiveNamesAreCaseInsensitive() {
+        assertThat(CacheControl.valueOf("NO-STORE, MAX-AGE=60").toString(), is("no-store, max-age=60"));
+    }
+
+    @Test
+    public void extensionValuesAreQuotedAndEscapedWhenNeeded() {
+        assertThat(cacheExtension("comma", "one,two").toString(), is("comma=\"one,two\""));
+        assertThat(cacheExtension("quoted", "say \"hi\"").toString(), is("quoted=\"say \\\"hi\\\"\""));
+        assertThat(cacheExtension("path", "a\\b").toString(), is("path=\"a\\\\b\""));
+    }
+
+    @Test
+    public void escapedExtensionValuesRoundTrip() {
+        assertThat(CacheControl.valueOf("comma=\"one,two\"").getCacheExtension().get("comma"), is("one,two"));
+        assertThat(CacheControl.valueOf("quoted=\"say \\\"hi\\\"\"").getCacheExtension().get("quoted"), is("say \"hi\""));
+        assertThat(CacheControl.valueOf("path=\"a\\\\b\"").getCacheExtension().get("path"), is("a\\b"));
+    }
+
+    @Test
+    public void absentDirectivesOverrideCacheControlDefaults() {
+        for (String header : new String[]{"", " \t "}) {
+            CacheControl value = CacheControl.valueOf(header);
+            assertThat(value.isPrivate(), is(false));
+            assertThat(value.isNoCache(), is(false));
+            assertThat(value.isNoStore(), is(false));
+            assertThat(value.isNoTransform(), is(false));
+            assertThat(value.isMustRevalidate(), is(false));
+            assertThat(value.isProxyRevalidate(), is(false));
+            assertThat(value.getMaxAge(), is(-1));
+            assertThat(value.getSMaxAge(), is(-1));
+            assertThat(value.toString(), is(""));
+        }
+    }
+
+    @Test
+    public void nullIsRejected() {
+        assertThrows(IllegalArgumentException.class, () -> CacheControl.valueOf(null));
+    }
+
+    @Test
+    public void valuelessAndEmptyExtensionsArePreservedAsFlags() {
+        CacheControl value = CacheControl.valueOf("immutable, empty=\"\"");
+
+        assertThat(value.getCacheExtension().get("immutable"), is(nullValue()));
+        assertThat(value.getCacheExtension().get("empty"), is(""));
+        assertThat(value.toString(), is("immutable, empty"));
+    }
+
+    @Test
+    public void invalidAgesAndQuotedStringsAreRejected() {
+        for (String header : new String[]{"max-age", "max-age=", "max-age=one", "s-maxage=2147483648",
+            "extension=\"unterminated", "extension=\"dangling\\", "extension=\"value\"trailing"}) {
+            assertThrows(IllegalArgumentException.class, () -> CacheControl.valueOf(header));
+        }
+    }
+
+    private static CacheControl cacheExtension(String name, String value) {
+        CacheControl cacheControl = new CacheControl();
+        cacheControl.setNoTransform(false);
+        cacheControl.getCacheExtension().put(name, value);
+        return cacheControl;
     }
 
 }
