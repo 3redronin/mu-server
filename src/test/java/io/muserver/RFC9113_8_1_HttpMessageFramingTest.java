@@ -113,6 +113,40 @@ class RFC9113_8_1_HttpMessageFramingTest {
     }
 
     @Test
+    void contentLengthZeroWithoutEndStreamIsStillEmptyForTheHandler() throws Exception {
+        var bodyRead = new AtomicReference<Integer>();
+        var handlerCompleted = new CountDownLatch(1);
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                bodyRead.set(request.body().read());
+                response.status(204);
+                handlerCompleted.countDown();
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            var headers = postHelloHeaders(getPort());
+            headers.add("content-length", "0");
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, headers))
+                .flush();
+
+            assertThat(
+                "A declared empty body blocked the handler",
+                handlerCompleted.await(1, TimeUnit.SECONDS),
+                equalTo(true)
+            );
+            assertThat(bodyRead.get(), equalTo(-1));
+            var response = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(response.headers().get(":status"), equalTo("204"));
+
+            con.writeFrame(Http2DataFrame.eos(1)).flush();
+        }
+    }
+
+    @Test
     void multipleRequestsCanBeInterleavedOnSeparateStreams() throws Exception {
         var firstStarted = new CountDownLatch(1);
         var letFirstFinish = new CountDownLatch(1);

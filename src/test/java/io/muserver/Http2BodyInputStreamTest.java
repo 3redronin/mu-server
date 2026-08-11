@@ -136,6 +136,48 @@ class Http2BodyInputStreamTest {
         assertThat(discardCallbackValue.get(), equalTo(8L - firstReadSize));
     }
 
+    @Test
+    void applicationCompletionDiscardsUnreadDataAndRefundsItOnlyOnce() throws Exception {
+        var readCallbackValue = new AtomicLong();
+        var discardCallbackValue = new AtomicLong();
+
+        try (var stream = new Http2BodyInputStream(10000, readCallbackValue::addAndGet, discardCallbackValue::addAndGet)) {
+            stream.onData(data("Hello", false), 8);
+
+            var buffer = new byte[8];
+            assertThat(stream.read(buffer, 0, 2), equalTo(2));
+
+            stream.discardRemaining();
+            stream.discardRemaining();
+
+            assertThat(stream.read(buffer), equalTo(-1));
+            assertThat(stream.isRequestBodyComplete(), equalTo(false));
+        }
+
+        assertThat(readCallbackValue.get(), equalTo(2L));
+        assertThat(discardCallbackValue.get(), equalTo(6L));
+    }
+
+    @Test
+    void dataArrivingInDiscardModeReturnsConnectionCreditUntilPeerEndStream() throws Exception {
+        var readCallbackValue = new AtomicLong();
+        var discardCallbackValue = new AtomicLong();
+
+        try (var stream = new Http2BodyInputStream(10000, readCallbackValue::addAndGet, discardCallbackValue::addAndGet)) {
+            stream.discardRemaining();
+
+            stream.onData(data("Hello", false), 8);
+            assertThat(stream.isRequestBodyComplete(), equalTo(false));
+            stream.onData(data("bye", true), 5);
+
+            assertThat(stream.read(), equalTo(-1));
+            assertThat(stream.isRequestBodyComplete(), equalTo(true));
+        }
+
+        assertThat(readCallbackValue.get(), equalTo(0L));
+        assertThat(discardCallbackValue.get(), equalTo(13L));
+    }
+
     private Http2DataFrame data(String data, boolean eos) {
         byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
         return new Http2DataFrame(1, eos, bytes, 0, bytes.length);

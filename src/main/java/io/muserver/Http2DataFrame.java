@@ -71,6 +71,7 @@ class Http2DataFrame implements LogicalHttp2Frame {
         return eos;
     }
 
+    @Override
     public int streamId() {
         return streamId;
     }

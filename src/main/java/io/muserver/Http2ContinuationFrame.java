@@ -18,6 +18,7 @@ class Http2ContinuationFrame implements LogicalHttp2Frame {
         this.fragment = fragment;
     }
 
+    @Override
     public int streamId() {
         return streamId;
     }

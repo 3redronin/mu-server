@@ -5,10 +5,19 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.*;
+import static io.muserver.FieldBlockEncoderTest.hexToByteArray;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.anEmptyMap;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.nullValue;
+import static scaffolding.MuAssert.assertEventually;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @DisplayName("RFC 9113 6.2 Frame Definitions: HEADERS")
@@ -103,13 +112,28 @@ class RFC9113_6_2_HeadersTest {
         try (var client = new H2Client();
              var con = client.connect(server)) {
 
+            var rejectedFieldBlock = new ByteArrayOutputStream();
+            rejectedFieldBlock.write(encodeFieldBlock(getHelloHeaders(getPort())));
+            // Literal custom-key: custom-header with incremental indexing (RFC 7541 6.2.1).
+            rejectedFieldBlock.write(hexToByteArray("400a637573746f6d2d6b65790d637573746f6d2d686561646572"));
+
             con.handshake()
-                .writeRaw(priorityHeadersFrame(1, true, true, encodeFieldBlock(getHelloHeaders(getPort())), false, 1, 10))
+                .writeRaw(priorityHeadersFrame(1, true, true, rejectedFieldBlock.toByteArray(), false, 1, 10))
                 .flush();
 
             var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
             assertThat(reset.streamId(), equalTo(1));
             assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+
+            // The rejected field block was still decoded, so the shared HPACK context and
+            // reader position remain usable for the next stream.
+            var nextFieldBlock = new ByteArrayOutputStream();
+            nextFieldBlock.write(encodeFieldBlock(getHelloHeaders(getPort())));
+            nextFieldBlock.write(0xbe); // Indexed dynamic-table entry 62 from the rejected block.
+            con.writeRaw(headersFrame(3, true, true, nextFieldBlock.toByteArray())).flush();
+            var response = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(response.streamId(), equalTo(3));
+            assertThat(response.headers().get(":status"), equalTo("202"));
         }
     }
 
@@ -245,6 +269,43 @@ class RFC9113_6_2_HeadersTest {
     }
 
     @Test
+    void dataFollowingTrailersInTheSameWriteIsAStreamClosedError() throws Exception {
+        var requestStarted = new CountDownLatch(1);
+        var releaseHandler = new CountDownLatch(1);
+        byte[] opaqueData = {1, 2, 3, 4, 5, 6, 7, 8};
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                requestStarted.countDown();
+                releaseHandler.await(10, TimeUnit.SECONDS);
+            })
+            .start();
+
+        FieldBlock trailers = new FieldBlock();
+        trailers.add("checksum", "abc123");
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .flush();
+            assertThat(requestStarted.await(5, TimeUnit.SECONDS), equalTo(true));
+
+            con.writeFrame(new Http2HeadersFrame(1, true, trailers))
+                .writeFrame(utf8DataFrame(1, true, "late"))
+                .writeFrame(new Http2Ping(false, opaqueData))
+                .flush();
+
+            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.STREAM_CLOSED));
+            assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, opaqueData)));
+        } finally {
+            releaseHandler.countDown();
+        }
+    }
+
+    @Test
     void invalidTrailerFieldsAreStreamErrors() throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
@@ -271,6 +332,172 @@ class RFC9113_6_2_HeadersTest {
             var response = con.readLogicalFrame(Http2HeadersFrame.class);
             assertThat(response.streamId(), equalTo(3));
             assertThat(response.headers().get(":status"), equalTo("200"));
+        }
+    }
+
+    @Test
+    void oversizedTrailersResetAndRetireTheExistingStream() throws Exception {
+        var handlerStarted = new CountDownLatch(1);
+        var releaseHandler = new CountDownLatch(1);
+        var exchangeCompleted = new CountDownLatch(1);
+        server = httpsServer()
+            .withMaxHeadersSize(512)
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addResponseCompleteListener(info -> exchangeCompleted.countDown())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                handlerStarted.countDown();
+                releaseHandler.await(5, TimeUnit.SECONDS);
+                response.status(202);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .flush();
+            assertThat(handlerStarted.await(5, TimeUnit.SECONDS), equalTo(true));
+
+            var connection = (Http2Connection) server.activeConnections().iterator().next();
+            Map<?, ?> streams = getField(connection, "streams", Map.class);
+            var trailers = new FieldBlock();
+            trailers.add("checksum", "x".repeat(1024));
+            con.writeFrame(new Http2HeadersFrame(1, true, trailers)).flush();
+
+            var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+
+            releaseHandler.countDown();
+            assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
+            assertEventually(() -> streams, anEmptyMap());
+        } finally {
+            releaseHandler.countDown();
+        }
+    }
+
+    @Test
+    void oversizedInitialHeadersCanReceiveAFlowControlledErrorBody() throws Exception {
+        server = httpsServer()
+            .withMaxHeadersSize(512)
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2Settings(false, 4096, 100, 0, 16384, 32768))
+                .flush();
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            var oversized = getHelloHeaders(getPort());
+            oversized.add("x-oversized", "x".repeat(1024));
+            con.writeFrame(new Http2HeadersFrame(1, true, oversized)).flush();
+
+            var responseHeaders = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(responseHeaders.headers().get(":status"), equalTo("431 Request Header Fields Too Large"));
+            assertNothingToRead(con.socket());
+
+            int contentLength = Integer.parseInt(responseHeaders.headers().get("content-length"));
+            con.writeFrame(new Http2WindowUpdate(1, contentLength)).flush();
+            var body = con.readLogicalFrame(Http2DataFrame.class);
+            assertThat(body.toUTF8(), equalTo("431 Request Header Fields Too Large"));
+            assertThat(body.endStream(), equalTo(true));
+        }
+    }
+
+    @Test
+    void rejectedInitialHeadersDiscardTheRemainingRequestBody() throws Exception {
+        server = httpsServer()
+            .withMaxHeadersSize(512)
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2Settings(false, 4096, 100, 0, 16384, 32768))
+                .flush();
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            var oversized = postHelloHeaders(getPort());
+            oversized.add("x-oversized", "x".repeat(1024));
+            con.writeFrame(new Http2HeadersFrame(1, false, oversized))
+                .writeFrame(utf8DataFrame(1, true, "discarded"))
+                .flush();
+
+            var responseHeaders = con.readLogicalFrame(Http2HeadersFrame.class);
+            int contentLength = Integer.parseInt(responseHeaders.headers().get("content-length"));
+            con.writeFrame(new Http2WindowUpdate(1, contentLength)).flush();
+            var body = con.readLogicalFrame(Http2DataFrame.class);
+            assertThat(body.toUTF8(), equalTo("431 Request Header Fields Too Large"));
+            assertThat(body.endStream(), equalTo(true));
+        }
+    }
+
+    @Test
+    void rejectedInitialHeadersRespectMaxConcurrentStreams() throws Exception {
+        server = httpsServer()
+            .withMaxHeadersSize(512)
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled().withMaxConcurrentStreams(1))
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2Settings(false, 4096, 100, 0, 16384, 32768))
+                .flush();
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            var firstOversized = postHelloHeaders(getPort());
+            firstOversized.add("x-oversized", "x".repeat(1024));
+            var secondOversized = postHelloHeaders(getPort());
+            secondOversized.add("x-oversized", "x".repeat(1024));
+            con.writeFrame(new Http2HeadersFrame(1, false, firstOversized))
+                .writeFrame(new Http2HeadersFrame(3, false, secondOversized))
+                .flush();
+
+            var responseHeaders = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(responseHeaders.streamId(), equalTo(1));
+            assertThat(responseHeaders.headers().get(":status"), equalTo("431 Request Header Fields Too Large"));
+            assertThat(
+                con.readLogicalFrame(),
+                equalTo(new Http2ResetStreamFrame(3, Http2ErrorCode.REFUSED_STREAM.code()))
+            );
+        }
+    }
+
+    @Test
+    void resettingARejectedRequestRetiresItsCoordinatorState() throws Exception {
+        server = httpsServer()
+            .withMaxHeadersSize(512)
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake();
+
+            var oversized = postHelloHeaders(getPort());
+            oversized.add("x-oversized", "x".repeat(1024));
+            con.writeFrame(new Http2HeadersFrame(1, false, oversized)).flush();
+            assertThat(con.readLogicalFrame(Http2HeadersFrame.class).streamId(), equalTo(1));
+            assertThat(con.readLogicalFrame(Http2DataFrame.class).streamId(), equalTo(1));
+
+            var connection = (Http2Connection) server.activeConnections().iterator().next();
+            Http2WriteCoordinator coordinator = getField(
+                connection,
+                "writeCoordinator",
+                Http2WriteCoordinator.class
+            );
+            assertThat(coordinator.streamState(1), equalTo(Http2StreamState.HALF_CLOSED_LOCAL));
+
+            byte[] barrierData = {1, 2, 3, 4, 5, 6, 7, 8};
+            con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()))
+                .writeFrame(new Http2Ping(false, barrierData))
+                .flush();
+            assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, barrierData)));
+            assertEventually(() -> coordinator.streamState(1), nullValue());
         }
     }
 
@@ -337,12 +564,14 @@ class RFC9113_6_2_HeadersTest {
         return server.uri().getPort();
     }
 
+    private static <T> T getField(Object target, String name, Class<T> type) throws Exception {
+        var field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return type.cast(field.get(target));
+    }
+
     @AfterEach
     public void stop() {
         if (server != null) server.stop();
     }
 }
-
-
-
-
