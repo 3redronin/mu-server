@@ -22,6 +22,7 @@ import io.netty.util.ReferenceCountUtil;
 import io.netty.util.internal.ObjectPool;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
+import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayDeque;
 import java.util.Queue;
@@ -39,8 +40,10 @@ class MuFlowControlHandler extends ChannelDuplexHandler {
 
     private final boolean releaseMessages;
 
-    private MuFlowControlHandler.RecyclableArrayDeque queue;
+    private @Nullable RecyclableArrayDeque queue;
 
+    // Netty invokes handlerAdded before this handler can receive events.
+    @SuppressWarnings("NullAway.Init")
     private ChannelConfig config;
 
     private boolean shouldConsume;
@@ -91,7 +94,8 @@ class MuFlowControlHandler extends ChannelDuplexHandler {
     @Override
     public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
         super.handlerRemoved(ctx);
-        if (!isQueueEmpty()) {
+        RecyclableArrayDeque queue = this.queue;
+        if (queue != null && !queue.isEmpty()) {
             dequeue(ctx, queue.size());
         }
         destroy();
