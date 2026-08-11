@@ -15,8 +15,8 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <error-prone.version>2.50.0</error-prone.version>
-        <netty.version.4.1>4.1.135.Final</netty.version.4.1>
-        <netty.version.4.2>4.2.14.Final</netty.version.4.2>
+        <netty.version.4.1>4.1.136.Final</netty.version.4.1>
+        <netty.version.4.2>4.2.16.Final</netty.version.4.2>
         <netty.version>${netty.version.4.1}</netty.version>
         <netty.codec.artifactId>netty-codec</netty.codec.artifactId>
         <nullaway.version>0.13.8</nullaway.version>

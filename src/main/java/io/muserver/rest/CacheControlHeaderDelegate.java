@@ -1,46 +1,3 @@
-/*
- * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS HEADER.
- *
- * Copyright (c) 2010-2015 Oracle and/or its affiliates. All rights reserved.
- *
- * The contents of this file are subject to the terms of either the GNU
- * General Public License Version 2 only ("GPL") or the Common Development
- * and Distribution License("CDDL") (collectively, the "License").  You
- * may not use this file except in compliance with the License.  You can
- * obtain a copy of the License at
- * http://glassfish.java.net/public/CDDL+GPL_1_1.html
- * or packager/legal/LICENSE.txt.  See the License for the specific
- * language governing permissions and limitations under the License.
- *
- * When distributing the software, include this License Header Notice in each
- * file and include the License file at packager/legal/LICENSE.txt.
- *
- * GPL Classpath Exception:
- * Oracle designates this particular file as subject to the "Classpath"
- * exception as provided by Oracle in the GPL Version 2 section of the License
- * file that accompanied this code.
- *
- * Modifications:
- * If applicable, add the following below the License Header, with the fields
- * enclosed by brackets [] replaced by your own identifying information:
- * "Portions Copyright [year] [name of copyright owner]"
- *
- * Contributor(s):
- * If you wish your version of this file to be governed by only the CDDL or
- * only the GPL Version 2, indicate your decision by adding "[Contributor]
- * elects to include this software in this distribution under the [CDDL or GPL
- * Version 2] license."  If you don't indicate a single choice of license, a
- * recipient has the option to distribute your version of this file under
- * either the CDDL, the GPL Version 2 or to extend the choice of license to
- * its licensees as provided above.  However, if you add GPL Version 2 code
- * and therefore, elected the GPL Version 2 license, then the option applies
- * only if the new code is made subject to such option by the copyright
- * holder.
- */
-/*
-NOTE: This file uses portions of code from the Jersey JAX-RS Spec:
-https://github.com/jersey/jersey/blob/12e5d8bdf22bcd2676a1032ed69473cf2bbc48c7/core-common/src/main/java/org/glassfish/jersey/message/internal/CacheControlProvider.java
- */
 package io.muserver.rest;
 
 import io.muserver.Mutils;
@@ -49,131 +6,133 @@ import jakarta.ws.rs.core.CacheControl;
 import jakarta.ws.rs.ext.RuntimeDelegate;
 import org.jspecify.annotations.Nullable;
 
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 class CacheControlHeaderDelegate implements RuntimeDelegate.HeaderDelegate<CacheControl> {
-    private static final Pattern WHITESPACE = Pattern.compile("\\s");
     @Override
     public CacheControl fromString(String value) {
         Mutils.notNull("value", value);
-        ParameterizedHeader dir = ParameterizedHeader.fromString(value);
-        CacheControl cc = new CacheControl();
-        Map<String, String> pams = new HashMap<>(dir.parameters());
+        CacheControl result = new CacheControl();
+        result.setPrivate(false);
+        result.setNoCache(false);
+        result.setNoStore(false);
+        result.setNoTransform(false);
+        result.setMustRevalidate(false);
+        result.setProxyRevalidate(false);
 
-        cc.setProxyRevalidate(pams.containsKey("proxy-revalidate"));
-        pams.remove("proxy-revalidate");
-        cc.setMustRevalidate(pams.containsKey("must-revalidate"));
-        pams.remove("must-revalidate");
-        cc.setNoTransform(pams.containsKey("no-transform"));
-        pams.remove("no-transform");
-        cc.setNoStore(pams.containsKey("no-store"));
-        pams.remove("no-store");
-        cc.setNoCache(pams.containsKey("no-cache"));
-        pams.remove("no-cache");
-        cc.setPrivate(pams.containsKey("private"));
-        pams.remove("private");
-
-        if (pams.containsKey("max-age")) {
-            cc.setMaxAge(Integer.parseInt(pams.get("max-age")));
-            pams.remove("max-age");
+        for (Map.Entry<String, @Nullable String> directive : ParameterizedHeader.fromString(value).parameters().entrySet()) {
+            String name = directive.getKey();
+            @Nullable String directiveValue = directive.getValue();
+            switch (name.toLowerCase(Locale.ROOT)) {
+                case "private":
+                    result.setPrivate(true);
+                    addFieldNames(result.getPrivateFields(), directiveValue);
+                    break;
+                case "no-cache":
+                    result.setNoCache(true);
+                    addFieldNames(result.getNoCacheFields(), directiveValue);
+                    break;
+                case "no-store":
+                    result.setNoStore(true);
+                    break;
+                case "no-transform":
+                    result.setNoTransform(true);
+                    break;
+                case "must-revalidate":
+                    result.setMustRevalidate(true);
+                    break;
+                case "proxy-revalidate":
+                    result.setProxyRevalidate(true);
+                    break;
+                case "max-age":
+                    result.setMaxAge(Integer.parseInt(directiveValue));
+                    break;
+                case "s-maxage":
+                    result.setSMaxAge(Integer.parseInt(directiveValue));
+                    break;
+                default:
+                    result.getCacheExtension().put(name, directiveValue);
+                    break;
+            }
         }
-        if (pams.containsKey("s-maxage")) {
-            cc.setSMaxAge(Integer.parseInt(pams.get("s-maxage")));
-            pams.remove("s-maxage");
-        }
-
-        cc.getCacheExtension().putAll(pams);
-
-        return cc;
+        return result;
     }
 
     @Override
     public String toString(CacheControl value) {
         Mutils.notNull("value", value);
-        StringBuilder sb = new StringBuilder();
+        List<String> directives = new ArrayList<>();
         if (value.isPrivate()) {
-            appendQuotedWithSeparator(sb, "private", buildListValue(value.getPrivateFields()));
+            addFieldDirective(directives, "private", value.getPrivateFields());
         }
         if (value.isNoCache()) {
-            appendQuotedWithSeparator(sb, "no-cache", buildListValue(value.getNoCacheFields()));
+            addFieldDirective(directives, "no-cache", value.getNoCacheFields());
         }
         if (value.isNoStore()) {
-            appendWithSeparator(sb, "no-store");
+            directives.add("no-store");
         }
         if (value.isNoTransform()) {
-            appendWithSeparator(sb, "no-transform");
+            directives.add("no-transform");
         }
         if (value.isMustRevalidate()) {
-            appendWithSeparator(sb, "must-revalidate");
+            directives.add("must-revalidate");
         }
         if (value.isProxyRevalidate()) {
-            appendWithSeparator(sb, "proxy-revalidate");
+            directives.add("proxy-revalidate");
         }
         if (value.getMaxAge() != -1) {
-            appendWithSeparator(sb, "max-age", value.getMaxAge());
+            directives.add("max-age=" + value.getMaxAge());
         }
         if (value.getSMaxAge() != -1) {
-            appendWithSeparator(sb, "s-maxage", value.getSMaxAge());
+            directives.add("s-maxage=" + value.getSMaxAge());
         }
-
-        for (Map.Entry<String, String> e : value.getCacheExtension().entrySet()) {
-            String val = e.getValue();
-            appendWithSeparator(sb, e.getKey(), quoteIfWhitespace(val));
+        for (Map.Entry<String, String> extension : value.getCacheExtension().entrySet()) {
+            String extensionValue = extension.getValue();
+            directives.add(extensionValue == null || extensionValue.isEmpty()
+                ? extension.getKey()
+                : extension.getKey() + "=" + quoteIfNeeded(extensionValue));
         }
-
-        return sb.toString();
+        return String.join(", ", directives);
     }
 
-    static String buildListValue(List<String> values) {
-        StringBuilder b = new StringBuilder();
-        for (String value : values) {
-            appendWithSeparator(b, value);
+    private static void addFieldNames(List<String> fields, @Nullable String value) {
+        if (value == null || value.isEmpty()) {
+            return;
         }
-        return b.toString();
-    }
-
-    static void appendWithSeparator(StringBuilder b, String field) {
-        if (b.length() > 0) {
-            b.append(", ");
-        }
-        b.append(field);
-    }
-
-    static void appendQuotedWithSeparator(StringBuilder b, String field, String value) {
-        appendWithSeparator(b, field);
-        if (value != null && !value.isEmpty()) {
-            b.append("=\"");
-            b.append(value);
-            b.append("\"");
+        for (String field : value.split(",")) {
+            String trimmed = field.trim();
+            if (!trimmed.isEmpty()) {
+                fields.add(trimmed);
+            }
         }
     }
 
-    static void appendWithSeparator(StringBuilder b, String field, int value) {
-        appendWithSeparator(b, field);
-        b.append("=");
-        b.append(value);
-    }
-
-    static void appendWithSeparator(StringBuilder b, String field, @Nullable String value) {
-        appendWithSeparator(b, field);
-        if (value != null && !value.isEmpty()) {
-            b.append("=");
-            b.append(value);
+    private static void addFieldDirective(List<String> directives, String name, List<String> fields) {
+        if (fields.isEmpty()) {
+            directives.add(name);
+        } else {
+            directives.add(name + "=\"" + escapeQuoted(String.join(", ", fields)) + "\"");
         }
     }
 
-    static @Nullable String quoteIfWhitespace(@Nullable String value) {
-        if (value == null) {
-            return null;
-        }
-        Matcher m = WHITESPACE.matcher(value);
-        if (m.find()) {
-            return "\"" + value + "\"";
+    private static String quoteIfNeeded(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            if (!isTokenCharacter(value.charAt(i))) {
+                return "\"" + escapeQuoted(value) + "\"";
+            }
         }
         return value;
+    }
+
+    private static String escapeQuoted(String value) {
+        return value.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    private static boolean isTokenCharacter(char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+            || "!#$%&'*+-.^_`|~".indexOf(c) >= 0;
     }
 }
