@@ -33,7 +33,11 @@ public class ParameterizedHeaderTest {
 
     @Test
     public void quotedValuesCanContainEscapedBackslashes() {
-        assertThat(fromString("path=\"a\\\\b\"").parameter("path"), is("a\\b"));
+        ParameterizedHeader parsed = fromString("path=\"a\\\\b\"");
+
+        assertThat(parsed.parameter("path"), is("a\\b"));
+        assertThat(parsed.toString(), is("path=\"a\\\\b\""));
+        assertThat(fromString(parsed.toString()), is(parsed));
     }
 
     @Test
