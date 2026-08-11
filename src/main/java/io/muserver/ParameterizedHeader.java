@@ -84,6 +84,8 @@ public class ParameterizedHeader {
         State state = State.PARAM_NAME;
         String paramName = null;
         boolean isQuotedString = false;
+        boolean isEscaped = false;
+        boolean isQuotedStringClosed = false;
 
         for (int i = 0; i < input.length(); i++) {
             char c = input.charAt(i);
@@ -118,14 +120,14 @@ public class ParameterizedHeader {
                 } else {
 
                     if (isQuotedString) {
-                        char lastChar = input.charAt(i - 1);
-                        if (c == '\\') {
-                            // don't append
-                        } else if (lastChar == '\\') {
+                        if (isEscaped) {
                             buffer.append(c);
+                            isEscaped = false;
+                        } else if (c == '\\') {
+                            isEscaped = true;
                         } else if (c == '"') {
-                            // this is the end, but we'll update on the next go
                             isQuotedString = false;
+                            isQuotedStringClosed = true;
                         } else {
                             buffer.append(c);
                         }
@@ -135,6 +137,11 @@ public class ParameterizedHeader {
                             buffer.setLength(0);
                             paramName = null;
                             state = State.PARAM_NAME;
+                            isQuotedStringClosed = false;
+                        } else if (isQuotedStringClosed && isOWS(c)) {
+                            // Ignore whitespace between a closing quote and the next comma.
+                        } else if (isQuotedStringClosed) {
+                            throw new IllegalArgumentException("Unexpected character after quoted parameter value");
                         } else if (isTChar(c)) {
                             buffer.append(c);
                         } else if (isOWS(c)) {
@@ -145,6 +152,9 @@ public class ParameterizedHeader {
                     }
                 }
             }
+        }
+        if (isQuotedString || isEscaped) {
+            throw new IllegalArgumentException("Unterminated quoted parameter value");
         }
         if (state == State.PARAM_VALUE) {
             parameters.put(paramName, buffer.toString());
