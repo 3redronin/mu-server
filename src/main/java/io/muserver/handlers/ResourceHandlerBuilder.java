@@ -254,15 +254,15 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
 
     /**
      * Creates a handler that serves files from a specific webjar and version.
-     * <p>For example, to serve the Swagger UI webjar at <code>/swagger-ui/</code>:</p>
+     * <p>For example, to serve the Swagger UI webjar at <code>/api-docs/</code>:</p>
      * <pre><code>
      * MuServer server = MuServerBuilder.httpServer()
-     *     .addHandler(ContextHandlerBuilder.context("/swagger-ui")
+     *     .addHandler(ContextHandlerBuilder.context("/api-docs")
      *         .addHandler(ResourceHandlerBuilder.webjarHandler("swagger-ui", "5.17.14")))
      *     .start();
      *
      * // Swagger UI home page is served at:
-     * // /swagger-ui/index.html
+     * // /api-docs/index.html
      * </code></pre>
      * @param artifactId The webjar artifact id
      * @param version The webjar version
