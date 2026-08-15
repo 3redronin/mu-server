@@ -25,6 +25,7 @@ import static io.muserver.handlers.ResourceType.gzippableMimeTypes;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.Assert.fail;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.FileUtils.readResource;
@@ -466,6 +467,61 @@ public class ResourceHandlerTest {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), is("application/javascript"));
             assertThat(resp.body().string(), is(readResource("/META-INF/resources/webjars/jquery-ui/1.13.2/jquery-ui.min.js")));
+        }
+    }
+
+    @Test
+    public void canServeResourcesFromWebjarWithExplicitVersion() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .withGzipEnabled(false)
+            .addHandler(context("/lib")
+                .addHandler(context("/jquery")
+                    .addHandler(webjarHandler("jquery", "3.7.1"))))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/lib/jquery/jquery.min.js")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), is("application/javascript"));
+            assertThat(resp.body().string(), is(readResource("/META-INF/resources/webjars/jquery/3.7.1/jquery.min.js")));
+        }
+    }
+
+    @Test
+    public void canServeResourcesFromWebjarByAutoDetectedVersion() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .withGzipEnabled(false)
+            .addHandler(context("/lib")
+                .addHandler(context("/jquery")
+                    .addHandler(webjarHandler("jquery"))))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/lib/jquery/jquery.min.js")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), is("application/javascript"));
+            assertThat(resp.body().string(), is(readResource("/META-INF/resources/webjars/jquery/3.7.1/jquery.min.js")));
+        }
+    }
+
+    @Test
+    public void webjarHandlerThrowsIfArtifactIsMissing() {
+        try {
+            webjarHandler("definitely-not-a-real-webjar");
+            fail("Expected IllegalArgumentException");
+        } catch (IllegalArgumentException e) {
+            assertThat(e.getMessage(), containsString("Could not find webjar 'definitely-not-a-real-webjar'"));
+        }
+    }
+
+    @Test
+    public void webjarHandlerThrowsIfMultipleVersionsAreFound() {
+        try {
+            webjarHandler("test-multi");
+            fail("Expected IllegalArgumentException");
+        } catch (IllegalArgumentException e) {
+            assertThat(e.getMessage(), containsString("Multiple versions found for webjar 'test-multi'"));
+            assertThat(e.getMessage(), containsString("1.0.0"));
+            assertThat(e.getMessage(), containsString("2.0.0"));
+            assertThat(e.getMessage(), containsString("webjarHandler(artifactId, version)"));
         }
     }
 

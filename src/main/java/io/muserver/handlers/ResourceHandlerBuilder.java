@@ -5,17 +5,31 @@ import io.muserver.rest.RestHandlerBuilder;
 import org.jspecify.annotations.Nullable;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
+import java.net.JarURLConnection;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Enumeration;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.Set;
+import java.util.jar.JarEntry;
+import java.util.jar.JarFile;
+import java.util.stream.Stream;
 
 import static io.muserver.handlers.ResourceType.DEFAULT_EXTENSION_MAPPINGS;
 import static java.util.Objects.requireNonNull;
@@ -236,6 +250,114 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      */
     public static ResourceHandlerBuilder classpathHandler(String classpathRoot) {
         return new ResourceHandlerBuilder().withResourceProviderFactory(ResourceProviderFactory.classpathBased(classpathRoot));
+    }
+
+    /**
+     * Creates a handler that serves files from a specific webjar and version.
+     * @param artifactId The webjar artifact id
+     * @param version The webjar version
+     * @return A new builder.
+     */
+    public static ResourceHandlerBuilder webjarHandler(String artifactId, String version) {
+        if (artifactId == null || artifactId.trim().isEmpty()) {
+            throw new IllegalArgumentException("artifactId cannot be null or blank");
+        }
+        if (version == null || version.trim().isEmpty()) {
+            throw new IllegalArgumentException("version cannot be null or blank");
+        }
+        return classpathHandler("/META-INF/resources/webjars/" + artifactId + "/" + version);
+    }
+
+    /**
+     * Creates a handler that serves files from a webjar. The version is discovered from the classpath.
+     * @param artifactId The webjar artifact id
+     * @return A new builder.
+     */
+    public static ResourceHandlerBuilder webjarHandler(String artifactId) {
+        if (artifactId == null || artifactId.trim().isEmpty()) {
+            throw new IllegalArgumentException("artifactId cannot be null or blank");
+        }
+        Set<String> versions = findWebJarVersions(artifactId);
+        if (versions.isEmpty()) {
+            throw new IllegalArgumentException("Could not find webjar '" + artifactId + "' at /META-INF/resources/webjars/" + artifactId);
+        }
+        if (versions.size() > 1) {
+            throw new IllegalArgumentException("Multiple versions found for webjar '" + artifactId + "': " + versions + ". Please use webjarHandler(artifactId, version).");
+        }
+        return webjarHandler(artifactId, versions.iterator().next());
+    }
+
+    private static Set<String> findWebJarVersions(String artifactId) {
+        String resourcePath = "META-INF/resources/webjars/" + artifactId;
+        Set<String> versions = new LinkedHashSet<>();
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        if (classLoader == null) {
+            classLoader = ResourceHandlerBuilder.class.getClassLoader();
+        }
+        try {
+            Enumeration<URL> resources = classLoader.getResources(resourcePath);
+            while (resources.hasMoreElements()) {
+                URL url = resources.nextElement();
+                versions.addAll(findWebJarVersions(url));
+            }
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Error while looking up webjar '" + artifactId + "'", e);
+        }
+        return versions;
+    }
+
+    private static Set<String> findWebJarVersions(URL url) {
+        try {
+            if ("jar".equals(url.getProtocol())) {
+                return findVersionsInJar(url);
+            } else {
+                return findVersionsInFileSystem(url);
+            }
+        } catch (IOException | URISyntaxException e) {
+            throw new IllegalArgumentException("Error while reading webjar path from " + url, e);
+        }
+    }
+
+    private static Set<String> findVersionsInJar(URL url) throws IOException {
+        Set<String> versions = new HashSet<>();
+        JarURLConnection connection = (JarURLConnection) url.openConnection();
+        String entryName = connection.getEntryName();
+        String prefix = (entryName == null ? "" : entryName);
+        if (!prefix.endsWith("/")) {
+            prefix += "/";
+        }
+        try (JarFile jarFile = connection.getJarFile()) {
+            Enumeration<JarEntry> entries = jarFile.entries();
+            while (entries.hasMoreElements()) {
+                String name = entries.nextElement().getName();
+                if (!name.startsWith(prefix) || name.length() <= prefix.length()) {
+                    continue;
+                }
+                String remainder = name.substring(prefix.length());
+                int slashIndex = remainder.indexOf('/');
+                if (slashIndex > 0) {
+                    versions.add(remainder.substring(0, slashIndex));
+                }
+            }
+        }
+        return versions;
+    }
+
+    private static Set<String> findVersionsInFileSystem(URL url) throws URISyntaxException, IOException {
+        Set<String> versions = new HashSet<>();
+        URI uri = url.toURI();
+        Path path = Paths.get(uri);
+        if (!Files.isDirectory(path)) {
+            return versions;
+        }
+        try (Stream<Path> children = Files.list(path)) {
+            List<Path> dirs = new ArrayList<>();
+            children.filter(Files::isDirectory).forEach(dirs::add);
+            for (Path dir : dirs) {
+                versions.add(dir.getFileName().toString());
+            }
+        }
+        return versions;
     }
 
     /**
