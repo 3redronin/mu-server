@@ -254,6 +254,16 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
 
     /**
      * Creates a handler that serves files from a specific webjar and version.
+     * <p>For example, to serve the Swagger UI webjar at <code>/swagger-ui/</code>:</p>
+     * <pre><code>
+     * MuServer server = MuServerBuilder.httpServer()
+     *     .addHandler(ContextHandlerBuilder.context("/swagger-ui")
+     *         .addHandler(ResourceHandlerBuilder.webjarHandler("swagger-ui", "5.17.14")))
+     *     .start();
+     *
+     * // Swagger UI home page is served at:
+     * // /swagger-ui/index.html
+     * </code></pre>
      * @param artifactId The webjar artifact id
      * @param version The webjar version
      * @return A new builder.
@@ -270,6 +280,8 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
 
     /**
      * Creates a handler that serves files from a webjar. The version is discovered from the classpath.
+     * <p>This is useful when only one version of a webjar is on the classpath. If multiple versions are present,
+     * use {@link #webjarHandler(String, String)} instead.</p>
      * @param artifactId The webjar artifact id
      * @return A new builder.
      */
