@@ -39,6 +39,11 @@ interface ResourceProviderFactory {
 
     ResourceProvider get(String relativePath);
 
+    static ClassLoader defaultClassLoader() {
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        return classLoader == null ? ResourceProviderFactory.class.getClassLoader() : classLoader;
+    }
+
     static ResourceProviderFactory fileBased(Path baseDirectory) {
         if (!Files.isDirectory(baseDirectory, LinkOption.NOFOLLOW_LINKS)) {
             throw new MuException(baseDirectory + " is not a directory");
@@ -59,7 +64,11 @@ interface ResourceProviderFactory {
     }
 
     static ResourceProviderFactory classpathBased(String classpathBase) {
-        ClasspathCache classpathCache = new ClasspathCache(classpathBase);
+        return classpathBased(classpathBase, defaultClassLoader());
+    }
+
+    static ResourceProviderFactory classpathBased(String classpathBase, ClassLoader classLoader) {
+        ClasspathCache classpathCache = new ClasspathCache(classpathBase, classLoader);
         try {
             classpathCache.cacheItems();
         } catch (Exception e) {
@@ -72,36 +81,94 @@ interface ResourceProviderFactory {
 
 class ClasspathCache implements ResourceProviderFactory {
     private final String basePath;
+    private final String resourceName;
+    private final ClassLoader classLoader;
     private final Map<String, ClasspathResourceProvider> all = new HashMap<>();
 
-    ClasspathCache(String basePath) {
+    ClasspathCache(String basePath, ClassLoader classLoader) {
         this.basePath = basePath;
+        this.resourceName = Mutils.trim(basePath, "/");
+        this.classLoader = classLoader;
     }
 
     void cacheItems() throws URISyntaxException, IOException {
-        URL resource = ClasspathCache.class.getResource(basePath);
-        if (resource != null) {
-            URI uri = resource.toURI();
-            Path myPath;
-            if (uri.getScheme().equals("jar")) {
-                FileSystem zipFileSystem;
-                try {
-                    zipFileSystem = FileSystems.getFileSystem(uri);
-                } catch (FileSystemNotFoundException e) {
-                    try {
-                        zipFileSystem = FileSystems.newFileSystem(uri, Collections.emptyMap());
-                    } catch (FileSystemAlreadyExistsException e2) {
-                        throw new MuException("Cannot create the classpath handler as the Zip File System for this jar file has already been created");
-                    }
-                }
-                myPath = zipFileSystem.getPath(basePath);
-            } else {
-                myPath = Paths.get(uri);
+        Set<String> seenRoots = new HashSet<>();
+        cacheFromFilesystemRoots(seenRoots);
+        cacheFromDirectResources(seenRoots);
+        cacheFromJarManifests(seenRoots);
+    }
+
+    Set<String> immediateSubdirectoryNames() {
+        Set<String> directories = new LinkedHashSet<>();
+        for (Map.Entry<String, ClasspathResourceProvider> entry : all.entrySet()) {
+            String relativePath = entry.getKey();
+            if (relativePath.isEmpty()) {
+                continue;
             }
-            Stream<Path> walk = Files.walk(myPath);
+            int slashIndex = relativePath.indexOf('/');
+            if (slashIndex > 0) {
+                directories.add(relativePath.substring(0, slashIndex));
+            } else if (entry.getValue().isDirectory()) {
+                directories.add(relativePath);
+            }
+        }
+        return directories;
+    }
+
+    private void cacheFromFilesystemRoots(Set<String> seenRoots) throws IOException, URISyntaxException {
+        Enumeration<URL> resources = classLoader.getResources("");
+        while (resources.hasMoreElements()) {
+            URL url = resources.nextElement();
+            if (!"file".equals(url.getProtocol())) {
+                continue;
+            }
+            Path classpathRoot = Paths.get(url.toURI());
+            Path rootPath = resourceName.isEmpty() ? classpathRoot : classpathRoot.resolve(resourceName);
+            cacheRootIfPresent(rootPath, seenRoots);
+        }
+    }
+
+    private void cacheFromDirectResources(Set<String> seenRoots) throws IOException, URISyntaxException {
+        if (resourceName.isEmpty()) {
+            return;
+        }
+        Enumeration<URL> resources = classLoader.getResources(resourceName);
+        while (resources.hasMoreElements()) {
+            cacheRootIfPresent(pathForResource(resources.nextElement()), seenRoots);
+        }
+    }
+
+    private void cacheFromJarManifests(Set<String> seenRoots) throws IOException {
+        Enumeration<URL> manifests = classLoader.getResources("META-INF/MANIFEST.MF");
+        while (manifests.hasMoreElements()) {
+            URL url = manifests.nextElement();
+            if (!"jar".equals(url.getProtocol())) {
+                continue;
+            }
+            try {
+                cacheRootIfPresent(pathForJar(url), seenRoots);
+            } catch (URISyntaxException e) {
+                throw new IOException("Could not inspect classpath jar " + url, e);
+            }
+        }
+    }
+
+    private void cacheRootIfPresent(Path rootPath, Set<String> seenRoots) throws IOException {
+        if (!Files.exists(rootPath)) {
+            return;
+        }
+        String rootKey = rootPath.toUri().toString();
+        if (!seenRoots.add(rootKey)) {
+            return;
+        }
+        cachePathTree(rootPath);
+    }
+
+    private void cachePathTree(Path rootPath) throws IOException {
+        try (Stream<Path> walk = Files.walk(rootPath)) {
             for (Iterator<Path> it = walk.iterator(); it.hasNext(); ) {
                 Path cur = it.next();
-                String relativePath = myPath.relativize(cur).toString().replace('\\', '/');
+                String relativePath = rootPath.relativize(cur).toString().replace('\\', '/');
 
                 boolean exists = Files.exists(cur);
                 boolean directory = exists && Files.isDirectory(cur);
@@ -121,8 +188,33 @@ class ClasspathCache implements ResourceProviderFactory {
                 ClasspathResourceProvider crp = new ClasspathResourceProvider(exists, directory, size, lastModified, cur, null);
                 all.put(relativePath, crp);
             }
-            walk.close();
         }
+    }
+
+    private Path pathForResource(URL resource) throws URISyntaxException, IOException {
+        if ("jar".equals(resource.getProtocol())) {
+            return pathForJar(resource);
+        }
+        return Paths.get(resource.toURI());
+    }
+
+    private Path pathForJar(URL resource) throws IOException, URISyntaxException {
+        URI jarUri = URI.create("jar:" + jarFileUrl(resource).toURI());
+        FileSystem zipFileSystem;
+        try {
+            zipFileSystem = FileSystems.getFileSystem(jarUri);
+        } catch (FileSystemNotFoundException e) {
+            try {
+                zipFileSystem = FileSystems.newFileSystem(jarUri, Collections.emptyMap());
+            } catch (FileSystemAlreadyExistsException e2) {
+                throw new MuException("Cannot create the classpath handler as the Zip File System for this jar file has already been created");
+            }
+        }
+        return zipFileSystem.getPath(basePath);
+    }
+
+    private URL jarFileUrl(URL resource) throws IOException {
+        return ((java.net.JarURLConnection) resource.openConnection()).getJarFileURL();
     }
 
 

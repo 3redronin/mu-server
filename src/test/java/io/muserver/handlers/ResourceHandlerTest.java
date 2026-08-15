@@ -12,9 +12,17 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.jar.Attributes;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
 
 import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.Mutils.urlDecode;
@@ -522,6 +530,83 @@ public class ResourceHandlerTest {
             assertThat(e.getMessage(), containsString("1.0.0"));
             assertThat(e.getMessage(), containsString("2.0.0"));
             assertThat(e.getMessage(), containsString("webjarHandler(artifactId, version)"));
+        }
+    }
+
+    @Test
+    public void canServeResourcesFromWebjarVisibleViaContextClassLoader() throws Exception {
+        Path jarPath = createWebJar("context-only-webjar", "1.2.3", true, "hello.txt", "Hello from a context loader webjar");
+        ClassLoader originalClassLoader = Thread.currentThread().getContextClassLoader();
+        try (URLClassLoader classLoader = new URLClassLoader(new URL[]{jarPath.toUri().toURL()}, originalClassLoader)) {
+            Thread.currentThread().setContextClassLoader(classLoader);
+            server = ServerUtils.httpsServerForTest()
+                .withGzipEnabled(false)
+                .addHandler(context("/lib")
+                    .addHandler(context("/context-only")
+                        .addHandler(webjarHandler("context-only-webjar"))))
+                .start();
+
+            try (Response resp = call(request(server.uri().resolve("/lib/context-only/hello.txt")))) {
+                assertThat(resp.code(), is(200));
+                assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
+                assertThat(resp.body().string(), is("Hello from a context loader webjar"));
+            }
+        } finally {
+            Thread.currentThread().setContextClassLoader(originalClassLoader);
+        }
+    }
+
+    @Test
+    public void canDiscoverWebjarVersionsWithoutDirectoryEntries() throws Exception {
+        Path jarPath = createWebJar("no-dir-entries-webjar", "4.5.6", false, "hello.txt", "Hello from a jar without directory entries");
+        ClassLoader originalClassLoader = Thread.currentThread().getContextClassLoader();
+        try (URLClassLoader classLoader = new URLClassLoader(new URL[]{jarPath.toUri().toURL()}, originalClassLoader)) {
+            Thread.currentThread().setContextClassLoader(classLoader);
+            server = ServerUtils.httpsServerForTest()
+                .withGzipEnabled(false)
+                .addHandler(context("/lib")
+                    .addHandler(context("/no-dir")
+                        .addHandler(webjarHandler("no-dir-entries-webjar"))))
+                .start();
+
+            try (Response resp = call(request(server.uri().resolve("/lib/no-dir/hello.txt")))) {
+                assertThat(resp.code(), is(200));
+                assertThat(resp.header("Content-Type"), is("text/plain;charset=utf-8"));
+                assertThat(resp.body().string(), is("Hello from a jar without directory entries"));
+            }
+        } finally {
+            Thread.currentThread().setContextClassLoader(originalClassLoader);
+        }
+    }
+
+    private static Path createWebJar(String artifactId, String version, boolean includeDirectoryEntries, String fileName, String content) throws IOException {
+        Path jarPath = Files.createTempFile("webjar-test-", ".jar");
+        Manifest manifest = new Manifest();
+        manifest.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
+
+        try (JarOutputStream jarOutputStream = new JarOutputStream(Files.newOutputStream(jarPath), manifest)) {
+            String filePath = "META-INF/resources/webjars/" + artifactId + "/" + version + "/" + fileName;
+            if (includeDirectoryEntries) {
+                addDirectoryEntries(jarOutputStream, filePath);
+            }
+            jarOutputStream.putNextEntry(new JarEntry(filePath));
+            jarOutputStream.write(content.getBytes(StandardCharsets.UTF_8));
+            jarOutputStream.closeEntry();
+        }
+
+        return jarPath;
+    }
+
+    private static void addDirectoryEntries(JarOutputStream jarOutputStream, String filePath) throws IOException {
+        String[] parts = filePath.split("/");
+        StringBuilder current = new StringBuilder();
+        for (int i = 0; i < parts.length - 1; i++) {
+            current.append(parts[i]).append('/');
+            if ("META-INF/".contentEquals(current)) {
+                continue;
+            }
+            jarOutputStream.putNextEntry(new JarEntry(current.toString()));
+            jarOutputStream.closeEntry();
         }
     }
 
