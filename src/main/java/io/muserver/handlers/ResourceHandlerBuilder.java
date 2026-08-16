@@ -248,7 +248,9 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
 
     /**
      * Creates a handler that serves files from a specific WebJar version.
-     * <p>For example, the Swagger UI WebJar can be served at {@code /api-docs/} like this:</p>
+     * <p>In this example, {@code swagger-ui} is the WebJar's Maven artifact ID and {@code 5.17.14} is its
+     * version. The {@code /api-docs} context path is chosen by the application and can be replaced with any
+     * desired path:</p>
      * <pre><code>
      * MuServer server = MuServerBuilder.httpServer()
      *     .addHandler(ContextHandlerBuilder.context("/api-docs")
@@ -274,7 +276,8 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      * <p>This supports WebJars in the {@code org.webjars} and {@code org.webjars.npm} Maven groups that include
      * their standard {@code META-INF/maven/.../pom.properties} file. Use
      * {@link #webjarHandler(String, String)} for WebJars without that metadata.</p>
-     * <p>For example, the Swagger UI WebJar can be served at {@code /api-docs/} like this:</p>
+     * <p>In this example, {@code swagger-ui} is the WebJar's Maven artifact ID. The {@code /api-docs} context
+     * path is chosen by the application and can be replaced with any desired path:</p>
      * <pre><code>
      * MuServer server = MuServerBuilder.httpServer()
      *     .addHandler(ContextHandlerBuilder.context("/api-docs")
