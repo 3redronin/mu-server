@@ -12,9 +12,15 @@ import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
 
 import static io.muserver.ContextHandlerBuilder.context;
 import static io.muserver.Mutils.urlDecode;
@@ -25,6 +31,7 @@ import static io.muserver.handlers.ResourceType.gzippableMimeTypes;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.Assert.assertThrows;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.FileUtils.readResource;
@@ -467,6 +474,91 @@ public class ResourceHandlerTest {
             assertThat(resp.header("Content-Type"), is("application/javascript"));
             assertThat(resp.body().string(), is(readResource("/META-INF/resources/webjars/jquery-ui/1.13.2/jquery-ui.min.js")));
         }
+    }
+
+    @Test
+    public void canServeAWebJarWithAnExplicitVersion() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .withGzipEnabled(false)
+            .addHandler(context("/jquery")
+                .addHandler(webjarHandler("jquery", "3.7.1")))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/jquery/jquery.min.js")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), is("application/javascript"));
+            assertThat(resp.body().string(), is(readResource("/META-INF/resources/webjars/jquery/3.7.1/jquery.min.js")));
+        }
+    }
+
+    @Test
+    public void canServeAWebJarWithTheVersionFromMavenMetadata() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .withGzipEnabled(false)
+            .addHandler(context("/jquery")
+                .addHandler(webjarHandler("jquery")))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/jquery/jquery.min.js")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.header("Content-Type"), is("application/javascript"));
+            assertThat(resp.body().string(), is(readResource("/META-INF/resources/webjars/jquery/3.7.1/jquery.min.js")));
+        }
+    }
+
+    @Test
+    public void versionDetectionDoesNotRequireJarDirectoryEntriesOrAManifest() throws Exception {
+        Path jar = createWebJarMetadataJar("org.webjars.npm", "metadata-only", "1.2.3");
+        try (URLClassLoader classLoader = new URLClassLoader(new URL[]{jar.toUri().toURL()}, null)) {
+            assertThat(ResourceHandlerBuilder.findWebJarVersion("metadata-only", classLoader), is("1.2.3"));
+        } finally {
+            Files.deleteIfExists(jar);
+        }
+    }
+
+    @Test
+    public void versionDetectionRejectsMissingMetadata() {
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+            () -> webjarHandler("definitely-not-a-real-webjar"));
+
+        assertThat(error.getMessage(), containsString("Could not find Maven metadata"));
+        assertThat(error.getMessage(), containsString("webjarHandler(artifactId, version)"));
+    }
+
+    @Test
+    public void versionDetectionRejectsMultipleVersions() throws Exception {
+        Path first = createWebJarMetadataJar("org.webjars", "duplicate-webjar", "1.0.0");
+        Path second = createWebJarMetadataJar("org.webjars", "duplicate-webjar", "2.0.0");
+        try (URLClassLoader classLoader = new URLClassLoader(
+            new URL[]{first.toUri().toURL(), second.toUri().toURL()}, null)) {
+            IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> ResourceHandlerBuilder.findWebJarVersion("duplicate-webjar", classLoader));
+
+            assertThat(error.getMessage(), containsString("Multiple versions found"));
+            assertThat(error.getMessage(), containsString("1.0.0"));
+            assertThat(error.getMessage(), containsString("2.0.0"));
+        } finally {
+            Files.deleteIfExists(first);
+            Files.deleteIfExists(second);
+        }
+    }
+
+    @Test
+    public void webJarCoordinatesMustBeSinglePathSegments() {
+        assertThrows(IllegalArgumentException.class, () -> webjarHandler("../jquery", "3.7.1"));
+        assertThrows(IllegalArgumentException.class, () -> webjarHandler("jquery", "../3.7.1"));
+    }
+
+    private static Path createWebJarMetadataJar(String groupId, String artifactId, String version) throws IOException {
+        Path jar = Files.createTempFile("webjar-metadata-", ".jar");
+        try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(jar))) {
+            String metadataPath = "META-INF/maven/" + groupId + "/" + artifactId + "/pom.properties";
+            output.putNextEntry(new JarEntry(metadataPath));
+            output.write(("artifactId=" + artifactId + "\nversion=" + version + "\n")
+                .getBytes(StandardCharsets.ISO_8859_1));
+            output.closeEntry();
+        }
+        return jar;
     }
 
     @After

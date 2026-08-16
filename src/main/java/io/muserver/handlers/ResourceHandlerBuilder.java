@@ -5,7 +5,9 @@ import io.muserver.rest.RestHandlerBuilder;
 import org.jspecify.annotations.Nullable;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,9 +15,13 @@ import java.nio.file.Paths;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
+import java.util.Enumeration;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Scanner;
+import java.util.Set;
 
 import static io.muserver.handlers.ResourceType.DEFAULT_EXTENSION_MAPPINGS;
 import static java.util.Objects.requireNonNull;
@@ -26,6 +32,8 @@ import static java.util.Objects.requireNonNull;
  * {@link #fileOrClasspath(String, String)}</p>
  */
 public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler> {
+
+    private static final String[] WEBJAR_GROUP_IDS = {"org.webjars.npm", "org.webjars"};
 
     private @Nullable DateTimeFormatter directoryListingDateFormatter;
     private Map<String, ResourceType> extensionToResourceType = DEFAULT_EXTENSION_MAPPINGS;
@@ -236,6 +244,98 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      */
     public static ResourceHandlerBuilder classpathHandler(String classpathRoot) {
         return new ResourceHandlerBuilder().withResourceProviderFactory(ResourceProviderFactory.classpathBased(classpathRoot));
+    }
+
+    /**
+     * Creates a handler that serves files from a specific WebJar version.
+     * <p>For example, the Swagger UI WebJar can be served at {@code /api-docs/} like this:</p>
+     * <pre><code>
+     * MuServer server = MuServerBuilder.httpServer()
+     *     .addHandler(ContextHandlerBuilder.context("/api-docs")
+     *         .addHandler(ResourceHandlerBuilder.webjarHandler("swagger-ui", "5.17.14")))
+     *     .start();
+     *
+     * // The Swagger UI home page is now available at /api-docs/index.html
+     * </code></pre>
+     *
+     * @param artifactId The WebJar Maven artifact ID.
+     * @param version The WebJar version.
+     * @return A new builder.
+     * @throws IllegalArgumentException If either argument is blank or is not a single path segment.
+     */
+    public static ResourceHandlerBuilder webjarHandler(String artifactId, String version) {
+        validateWebJarPathSegment("artifactId", artifactId);
+        validateWebJarPathSegment("version", version);
+        return classpathHandler("/META-INF/resources/webjars/" + artifactId + "/" + version);
+    }
+
+    /**
+     * Creates a handler that serves files from an official WebJar, with its version read from Maven metadata.
+     * <p>This supports WebJars in the {@code org.webjars} and {@code org.webjars.npm} Maven groups that include
+     * their standard {@code META-INF/maven/.../pom.properties} file. Use
+     * {@link #webjarHandler(String, String)} for WebJars without that metadata.</p>
+     * <p>For example, the Swagger UI WebJar can be served at {@code /api-docs/} like this:</p>
+     * <pre><code>
+     * MuServer server = MuServerBuilder.httpServer()
+     *     .addHandler(ContextHandlerBuilder.context("/api-docs")
+     *         .addHandler(ResourceHandlerBuilder.webjarHandler("swagger-ui")))
+     *     .start();
+     * </code></pre>
+     *
+     * @param artifactId The WebJar Maven artifact ID.
+     * @return A new builder.
+     * @throws IllegalArgumentException If the artifact ID is invalid, its Maven metadata cannot be found, or
+     *                                  multiple versions are present.
+     */
+    public static ResourceHandlerBuilder webjarHandler(String artifactId) {
+        String version = findWebJarVersion(artifactId, ResourceHandlerBuilder.class.getClassLoader());
+        return webjarHandler(artifactId, version);
+    }
+
+    static String findWebJarVersion(String artifactId, ClassLoader classLoader) {
+        validateWebJarPathSegment("artifactId", artifactId);
+        requireNonNull(classLoader, "classLoader");
+
+        Set<String> versions = new LinkedHashSet<>();
+        try {
+            for (String groupId : WEBJAR_GROUP_IDS) {
+                String metadataPath = "META-INF/maven/" + groupId + "/" + artifactId + "/pom.properties";
+                Enumeration<URL> resources = classLoader.getResources(metadataPath);
+                while (resources.hasMoreElements()) {
+                    URL resource = resources.nextElement();
+                    Properties properties = new Properties();
+                    try (InputStream input = resource.openStream()) {
+                        properties.load(input);
+                    }
+                    String version = properties.getProperty("version");
+                    if (version == null || version.trim().isEmpty()) {
+                        throw new IllegalArgumentException("WebJar metadata at " + resource + " does not contain a version");
+                    }
+                    versions.add(version);
+                }
+            }
+        } catch (IOException e) {
+            throw new IllegalArgumentException("Could not read Maven metadata for WebJar '" + artifactId + "'", e);
+        }
+
+        if (versions.isEmpty()) {
+            throw new IllegalArgumentException("Could not find Maven metadata for WebJar '" + artifactId
+                + "'. Use webjarHandler(artifactId, version) for WebJars without pom.properties.");
+        }
+        if (versions.size() > 1) {
+            throw new IllegalArgumentException("Multiple versions found for WebJar '" + artifactId + "': " + versions
+                + ". Use webjarHandler(artifactId, version) to select one.");
+        }
+        return versions.iterator().next();
+    }
+
+    private static void validateWebJarPathSegment(String name, String value) {
+        if (value == null || value.trim().isEmpty()) {
+            throw new IllegalArgumentException(name + " cannot be null or blank");
+        }
+        if (value.indexOf('/') >= 0 || value.indexOf('\\') >= 0 || value.equals(".") || value.equals("..")) {
+            throw new IllegalArgumentException(name + " must be a single path segment");
+        }
     }
 
     /**
