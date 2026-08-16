@@ -186,7 +186,7 @@ class ClasspathCache implements ResourceProviderFactory {
                     lastModified = null;
                 }
                 ClasspathResourceProvider crp = new ClasspathResourceProvider(exists, directory, size, lastModified, cur, null);
-                all.put(relativePath, crp);
+                all.putIfAbsent(relativePath, crp);
             }
         }
     }
