@@ -280,6 +280,8 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      *     .addHandler(ContextHandlerBuilder.context("/api-docs")
      *         .addHandler(ResourceHandlerBuilder.webjarHandler("swagger-ui")))
      *     .start();
+     *
+     * // The Swagger UI home page is now available at /api-docs/index.html
      * </code></pre>
      *
      * @param artifactId The WebJar Maven artifact ID.
