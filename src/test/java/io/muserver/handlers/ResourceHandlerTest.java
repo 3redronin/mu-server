@@ -521,8 +521,8 @@ public class ResourceHandlerTest {
         IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
             () -> webjarHandler("definitely-not-a-real-webjar"));
 
-        assertThat(error.getMessage(), containsString("Could not find Maven metadata"));
-        assertThat(error.getMessage(), containsString("webjarHandler(artifactId, version)"));
+        assertThat(error.getMessage(), containsString("Could not determine the version"));
+        assertThat(error.getMessage(), containsString("webjarHandler(\"definitely-not-a-real-webjar\", \"<version>\")"));
     }
 
     @Test
@@ -537,6 +537,7 @@ public class ResourceHandlerTest {
             assertThat(error.getMessage(), containsString("Multiple versions found"));
             assertThat(error.getMessage(), containsString("1.0.0"));
             assertThat(error.getMessage(), containsString("2.0.0"));
+            assertThat(error.getMessage(), containsString("webjarHandler(\"duplicate-webjar\", \"<version>\")"));
         } finally {
             Files.deleteIfExists(first);
             Files.deleteIfExists(second);

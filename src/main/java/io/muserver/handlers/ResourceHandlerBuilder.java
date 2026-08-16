@@ -273,9 +273,6 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
 
     /**
      * Creates a handler that serves files from an official WebJar, with its version read from Maven metadata.
-     * <p>This supports WebJars in the {@code org.webjars} and {@code org.webjars.npm} Maven groups that include
-     * their standard {@code META-INF/maven/.../pom.properties} file. Use
-     * {@link #webjarHandler(String, String)} for WebJars without that metadata.</p>
      * <p>In this example, {@code swagger-ui} is the WebJar's Maven artifact ID. The {@code /api-docs} context
      * path is chosen by the application and can be replaced with any desired path:</p>
      * <pre><code>
@@ -287,8 +284,9 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
      *
      * @param artifactId The WebJar Maven artifact ID.
      * @return A new builder.
-     * @throws IllegalArgumentException If the artifact ID is invalid, its Maven metadata cannot be found, or
-     *                                  multiple versions are present.
+     * @throws IllegalArgumentException If the artifact ID is invalid, its version cannot be determined, or
+     *                                  multiple versions are present. The exception message explains how to
+     *                                  specify a version explicitly.
      */
     public static ResourceHandlerBuilder webjarHandler(String artifactId) {
         String version = findWebJarVersion(artifactId, ResourceHandlerBuilder.class.getClassLoader());
@@ -322,12 +320,12 @@ public class ResourceHandlerBuilder implements MuHandlerBuilder<ResourceHandler>
         }
 
         if (versions.isEmpty()) {
-            throw new IllegalArgumentException("Could not find Maven metadata for WebJar '" + artifactId
-                + "'. Use webjarHandler(artifactId, version) for WebJars without pom.properties.");
+            throw new IllegalArgumentException("Could not determine the version of WebJar '" + artifactId
+                + "'. Use webjarHandler(\"" + artifactId + "\", \"<version>\") to specify it explicitly.");
         }
         if (versions.size() > 1) {
             throw new IllegalArgumentException("Multiple versions found for WebJar '" + artifactId + "': " + versions
-                + ". Use webjarHandler(artifactId, version) to select one.");
+                + ". Use webjarHandler(\"" + artifactId + "\", \"<version>\") to select one explicitly.");
         }
         return versions.iterator().next();
     }
