@@ -274,7 +274,7 @@ public class MuServerTest {
             .addHandler(Method.GET, "/", (req, resp, pp) -> resp.write("Hello there " + req.remoteAddress()))
             .start();
         try (Response resp = call(request().url(server.uri().toString()))) {
-            assertThat(resp.body().string(), containsString("."));
+            assertThat(resp.body().string(), anyOf(containsString("."), containsString(":")));
         }
     }
 

@@ -174,6 +174,35 @@ public class MuUriInfoTest {
     }
 
     @Test
+    public void rawColonsArePreservedInMatchedUris() {
+        AtomicReference<UriInfo> uriRef = new AtomicReference<>();
+
+        @Path("api")
+        class ApiResource {
+            @GET
+            @Path("{segment}")
+            public void get(@PathParam("segment") String segment, @Context UriInfo uriInfo) {
+                assertThat(segment, equalTo("foo:bar"));
+                uriRef.set(uriInfo);
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new ApiResource()))
+            .start();
+
+        call(request(server.uri().resolve("/api/foo:bar"))).close();
+
+        UriInfo uriInfo = uriRef.get();
+        assertThat(uriInfo, not(nullValue()));
+        assertThat(uriInfo.getPath(true), equalTo("api/foo:bar"));
+        assertThat(uriInfo.getPath(false), equalTo("api/foo:bar"));
+        assertThat(uriInfo.getMatchedURIs(true), contains("api/foo:bar", "api"));
+        assertThat(uriInfo.getMatchedURIs(false), contains("api/foo:bar", "api"));
+        assertThat(uriInfo.getRequestUri(), equalTo(server.uri().resolve("/api/foo:bar")));
+    }
+
+    @Test
     public void preMatchFiltersHaveMostUriInfo() {
 
         AtomicReference<UriInfo> uriRef = new AtomicReference<>();
