@@ -185,6 +185,23 @@ public class RequestMatcherTest {
     }
 
     @Test
+    public void pathSegmentsCanContainColons() throws NotMatchedException {
+        @Path("api")
+        class ApiResource {
+            @GET
+            @Path("{segment}")
+            public String get(@PathParam("segment") String segment) {
+                return segment;
+            }
+        }
+
+        RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new ApiResource(), paramConverterProviders, customizer)));
+        RequestMatcher.MatchedMethod mm = findResourceMethod(rm, Method.GET, "api/foo:bar", emptyList(), null);
+        assertThat(mm.resourceMethod.methodHandle.getName(), equalTo("get"));
+        assertThat(mm.pathParams.get("segment").getPath(), equalTo("foo:bar"));
+    }
+
+    @Test
     public void pathsOnClassesAreMatchedFirst() throws NotMatchedException {
         // test example taken from https://bill.burkecentral.com/2013/05/29/the-poor-jax-rs-request-dispatching-algorithm/
 

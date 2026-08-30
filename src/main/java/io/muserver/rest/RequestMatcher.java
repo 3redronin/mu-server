@@ -47,7 +47,9 @@ class RequestMatcher {
     }
 
     Set<MatchedMethod> getMatchedMethodsForPath(String path, Function<MatchedMethod, ResourceClass> subResourceLocator) throws NotMatchedException {
-        StepOneOutput stepOneOutput = stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(path);
+        // Encode colon so it doesn't cause a path segment to be interpreted as scheme
+        String uriSafePath = path.replace(":", "%3A");
+        StepOneOutput stepOneOutput = stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(uriSafePath);
         URI methodURI = stepOneOutput.unmatchedGroup == null ? null : URI.create(UriPattern.trimSlashes(stepOneOutput.unmatchedGroup));
         return stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(methodURI, stepOneOutput.candidates, subResourceLocator);
     }
