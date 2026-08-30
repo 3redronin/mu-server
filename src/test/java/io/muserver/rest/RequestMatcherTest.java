@@ -8,6 +8,7 @@ import io.netty.handler.codec.http.HttpHeaderNames;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.ext.ParamConverterProvider;
+import org.jspecify.annotations.Nullable;
 import org.junit.Assert;
 import org.junit.Test;
 import scaffolding.NotImplementedMuRequest;
@@ -182,6 +183,23 @@ public class RequestMatcherTest {
         RequestMatcher.MatchedMethod mm = findResourceMethod(rm, Method.GET, "api/fruits/orange", emptyList(), null);
         assertThat(mm.resourceMethod.methodHandle().getName(), equalTo("get"));
         assertThat(mm.pathParams.get("name").getPath(), equalTo("orange"));
+    }
+
+    @Test
+    public void pathSegmentsCanContainColons() throws NotMatchedException {
+        @Path("api")
+        class ApiResource {
+            @GET
+            @Path("{segment}")
+            public String get(@PathParam("segment") String segment) {
+                return segment;
+            }
+        }
+
+        RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new ApiResource(), paramConverterProviders, customizer)));
+        RequestMatcher.MatchedMethod mm = findResourceMethod(rm, Method.GET, "api/foo:bar", emptyList(), null);
+        assertThat(mm.resourceMethod.methodHandle().getName(), equalTo("get"));
+        assertThat(mm.pathParams.get("segment").getPath(), equalTo("foo:bar"));
     }
 
     @Test
@@ -421,11 +439,11 @@ public class RequestMatcherTest {
         assertThat(findResourceMethod(rm, Method.POST, "pictures", emptyList(), null).resourceMethod.methodHandle().getName(), equalTo("concreteAndWildcard"));
     }
 
-    private static String nameOf(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) throws NotMatchedException {
+    private static String nameOf(RequestMatcher rm, List<MediaType> acceptHeaders, @Nullable String requestBodyContentType) throws NotMatchedException {
         return findResourceMethod(rm, Method.GET, "pictures", acceptHeaders, requestBodyContentType).resourceMethod.methodHandle().getName();
     }
 
-    private static void assertNotAcceptable(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) {
+    private static void assertNotAcceptable(RequestMatcher rm, List<MediaType> acceptHeaders, @Nullable String requestBodyContentType) {
         try {
             RequestMatcher.MatchedMethod found = findResourceMethod(rm, Method.GET, "pictures", acceptHeaders, requestBodyContentType);
             Assert.fail("Should have thrown exception but instead got " + found);
@@ -436,11 +454,11 @@ public class RequestMatcherTest {
         }
     }
 
-    private static RequestMatcher.MatchedMethod findResourceMethod(RequestMatcher rm, Method method, String path, List<MediaType> acceptHeaders, String contentBodyType) throws NotMatchedException {
+    private static RequestMatcher.MatchedMethod findResourceMethod(RequestMatcher rm, Method method, String path, List<MediaType> acceptHeaders, @Nullable String contentBodyType) throws NotMatchedException {
         return findResourceMethod(rm, method, path, acceptHeaders, contentBodyType, contentBodyType != null);
     }
 
-    private static RequestMatcher.MatchedMethod findResourceMethod(RequestMatcher rm, Method method, String path, List<MediaType> acceptHeaders, String contentBodyType, boolean requestHasEntity) throws NotMatchedException {
+    private static RequestMatcher.MatchedMethod findResourceMethod(RequestMatcher rm, Method method, String path, List<MediaType> acceptHeaders, @Nullable String contentBodyType, boolean requestHasEntity) throws NotMatchedException {
         NotImplementedMuRequest request = new NotImplementedMuRequest() {
             @Override
             public URI uri() {
