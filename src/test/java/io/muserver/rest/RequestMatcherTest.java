@@ -7,7 +7,9 @@ import io.muserver.Method;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.PathSegment;
 import jakarta.ws.rs.ext.ParamConverterProvider;
+import org.jspecify.annotations.Nullable;
 import org.junit.Assert;
 import org.junit.Test;
 import scaffolding.NotImplementedMuRequest;
@@ -182,6 +184,145 @@ public class RequestMatcherTest {
         RequestMatcher.MatchedMethod mm = findResourceMethod(rm, Method.GET, "api/fruits/orange", emptyList(), null);
         assertThat(mm.resourceMethod.methodHandle().getName(), equalTo("get"));
         assertThat(mm.pathParams.get("name").getPath(), equalTo("orange"));
+    }
+
+    @Test
+    public void pathSegmentsCanContainColons() throws NotMatchedException {
+        @Path("api")
+        class ApiResource {
+            @GET
+            @Path("{segment}")
+            public String get(@PathParam("segment") String segment) {
+                return segment;
+            }
+        }
+
+        RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new ApiResource(), paramConverterProviders, customizer)));
+        RequestMatcher.MatchedMethod mm = findResourceMethod(rm, Method.GET, "api/foo:bar", emptyList(), null);
+        assertThat(mm.resourceMethod.methodHandle().getName(), equalTo("get"));
+        assertThat(mm.pathParams.get("segment").getPath(), equalTo("foo:bar"));
+    }
+
+    @Test
+    public void schemeLikePathSegmentsAreTreatedAsPathData() throws NotMatchedException {
+        @Path("api")
+        class ApiResource {
+            @GET
+            @Path("{segment}")
+            public String get(@PathParam("segment") String segment) {
+                return segment;
+            }
+        }
+
+        RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new ApiResource(), paramConverterProviders, customizer)));
+        for (String segment : asList("a:b", "sha256:1234", "urn:example:item", "a+b:value", "a.b:value", "a-b:value")) {
+            RequestMatcher.MatchedMethod mm = findResourceMethod(rm, Method.GET, "api/" + segment, emptyList(), null);
+            assertThat(mm.pathParams.get("segment").getPath(), equalTo(segment));
+        }
+    }
+
+    @Test
+    public void percentEncodedColonsContinueToWork() throws NotMatchedException {
+        @Path("api")
+        class ApiResource {
+            @GET
+            @Path("{segment}")
+            public String get(@PathParam("segment") String segment) {
+                return segment;
+            }
+        }
+
+        RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new ApiResource(), paramConverterProviders, customizer)));
+        RequestMatcher.MatchedMethod mm = rm.getMatchedMethodsForPath("api/foo%3Abar", ignored -> {
+            throw new AssertionError("No sub-resource locator should be invoked");
+        }).iterator().next();
+        assertThat(mm.pathParams.get("segment").getPath(), equalTo("foo:bar"));
+        assertThat(mm.pathMatch.regexMatcher().group(), equalTo("foo%3Abar"));
+    }
+
+    @Test
+    public void rawColonsRemainVisibleToMethodPathRegexes() throws NotMatchedException {
+        @Path("api")
+        class ApiResource {
+            @GET
+            @Path("{segment:[a-z]+:[a-z]+}")
+            public String get(@PathParam("segment") String segment) {
+                return segment;
+            }
+        }
+
+        RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new ApiResource(), paramConverterProviders, customizer)));
+        RequestMatcher.MatchedMethod mm = findResourceMethod(rm, Method.GET, "api/foo:bar", emptyList(), null);
+        assertThat(mm.pathParams.get("segment").getPath(), equalTo("foo:bar"));
+        assertThat(mm.pathMatch.regexMatcher().group(), equalTo("foo:bar"));
+    }
+
+    @Test
+    public void rawColonsRemainVisibleToRootResourcePathRegexes() throws NotMatchedException {
+        @Path("{segment:[a-z]+:[a-z]+}")
+        class ColonResource {
+            @GET
+            public String get(@PathParam("segment") String segment) {
+                return segment;
+            }
+        }
+
+        RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new ColonResource(), paramConverterProviders, customizer)));
+        RequestMatcher.MatchedMethod mm = rm.getMatchedMethodsForPath("foo:bar", ignored -> {
+            throw new AssertionError("No sub-resource locator should be invoked");
+        }).iterator().next();
+        assertThat(mm.pathParams.get("segment").getPath(), equalTo("foo:bar"));
+        assertThat(mm.matchedClass.pathMatch.regexMatcher().group(), equalTo("foo:bar"));
+    }
+
+    @Test
+    public void colonsInLaterRemainingSegmentsContinueToWork() throws NotMatchedException {
+        @Path("api")
+        class ApiResource {
+            @GET
+            @Path("prefix/{segment}")
+            public String get(@PathParam("segment") String segment) {
+                return segment;
+            }
+        }
+
+        RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new ApiResource(), paramConverterProviders, customizer)));
+        RequestMatcher.MatchedMethod mm = findResourceMethod(rm, Method.GET, "api/prefix/foo:bar", emptyList(), null);
+        assertThat(mm.pathParams.get("segment").getPath(), equalTo("foo:bar"));
+    }
+
+    @Test
+    public void slashTrimmingBehaviorIsPreservedForColonSegments() throws NotMatchedException {
+        @Path("api")
+        class ApiResource {
+            @GET
+            @Path("{segment}")
+            public String get(@PathParam("segment") String segment) {
+                return segment;
+            }
+        }
+
+        RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new ApiResource(), paramConverterProviders, customizer)));
+        RequestMatcher.MatchedMethod mm = findResourceMethod(rm, Method.GET, "api//foo:bar/", emptyList(), null);
+        assertThat(mm.pathParams.get("segment").getPath(), equalTo("foo:bar"));
+    }
+
+    @Test
+    public void colonSegmentsCanHaveMatrixParameters() throws NotMatchedException {
+        @Path("api")
+        class ApiResource {
+            @GET
+            @Path("{segment}")
+            public String get(@PathParam("segment") PathSegment segment) {
+                return segment.getPath();
+            }
+        }
+
+        RequestMatcher rm = new RequestMatcher(singletonList(ResourceClass.fromObject(new ApiResource(), paramConverterProviders, customizer)));
+        RequestMatcher.MatchedMethod mm = findResourceMethod(rm, Method.GET, "api/foo:bar;color=blue", emptyList(), null);
+        PathSegment segment = mm.pathParams.get("segment");
+        assertThat(segment.getPath(), equalTo("foo:bar"));
+        assertThat(segment.getMatrixParameters().getFirst("color"), equalTo("blue"));
     }
 
     @Test
@@ -421,11 +562,11 @@ public class RequestMatcherTest {
         assertThat(findResourceMethod(rm, Method.POST, "pictures", emptyList(), null).resourceMethod.methodHandle().getName(), equalTo("concreteAndWildcard"));
     }
 
-    private static String nameOf(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) throws NotMatchedException {
+    private static String nameOf(RequestMatcher rm, List<MediaType> acceptHeaders, @Nullable String requestBodyContentType) throws NotMatchedException {
         return findResourceMethod(rm, Method.GET, "pictures", acceptHeaders, requestBodyContentType).resourceMethod.methodHandle().getName();
     }
 
-    private static void assertNotAcceptable(RequestMatcher rm, List<MediaType> acceptHeaders, String requestBodyContentType) {
+    private static void assertNotAcceptable(RequestMatcher rm, List<MediaType> acceptHeaders, @Nullable String requestBodyContentType) {
         try {
             RequestMatcher.MatchedMethod found = findResourceMethod(rm, Method.GET, "pictures", acceptHeaders, requestBodyContentType);
             Assert.fail("Should have thrown exception but instead got " + found);
@@ -436,11 +577,11 @@ public class RequestMatcherTest {
         }
     }
 
-    private static RequestMatcher.MatchedMethod findResourceMethod(RequestMatcher rm, Method method, String path, List<MediaType> acceptHeaders, String contentBodyType) throws NotMatchedException {
+    private static RequestMatcher.MatchedMethod findResourceMethod(RequestMatcher rm, Method method, String path, List<MediaType> acceptHeaders, @Nullable String contentBodyType) throws NotMatchedException {
         return findResourceMethod(rm, method, path, acceptHeaders, contentBodyType, contentBodyType != null);
     }
 
-    private static RequestMatcher.MatchedMethod findResourceMethod(RequestMatcher rm, Method method, String path, List<MediaType> acceptHeaders, String contentBodyType, boolean requestHasEntity) throws NotMatchedException {
+    private static RequestMatcher.MatchedMethod findResourceMethod(RequestMatcher rm, Method method, String path, List<MediaType> acceptHeaders, @Nullable String contentBodyType, boolean requestHasEntity) throws NotMatchedException {
         NotImplementedMuRequest request = new NotImplementedMuRequest() {
             @Override
             public URI uri() {
