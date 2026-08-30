@@ -59,6 +59,40 @@ public class SubResourceLocatorTest {
     }
 
     @Test
+    public void colonSegmentsWorkThroughSubResourceLocators() throws Exception {
+        class WidgetResource {
+            private final String id;
+
+            WidgetResource(String id) {
+                this.id = id;
+            }
+
+            @GET
+            @Path("details/{detail:[a-z]+:[a-z]+}")
+            public String getDetails(@PathParam("detail") String detail) {
+                return id + "/" + detail;
+            }
+        }
+
+        @Path("widgets")
+        class WidgetsResource {
+            @Path("{id}")
+            public WidgetResource findWidget(@PathParam("id") String id) {
+                return new WidgetResource(id);
+            }
+        }
+
+        server = httpsServerForTest()
+            .addHandler(restHandler(new WidgetsResource()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/widgets/sha256:parent/details/urn:child")))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("sha256:parent/urn:child"));
+        }
+    }
+
+    @Test
     public void subResourceMethodsInASubResourceWork() throws Exception {
         class WidgetResource {
             private final String id;
