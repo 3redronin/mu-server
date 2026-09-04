@@ -58,6 +58,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private CORSConfig corsConfig = CORSConfigBuilder.disabled().build();
     private final List<SchemaObjectCustomizer> schemaObjectCustomizers = new ArrayList<>();
     private @Nullable CollectionParameterStrategy collectionParameterStrategy;
+    private @Nullable Application application;
     {
         exceptionMappers.add(new JaxRSProviders.ExceptionMapperRegistration<>(
             Throwable.class, DEFAULT_EXCEPTION_MAPPER, true));
@@ -370,12 +371,18 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * Singleton resources must therefore be safe to use concurrently. Provider classes are instantiated once using a
      * public no-argument constructor. Application properties, features, dynamic features, automatic
      * discovery, and {@link jakarta.ws.rs.ApplicationPath} mounting are not supported.</p>
+     * <p>The supplied instance is available to resource methods using {@link jakarta.ws.rs.core.Context}
+     * {@code Application} parameters.</p>
      *
      * @param application The application configuration to adapt.
      * @return A builder containing the application's supported singleton components.
      */
     public static RestHandlerBuilder fromApplication(Application application) {
         return ApplicationRegistrar.from(application);
+    }
+
+    void setApplication(Application application) {
+        this.application = Objects.requireNonNull(application, "application");
     }
 
     /**
@@ -728,9 +735,54 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
             cps = CollectionParameterStrategy.NO_TRANSFORM;
         }
 
-        RestHandler handler = new RestHandler(providers, roots, documentor, customExceptionMapper, filterManagerThing,
+        Application application = this.application == null ? applicationSnapshot(readers, writers) : this.application;
+        RestHandler handler = new RestHandler(application, providers, roots, documentor, customExceptionMapper, filterManagerThing,
             corsConfig, paramConverterProviders, schemaObjectCustomizer, readerInterceptors, writerInterceptors, cps);
         providers.initialize(entityProviders, exceptionMappers, contextResolvers);
         return handler;
+    }
+
+    private Application applicationSnapshot(List<MessageBodyReader> readers, List<MessageBodyWriter> writers) {
+        Set<Object> singletons = new LinkedHashSet<>(resources);
+        singletons.addAll(readers);
+        singletons.addAll(writers);
+        singletons.addAll(customParamConverterProviders);
+        for (JaxRSProviders.ExceptionMapperRegistration<?> registration : exceptionMappers) {
+            if (!registration.isBuiltIn) {
+                singletons.add(registration.mapper);
+            }
+        }
+        for (JaxRSProviders.ContextResolverRegistration<?> registration : contextResolvers) {
+            singletons.add(registration.resolver);
+        }
+        singletons.addAll(preMatchRequestFilters);
+        singletons.addAll(requestFilters);
+        singletons.addAll(responseFilters);
+        singletons.addAll(readerInterceptors);
+        singletons.addAll(writerInterceptors);
+        return new RuntimeApplication(singletons);
+    }
+
+    private static final class RuntimeApplication extends Application {
+        private final Set<Object> singletons;
+
+        private RuntimeApplication(Set<Object> singletons) {
+            this.singletons = Collections.unmodifiableSet(new LinkedHashSet<>(singletons));
+        }
+
+        @Override
+        public Set<Class<?>> getClasses() {
+            return Collections.emptySet();
+        }
+
+        @Override
+        public Set<Object> getSingletons() {
+            return singletons;
+        }
+
+        @Override
+        public Map<String, Object> getProperties() {
+            return Collections.emptyMap();
+        }
     }
 }

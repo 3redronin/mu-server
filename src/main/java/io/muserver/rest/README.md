@@ -383,7 +383,11 @@ allows injection of `MuRequest`, `MuResponse` and `ContainerRequestContext`.
 
 #### 10.2.1 Application 
 
-N/A. Will not implement, as there is no support for `Application`.
+- [x] Implemented for resource method parameters using `@Context Application`.
+
+Applications supplied through `RestHandlerBuilder.fromApplication(...)` or `SeBootstrap` are injected directly.
+For handlers configured with `RestHandlerBuilder`, Mu Server creates an immutable application snapshot containing
+the handler's resource instances and custom JAX-RS provider instances.
 
 #### 10.2.2 URIs and URI Templates 
 

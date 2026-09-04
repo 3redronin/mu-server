@@ -53,14 +53,17 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.sameInstance;
 import static org.junit.Assert.assertThrows;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
@@ -110,6 +113,75 @@ public class ApplicationTest {
         assertThat(builder.customWriters(), contains(provider));
         assertThat(builder.customParamConverterProviders(), contains(provider));
         assertThat(builder.exceptionMappers(), hasEntry(SampleException.class, provider));
+    }
+
+    @Test
+    public void suppliedApplicationIsInjectedIntoSubResourceLocators() throws IOException {
+        AtomicReference<Application> injected = new AtomicReference<>();
+        class ChildResource {
+            @GET
+            public String get() {
+                return "injected";
+            }
+        }
+        @Path("application-injection")
+        class RootResource {
+            @Path("child")
+            public ChildResource child(@Context Application application) {
+                injected.set(application);
+                return new ChildResource();
+            }
+        }
+        Application application = singletonApplication(new RootResource());
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.fromApplication(application))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/application-injection/child")))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), is("injected"));
+        }
+        assertThat(injected.get(), sameInstance(application));
+    }
+
+    @Test
+    public void regularBuildersExposeAnImmutableApplicationSnapshot() throws IOException {
+        AtomicReference<Application> injected = new AtomicReference<>();
+        @Path("application-snapshot")
+        class Resource {
+            @GET
+            public String get(@Context Application application) {
+                injected.set(application);
+                return "snapshotted";
+            }
+        }
+        Resource resource = new Resource();
+        SupportedProvider provider = new SupportedProvider();
+        ContextResolver<ApplicationContext> resolver = type -> new ApplicationContext("resolved");
+        RestHandlerBuilder builder = RestHandlerBuilder.restHandler(resource)
+            .addCustomReader(providers -> provider)
+            .addCustomWriter(providers -> provider)
+            .addCustomParamConverterProvider(provider)
+            .addExceptionMapper(SampleException.class, provider)
+            .addContextResolver(ApplicationContext.class, resolver)
+            .addRequestFilter(provider)
+            .addResponseFilter(provider)
+            .addReaderInterceptor(provider)
+            .addWriterInterceptor(provider);
+        server = ServerUtils.httpsServerForTest().addHandler(builder).start();
+
+        try (Response response = call(request(server.uri().resolve("/application-snapshot")))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), is("snapshotted"));
+        }
+
+        Application application = injected.get();
+        assertThat(application.getSingletons(), containsInAnyOrder(resource, provider, resolver));
+        assertThat(application.getSingletons(), hasSize(3));
+        assertThat(application.getClasses(), is(empty()));
+        assertThat(application.getProperties().entrySet(), is(empty()));
+        assertThrows(UnsupportedOperationException.class,
+            () -> application.getSingletons().add(new Object()));
     }
 
     @Test

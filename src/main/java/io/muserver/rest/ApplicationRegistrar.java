@@ -76,6 +76,7 @@ final class ApplicationRegistrar {
         }
 
         RestHandlerBuilder builder = new RestHandlerBuilder();
+        builder.setApplication(application);
         List<Object> serverComponents = new ArrayList<>();
         for (Object component : components) {
             Objects.requireNonNull(component, "Application components must not contain null");
