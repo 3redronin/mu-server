@@ -119,6 +119,7 @@ public class ProvidersTest {
 
         assertThat(providers.getContextResolver(Prefix.class, MediaType.TEXT_PLAIN_TYPE), nullValue());
         assertThat(providers.getContextResolver(CharSequence.class, MediaType.APPLICATION_JSON_TYPE), nullValue());
+        assertThat(providers.getContextResolver(Object.class, MediaType.APPLICATION_JSON_TYPE), nullValue());
     }
 
     @Test

@@ -102,7 +102,7 @@ final class JaxRSProviders implements Providers {
     public <T> @Nullable ContextResolver<T> getContextResolver(Class<T> contextType, MediaType mediaType) {
         List<ContextResolverRegistration<?>> matches = new ArrayList<>();
         for (ContextResolverRegistration<?> registration : requiredState().contextResolvers) {
-            if (contextType.isAssignableFrom(registration.contextType) && registration.supports(mediaType)) {
+            if (contextType.equals(registration.contextType) && registration.supports(mediaType)) {
                 matches.add(registration);
             }
         }
