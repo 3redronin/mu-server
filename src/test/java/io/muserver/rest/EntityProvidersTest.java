@@ -485,6 +485,38 @@ public class EntityProvidersTest {
     }
 
     @Test
+    public void writerSpecificityOnlyConsidersCompatibleMediaTypes() {
+        class StringWriter implements MessageBodyWriter<String> {
+            @Override
+            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations,
+                                       jakarta.ws.rs.core.MediaType mediaType) {
+                return type.equals(String.class);
+            }
+
+            @Override
+            public void writeTo(String value, Class<?> type, Type genericType, Annotation[] annotations,
+                                jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders,
+                                OutputStream entityStream) {
+            }
+        }
+        @Priority(1)
+        @Produces({"application/json", "*/*"})
+        class HighPriorityWildcardWriter extends StringWriter {
+        }
+        @Priority(5000)
+        @Produces("text/plain")
+        class LowPriorityTextWriter extends StringWriter {
+        }
+        MessageBodyWriter<String> wildcard = new HighPriorityWildcardWriter();
+        MessageBodyWriter<String> text = new LowPriorityTextWriter();
+        EntityProviders providers = new EntityProviders(
+            Collections.emptyList(), asList(wildcard, text));
+
+        assertThat(providers.findWriter(String.class, String.class, new Annotation[0],
+            jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE), Matchers.sameInstance(text));
+    }
+
+    @Test
     public void customWriterOverridesMoreSpecificBuiltInWriter() throws Exception {
         @Path("numbers")
         class Sample {

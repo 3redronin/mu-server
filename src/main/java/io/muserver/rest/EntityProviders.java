@@ -10,7 +10,6 @@ import java.lang.reflect.Type;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 class EntityProviders {
@@ -108,9 +107,9 @@ class EntityProviders {
                 }
 
                 // and a secondary key of media type
-                Integer min1 = o1.mediaTypes.stream().map(EntityProviders::mediaTypeSpecificity).min(Comparator.naturalOrder()).orElse(2);
-                Integer min2 = o2.mediaTypes.stream().map(EntityProviders::mediaTypeSpecificity).min(Comparator.naturalOrder()).orElse(2);
-                int mtCompare = min1.compareTo(min2);
+                int mtCompare = Integer.compare(
+                    mediaTypeSpecificity(o1, responseMediaType),
+                    mediaTypeSpecificity(o2, responseMediaType));
                 if (mtCompare != 0) {
                     return mtCompare;
                 }
