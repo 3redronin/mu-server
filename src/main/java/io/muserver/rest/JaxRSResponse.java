@@ -8,6 +8,7 @@ import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.core.*;
 import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.ext.MessageBodyReader;
+import jakarta.ws.rs.ext.Providers;
 import jakarta.ws.rs.ext.RuntimeDelegate;
 import jakarta.ws.rs.ext.WriterInterceptor;
 import jakarta.ws.rs.ext.WriterInterceptorContext;
@@ -205,8 +206,8 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
         InputStream toRead = inputStreamBuffer != null ? inputStreamBuffer : (InputStream) entity;
         Type typeToRead = genericType == null ? entityType : genericType;
         MediaType mediaType = getMediaType() == null ? MediaType.APPLICATION_OCTET_STREAM_TYPE : getMediaType();
-        EntityProviders ep = new EntityProviders(EntityProviders.builtInReaders(), emptyList());
-        MessageBodyReader<T> reader = (MessageBodyReader<T>) ep.selectReader(entityType, typeToRead, annotations, mediaType);
+        Providers providers = JaxRSProviders.builtInReadersOnly();
+        MessageBodyReader<T> reader = providers.getMessageBodyReader(entityType, typeToRead, annotations, mediaType);
         if (reader == null) {
             throw new ProcessingException("Cannot read this entity type");
         }

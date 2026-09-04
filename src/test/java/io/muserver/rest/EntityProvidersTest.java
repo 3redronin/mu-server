@@ -415,10 +415,11 @@ public class EntityProvidersTest {
     public void broadApplicationReaderOverridesMoreSpecificBuiltInReader() {
         ObjectReader applicationReader = new ObjectReader();
         EntityProviders providers = new EntityProviders(
-            asList(applicationReader, StringEntityProviders.stringEntityReaders.get(0)),
-            Collections.emptyList());
+            Collections.singletonList(StringEntityProviders.stringEntityReaders.get(0)),
+            Collections.singletonList(applicationReader),
+            Collections.emptyList(), Collections.emptyList());
 
-        assertThat(providers.selectReader(
+        assertThat(providers.findReader(
             String.class,
             String.class,
             new Annotation[0],
@@ -879,14 +880,14 @@ public class EntityProvidersTest {
 
         EntityProviders firstReadable = new EntityProviders(
             asList(new WildcardReader(), new ExactReader(true)), Collections.emptyList());
-        assertThat(firstReadable.selectReader(String.class, String.class, new Annotation[0], mediaType),
+        assertThat(firstReadable.findReader(String.class, String.class, new Annotation[0], mediaType),
             Matchers.instanceOf(ExactReader.class));
         assertThat(calls, Matchers.contains("exact"));
 
         calls.clear();
         EntityProviders fallback = new EntityProviders(
             asList(new WildcardReader(), new ExactReader(false)), Collections.emptyList());
-        assertThat(fallback.selectReader(String.class, String.class, new Annotation[0], mediaType),
+        assertThat(fallback.findReader(String.class, String.class, new Annotation[0], mediaType),
             Matchers.instanceOf(WildcardReader.class));
         assertThat(calls, Matchers.contains("exact", "wildcard"));
     }

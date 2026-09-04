@@ -12,6 +12,7 @@ import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.container.PreMatching;
 import jakarta.ws.rs.container.ResourceInfo;
 import jakarta.ws.rs.core.Application;
+import jakarta.ws.rs.ext.ContextResolver;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.MessageBodyReader;
 import jakarta.ws.rs.ext.MessageBodyWriter;
@@ -154,6 +155,16 @@ final class ApplicationRegistrar {
             builder.addExceptionMapper((Class<? extends Throwable>) exceptionType, (ExceptionMapper) component);
             registered = true;
         }
+        if (component instanceof ContextResolver) {
+            Type contextType = GenericTypeResolver.resolveTypeArgument(component.getClass(), ContextResolver.class, 0);
+            Class<?> contextClass = GenericTypeResolver.rawClass(contextType);
+            if (contextClass == null) {
+                throw new IllegalArgumentException("Could not infer the context type supplied by "
+                    + component.getClass().getName());
+            }
+            builder.addContextResolver((Class) contextClass, (ContextResolver) component);
+            registered = true;
+        }
         if (component instanceof SchemaObjectCustomizer) {
             builder.addSchemaObjectCustomizer((SchemaObjectCustomizer) component);
             registered = true;
@@ -255,6 +266,7 @@ final class ApplicationRegistrar {
             || MessageBodyWriter.class.isAssignableFrom(componentClass)
             || ParamConverterProvider.class.isAssignableFrom(componentClass)
             || ExceptionMapper.class.isAssignableFrom(componentClass)
+            || ContextResolver.class.isAssignableFrom(componentClass)
             || ContainerRequestFilter.class.isAssignableFrom(componentClass)
             || ContainerResponseFilter.class.isAssignableFrom(componentClass)
             || ReaderInterceptor.class.isAssignableFrom(componentClass)

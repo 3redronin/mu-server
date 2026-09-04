@@ -9,6 +9,7 @@ import jakarta.ws.rs.container.ResourceInfo;
 import jakarta.ws.rs.core.*;
 import jakarta.ws.rs.core.Cookie;
 import jakarta.ws.rs.ext.MessageBodyReader;
+import jakarta.ws.rs.ext.Providers;
 import jakarta.ws.rs.ext.ReaderInterceptor;
 import jakarta.ws.rs.ext.ReaderInterceptorContext;
 import org.jspecify.annotations.Nullable;
@@ -35,14 +36,14 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     private @Nullable Type genericType;
     private int nextReader;
     private final List<ReaderInterceptor> readerInterceptors;
-    private final EntityProviders entityProviders;
+    private final Providers providers;
     private String httpMethod;
     private @Nullable Response abortResponse;
     private boolean requestFilterChainRunning;
     private boolean responseFilterChainStarted;
     private boolean exceptionMapperUsed;
 
-    JaxRSRequest(MuRequest muRequest, MuResponse muResponse, InputStream inputStream, String relativePath, SecurityContext securityContext, List<ReaderInterceptor> readerInterceptors, EntityProviders entityProviders) {
+    JaxRSRequest(MuRequest muRequest, MuResponse muResponse, InputStream inputStream, String relativePath, SecurityContext securityContext, List<ReaderInterceptor> readerInterceptors, Providers providers) {
         this.muRequest = muRequest;
         this.httpMethod = muRequest.method().name();
         this.muResponse = muResponse;
@@ -50,7 +51,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         this.relativePath = relativePath;
         this.securityContext = securityContext;
         this.readerInterceptors = readerInterceptors;
-        this.entityProviders = entityProviders;
+        this.providers = providers;
         String basePath = muRequest.contextPath();
         if (!basePath.endsWith("/")) {
             basePath += "/";
@@ -374,7 +375,8 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         Annotation[] annotations = getAnnotations();
 
         // 3 & 4: Select a reader that supports the media type of the request and isReadable
-        MessageBodyReader messageBodyReader = entityProviders.selectReader(type, genericType, annotations, requestBodyMediaType);
+        MessageBodyReader messageBodyReader = JaxRSProviders.requireMessageBodyReader(
+            providers, type, genericType, annotations, requestBodyMediaType);
         try {
             return messageBodyReader.readFrom(type, genericType, annotations, requestBodyMediaType, getHeaders(), getInputStream());
         } catch (NoContentException nce) {

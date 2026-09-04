@@ -8,6 +8,8 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.Map;
 
+import static java.util.Collections.emptyList;
+
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
@@ -31,7 +33,9 @@ public class CustomExceptionMapperTest {
         mappers.put(ConcurrentException.class, exception -> Response.status(409).build());
         mappers.put(NoContentException.class, exception -> null);
         mappers.put(ServerException.class, exception -> { throw new RuntimeException("oops");});
-        mapper = new CustomExceptionMapper(mappers);
+        JaxRSProviders providers = new JaxRSProviders();
+        providers.initialize(new EntityProviders(emptyList(), emptyList()), mappers, emptyList());
+        mapper = new CustomExceptionMapper(providers);
     }
 
     @Test

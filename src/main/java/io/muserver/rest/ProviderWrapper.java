@@ -15,20 +15,29 @@ class ProviderWrapper<T> implements Comparable<ProviderWrapper<T>> {
     public final List<MediaType> mediaTypes;
     public final Type genericType;
 
-    private ProviderWrapper(T provider, List<MediaType> mediaTypes, Type genericType) {
+    private ProviderWrapper(T provider, List<MediaType> mediaTypes, Type genericType, boolean isBuiltIn) {
         this.provider = provider;
-        this.isBuiltIn = provider.getClass().getPackage().getName().equals(ProviderWrapper.class.getPackage().getName());
+        this.isBuiltIn = isBuiltIn;
         this.mediaTypes = mediaTypes;
         this.genericType = genericType;
     }
 
     public static ProviderWrapper<MessageBodyReader<?>> reader(MessageBodyReader<?> provider) {
-        List<MediaType> mediaTypes = MediaTypeDeterminer.supportedConsumesTypes(provider.getClass());
-        return new ProviderWrapper<>(provider, mediaTypes, genericTypeOf(provider, MessageBodyReader.class));
+        return reader(provider, false);
     }
+
+    public static ProviderWrapper<MessageBodyReader<?>> reader(MessageBodyReader<?> provider, boolean isBuiltIn) {
+        List<MediaType> mediaTypes = MediaTypeDeterminer.supportedConsumesTypes(provider.getClass());
+        return new ProviderWrapper<>(provider, mediaTypes, genericTypeOf(provider, MessageBodyReader.class), isBuiltIn);
+    }
+
     public static ProviderWrapper<MessageBodyWriter<?>> writer(MessageBodyWriter<?> provider) {
+        return writer(provider, false);
+    }
+
+    public static ProviderWrapper<MessageBodyWriter<?>> writer(MessageBodyWriter<?> provider, boolean isBuiltIn) {
         List<MediaType> mediaTypes = MediaTypeDeterminer.supportedProducesTypes(provider.getClass());
-        return new ProviderWrapper<>(provider, mediaTypes, genericTypeOf(provider, MessageBodyWriter.class));
+        return new ProviderWrapper<>(provider, mediaTypes, genericTypeOf(provider, MessageBodyWriter.class), isBuiltIn);
     }
 
     public static Type genericTypeOf(Object instance, Class implementedInterface) {

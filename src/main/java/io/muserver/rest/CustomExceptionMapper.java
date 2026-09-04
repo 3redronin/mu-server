@@ -3,12 +3,11 @@ package io.muserver.rest;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
+import jakarta.ws.rs.ext.Providers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
 import org.jspecify.annotations.Nullable;
@@ -16,10 +15,10 @@ import org.jspecify.annotations.Nullable;
 class CustomExceptionMapper {
     private static final Logger log = LoggerFactory.getLogger(CustomExceptionMapper.class);
 
-    private final Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> mappers;
+    private final Providers providers;
 
-    CustomExceptionMapper(Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> mappers) {
-        this.mappers = new HashMap<>(mappers);
+    CustomExceptionMapper(Providers providers) {
+        this.providers = providers;
     }
 
     @SuppressWarnings("unchecked")
@@ -31,8 +30,7 @@ class CustomExceptionMapper {
 
         Class<? extends Throwable> exClass = ex.getClass();
 
-        int maxDepth = Integer.MAX_VALUE;
-        ExceptionMapper exceptionMapper = findBestMatchingExceptionMapper(exClass, maxDepth);
+        ExceptionMapper exceptionMapper = providers.getExceptionMapper(exClass);
 
         if (exceptionMapper == null) {
             return null;
@@ -52,30 +50,6 @@ class CustomExceptionMapper {
                 .entity("<h1>500 Internal Server Error</h1><p>ErrorID=" + errorID + "</p>")
                 .build();
         }
-    }
-
-    @SuppressWarnings("unchecked")
-    private @Nullable ExceptionMapper findBestMatchingExceptionMapper(Class<? extends Throwable> exClass, int maxDepth) {
-        ExceptionMapper exceptionMapper = null;
-        for (Map.Entry<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> entry : mappers.entrySet()) {
-            Class mapperClass = entry.getKey();
-            if (mapperClass.isAssignableFrom(exClass)) {
-                int depth = 0;
-                Class yo = exClass;
-                while (yo != null) {
-                    if (mapperClass.equals(yo)) {
-                        if (depth < maxDepth) {
-                            maxDepth = depth;
-                            exceptionMapper = entry.getValue();
-                        }
-                        break;
-                    }
-                    depth++;
-                    yo = yo.getSuperclass();
-                }
-            }
-        }
-        return exceptionMapper;
     }
 
 }

@@ -6,6 +6,7 @@ import io.muserver.MuResponse;
 import io.muserver.ResponseCompleteListener;
 import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.ext.MessageBodyWriter;
+import jakarta.ws.rs.ext.Providers;
 import jakarta.ws.rs.sse.OutboundSseEvent;
 import jakarta.ws.rs.sse.SseEventSink;
 import org.jspecify.annotations.Nullable;
@@ -29,13 +30,13 @@ class JaxSseEventSinkImpl implements SseEventSink {
 
     private final @Nullable AsyncSsePublisher ssePublisher;
     private final @Nullable MuResponse response;
-    private final @Nullable EntityProviders entityProviders;
+    private final @Nullable Providers providers;
     private final List<ResponseCompleteListener> responseCompleteListeners = new CopyOnWriteArrayList<>();
 
-    public JaxSseEventSinkImpl(@Nullable AsyncSsePublisher ssePublisher, @Nullable MuResponse response, @Nullable EntityProviders entityProviders) {
+    public JaxSseEventSinkImpl(@Nullable AsyncSsePublisher ssePublisher, @Nullable MuResponse response, @Nullable Providers providers) {
         this.ssePublisher = ssePublisher;
         this.response = response;
-        this.entityProviders = entityProviders;
+        this.providers = providers;
         if (ssePublisher != null) {
             ssePublisher.setResponseCompleteHandler(info -> {
                 for (ResponseCompleteListener listener : responseCompleteListeners) {
@@ -65,7 +66,7 @@ class JaxSseEventSinkImpl implements SseEventSink {
         Objects.requireNonNull(event, "event");
         AsyncSsePublisher publisher = Objects.requireNonNull(ssePublisher, "ssePublisher");
         MuResponse muResponse = Objects.requireNonNull(response, "response");
-        EntityProviders providers = Objects.requireNonNull(entityProviders, "entityProviders");
+        Providers providers = Objects.requireNonNull(this.providers, "providers");
         if (isClosed()) {
             throw new IllegalStateException("The SSE stream was already closed");
         }
@@ -86,8 +87,8 @@ class JaxSseEventSinkImpl implements SseEventSink {
                 if (genericDataType == null) {
                     genericDataType = dataType;
                 }
-                MessageBodyWriter messageBodyWriter = providers.selectWriter(dataType, genericDataType,
-                    JaxRSResponse.Builder.EMPTY_ANNOTATIONS, event.getMediaType());
+                MessageBodyWriter messageBodyWriter = JaxRSProviders.requireMessageBodyWriter(
+                    providers, dataType, genericDataType, JaxRSResponse.Builder.EMPTY_ANNOTATIONS, event.getMediaType());
                 try (ByteArrayOutputStream out = new ByteArrayOutputStream()) {
                     messageBodyWriter.writeTo(dataObject, dataType, genericDataType, JaxRSResponse.Builder.EMPTY_ANNOTATIONS,
                         event.getMediaType(), muHeadersToJaxObj(muResponse.headers()), out);

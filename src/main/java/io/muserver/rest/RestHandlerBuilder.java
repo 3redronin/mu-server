@@ -21,6 +21,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static io.muserver.openapi.PathsObjectBuilder.pathsObject;
@@ -38,8 +39,10 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
     private final List<Object> resources = new ArrayList<>();
     private final List<MessageBodyWriter> customWriters = new ArrayList<>();
+    private final List<Function<Providers, MessageBodyWriter<?>>> customWriterRegistrations = new ArrayList<>();
     private final List<WriterInterceptor> writerInterceptors = new ArrayList<>();
     private final List<MessageBodyReader> customReaders = new ArrayList<>();
+    private final List<Function<Providers, MessageBodyReader<?>>> customReaderRegistrations = new ArrayList<>();
     private final List<ReaderInterceptor> readerInterceptors = new ArrayList<>();
     private final List<ParamConverterProvider> customParamConverterProviders = new ArrayList<>();
     private final List<SchemaReference> customSchemas = new ArrayList<>();
@@ -48,6 +51,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private @Nullable OpenAPIObjectBuilder openAPIObject;
     private @Nullable String openApiHtmlCss;
     private final Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> exceptionMappers = new HashMap<>();
+    private final List<JaxRSProviders.ContextResolverRegistration<?>> contextResolvers = new ArrayList<>();
     private final List<ContainerRequestFilter> preMatchRequestFilters = new ArrayList<>();
     private final List<ContainerRequestFilter> requestFilters = new ArrayList<>();
     private final List<ContainerResponseFilter> responseFilters = new ArrayList<>();
@@ -80,7 +84,25 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @return This builder
      */
     public <T> RestHandlerBuilder addCustomWriter(MessageBodyWriter<T> writer) {
+        Objects.requireNonNull(writer, "writer");
         customWriters.add(writer);
+        customWriterRegistrations.add(providers -> writer);
+        return this;
+    }
+
+    /**
+     * Registers a factory for a custom response body writer that needs access to the providers registered for this
+     * REST handler. The factory is invoked once each time {@link #build()} is called. The supplied {@link Providers}
+     * instance may be retained by the writer, but it cannot be queried until the build has completed.
+     *
+     * @param writerFactory Creates a response body writer for a single REST handler
+     * @param <T> The type of object that the writer can serialise
+     * @return This builder
+     */
+    public <T> RestHandlerBuilder addCustomWriter(
+        Function<Providers, ? extends MessageBodyWriter<T>> writerFactory) {
+        Objects.requireNonNull(writerFactory, "writerFactory");
+        customWriterRegistrations.add(providers -> writerFactory.apply(providers));
         return this;
     }
 
@@ -94,7 +116,41 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @return This builder
      */
     public <T> RestHandlerBuilder addCustomReader(MessageBodyReader<T> reader) {
+        Objects.requireNonNull(reader, "reader");
         customReaders.add(reader);
+        customReaderRegistrations.add(providers -> reader);
+        return this;
+    }
+
+    /**
+     * Registers a factory for a custom request body reader that needs access to the providers registered for this
+     * REST handler. The factory is invoked once each time {@link #build()} is called. The supplied {@link Providers}
+     * instance may be retained by the reader, but it cannot be queried until the build has completed.
+     *
+     * @param readerFactory Creates a request body reader for a single REST handler
+     * @param <T> The type of object that the reader can deserialise
+     * @return This builder
+     */
+    public <T> RestHandlerBuilder addCustomReader(
+        Function<Providers, ? extends MessageBodyReader<T>> readerFactory) {
+        Objects.requireNonNull(readerFactory, "readerFactory");
+        customReaderRegistrations.add(providers -> readerFactory.apply(providers));
+        return this;
+    }
+
+    /**
+     * Registers a context resolver for a given context type. More than one resolver can be registered for the same
+     * type; {@link jakarta.ws.rs.Produces} annotations on the resolver classes are used to select and order matches.
+     *
+     * @param contextType The type of context supplied by the resolver
+     * @param resolver The context resolver
+     * @param <T> The context type
+     * @return This builder
+     */
+    public <T> RestHandlerBuilder addContextResolver(Class<T> contextType, ContextResolver<T> resolver) {
+        contextResolvers.add(new JaxRSProviders.ContextResolverRegistration<>(
+            Objects.requireNonNull(contextType, "contextType"),
+            Objects.requireNonNull(resolver, "resolver")));
         return this;
     }
 
@@ -300,7 +356,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * <p>Mu Server supports resource instances returned by {@link Application#getSingletons()}, but not resource
      * classes returned by {@link Application#getClasses()} because those have a per-request lifecycle by default.
      * Singleton resources must therefore be safe to use concurrently. Provider classes are instantiated once using a
-     * public no-argument constructor. Application properties, features, dynamic features, context resolvers, automatic
+     * public no-argument constructor. Application properties, features, dynamic features, automatic
      * discovery, and {@link jakarta.ws.rs.ApplicationPath} mounting are not supported.</p>
      *
      * @param application The application configuration to adapt.
@@ -592,11 +648,25 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      */
     @Override
     public RestHandler build() {
-        List<MessageBodyReader> readers = EntityProviders.builtInReaders();
-        readers.addAll(customReaders);
-        List<MessageBodyWriter> writers = EntityProviders.builtInWriters();
-        writers.addAll(customWriters);
-        EntityProviders entityProviders = new EntityProviders(readers, writers);
+        JaxRSProviders providers = new JaxRSProviders();
+        List<MessageBodyReader> readers = new ArrayList<>();
+        for (Function<Providers, MessageBodyReader<?>> registration : customReaderRegistrations) {
+            MessageBodyReader<?> reader = registration.apply(providers);
+            if (reader == null) {
+                throw new IllegalStateException("A custom message body reader factory returned null");
+            }
+            readers.add(reader);
+        }
+        List<MessageBodyWriter> writers = new ArrayList<>();
+        for (Function<Providers, MessageBodyWriter<?>> registration : customWriterRegistrations) {
+            MessageBodyWriter<?> writer = registration.apply(providers);
+            if (writer == null) {
+                throw new IllegalStateException("A custom message body writer factory returned null");
+            }
+            writers.add(writer);
+        }
+        EntityProviders entityProviders = new EntityProviders(
+            EntityProviders.builtInReaders(), readers, EntityProviders.builtInWriters(), writers);
         List<ParamConverterProvider> paramConverterProviders = new ArrayList<>(customParamConverterProviders);
         paramConverterProviders.add(new BuiltInParamConverterProvider());
 
@@ -628,7 +698,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
             documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss, corsConfig, new ArrayList<>(customSchemas), schemaObjectCustomizer, paramConverterProviders);
         }
 
-        CustomExceptionMapper customExceptionMapper = new CustomExceptionMapper(exceptionMappers);
+        CustomExceptionMapper customExceptionMapper = new CustomExceptionMapper(providers);
 
         FilterManagerThing filterManagerThing = new FilterManagerThing(preMatchRequestFilters, requestFilters, responseFilters);
 
@@ -637,6 +707,9 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
             cps = CollectionParameterStrategy.NO_TRANSFORM;
         }
 
-        return new RestHandler(entityProviders, roots, documentor, customExceptionMapper, filterManagerThing, corsConfig, paramConverterProviders, schemaObjectCustomizer, readerInterceptors, writerInterceptors, cps);
+        RestHandler handler = new RestHandler(providers, roots, documentor, customExceptionMapper, filterManagerThing,
+            corsConfig, paramConverterProviders, schemaObjectCustomizer, readerInterceptors, writerInterceptors, cps);
+        providers.initialize(entityProviders, exceptionMappers, contextResolvers);
+        return handler;
     }
 }

@@ -1,10 +1,9 @@
 package io.muserver.rest;
 
-import jakarta.ws.rs.InternalServerErrorException;
-import jakarta.ws.rs.NotSupportedException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.ext.MessageBodyReader;
 import jakarta.ws.rs.ext.MessageBodyWriter;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
@@ -13,8 +12,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 class EntityProviders {
 
@@ -22,11 +19,24 @@ class EntityProviders {
     final List<ProviderWrapper<MessageBodyWriter<?>>> writers;
 
     public EntityProviders(List<MessageBodyReader> readers, List<MessageBodyWriter> writers) {
-        this.readers = readers.stream().map(ProviderWrapper::reader).sorted().collect(Collectors.toList());
-        this.writers = writers.stream().map(ProviderWrapper::writer).sorted().collect(Collectors.toList());
+        this(new ArrayList<>(), readers, new ArrayList<>(), writers);
     }
-    public MessageBodyReader<?> selectReader(Class<?> type, Type genericType, Annotation[] annotations, MediaType requestBodyMediaType) {
-        Optional<ProviderWrapper<MessageBodyReader<?>>> best = readers.stream()
+
+    public EntityProviders(List<MessageBodyReader> builtInReaders, List<MessageBodyReader> customReaders,
+                           List<MessageBodyWriter> builtInWriters, List<MessageBodyWriter> customWriters) {
+        this.readers = new ArrayList<>();
+        builtInReaders.stream().map(reader -> ProviderWrapper.reader(reader, true)).forEach(this.readers::add);
+        customReaders.stream().map(reader -> ProviderWrapper.reader(reader, false)).forEach(this.readers::add);
+        this.readers.sort(ProviderWrapper::compareTo);
+
+        this.writers = new ArrayList<>();
+        builtInWriters.stream().map(writer -> ProviderWrapper.writer(writer, true)).forEach(this.writers::add);
+        customWriters.stream().map(writer -> ProviderWrapper.writer(writer, false)).forEach(this.writers::add);
+        this.writers.sort(ProviderWrapper::compareTo);
+    }
+
+    public @Nullable MessageBodyReader<?> findReader(Class<?> type, Type genericType, Annotation[] annotations, MediaType requestBodyMediaType) {
+        return readers.stream()
             .filter(reader -> reader.supports(requestBodyMediaType))
             .filter(reader -> !(reader.genericType instanceof Class) || ((Class<?>) reader.genericType).isAssignableFrom(box(type)))
             .sorted((first, second) -> {
@@ -39,11 +49,9 @@ class EntityProviders {
                 return first.compareTo(second);
             })
             .filter(reader -> reader.provider.isReadable(type, genericType, annotations, requestBodyMediaType))
-            .findFirst();
-        if (best.isPresent()) {
-            return best.get().provider;
-        }
-        throw new NotSupportedException("Could not find a suitable entity provider to read " + type);
+            .map(reader -> reader.provider)
+            .findFirst()
+            .orElse(null);
     }
 
     private static int mediaTypeSpecificity(ProviderWrapper<?> provider, MediaType requestedType) {
@@ -74,11 +82,11 @@ class EntityProviders {
         if (type == double.class) return Double.class;
         return type;
     }
-    public MessageBodyWriter<?> selectWriter(Class<?> type, Type genericType, Annotation[] annotations, MediaType responseMediaType) {
+    public @Nullable MessageBodyWriter<?> findWriter(Class<?> type, Type genericType, Annotation[] annotations, MediaType responseMediaType) {
         // From 4.2.2
 
         // 3. SelectthesetofMessageBodyWriterprovidersthatsupport(seeSection4.2.3)theobjectandmedia type of the message entity body.
-        Optional<ProviderWrapper<MessageBodyWriter<?>>> best = writers.stream().filter(w -> w.supports(responseMediaType))
+        return writers.stream().filter(w -> w.supports(responseMediaType))
             .sorted((o1, o2) -> {
                 // Application-provided providers take precedence over built-in providers.
                 int providerCompare = o1.compareTo(o2);
@@ -105,12 +113,9 @@ class EntityProviders {
                 return 0;
             })
             .filter(w -> w.provider.isWriteable(type, genericType, annotations, responseMediaType))
-            .findFirst();
-
-        if (best.isPresent()) {
-            return best.get().provider;
-        }
-        throw new InternalServerErrorException("Could not find a suitable entity provider to write " + type);
+            .map(writer -> writer.provider)
+            .findFirst()
+            .orElse(null);
     }
 
     boolean isBuiltInWriter(MessageBodyWriter<?> writer) {

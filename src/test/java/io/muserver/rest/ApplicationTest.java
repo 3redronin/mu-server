@@ -18,13 +18,16 @@ import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.core.Application;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.ext.ContextResolver;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.MessageBodyReader;
 import jakarta.ws.rs.ext.MessageBodyWriter;
 import jakarta.ws.rs.ext.ParamConverter;
 import jakarta.ws.rs.ext.ParamConverterProvider;
+import jakarta.ws.rs.ext.Providers;
 import jakarta.ws.rs.ext.ReaderInterceptor;
 import jakarta.ws.rs.ext.ReaderInterceptorContext;
 import jakarta.ws.rs.ext.WriterInterceptor;
@@ -229,6 +232,29 @@ public class ApplicationTest {
     }
 
     @Test
+    public void contextResolverClassesAreRegistered() throws IOException {
+        Application application = new Application() {
+            @Override
+            public Set<Class<?>> getClasses() {
+                return Set.of(ApplicationContextResolver.class);
+            }
+
+            @Override
+            public Set<Object> getSingletons() {
+                return Set.of(new ContextResource());
+            }
+        };
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.fromApplication(application))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/application-context")))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), is("application-context"));
+        }
+    }
+
+    @Test
     public void nameBindingOnApplicationMakesMatchingProviderGlobal() throws IOException {
         BoundResponseFilter filter = new BoundResponseFilter();
         server = ServerUtils.httpsServerForTest()
@@ -417,6 +443,30 @@ public class ApplicationTest {
     }
 
     public static class SampleException extends RuntimeException {
+    }
+
+    private static class ApplicationContext {
+        private final String value;
+
+        private ApplicationContext(String value) {
+            this.value = value;
+        }
+    }
+
+    public static class ApplicationContextResolver implements ContextResolver<ApplicationContext> {
+        @Override
+        public ApplicationContext getContext(Class<?> type) {
+            return new ApplicationContext("application-context");
+        }
+    }
+
+    @Path("application-context")
+    private static class ContextResource {
+        @GET
+        public String context(@Context Providers providers) {
+            return providers.getContextResolver(ApplicationContext.class, MediaType.TEXT_PLAIN_TYPE)
+                .getContext(ContextResource.class).value;
+        }
     }
 
     private static class Converted {
