@@ -468,6 +468,23 @@ public class EntityProvidersTest {
     }
 
     @Test
+    public void readerPriorityWinsBeforeTypeSpecificity() {
+        @Priority(1)
+        class HighPriorityObjectReader extends ObjectReader {
+        }
+        @Priority(5000)
+        class LowPriorityStringReader extends MyStringReaderWriter {
+        }
+        MessageBodyReader<Object> objectReader = new HighPriorityObjectReader();
+        MessageBodyReader<String> stringReader = new LowPriorityStringReader();
+        EntityProviders providers = new EntityProviders(
+            asList(objectReader, stringReader), Collections.emptyList());
+
+        assertThat(providers.findReader(String.class, String.class, new Annotation[0],
+            jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE), Matchers.sameInstance(objectReader));
+    }
+
+    @Test
     public void customWriterOverridesMoreSpecificBuiltInWriter() throws Exception {
         @Path("numbers")
         class Sample {
