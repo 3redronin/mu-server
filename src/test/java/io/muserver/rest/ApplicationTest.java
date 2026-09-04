@@ -113,6 +113,73 @@ public class ApplicationTest {
     }
 
     @Test
+    public void exceptionMappersForTheSameTypeAreSelectedByPriority() throws IOException {
+        @Path("priority-mapper")
+        class Resource {
+            @GET
+            public String get() throws SampleException {
+                throw new SampleException();
+            }
+        }
+        @Priority(200)
+        class LowerPriorityMapper implements ExceptionMapper<SampleException> {
+            @Override
+            public jakarta.ws.rs.core.Response toResponse(SampleException exception) {
+                return jakarta.ws.rs.core.Response.status(420).build();
+            }
+        }
+        @Priority(100)
+        class HigherPriorityMapper implements ExceptionMapper<SampleException> {
+            @Override
+            public jakarta.ws.rs.core.Response toResponse(SampleException exception) {
+                return jakarta.ws.rs.core.Response.status(421).build();
+            }
+        }
+        Application application = singletonApplication(
+            new Resource(), new LowerPriorityMapper(), new HigherPriorityMapper());
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.fromApplication(application))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/priority-mapper")))) {
+            assertThat(response.code(), is(421));
+        }
+    }
+
+    @Test
+    public void nearestExceptionMapperTypeWinsBeforePriority() throws IOException {
+        @Path("nearest-priority-mapper")
+        class Resource {
+            @GET
+            public String get() {
+                throw new IllegalArgumentException();
+            }
+        }
+        @Priority(1)
+        class BroadMapper implements ExceptionMapper<Exception> {
+            @Override
+            public jakarta.ws.rs.core.Response toResponse(Exception exception) {
+                return jakarta.ws.rs.core.Response.status(420).build();
+            }
+        }
+        @Priority(5000)
+        class ExactMapper implements ExceptionMapper<IllegalArgumentException> {
+            @Override
+            public jakarta.ws.rs.core.Response toResponse(IllegalArgumentException exception) {
+                return jakarta.ws.rs.core.Response.status(421).build();
+            }
+        }
+        Application application = singletonApplication(new Resource(), new BroadMapper(), new ExactMapper());
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.fromApplication(application))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/nearest-priority-mapper")))) {
+            assertThat(response.code(), is(421));
+        }
+    }
+
+    @Test
     public void singletonTakesPrecedenceOverClassRegistration() {
         SupportedProvider singleton = new SupportedProvider();
         Application application = new Application() {

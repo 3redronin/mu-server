@@ -15,9 +15,7 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * The providers registered for a single {@link RestHandler}.
@@ -30,7 +28,7 @@ final class JaxRSProviders implements Providers {
     private volatile @Nullable State state;
 
     synchronized void initialize(EntityProviders entityProviders,
-                                 Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> exceptionMappers,
+                                 List<ExceptionMapperRegistration<?>> exceptionMappers,
                                  List<ContextResolverRegistration<?>> contextResolvers) {
         if (state != null) {
             throw new IllegalStateException("Providers have already been initialized");
@@ -43,7 +41,7 @@ final class JaxRSProviders implements Providers {
         providers.initialize(new EntityProviders(
                 EntityProviders.builtInReaders(), Collections.emptyList(),
                 Collections.emptyList(), Collections.emptyList()),
-            Collections.emptyMap(), Collections.emptyList());
+            Collections.emptyList(), Collections.emptyList());
         return providers;
     }
 
@@ -72,11 +70,10 @@ final class JaxRSProviders implements Providers {
     @Override
     @SuppressWarnings("unchecked")
     public <T extends Throwable> @Nullable ExceptionMapper<T> getExceptionMapper(Class<T> type) {
-        ExceptionMapper<?> best = null;
+        ExceptionMapperRegistration<?> best = null;
         int bestDepth = Integer.MAX_VALUE;
-        for (Map.Entry<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> entry
-            : requiredState().exceptionMappers.entrySet()) {
-            Class<? extends Throwable> mappedType = entry.getKey();
+        for (ExceptionMapperRegistration<?> registration : requiredState().exceptionMappers) {
+            Class<? extends Throwable> mappedType = registration.exceptionType;
             if (!mappedType.isAssignableFrom(type)) {
                 continue;
             }
@@ -84,8 +81,8 @@ final class JaxRSProviders implements Providers {
             Class<?> candidate = type;
             while (candidate != null) {
                 if (candidate.equals(mappedType)) {
-                    if (depth < bestDepth) {
-                        best = entry.getValue();
+                    if (depth < bestDepth || (depth == bestDepth && registration.preferredTo(best))) {
+                        best = registration;
                         bestDepth = depth;
                     }
                     break;
@@ -94,7 +91,7 @@ final class JaxRSProviders implements Providers {
                 depth++;
             }
         }
-        return (ExceptionMapper<T>) best;
+        return best == null ? null : (ExceptionMapper<T>) best.mapper;
     }
 
     @Override
@@ -175,6 +172,30 @@ final class JaxRSProviders implements Providers {
         }
     }
 
+    static final class ExceptionMapperRegistration<T extends Throwable> {
+        final Class<T> exceptionType;
+        final ExceptionMapper<T> mapper;
+        final boolean isBuiltIn;
+        final int priority;
+
+        ExceptionMapperRegistration(Class<T> exceptionType, ExceptionMapper<T> mapper, boolean isBuiltIn) {
+            this.exceptionType = exceptionType;
+            this.mapper = mapper;
+            this.isBuiltIn = isBuiltIn;
+            this.priority = PrioritizedComponent.priorityOf(mapper);
+        }
+
+        boolean preferredTo(@Nullable ExceptionMapperRegistration<?> other) {
+            if (other == null) {
+                return true;
+            }
+            if (isBuiltIn != other.isBuiltIn) {
+                return !isBuiltIn;
+            }
+            return priority < other.priority;
+        }
+    }
+
     private static int mediaTypeSpecificity(MediaType mediaType) {
         return mediaType.isWildcardType()
             ? 2
@@ -183,14 +204,14 @@ final class JaxRSProviders implements Providers {
 
     private static final class State {
         private final EntityProviders entityProviders;
-        private final Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> exceptionMappers;
+        private final List<ExceptionMapperRegistration<?>> exceptionMappers;
         private final List<ContextResolverRegistration<?>> contextResolvers;
 
         private State(EntityProviders entityProviders,
-                      Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> exceptionMappers,
+                      List<ExceptionMapperRegistration<?>> exceptionMappers,
                       List<ContextResolverRegistration<?>> contextResolvers) {
             this.entityProviders = entityProviders;
-            this.exceptionMappers = Collections.unmodifiableMap(new HashMap<>(exceptionMappers));
+            this.exceptionMappers = Collections.unmodifiableList(new ArrayList<>(exceptionMappers));
             this.contextResolvers = Collections.unmodifiableList(new ArrayList<>(contextResolvers));
         }
     }

@@ -1,12 +1,11 @@
 package io.muserver.rest;
 
 import jakarta.ws.rs.core.Response;
-import jakarta.ws.rs.ext.ExceptionMapper;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 import static java.util.Collections.emptyList;
 
@@ -28,11 +27,15 @@ public class CustomExceptionMapperTest {
     @Before
     public void setup() {
         MuRuntimeDelegate.ensureSet();
-        Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> mappers = new HashMap<>();
-        mappers.put(ValidationException.class, exception -> Response.status(400).build());
-        mappers.put(ConcurrentException.class, exception -> Response.status(409).build());
-        mappers.put(NoContentException.class, exception -> null);
-        mappers.put(ServerException.class, exception -> { throw new RuntimeException("oops");});
+        List<JaxRSProviders.ExceptionMapperRegistration<?>> mappers = new ArrayList<>();
+        mappers.add(new JaxRSProviders.ExceptionMapperRegistration<>(ValidationException.class,
+            exception -> Response.status(400).build(), false));
+        mappers.add(new JaxRSProviders.ExceptionMapperRegistration<>(ConcurrentException.class,
+            exception -> Response.status(409).build(), false));
+        mappers.add(new JaxRSProviders.ExceptionMapperRegistration<>(NoContentException.class,
+            exception -> null, false));
+        mappers.add(new JaxRSProviders.ExceptionMapperRegistration<>(ServerException.class,
+            exception -> { throw new RuntimeException("oops");}, false));
         JaxRSProviders providers = new JaxRSProviders();
         providers.initialize(new EntityProviders(emptyList(), emptyList()), mappers, emptyList());
         mapper = new CustomExceptionMapper(providers);

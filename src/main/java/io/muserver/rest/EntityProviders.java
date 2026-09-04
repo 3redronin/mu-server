@@ -40,13 +40,18 @@ class EntityProviders {
             .filter(reader -> reader.supports(requestBodyMediaType))
             .filter(reader -> !(reader.genericType instanceof Class) || ((Class<?>) reader.genericType).isAssignableFrom(box(type)))
             .sorted((first, second) -> {
+                // Application-provided providers always take precedence over built-in providers.
+                int providerCompare = first.compareTo(second);
+                if (providerCompare != 0) {
+                    return providerCompare;
+                }
                 int mediaTypeCompare = Integer.compare(
                     mediaTypeSpecificity(first, requestBodyMediaType),
                     mediaTypeSpecificity(second, requestBodyMediaType));
                 if (mediaTypeCompare != 0) {
                     return mediaTypeCompare;
                 }
-                return first.compareTo(second);
+                return first.comparePriorityTo(second);
             })
             .filter(reader -> reader.provider.isReadable(type, genericType, annotations, requestBodyMediaType))
             .map(reader -> reader.provider)
@@ -110,7 +115,7 @@ class EntityProviders {
                     return mtCompare;
                 }
 
-                return 0;
+                return o1.comparePriorityTo(o2);
             })
             .filter(w -> w.provider.isWriteable(type, genericType, annotations, responseMediaType))
             .map(writer -> writer.provider)

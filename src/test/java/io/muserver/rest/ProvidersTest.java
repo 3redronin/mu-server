@@ -215,8 +215,17 @@ public class ProvidersTest {
         Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> exceptionMappers,
         List<JaxRSProviders.ContextResolverRegistration<?>> contextResolvers) {
         JaxRSProviders providers = new JaxRSProviders();
-        providers.initialize(new EntityProviders(readers, writers), exceptionMappers, contextResolvers);
+        List<JaxRSProviders.ExceptionMapperRegistration<?>> mapperRegistrations = new ArrayList<>();
+        exceptionMappers.forEach((type, mapper) -> addExceptionMapper(mapperRegistrations, type, mapper));
+        providers.initialize(new EntityProviders(readers, writers), mapperRegistrations, contextResolvers);
         return providers;
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private static void addExceptionMapper(List<JaxRSProviders.ExceptionMapperRegistration<?>> registrations,
+                                           Class<? extends Throwable> type,
+                                           ExceptionMapper<? extends Throwable> mapper) {
+        registrations.add(new JaxRSProviders.ExceptionMapperRegistration(type, mapper, false));
     }
 
     private static class Payload {

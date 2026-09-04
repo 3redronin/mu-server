@@ -50,7 +50,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private @Nullable String openApiHtmlUrl;
     private @Nullable OpenAPIObjectBuilder openAPIObject;
     private @Nullable String openApiHtmlCss;
-    private final Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> exceptionMappers = new HashMap<>();
+    private final List<JaxRSProviders.ExceptionMapperRegistration<?>> exceptionMappers = new ArrayList<>();
     private final List<JaxRSProviders.ContextResolverRegistration<?>> contextResolvers = new ArrayList<>();
     private final List<ContainerRequestFilter> preMatchRequestFilters = new ArrayList<>();
     private final List<ContainerRequestFilter> requestFilters = new ArrayList<>();
@@ -59,7 +59,8 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private final List<SchemaObjectCustomizer> schemaObjectCustomizers = new ArrayList<>();
     private @Nullable CollectionParameterStrategy collectionParameterStrategy;
     {
-        exceptionMappers.put(Throwable.class, DEFAULT_EXCEPTION_MAPPER);
+        exceptionMappers.add(new JaxRSProviders.ExceptionMapperRegistration<>(
+            Throwable.class, DEFAULT_EXCEPTION_MAPPER, true));
     }
 
     /**
@@ -306,8 +307,19 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         if (exceptionMapper == null) {
             throw new IllegalArgumentException("exceptionMapper cannot be null. Use removeExceptionMapper(" + exceptionClass.getName() + ") to remove a mapper.");
         }
-        this.exceptionMappers.put(exceptionClass, exceptionMapper);
+        removeExceptionMapper(exceptionClass);
+        addExceptionMapper(exceptionClass, exceptionMapper, false);
         return this;
+    }
+
+    <T extends Throwable> void addApplicationExceptionMapper(Class<T> exceptionClass, ExceptionMapper<T> exceptionMapper) {
+        addExceptionMapper(exceptionClass, exceptionMapper, false);
+    }
+
+    private <T extends Throwable> void addExceptionMapper(Class<T> exceptionClass, ExceptionMapper<T> exceptionMapper,
+                                                           boolean isBuiltIn) {
+        exceptionMappers.add(new JaxRSProviders.ExceptionMapperRegistration<>(
+            exceptionClass, exceptionMapper, isBuiltIn));
     }
 
     /**
@@ -321,7 +333,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         if (exceptionClass == null) {
             throw new IllegalArgumentException("exceptionClass cannot be null");
         }
-        this.exceptionMappers.remove(exceptionClass);
+        this.exceptionMappers.removeIf(registration -> registration.exceptionType.equals(exceptionClass));
         return this;
     }
 
@@ -598,7 +610,16 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @return The current value of this property
      */
     public Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> exceptionMappers() {
-        return Collections.unmodifiableMap(exceptionMappers);
+        Map<Class<? extends Throwable>, JaxRSProviders.ExceptionMapperRegistration<?>> effective = new LinkedHashMap<>();
+        for (JaxRSProviders.ExceptionMapperRegistration<?> registration : exceptionMappers) {
+            JaxRSProviders.ExceptionMapperRegistration<?> current = effective.get(registration.exceptionType);
+            if (registration.preferredTo(current)) {
+                effective.put(registration.exceptionType, registration);
+            }
+        }
+        Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> result = new LinkedHashMap<>();
+        effective.forEach((type, registration) -> result.put(type, registration.mapper));
+        return Collections.unmodifiableMap(result);
     }
 
     /**

@@ -171,7 +171,9 @@ N/A as Mu will never instantiate user classes.
 
 #### 4.1.4 Priorities
 
-No plan to implement as it would add another dependency.
+- [x] Application-supplied message body readers, message body writers, and exception mappers honor `@Priority`,
+  defaulting to `Priorities.USER`. Application-supplied providers always take precedence over built-in providers.
+- [x] Context resolvers are ordered by `@Produces` media-type specificity as required by `Providers`.
 
 ### 4.2 Entity Providers 
 

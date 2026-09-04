@@ -152,7 +152,7 @@ final class ApplicationRegistrar {
                 throw new IllegalArgumentException("Could not infer the exception type handled by "
                     + component.getClass().getName());
             }
-            builder.addExceptionMapper((Class<? extends Throwable>) exceptionType, (ExceptionMapper) component);
+            builder.addApplicationExceptionMapper((Class<? extends Throwable>) exceptionType, (ExceptionMapper) component);
             registered = true;
         }
         if (component instanceof ContextResolver) {
