@@ -743,7 +743,8 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     }
 
     private Application applicationSnapshot(List<MessageBodyReader> readers, List<MessageBodyWriter> writers) {
-        Set<Object> singletons = new LinkedHashSet<>(resources);
+        Set<Object> singletons = Collections.newSetFromMap(new IdentityHashMap<>());
+        singletons.addAll(resources);
         singletons.addAll(readers);
         singletons.addAll(writers);
         singletons.addAll(customParamConverterProviders);
@@ -767,7 +768,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         private final Set<Object> singletons;
 
         private RuntimeApplication(Set<Object> singletons) {
-            this.singletons = Collections.unmodifiableSet(new LinkedHashSet<>(singletons));
+            this.singletons = Collections.unmodifiableSet(singletons);
         }
 
         @Override

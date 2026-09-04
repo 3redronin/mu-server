@@ -53,6 +53,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -182,6 +183,54 @@ public class ApplicationTest {
         assertThat(application.getProperties().entrySet(), is(empty()));
         assertThrows(UnsupportedOperationException.class,
             () -> application.getSingletons().add(new Object()));
+    }
+
+    @Test
+    public void applicationSnapshotDeduplicatesByIdentityRatherThanEquality() throws IOException {
+        AtomicReference<Application> injected = new AtomicReference<>();
+        AtomicInteger filterCalls = new AtomicInteger();
+        @Path("identity-application-snapshot")
+        class Resource {
+            @GET
+            public String get(@Context Application application) {
+                injected.set(application);
+                return "snapshotted";
+            }
+        }
+        class EqualFilter implements ContainerResponseFilter {
+            @Override
+            public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
+                filterCalls.incrementAndGet();
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof EqualFilter;
+            }
+
+            @Override
+            public int hashCode() {
+                return 1;
+            }
+        }
+        Resource resource = new Resource();
+        EqualFilter first = new EqualFilter();
+        EqualFilter second = new EqualFilter();
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.restHandler(resource)
+                .addResponseFilter(first)
+                .addResponseFilter(second))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/identity-application-snapshot")))) {
+            assertThat(response.code(), is(200));
+        }
+
+        assertThat(filterCalls.get(), is(2));
+        Set<Object> singletons = injected.get().getSingletons();
+        assertThat(singletons, hasSize(3));
+        assertThat(singletons.stream().anyMatch(value -> value == first), is(true));
+        assertThat(singletons.stream().anyMatch(value -> value == second), is(true));
     }
 
     @Test
