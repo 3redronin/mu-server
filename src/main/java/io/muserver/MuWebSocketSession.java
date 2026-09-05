@@ -254,7 +254,9 @@ public interface MuWebSocketSession {
      * are configured using {@link WebSocketHandlerBuilder#withPingInterval(int, TimeUnit)}.
      * If the ping was initiated by your own code by calling {@link MuWebSocketSession#sendPing(ByteBuffer)}
      * or the client sent an unsolicited pong message, or the pong response does not contain the
-     * payload sent in the ping, then <code>null</code> is returned.</p>
+     * payload sent in the ping, then <code>null</code> is returned. Each outstanding ping is
+     * measured at most once: repeated calls with the same payload, replayed pongs and pings
+     * evicted from the bounded outstanding-ping history also return null.</p>
      *
      * @param pongPayload the payload received in a pong message. The buffer will be read from its current position
      *                    and after returning the position will not have been incremented.

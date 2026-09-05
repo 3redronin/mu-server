@@ -89,6 +89,29 @@ class AsyncResponseOutputTest {
         } finally { acknowledge.countDown(); }
     }
 
+    @Test void exchangeFailureWaitsForAbortEvenWhenTheQueuedIoRunnerFindsNoWrites() throws Exception {
+        var queuedIo = new LinkedBlockingQueue<Runnable>();
+        var abortEntered = new CountDownLatch(1);
+        var releaseAbort = new CountDownLatch(1);
+        IOException expected = new IOException("cancel queued output");
+        var output = new AsyncResponseOutput(queuedIo::add, buffer -> fail("Cancelled output must not start"), active -> {
+            abortEntered.countDown();
+            try { releaseAbort.await(); }
+            catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        }, new SerialApplicationTasks(server));
+        Future<?> write = output.write(ByteBuffer.allocate(1), null);
+        Future<?> cancelling = io.submit(() -> output.complete(expected));
+        try {
+            assertTrue(abortEntered.await(5, TimeUnit.SECONDS));
+            queuedIo.remove().run();
+            assertFalse(output.completion().isDone());
+            assertFalse(write.isDone());
+            releaseAbort.countDown();
+            cancelling.get(5, TimeUnit.SECONDS);
+            assertSame(expected, assertThrows(ExecutionException.class, () -> output.completion().get()).getCause());
+        } finally { releaseAbort.countDown(); }
+    }
+
     @Test void cancellingTheReturnedFutureWaitsForBufferRelease() throws Exception {
         var started = new CountDownLatch(1);
         var aborted = new CountDownLatch(1);

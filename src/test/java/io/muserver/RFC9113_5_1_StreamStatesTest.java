@@ -75,11 +75,7 @@ class RFC9113_5_1_StreamStatesTest {
                     request,
                     EmptyInputStream.INSTANCE
                 );
-                Http2WriteCoordinator coordinator = getField(
-                    writerConnection,
-                    "writeCoordinator",
-                    Http2WriteCoordinator.class
-                );
+                Http2WriteCoordinator coordinator = writerConnection.testProbe().coordinator();
                 coordinator.openStream(
                     1,
                     65_535,
@@ -508,9 +504,9 @@ class RFC9113_5_1_StreamStatesTest {
 
             var connection = (Http2Connection) server.activeConnections().iterator().next();
             Http2StreamRegistry streamRegistry =
-                getField(connection, "streamRegistry", Http2StreamRegistry.class);
+                connection.testProbe().streams();
             var stream = Objects.requireNonNull(streamRegistry.applicationStream(1));
-            Lock stateLock = getField(connection, "stateLock", Lock.class);
+            Lock stateLock = connection.testProbe().lifecycleLock();
             stateLock.lock();
             try {
                 con.writeFrame(terminalFrame)
@@ -614,13 +610,13 @@ class RFC9113_5_1_StreamStatesTest {
 
             var connection = (Http2Connection) server.activeConnections().iterator().next();
             Http2StreamRegistry streamRegistry =
-                getField(connection, "streamRegistry", Http2StreamRegistry.class);
+                connection.testProbe().streams();
             var stream = Objects.requireNonNull(streamRegistry.applicationStream(1));
             assertEventually(stream::protocolStateClosed, equalTo(true));
 
             con.socket().shutdownOutput();
             assertEventually(
-                () -> getField(connection, "readState", Object.class).toString(),
+                () -> connection.testProbe().inputState().toString(),
                 equalTo("COMPLETED")
             );
         } finally {
@@ -661,11 +657,7 @@ class RFC9113_5_1_StreamStatesTest {
         return RFCTestUtils.getHelloHeaders(server.uri().getPort());
     }
 
-    private static <T> T getField(Object target, String name, Class<T> type) throws Exception {
-        var field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        return type.cast(field.get(target));
-    }
+
 
     @AfterEach
     public void stop() {

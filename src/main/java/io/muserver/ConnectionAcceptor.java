@@ -124,7 +124,7 @@ class ConnectionAcceptor {
                 }
                 ConnectionAcceptedTime acceptedTime = ConnectionAcceptedTime.now();
                 try {
-                    connectionExecutor.submit(
+                    connectionExecutor.execute(
                         () -> runAcceptedSocket(clientSocket, acceptedTime, h2, false)
                     );
                 } catch (RejectedExecutionException e) {
@@ -140,7 +140,7 @@ class ConnectionAcceptor {
                     throw submissionFailure;
                 }
             } catch (Throwable e) {
-            FatalErrors.rethrow(e);
+                FatalErrors.rethrow(e);
                 if (Thread.interrupted() || e instanceof SocketException) {
                     log.info("Accept listening stopped");
                 } else {

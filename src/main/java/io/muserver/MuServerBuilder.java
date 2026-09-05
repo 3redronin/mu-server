@@ -623,7 +623,7 @@ public class MuServerBuilder {
     }
 
     /**
-     * Gets the executor used to run request handlers.
+     * Gets the executor used to run request handlers, application callbacks and continuations.
      *
      * @return The configured executor, or <code>null</code> if the default executor will be used.
      */

@@ -249,7 +249,7 @@ class ExecutionDomainsTest {
             var connection =
                 (Http2Connection) server.activeConnections().iterator().next();
             Http2StreamRegistry streamRegistry =
-                getField(connection, "streamRegistry", Http2StreamRegistry.class);
+                connection.testProbe().streams();
             assertThat(
                 streamRegistry.lookup(1).rejectedRequestBody(),
                 is(true)
@@ -1983,11 +1983,7 @@ class ExecutionDomainsTest {
         return runnable -> new Thread(runnable, prefix + count.incrementAndGet());
     }
 
-    private static <T> T getField(Object target, String name, Class<T> type) throws Exception {
-        var field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        return type.cast(field.get(target));
-    }
+
 
     @AfterEach
     void stop() {

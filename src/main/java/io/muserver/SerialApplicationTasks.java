@@ -1,5 +1,7 @@
 package io.muserver;
 
+import com.google.errorprone.annotations.concurrent.GuardedBy;
+
 import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.concurrent.RejectedExecutionException;
@@ -9,7 +11,9 @@ import java.util.function.Consumer;
 final class SerialApplicationTasks {
     private final Mu3ServerImpl server;
     private final Object lock = new Object();
+    @GuardedBy("lock")
     private final Queue<Entry> tasks = new ArrayDeque<>();
+    @GuardedBy("lock")
     private boolean scheduled;
 
     SerialApplicationTasks(Mu3ServerImpl server) { this.server = server; }

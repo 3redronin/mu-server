@@ -500,6 +500,7 @@ class WebsocketConnection implements MuWebSocketSession {
                 task.completion.complete(null);
             } catch (Throwable failure) {
                 task.completion.completeExceptionally(failure);
+                if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
                 FatalErrors.rethrow(failure);
             }
         }

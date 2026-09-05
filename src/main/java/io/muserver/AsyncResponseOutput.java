@@ -1,5 +1,7 @@
 package io.muserver;
 
+import com.google.errorprone.annotations.concurrent.GuardedBy;
+
 import io.muserver.internal.FatalErrors;
 
 import org.jspecify.annotations.Nullable;
@@ -20,12 +22,20 @@ final class AsyncResponseOutput {
     private final Consumer<Boolean> abort;
     private final SerialApplicationTasks callbacks;
     private final ReentrantLock lock = new ReentrantLock();
+    @GuardedBy("lock")
     private final Queue<PendingWrite> pending = new ArrayDeque<>();
     private final CompletableFuture<@Nullable Void> completion = new CompletableFuture<>();
+    @GuardedBy("lock")
     private boolean completionRequested;
+    @GuardedBy("lock")
     private @Nullable Throwable failure;
+    @GuardedBy("lock")
     private @Nullable PendingWrite active;
+    @GuardedBy("lock")
     private boolean draining;
+    /** Prevents an empty I/O drain from publishing failure before transport abort has returned. */
+    @GuardedBy("lock")
+    private boolean abortFinished;
     private final java.util.concurrent.atomic.AtomicBoolean abortRequested = new java.util.concurrent.atomic.AtomicBoolean();
 
     AsyncResponseOutput(Executor executor, Writer writer, Consumer<Boolean> abort, SerialApplicationTasks callbacks) {
@@ -80,10 +90,12 @@ final class AsyncResponseOutput {
         if (completion.isDone()) return;
         Queue<PendingWrite> cancelled = new ArrayDeque<>();
         boolean activeOutput;
+        Throwable terminalFailure;
         lock.lock();
         try {
             completionRequested = true;
             if (failure == null) failure = cause;
+            terminalFailure = failure;
             activeOutput = active != null;
             if (!activeOutput) {
                 cancelled.addAll(pending);
@@ -93,9 +105,15 @@ final class AsyncResponseOutput {
         } finally { lock.unlock(); }
         // The transport abort does not return buffers to callers. The I/O drain must
         // acknowledge termination before active futures and callbacks can finish.
-        if (abortRequested.compareAndSet(false, true)) abort.accept(activeOutput);
-        for (PendingWrite write : cancelled) write.finish(cause);
-        if (!activeOutput) finishIfDrained();
+        if (abortRequested.compareAndSet(false, true)) {
+            try { abort.accept(activeOutput); }
+            finally {
+                lock.lock();
+                try { abortFinished = true; } finally { lock.unlock(); }
+            }
+        }
+        for (PendingWrite write : cancelled) write.finish(terminalFailure);
+        finishIfDrained();
     }
 
     private void drain() {
@@ -139,7 +157,8 @@ final class AsyncResponseOutput {
         Throwable terminalFailure;
         lock.lock();
         try {
-            finish = completionRequested && active == null && pending.isEmpty();
+            finish = completionRequested && active == null && pending.isEmpty()
+                && (failure == null || abortFinished);
             terminalFailure = failure;
         } finally { lock.unlock(); }
         if (finish) {

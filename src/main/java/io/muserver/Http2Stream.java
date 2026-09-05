@@ -1,5 +1,7 @@
 package io.muserver;
 
+import com.google.errorprone.annotations.concurrent.GuardedBy;
+
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,7 +31,9 @@ class Http2Stream implements ResponseInfo {
     // starting new response work after any thread has initiated a reset.
     private volatile boolean resetInitiated;
     private final Object outputLock = new Object();
+    @GuardedBy("outputLock")
     private @Nullable WriteTask activeWrite;
+    @GuardedBy("outputLock")
     private boolean outputAborted;
     private volatile boolean applicationExchangeEnded;
     private volatile boolean protocolStateClosed;
@@ -149,10 +153,10 @@ class Http2Stream implements ResponseInfo {
     }
 
     void cancel(IOException reason) {
-        cancel(reason, true);
+        cancel(reason, UnreadDataCredit.REFUND_CONNECTION);
     }
 
-    void cancel(IOException reason, boolean refundUnreadData) {
+    void cancel(IOException reason, UnreadDataCredit refundUnreadData) {
         resetInitiated = true;
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).cancel(reason, refundUnreadData);
@@ -160,7 +164,7 @@ class Http2Stream implements ResponseInfo {
     }
 
     void onConnectionTerminated(IOException reason, ResponseState terminalState) {
-        cancel(reason, false);
+        cancel(reason, UnreadDataCredit.CONNECTION_CLOSED_OR_TRANSFERRED);
         Http2Response currentResponse = requiredResponse();
         currentResponse.setState(terminalState);
         // Complete the private async-exchange future. Its continuation is

@@ -1,187 +1,111 @@
-# HTTP/2 concurrency model
+# Mu concurrency and ownership
 
-This document defines the concurrency and ownership rules for the direct HTTP/2
-implementation. It is the design contract for the staged migration: completed
-slices must preserve the rules they implement, and later changes must keep each
-piece of mutable state within one of the ownership boundaries described here.
+This is the concurrency contract for HTTP/1, HTTP/2, WebSocket, asynchronous
+request handling and shutdown. The disposition of the review notes is recorded
+in [CONCURRENCY-REVIEW.md](CONCURRENCY-REVIEW.md).
 
-## Implementation status
+## Execution resources
 
-The outbound coordinator, outbound flow-control ownership, stream-state
-transitions, reset ordering, and separation of protocol lifetime from
-application exchange lifetime are implemented. Connection setup and HTTP/2
-readers use a connection executor that is independent of
-`MuServerBuilder.withHandlerExecutor`; serialized HTTP/2 writer drains use
-their own executor. Handler-executor rejection is handled as a 503 response on
-the affected stream while the connection remains usable. Scheduled connection
-maintenance and connection idle-timeout scans use a server timer that dispatches
-due work to a separate maintenance executor.
+| Resource | Configuration and ownership | Work |
+| --- | --- | --- |
+| Application executor | `withHandlerExecutor`; caller-owned when supplied | Handlers, JAX-RS continuations, body/write callbacks, WebSocket events, completion/rejection listeners |
+| Internal task executor | Mu-owned, unbounded task dispatch | Connection readers, serialized HTTP/2 writer drains, maintenance and blocking adapter I/O |
+| Timer | Mu-owned single scheduled thread | Determine when work is due and dispatch it |
 
-SETTINGS acknowledgement expiry now runs on the server timer and is serialized
-as a coordinator connection-error command; it no longer changes the socket
-reader's blocking timeout. Peer SETTINGS are decoded into an immutable
-reader-published snapshot, while their outbound effects (existing-stream flow
-credit, the HPACK encoder limit, and the ACK) are applied in order by the
-coordinator. Connection and stream inbound flow-control accounting is also
-centralized in one component with a short-held lock. The reader atomically
-debits both receive windows without depending on the blocking-output executor,
-body consumers return freed credit through the same component, and the writer
-publishes that credit as available immediately before emitting the corresponding
-`WINDOW_UPDATE`. Live stream identity publication is similarly centralized in one
-short-held registry lock, while the coordinator remains the sole owner of RFC
-stream-state transitions.
-Request-body read deadlines are monotonic timed waits owned by the body buffer:
-they do not require a scheduled task or coordinator round trip. The reader,
-coordinator, application executors, and timer now have separate execution
-capacity. Accepted sockets, live-connection publication, and listener shutdown
-admission share one lifecycle lock, so work queued on the connection executor
-cannot start a connection after server shutdown. The deliberate cross-domain
-boundaries are listed below.
+The two task executors use virtual-thread-per-task execution when the runtime
+supports it, otherwise cached platform threads. Logical ownership does not
+require a separate configurable pool for every kind of task. Readers, writers
+and maintenance must all be able to make independent progress. HTTP/2 retains
+its existing rescheduling writer: one drain at a time per connection, returning
+when nothing can progress. No protocol ordering or flow-control queue was removed.
 
-## Goals
+A custom application executor must dispatch asynchronously, reject visibly and
+remain alive until `stop` finishes. Direct execution, caller-runs and silent
+discard are unsupported. New-request rejection produces 503. A rejected required
+continuation aborts the exchange and performs internal cleanup. Terminal
+notifications may be logged and dropped when dispatch rejects; Mu releases its
+tracking registration. There is no fallback to another pool or a protocol thread.
+Mu cannot discover tasks silently removed from an opaque caller-owned executor.
 
-The model must:
+Nested application tasks use a short FIFO within the current application turn.
+This preserves nonrecursive callback delivery and avoids resubmitting work to the
+same occupied worker. Per-response write callbacks and WebSocket events also have
+serialized mailboxes. Deprecated WebSocket event adapters release the worker while
+their completion is pending; their blocking writes still run on internal workers.
 
-* preserve HTTP/2 frame ordering and stream state rules;
-* allow request handlers for different streams to run concurrently;
-* support the existing blocking and asynchronous request/response APIs;
-* keep protocol progress independent of handler-executor saturation;
-* ensure every blocking or asynchronous operation completes or fails;
-* avoid holding locks while invoking user code or performing socket writes; and
-* use only JDK concurrency primitives.
+## Request admission
 
-## Execution domains
+`withMaxConcurrentRequests` defaults to **1000** unfinished requests across the
+whole server, including all listeners and HTTP versions. Zero means unlimited;
+negative values are invalid. Acquisition is nonblocking and precedes application
+submission. Excess requests receive 503. Queued handlers, suspended async work
+and SSE retain admission until internal exchange cleanup. Release is idempotent
+and occurs before detached completion listeners. A completed WebSocket upgrade
+releases the HTTP slot; the session remains a live connection.
 
-The executor allocation and application-turn rules in this section are
-implemented. The ownership boundaries below describe both the current design
-and the constraint on later phases; individual call sites can still be
-simplified within those boundaries.
+This is separate from HTTP/2's default limit of 200 concurrent protocol streams
+per connection. A completed application exchange may retain protocol state while
+response DATA or inbound closure is pending. Likewise, a lightweight rejected
+stream remains protocol-only while the peer finishes sending its body.
 
-There are five execution domains and one timer facility:
+The historical 400 value limited workers in the old platform-thread handler pool;
+it was not a cap on unfinished async requests. Admission now expresses the resource
+limit independently of executor sizing. Request-aware 429 rate limiting remains
+inside the handler pipeline and does not replace this early overload check.
 
-* connection input;
-* HTTP/2 output;
-* connection maintenance;
-* request handling and application continuations;
-* asynchronous application I/O; and
-* timer scheduling.
+## Async output and callbacks
 
-### Connection I/O
+`handleAsync` remains supported for external callbacks, CompletionStage and JAX-RS
+suspension. Blocking code is a straightforward ordinary path. Core/JAX-RS dispatch
+uses `io.muserver.internal.AsyncExecution`, which is excluded from supported API
+documentation. Custom AsyncHandle implementations retain immediate continuation
+execution and the JDK delayed-execution fallback.
 
-Before protocol selection, the listener lifecycle lock owns the transition from
-an accepted socket to a published live connection. Shutdown closes accepted
-sockets that have not crossed that boundary and prevents their queued connection
-tasks from later being promoted. Live-connection retirement signals a condition
-used by graceful shutdown; it is not discovered by polling.
+Multiple outstanding async writes are accepted and sent in submission order.
+Mu owns each buffer until its I/O future completes or its callback runs. Waiting
+before submitting another write provides backpressure. Blocking adapter I/O runs
+on internal workers; futures resolve without waiting for an application worker.
+Callbacks run in order on the application executor, independently of later I/O.
+Concurrent blocking writes to the same response remain the caller's responsibility.
 
-The accepted connection wraps socket input and output once, below every
-protocol implementation. Successful reads and writes publish monotonic
-connection activity and update byte statistics at that boundary. Protocol
-layers do not duplicate this bookkeeping; the wrappers account for transport
-activity but do not own protocol serialization.
+`complete()` rejects later submissions and drains accepted writes. Error completion
+cancels queued output and terminates active output before releasing its buffers.
+Before output begins, the configured exception handler may produce a 500 response.
+After output begins, HTTP/1 closes or HTTP/2 resets the stream. Interrupting an
+HTTP/2 waiter cancels the underlying write; cancellation of an active socket frame
+can require closing the entire transport because a partial frame cannot safely be
+followed by another frame. There is no separate two-hour waiter timeout.
 
-Each HTTP/2 connection has:
+Completion listeners retain registration order per response. They run after
+internal cleanup, may overlap the next HTTP/1 request, and have no same-thread
+guarantee. `stop(timeout)` waits for accepted detached callbacks within the shared
+shutdown deadline. It cannot force arbitrary caller code to stop. Callback-local
+stop avoids waiting for itself or work queued behind it; a concurrent external stop
+still sees the callback's registration. Ordinary listener failures do not strand
+later listeners. Fatal VM failures and ThreadDeath are rethrown after available
+cleanup, rather than converted into ordinary HTTP responses.
 
-* one blocking socket reader; and
-* one protocol coordinator that also owns socket writes.
+## Connection I/O and timers
 
-These tasks run independently of request handlers and independently of each
-other. The connection reader is a long-lived task on the executor configured
-by `MuServerBuilder.withConnectionExecutor`. It owns the input stream, read
-buffer, HPACK decoder, wire-order validation, and monotonic inbound
-`END_STREAM`/reset-seen fences. It directly debits receive credit and publishes
-validated DATA to the request-body buffer. Making either operation wait for the
-writer would let a blocked socket output stall input and can deadlock
-bidirectional exchanges.
+The listener lifecycle lock owns accepted-to-live socket promotion. Shutdown closes
+accepted sockets that have not crossed that boundary and prevents queued tasks
+from promoting them later. Live connection retirement signals a condition.
 
-The coordinator serializes the RFC stream-state machine, outbound flow control,
-pending frames, and socket output. The reader enqueues each inbound transition
-before publishing an application-visible terminal event, but its wire-order
-fences are intentionally not a second RFC state machine. The coordinator
-schedules short serialized drains on the executor configured by
-`MuServerBuilder.withHttp2WriterExecutor`; an idle or flow-control-blocked
-connection does not retain a writer worker.
+Each HTTP/2 connection has one input owner and one independently runnable output
+coordinator. The reader owns socket input, HPACK decoding and wire-order validation;
+it debits receive credit and publishes DATA directly to the body buffer. The
+coordinator owns RFC stream transitions, outbound flow control and socket output.
+Reader END_STREAM/reset fences prevent later wire data from overtaking queued
+coordinator transitions. Socket wrappers publish byte counts and monotonic activity.
 
-Timed connection work runs on
-`MuServerBuilder.withConnectionMaintenanceExecutor`, not on a reader or writer.
-The three executors have independent defaults. Sharing a bounded executor
-between long-lived readers and work needed to make output or maintenance
-progress can starve the latter and is unsupported.
-
-### Application work
-
-The executor configured by `MuServerBuilder.withHandlerExecutor` runs:
-
-* request handlers;
-* exception handlers; and
-* response-completion listeners;
-* serialized WebSocket callbacks; and
-* application continuations such as JAX-RS asynchronous response processing.
-
-The executor configured by `MuServerBuilder.withAsyncExecutor` runs
-asynchronous request-body listeners, asynchronous response writes and their
-callbacks, request-rejection notifications, and deprecated asynchronous
-WebSocket adapters. Handler-oriented detached callbacks may use it as a
-fallback when the handler executor rejects them. Operations whose contract
-specifically requires the async executor fail when that executor rejects them.
-A failure thrown by a request-body data listener is reported through its
-`onError` callback in the same async application turn before the exchange is
-failed. Request-rejection listener failures are isolated so one listener cannot
-skip later listeners for the same rejected request.
-A response write rejected by the async-completion terminal gate still dispatches
-its failure callback to this executor; if the executor itself rejects that
-notification, the caller delivers the required failure callback rather than
-dropping it.
-
-Neither application executor runs a connection reader, writer, or timer
-callback. Rejection of a new handler is handled as rejection of that individual
-request, not failure of the HTTP/2 connection. Rejection of continuation work
-for an already accepted exchange completes or aborts that exchange explicitly;
-it must not silently strand the stream.
-
-Application callbacks execute in a per-server application turn. A turn records
-both the requested executor and any fallback executor that actually accepted
-the task. Work submitted from that turn to either occupied executor is appended
-to a thread-confined FIFO and drained before the worker is released. It is not
-recursively invoked and is not submitted back to an executor whose only worker
-may be the current thread. Work targeting a distinct required executor is still
-dispatched there.
-
-This rule makes a shared single-worker non-queueing executor usable without
-collapsing the handler and async domains when separate executors are configured.
-The turn marker is installed only around application work and is always removed
-before returning a caller-owned worker to its executor.
-
-### Timers
-
-A single server timer determines when scheduled work is due. The default is one
-server-owned platform thread, and a custom
-`ScheduledExecutorService` can be supplied through
-`MuServerBuilder.withTimerExecutor`. Timer callbacks dispatch due connection
-work to the maintenance executor and due application work to an application
-executor. Periodic connection dispatch is coalesced so a delayed maintenance
-executor does not accumulate duplicate work. Timer threads do not mutate
-protocol state, perform socket I/O, or invoke user code.
-
-Connection idle-timeout scans, WebSocket pings, and HTTP/2 SETTINGS
-acknowledgement deadlines use this facility. SETTINGS expiry atomically wins
-or loses a race with its ACK, then enqueues a connection-error command without
-mutating protocol state on the timer thread. The writer registers each local
-SETTINGS frame in the acknowledgement FIFO before writing any of its bytes, so
-a fast ACK cannot be missed, but arms its deadline only after the frame is
-flushed, so blocked output does not consume the peer's acknowledgement period.
-Connection idle expiry and graceful-stop budgets also use monotonic elapsed
-time, so wall-clock adjustments cannot shorten or extend them.
-
-Request-body read deadlines are intentionally not server timer tasks. They
-bound an application thread's blocking read on `Http2BodyInputStream`, so the
-body-buffer condition performs a monotonic timed wait. A zero request timeout
-waits indefinitely, as required by the public builder contract. Expiry raises
-the documented 408 response without the HTTP/1-only `Connection: close` field;
-RFC 9113 Section 8.2.2 prohibits connection-specific fields in HTTP/2. If a
-response has already started, the status cannot be replaced, so the coordinator
-resets only that stream with `CANCEL`, meaning the stream is no longer needed
-as defined by RFC 9113 Section 7.
+Timers only dispatch. Periodic maintenance is coalesced so delayed work cannot
+accumulate duplicate scans. SETTINGS acknowledgement expiry uses a coordinator
+command, with the existing configurable 10-second default; zero means immediate
+expiry. Registration precedes possible peer observation, and the deadline is armed
+after successful output. Request-body read deadlines use monotonic body-condition
+waits, not timer tasks. A readable timeout may produce 408 before response output
+begins: HTTP/1 then closes, while HTTP/2 omits Connection and resets after an already
+started response. No competing HTTP/1 disconnect reader was introduced.
 
 ## Ownership
 
@@ -202,7 +126,7 @@ as defined by RFC 9113 Section 7.
 | Pending outbound frames and their ordering | Coordinator |
 | HPACK encoder and socket output | Coordinator |
 | Request-body producer/consumer buffer and read deadline | `Http2BodyInputStream` lock and condition |
-| Response API call ordering and async completion terminal gate | Application-side response/async handle lock |
+| Response API call ordering and async completion terminal gate | Async output queue lock |
 | Response completion-listener registration and notification gate | `BaseResponse` completion-listener lock |
 | Protocol stream completion | Coordinator |
 | Application exchange completion | Serialized application completion path |
@@ -254,7 +178,7 @@ been processed by the coordinator.
 ## Stream protocol state
 
 RFC 9113 stream state is represented independently of application exchange
-lifecycle. Initially supported states are:
+lifecycle. Protocol states are:
 
 * `OPEN`;
 * `HALF_CLOSED_LOCAL`;

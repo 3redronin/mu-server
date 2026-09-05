@@ -1,5 +1,7 @@
 package io.muserver;
 
+import com.google.errorprone.annotations.concurrent.GuardedBy;
+
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -46,6 +48,7 @@ final class Http2StreamRegistry {
     }
 
     private final Lock lock = new ReentrantLock();
+    @GuardedBy("lock")
     private final Map<Integer, Lookup> entries = new HashMap<>();
 
     void registerApplicationStream(Http2Stream stream) {

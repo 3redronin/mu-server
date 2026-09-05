@@ -22,6 +22,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 final class Http2WriteCoordinator {
 
+    enum ResetRetention { UNTIL_APPLICATION_ENDS, NONE }
+
     final class WritableFrame {
         private final LogicalHttp2Frame frame;
         private final WriteTask task;
@@ -83,9 +85,9 @@ final class Http2WriteCoordinator {
 
     private static final class QueueWrite implements Command {
         private final WriteTask task;
-        private final boolean retainResetState;
+        private final ResetRetention retainResetState;
 
-        private QueueWrite(WriteTask task, boolean retainResetState) {
+        private QueueWrite(WriteTask task, ResetRetention retainResetState) {
             this.task = task;
             this.retainResetState = retainResetState;
         }
@@ -237,10 +239,10 @@ final class Http2WriteCoordinator {
     }
 
     void submit(WriteTask task) {
-        submit(task, true);
+        submit(task, ResetRetention.UNTIL_APPLICATION_ENDS);
     }
 
-    void submit(WriteTask task, boolean retainResetState) {
+    void submit(WriteTask task, ResetRetention retainResetState) {
         enqueue(new QueueWrite(task, retainResetState));
     }
 
@@ -547,7 +549,7 @@ final class Http2WriteCoordinator {
                     streamCredits.putAll(changedCredits);
                 }
                 fieldBlockEncoder.changeTableSize(change.headerTableSize);
-                queue(change.acknowledgement, true, false);
+                queue(change.acknowledgement, true, ResetRetention.NONE);
             } catch (Http2Exception e) {
                 queueConnectionError(
                     Http2Exception.connection(e.errorCode(), e.getMessage()),
@@ -574,14 +576,14 @@ final class Http2WriteCoordinator {
         }
     }
 
-    private void queue(WriteTask task, boolean first, boolean retainResetState) {
+    private void queue(WriteTask task, boolean first, ResetRetention retainResetState) {
         queue(task, first, retainResetState, null);
     }
 
     private void queue(
         WriteTask task,
         boolean first,
-        boolean retainResetState,
+        ResetRetention retainResetState,
         @Nullable Http2Exception protocolError
     ) {
         LogicalHttp2Frame frame = task.frame();
@@ -593,7 +595,7 @@ final class Http2WriteCoordinator {
             streamCredits.remove(streamId);
             applyResetState(streamId);
             localResetsPendingWrite.add(streamId);
-            if (retainResetState) {
+            if (retainResetState == ResetRetention.UNTIL_APPLICATION_ENDS) {
                 retainedLocalResetStreams.add(streamId);
             }
             // RFC 9113 Section 5.4.2 permits additional RST_STREAM responses to frames that
@@ -695,7 +697,7 @@ final class Http2WriteCoordinator {
         queue(
             new WriteTask(new Http2ResetStreamFrame(error.streamId(), error.errorCode().code()), false),
             true,
-            true,
+            ResetRetention.UNTIL_APPLICATION_ENDS,
             error
         );
     }

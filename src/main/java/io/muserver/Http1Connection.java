@@ -186,7 +186,8 @@ class Http1Connection extends BaseHttpConnection {
                             closeConnection = rejectRequestDueToHandlerOverload(muRequest, outputStream);
                         }
                     } catch (Throwable e) {
-            FatalErrors.rethrow(e);
+                        if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+                        FatalErrors.rethrow(e);
                         closeConnection = true;
                         log.warn("Unrecoverable error for " + muRequest, e);
                         muResponse.setState(ResponseState.ERRORED);
@@ -225,7 +226,7 @@ class Http1Connection extends BaseHttpConnection {
         try {
             handlerExecutor.execute(server.handlerApplicationTask(() -> {
                 try {
-                    completion.complete(handleExchange(request, response));
+                    completion.complete(response.responseState().endState() ? null : handleExchange(request, response));
                 } catch (Throwable t) {
                     completion.completeExceptionally(t);
                     FatalErrors.rethrow(t);

@@ -43,7 +43,7 @@ final class MonotonicTime {
         return candidateNanos - referenceNanos > 0L;
     }
 
-    static void publishLatest(AtomicLong destination, long candidateNanos) {
+    static void advanceIfLater(AtomicLong destination, long candidateNanos) {
         long current = destination.get();
         while (isAfter(candidateNanos, current)
             && !destination.compareAndSet(current, candidateNanos)) {

@@ -164,7 +164,7 @@ public class RestHandler implements MuHandler {
                                 : completionCause((Throwable) stageFailure);
                             if (failure != null && !(failure instanceof Exception)) {
                                 asyncHandle.complete(failure);
-                FatalErrors.rethrow(failure);
+                                FatalErrors.rethrow(failure);
                                 return;
                             }
                             @Nullable Object response = failure == null ? value : failure;
@@ -174,14 +174,14 @@ public class RestHandler implements MuHandler {
                                 asyncHandle.complete();
                             } catch (Throwable responseFailure) {
                                 asyncHandle.complete(responseFailure);
-                FatalErrors.rethrow(responseFailure);
+                                FatalErrors.rethrow(responseFailure);
                             }
                         };
                         try {
                             AsyncExecution.forHandle(asyncHandle).executeApplicationTask(continuation);
                         } catch (Throwable dispatchFailure) {
                             asyncHandle.complete(dispatchFailure);
-                FatalErrors.rethrow(dispatchFailure);
+                            FatalErrors.rethrow(dispatchFailure);
                         }
                     });
                 } else {

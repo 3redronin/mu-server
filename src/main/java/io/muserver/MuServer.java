@@ -40,7 +40,10 @@ public interface MuServer extends Closeable {
      *
      * @param duration The duration of the graceful timeout period, or 0 to shut down immediately.
      * @param unit     The time unit of the duration.
-     * @return false if there were in-flight requests not completed.
+     * <p>The same deadline includes accepted detached completion/rejection callbacks. Timeout
+     * cannot forcibly stop arbitrary application code. Calling stop from such a callback does
+     * not wait for that callback or work queued behind it.</p>
+     * @return false if requests, connections or tracked callbacks did not drain before the deadline.
      */
     boolean stop(long duration, TimeUnit unit);
 
