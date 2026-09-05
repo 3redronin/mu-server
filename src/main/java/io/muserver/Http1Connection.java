@@ -209,6 +209,7 @@ class Http1Connection extends BaseHttpConnection {
                 closeConnection = closeConnection || state.get() != HttpConnectionState.OPEN || closed.get();
             }
         } catch (Exception e) {
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             // probably shouldn't log here so much for things like IO errors which would be common when clients disconnect
             log.error("Unhandled error at the socket", e);
         } finally {

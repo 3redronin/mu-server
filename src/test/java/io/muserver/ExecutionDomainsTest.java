@@ -31,7 +31,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.Phaser;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -107,6 +106,13 @@ class ExecutionDomainsTest {
 
             server.stop();
             server = null;
+            client.setSoTimeout(1000);
+            try {
+                assertThat(client.getInputStream().read(), equalTo(-1));
+            } catch (java.net.SocketException reset) {
+                // Closing an accepted socket with unread input may send RST instead of FIN.
+                assertThat(client.isConnected(), is(true));
+            }
 
             releaseBlocker.countDown();
             blocker.get(5, TimeUnit.SECONDS);
@@ -120,6 +126,45 @@ class ExecutionDomainsTest {
             assertThat(handledRequests.get(), equalTo(0));
         } finally {
             releaseBlocker.countDown();
+        }
+    }
+
+    @Test
+    void handlerRejectionAfterFinalGoAwayStillSendsTheAdmittedResponse() throws Exception {
+        var submitting = new CountDownLatch(1);
+        var reject = new CountDownLatch(1);
+        var handler = track(new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
+            new java.util.concurrent.SynchronousQueue<>()) {
+            @Override public void execute(Runnable task) {
+                submitting.countDown();
+                try {
+                    if (!reject.await(5, TimeUnit.SECONDS)) throw new AssertionError("Rejection not released");
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                throw new RejectedExecutionException("full");
+            }
+        });
+        server = httpServer().withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .withHandlerExecutor(handler).start();
+        try (var client = new H2Client(); var connection = client.connectClearText(server)) {
+            connection.socket().setSoTimeout(5000);
+            connection.handshake();
+            var headers = new FieldBlock();
+            headers.set(":method", "GET");
+            headers.set(":scheme", "http");
+            headers.set(":authority", "localhost");
+            headers.set(":path", "/");
+            connection.writeFrame(new Http2HeadersFrame(1, true, headers)).flush();
+            assertThat(submitting.await(5, TimeUnit.SECONDS), is(true));
+            ((Http2Connection) server.activeConnections().iterator().next()).initiateGracefulShutdown();
+            connection.readLogicalFrame(Http2GoAway.class);
+            connection.readLogicalFrame(Http2GoAway.class);
+            reject.countDown();
+            assertThat(connection.readLogicalFrame(Http2HeadersFrame.class).headers().get(":status"), is("503"));
+            assertThat(connection.readLogicalFrame(Http2DataFrame.class).toUTF8(), is("503 Service Unavailable"));
+        } finally {
+            reject.countDown();
         }
     }
 
@@ -443,28 +488,20 @@ class ExecutionDomainsTest {
     }
 
     @Test
-    void detachedTaskWaitDoesNotWaitOnANewEmptyPhase() {
-        Phaser tasks = new Phaser(1) {
-            private boolean advanceBeforeReturningParties = true;
-
-            @Override
-            public int getRegisteredParties() {
-                int parties = super.getRegisteredParties();
-                if (advanceBeforeReturningParties) {
-                    advanceBeforeReturningParties = false;
-                    arriveAndDeregister();
-                }
-                return parties;
-            }
-        };
-
-        assertThat(
-            Mu3ServerImpl.awaitDetachedApplicationTasks(
-                tasks,
-                MonotonicTime.deadlineAfterMillis(100)
-            ),
-            is(true)
-        );
+    void detachedTaskTrackerSupportsLargeBatchesAndRepeatedDrains() {
+        var tasks = new ApplicationTaskTracker();
+        var registrations = new java.util.ArrayList<ApplicationTaskTracker.Registration>();
+        for (int i = 0; i < 70_000; i++) {
+            registrations.add(tasks.register());
+        }
+        assertThat(tasks.awaitUntil(System.nanoTime()), is(false));
+        registrations.forEach(ApplicationTaskTracker.Registration::close);
+        registrations.forEach(ApplicationTaskTracker.Registration::close);
+        assertThat(tasks.awaitUntil(System.nanoTime()), is(true));
+        try (var registration = tasks.register()) {
+            assertThat(tasks.awaitUntil(System.nanoTime()), is(false));
+        }
+        assertThat(tasks.awaitUntil(System.nanoTime()), is(true));
     }
 
     @Test
@@ -1871,6 +1908,44 @@ class ExecutionDomainsTest {
         } finally {
             releaseShutdown.countDown();
             webSocket.cancel();
+        }
+    }
+
+    @Test
+    void applicationFailureDuringWebSocketShutdownStillReachesOnError() throws Exception {
+        var handler = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var session = new CompletableFuture<WebsocketConnection>();
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var observed = new CompletableFuture<Throwable>();
+        var expected = new IOException("application callback failed during shutdown");
+        server = httpServer().withHandlerExecutor(handler)
+            .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
+                @Override public void onConnect(MuWebSocketSession connected) throws Exception {
+                    super.onConnect(connected);
+                    session.complete((WebsocketConnection) connected);
+                }
+                @Override public void onText(String message) throws Exception {
+                    entered.countDown();
+                    if (!release.await(5, TimeUnit.SECONDS)) throw new AssertionError("Callback not released");
+                    throw expected;
+                }
+                @Override public void onBinary(ByteBuffer payload) { }
+                @Override public void onServerShuttingDown() { }
+                @Override public void onError(Throwable cause) { observed.complete(cause); }
+            })).start();
+        WebSocket socket = client.newWebSocket(
+            request().url("ws" + server.uri().toString().substring(4)).build(), new WebSocketListener() { });
+        try {
+            WebsocketConnection connection = session.get(5, TimeUnit.SECONDS);
+            socket.send("fail");
+            assertThat(entered.await(5, TimeUnit.SECONDS), is(true));
+            connection.onServerShuttingDown();
+            release.countDown();
+            assertThat(observed.get(5, TimeUnit.SECONDS), is(expected));
+        } finally {
+            release.countDown();
+            socket.cancel();
         }
     }
 

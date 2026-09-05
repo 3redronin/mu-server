@@ -10,11 +10,7 @@ import static org.hamcrest.Matchers.nullValue;
 
 class WebsocketPingTrackerTest {
 
-    private static final byte[] CONNECTION_SECRET =
-        new byte[]{1, 2, 3, 4, 5, 6, 7, 8};
-    private final WebsocketPingTracker tracker = new WebsocketPingTracker(
-        CONNECTION_SECRET
-    );
+    private final WebsocketPingTracker tracker = new WebsocketPingTracker();
 
     @Test
     void overlappingPingsRetainTheirOwnMonotonicSendPoints() {
@@ -23,7 +19,7 @@ class WebsocketPingTrackerTest {
 
         assertThat(tracker.pongLatencyMillis(secondPing, 6_000_000L), is(2L));
         assertThat(tracker.pongLatencyMillis(firstPing, 8_000_000L), is(7L));
-        assertThat(firstPing.getLong(0), is(1_000_000L));
+        assertThat(tracker.pongLatencyMillis(firstPing, 9_000_000L), nullValue());
     }
 
     @Test
@@ -44,7 +40,7 @@ class WebsocketPingTrackerTest {
         ByteBuffer tamperedTimestamp = tracker.newPingPayload(1L);
         tamperedTimestamp.putLong(0, 2L);
         ByteBuffer peerChosenTimestamp = ByteBuffer.allocate(16)
-            .put(CONNECTION_SECRET)
+            .putLong(123L)
             .putLong(2L)
             .flip();
 
@@ -52,4 +48,17 @@ class WebsocketPingTrackerTest {
         assertThat(tracker.pongLatencyMillis(peerChosenTimestamp, 3L), nullValue());
         assertThat(tracker.pongLatencyMillis(ByteBuffer.allocate(15), 2L), nullValue());
     }
+    @Test
+    void oldAndOtherConnectionPongsAreNotSamples() {
+        ByteBuffer oldest = tracker.newPingPayload(1L);
+        for (int i = 0; i < WebsocketPingTracker.MAX_OUTSTANDING; i++) {
+            tracker.newPingPayload(2L + i);
+        }
+        assertThat(tracker.pongLatencyMillis(oldest, 100L), nullValue());
+        ByteBuffer current = tracker.newPingPayload(100L);
+        assertThat(new WebsocketPingTracker().pongLatencyMillis(current, 101L), nullValue());
+        assertThat(tracker.pongLatencyMillis(current, 102L), is(0L));
+        assertThat(tracker.pongLatencyMillis(current, 103L), nullValue());
+    }
+
 }

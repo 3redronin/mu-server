@@ -282,6 +282,23 @@ class Http2BodyInputStreamTest {
         assertThat(discardCallbackValue.get(), equalTo(0L));
     }
 
+    @Test
+    void dataAfterResetRefundsOnlyConnectionCreditAndCannotReplaceTheError() throws Exception {
+        var reusable = new AtomicLong();
+        var reset = new AtomicLong();
+        try (var body = new Http2BodyInputStream(100, reusable::addAndGet, reset::addAndGet)) {
+            body.onData(data("before", false), 9);
+            body.onStreamReset(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()));
+            body.discardRemaining();
+            body.onData(data("after", false), 8);
+            body.onData(data("", true), 4);
+            body.cancel(new IOException("second reset"));
+            assertThrows(IOException.class, body::read);
+            assertThat(reset.get(), equalTo(21L));
+            assertThat(reusable.get(), equalTo(0L));
+        }
+    }
+
     private Http2DataFrame data(String data, boolean eos) {
         byte[] bytes = data.getBytes(StandardCharsets.UTF_8);
         return new Http2DataFrame(1, eos, bytes, 0, bytes.length);
