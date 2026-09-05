@@ -5,9 +5,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.lang.reflect.Field;
-import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Queue;
@@ -22,7 +21,10 @@ import static io.muserver.RFCTestUtils.readIgnoringWindowUpdates;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static scaffolding.MuAssert.assertEventually;
 import static scaffolding.MuAssert.assertNotTimedOut;
 
 @DisplayName("RFC 9113 6.5 Frame Definitions: SETTINGS")
@@ -208,6 +210,67 @@ class RFC9113_6_5_SettingsTest {
                 .flush();
 
             assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+        }
+    }
+
+    @Test
+    void initialHeaderTableSizeIsAppliedBeforeTheHandshakeAck() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                response.status(204);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake(new Http2Settings(false, 0, 100, 65535, 16384, 32768))
+                .writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+
+            var header = con.readFrameHeader();
+            assertThat(header.frameType(), equalTo(Http2FrameType.HEADERS));
+            byte[] payload = con.readRawPayload(header);
+            assertThat(payload[0], equalTo((byte) 0x20));
+        }
+    }
+
+    @Test
+    void repeatedHeaderTableSizeChangesAreSignalledInTheNextFieldBlock() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                response.status(204);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeRaw(settingsFrame(1, 100))
+                .flush();
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            con.writeRaw(settingsFrame(1, 200))
+                .flush();
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            con.writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+
+            var header = con.readFrameHeader();
+            assertThat(header.frameType(), equalTo(Http2FrameType.HEADERS));
+            assertThat(header.streamId(), equalTo(1));
+            byte[] payload = con.readRawPayload(header);
+
+            // RFC 7541 Section 4.2: the smallest value since the previous
+            // field block (100) is followed by the final value (200).
+            assertThat(
+                Arrays.copyOf(payload, 5),
+                equalTo(new byte[] { 0x3f, 0x45, 0x3f, (byte) 0xa9, 0x01 })
+            );
         }
     }
 
@@ -621,7 +684,7 @@ class RFC9113_6_5_SettingsTest {
     }
 
     @Test
-    void serverSettingsAreOnlyAckPendingAfterTheyAreSent() throws Exception {
+    void serverSettingsAckTimeoutStartsOnlyAfterTheSettingsAreFlushed() throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled().withSettingsAckTimeoutMillis(5000))
             .start();
@@ -639,18 +702,41 @@ class RFC9113_6_5_SettingsTest {
                     liveConnection.creator,
                     liveConnection.clientSocket,
                     liveConnection.clientCertificate,
-                    Instant.now(),
+                    ConnectionAcceptedTime.now(),
                     Http2Settings.DEFAULT_CLIENT_SETTINGS,
                     5000,
+                    executor,
                     executor
                 );
 
-                Queue<Long> settingsAckQueue = getField(queuedOnlyConnection, "settingsAckQueue", Queue.class);
+                Queue<Http2Connection.PendingSettingsAck> settingsAckQueue = queuedOnlyConnection.testProbe().pendingSettingsAcks();
                 assertThat(settingsAckQueue.size(), equalTo(0));
 
                 queuedOnlyConnection.write(new Http2Settings(false, 8192, 123, 65535, 16384, 32768));
-
                 assertThat(settingsAckQueue.size(), equalTo(0));
+
+                var flushEntered = new CountDownLatch(1);
+                var releaseFlush = new CountDownLatch(1);
+                var blockedOutput = new ByteArrayOutputStream() {
+                    @Override
+                    public void flush() {
+                        flushEntered.countDown();
+                        assertNotTimedOut("waiting to release SETTINGS flush", releaseFlush);
+                    }
+                };
+
+                queuedOnlyConnection.startWriteLoop(blockedOutput);
+                assertNotTimedOut("waiting for SETTINGS flush", flushEntered);
+
+                assertThat(settingsAckQueue.size(), equalTo(1));
+                Http2Connection.PendingSettingsAck pendingAck = java.util.Objects.requireNonNull(settingsAckQueue.peek());
+                assertThat(pendingAck.timeoutTask(), nullValue());
+
+                releaseFlush.countDown();
+                assertEventually(
+                    () -> pendingAck.timeoutTask(),
+                    notNullValue()
+                );
             } finally {
                 executor.shutdownNow();
             }
@@ -737,11 +823,7 @@ class RFC9113_6_5_SettingsTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> T getField(Object target, String name, Class<T> type) throws Exception {
-        Field field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        return (T) type.cast(field.get(target));
-    }
+
 
     @AfterEach
     public void stop() {

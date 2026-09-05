@@ -168,13 +168,23 @@ class Http2Settings implements LogicalHttp2Frame {
     Http2Settings copyIfChanged(Http2Settings existingSettings) {
         assert !existingSettings.isAck;
         int newHeaderTableSize = updatedValue(existingSettings.headerTableSize, headerTableSize);
+        int newMaxConcurrentStreams = updatedValue(
+            existingSettings.maxConcurrentStreams,
+            maxConcurrentStreams
+        );
         int newInitialWindowSize = updatedValue(existingSettings.initialWindowSize, initialWindowSize);
         int newMaxFrameSize = updatedValue(existingSettings.maxFrameSize, maxFrameSize);
+        int newMaxHeaderListSize = updatedValue(
+            existingSettings.maxHeaderListSize,
+            maxHeaderListSize
+        );
         if (newHeaderTableSize != existingSettings.headerTableSize
-        || newInitialWindowSize != existingSettings.initialWindowSize
-        || newMaxFrameSize != existingSettings.maxFrameSize) {
-            return new Http2Settings(false, newHeaderTableSize, existingSettings.maxConcurrentStreams,
-                newInitialWindowSize, newMaxFrameSize, existingSettings.maxHeaderListSize);
+            || newMaxConcurrentStreams != existingSettings.maxConcurrentStreams
+            || newInitialWindowSize != existingSettings.initialWindowSize
+            || newMaxFrameSize != existingSettings.maxFrameSize
+            || newMaxHeaderListSize != existingSettings.maxHeaderListSize) {
+            return new Http2Settings(false, newHeaderTableSize, newMaxConcurrentStreams,
+                newInitialWindowSize, newMaxFrameSize, newMaxHeaderListSize);
         }
         return existingSettings;
     }

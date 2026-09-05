@@ -12,7 +12,10 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 /**
@@ -36,6 +39,8 @@ public class MuServerBuilder {
     private long requestReadTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(20);
     private @Nullable ExecutorService executor;
+    private int maxConcurrentRequests = 1000;
+    ExecutionResources.Factory executionResourcesFactory = ExecutionResources::create;
     private long maxRequestSize = 24 * 1024 * 1024;
     private @Nullable List<ResponseCompleteListener> responseCompleteListeners;
     private @Nullable List<RequestRejectListener> requestRejectListeners;
@@ -195,15 +200,52 @@ public class MuServerBuilder {
     }
 
     /**
-     * Sets the thread executor service to run requests on. By default {@link Executors#newCachedThreadPool()}
-     * is used.
-     *
-     * @param executor The executor service to use to handle requests
-     * @return The current Mu Server builder
+     * Sets the executor that runs request handlers and application callbacks, including
+     * WebSocket events, response-completion listeners and resumed asynchronous JAX-RS responses.
+     * <p>By default, Mu uses a new virtual thread per task when available, otherwise a cached
+     * pool of platform threads with no configured maximum. Use {@link #withMaxConcurrentRequests(int)}
+     * to limit unfinished requests. Network reads and writes use separate internal workers.</p>
+     * <p>If you supply an executor, keep it running until the server has stopped; Mu does not
+     * shut it down. It must run tasks asynchronously and throw
+     * {@link java.util.concurrent.RejectedExecutionException} when it cannot accept them.
+     * Executors that run tasks on the submitting thread or silently discard them are unsupported.</p>
+     * <p>A bounded executor can reject callbacks needed to finish a request that was already
+     * accepted. Such a rejection fails that request; completion and rejection notifications may
+     * not be delivered. Rejection of a new request produces HTTP 503. The unbounded default
+     * avoids rejection due to a configured pool or queue limit.</p>
+     * @param executor The application executor, or null for Mu's default
+     * @return This builder
      */
     public MuServerBuilder withHandlerExecutor(@Nullable ExecutorService executor) {
         this.executor = executor;
         return this;
+    }
+
+    /**
+     * Limits how many requests the server handles at once, across all its HTTP and HTTPS ports.
+     * <p>A request counts while waiting for its handler to run, waiting for asynchronous work,
+     * or streaming a response, including server-sent events. It stops counting after response
+     * processing and internal cleanup finish, before completion listeners are called.</p>
+     * <p>When the limit is reached, new requests receive HTTP 503. Requests already accepted
+     * continue processing. An HTTP request that upgrades to WebSocket stops counting once the
+     * upgrade completes; the WebSocket connection itself does not count.</p>
+     * <p>This limits requests, not connections or threads. Idle connections are not counted.
+     * HTTP/2 also has a separate per-connection stream limit.</p>
+     * @param maximum The limit (default 1000), or zero for unlimited
+     * @return This builder
+     */
+    public MuServerBuilder withMaxConcurrentRequests(int maximum) {
+        if (maximum < 0) throw new IllegalArgumentException("maximum must be non-negative");
+        maxConcurrentRequests = maximum;
+        return this;
+    }
+
+    /**
+     * Gets the server-wide limit on unfinished requests.
+     * @return The limit; zero means unlimited.
+     */
+    public int maxConcurrentRequests() {
+        return maxConcurrentRequests;
     }
 
     /**
@@ -374,6 +416,9 @@ public class MuServerBuilder {
      * becomes a normal request/response exchange (for example a <code>431</code> when the request
      * headers are too large). Such rejections are never reported to
      * {@link #addResponseCompleteListener(ResponseCompleteListener)}.
+     * Listeners are dispatched on the executor configured by
+     * {@link #withHandlerExecutor(ExecutorService)} so they cannot block connection input
+     * processing.
      *
      * @param listener A listener. If <code>null</code>, then nothing is added.
      * @return Returns the server builder
@@ -589,7 +634,7 @@ public class MuServerBuilder {
     }
 
     /**
-     * Gets the executor used to run request handlers.
+     * Gets the executor used to run request handlers, application callbacks and continuations.
      *
      * @return The configured executor, or <code>null</code> if the default executor will be used.
      */
@@ -773,5 +818,17 @@ public class MuServerBuilder {
             // no worries; we'll use the default
         }
         return Executors.newCachedThreadPool();
+    }
+
+    private static final AtomicInteger TIMER_THREAD_IDS = new AtomicInteger();
+
+    static ScheduledExecutorService defaultTimerExecutor() {
+        var scheduler = new ScheduledThreadPoolExecutor(1, runnable ->
+            new Thread(runnable, "mu-timer-" + TIMER_THREAD_IDS.incrementAndGet())
+        );
+        scheduler.setRemoveOnCancelPolicy(true);
+        scheduler.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+        scheduler.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
+        return scheduler;
     }
 }

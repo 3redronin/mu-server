@@ -26,12 +26,19 @@ import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Queue;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static java.util.stream.Collectors.toSet;
@@ -43,7 +50,10 @@ import static scaffolding.MuAssert.assertNotTimedOut;
 
 public class AsynchronousProcessingTest {
 
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final List<ExecutorService> executors = new ArrayList<>();
+    private final ExecutorService executor = track(
+        Executors.newSingleThreadExecutor(namedThreads("jaxrs-result-"))
+    );
     private MuServer server;
 
     @Test
@@ -116,6 +126,191 @@ public class AsynchronousProcessingTest {
         ))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), equalTo(body));
+        }
+    }
+
+    @Test
+    public void completionStageResultsAreProcessedOnTheHandlerExecutor() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var completionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("completion-")));
+        var stage = new CallbackSignallingFuture<ThreadReportingEntity>();
+
+        @Path("samples")
+        class Sample {
+            @GET
+            public CompletionStage<ThreadReportingEntity> go() {
+                completionExecutor.execute(() -> {
+                    assertNotTimedOut("Waiting for the REST continuation", stage.callbackRegistered);
+                    stage.complete(new ThreadReportingEntity());
+                });
+                return stage;
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest("http")
+            .withHandlerExecutor(handlerExecutor)
+            .addHandler(restHandler(new Sample()).addCustomWriter(threadReportingWriter()))
+            .start();
+
+        try (Response response = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), startsWith("handler-"));
+        }
+    }
+
+    @Test
+    public void suspendedResponsesAreProcessedOnTheHandlerExecutor() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var completionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("completion-")));
+
+        @Path("samples")
+        class Sample {
+            @GET
+            public void go(@Suspended AsyncResponse response) {
+                completionExecutor.execute(() -> response.resume(new ThreadReportingEntity()));
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest("http")
+            .withHandlerExecutor(handlerExecutor)
+            .addHandler(restHandler(new Sample()).addCustomWriter(threadReportingWriter()))
+            .start();
+
+        try (Response response = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), startsWith("handler-"));
+        }
+    }
+
+    @Test
+    public void asyncResponseTimeoutsUseTheServerTimerAndRunOnTheHandlerExecutor() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
+        var timerExecutor = track(Executors.newSingleThreadScheduledExecutor(namedThreads("timer-")));
+        var timeoutThread = new CompletableFuture<String>();
+
+        @Path("samples")
+        class Sample {
+            @GET
+            public void go(@Suspended AsyncResponse response) {
+                response.setTimeoutHandler(timedOut -> {
+                    timeoutThread.complete(Thread.currentThread().getName());
+                    timedOut.resume(new ThreadReportingEntity());
+                });
+                response.setTimeout(1, TimeUnit.MILLISECONDS);
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest("http")
+            .withHandlerExecutor(handlerExecutor)
+            .addHandler(restHandler(new Sample()).addCustomWriter(threadReportingWriter()))
+            .start();
+
+        try (Response response = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), startsWith("handler-"));
+        }
+        assertThat(timeoutThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
+    }
+
+    @Test
+    public void exceptionalCompletionStagesResumeRequestProcessing() throws Exception {
+        var stage = new CallbackSignallingFuture<String>();
+
+        @Path("samples")
+        class Sample {
+            @GET
+            public CompletionStage<String> go() {
+                executor.execute(() -> {
+                    assertNotTimedOut("Waiting for the REST continuation", stage.callbackRegistered);
+                    stage.completeExceptionally(new BadRequestException("Bad async result"));
+                });
+                return stage;
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest("http")
+            .addHandler(restHandler(new Sample()))
+            .start();
+
+        try (Response response = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(response.code(), is(400));
+            assertThat(response.body().string(), containsString("Bad async result"));
+        }
+    }
+
+    @Test
+    public void completedStagesDoNotResubmitFromTheApplicationWorker() throws Exception {
+        var applicationExecutor = track(nonQueueingApplicationExecutor());
+
+        @Path("samples")
+        class Sample {
+            @GET
+            public CompletionStage<ThreadReportingEntity> go() {
+                return CompletableFuture.completedFuture(new ThreadReportingEntity());
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest("http")
+            .withHandlerExecutor(applicationExecutor)
+            .addHandler(restHandler(new Sample()).addCustomWriter(threadReportingWriter()))
+            .start();
+
+        try (Response response = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), startsWith("application-"));
+        }
+    }
+
+    @Test
+    public void inlineResumeDoesNotResubmitFromTheApplicationWorker() throws Exception {
+        var applicationExecutor = track(nonQueueingApplicationExecutor());
+
+        @Path("samples")
+        class Sample {
+            @GET
+            public void go(@Suspended AsyncResponse response) {
+                assertThat(response.resume(new ThreadReportingEntity()), is(true));
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest("http")
+            .withHandlerExecutor(applicationExecutor)
+            .addHandler(restHandler(new Sample()).addCustomWriter(threadReportingWriter()))
+            .start();
+
+        try (Response response = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), startsWith("application-"));
+        }
+    }
+
+    @Test
+    public void timeoutResumeDoesNotResubmitFromTheApplicationWorker() throws Exception {
+        var applicationExecutor = track(nonQueueingApplicationExecutor());
+        var timerExecutor = track(Executors.newSingleThreadScheduledExecutor(namedThreads("timer-")));
+
+        @Path("samples")
+        class Sample {
+            @GET
+            public void go(@Suspended AsyncResponse response) {
+                response.setTimeoutHandler(timedOut ->
+                    timedOut.resume(new ThreadReportingEntity())
+                );
+                response.setTimeout(1, TimeUnit.MILLISECONDS);
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest("http")
+            .withHandlerExecutor(applicationExecutor)
+            .addHandler(restHandler(new Sample()).addCustomWriter(threadReportingWriter()))
+            .start();
+
+        try (Response response = call(request().url(server.uri().resolve("/samples").toString()))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), startsWith("application-"));
         }
     }
 
@@ -234,6 +429,105 @@ public class AsynchronousProcessingTest {
         }
     }
 
+    @Test
+    public void onlyOneConcurrentResumeClaimsAnAsyncResponse() throws Exception {
+        var asyncHandle = new QueuedAsyncHandle();
+        var consumed = new AtomicInteger();
+        var asyncResponse = new AsyncResponseAdapter(asyncHandle, ignored -> consumed.incrementAndGet());
+        var callers = track(Executors.newFixedThreadPool(8));
+        var start = new CountDownLatch(1);
+        List<Future<Boolean>> attempts = new ArrayList<>();
+        for (int i = 0; i < 100; i++) {
+            attempts.add(callers.submit(() -> {
+                assertNotTimedOut("Waiting to race resume calls", start);
+                return asyncResponse.resume("response");
+            }));
+        }
+
+        start.countDown();
+        int successfulResumes = 0;
+        for (Future<Boolean> attempt : attempts) {
+            if (attempt.get(5, TimeUnit.SECONDS)) {
+                successfulResumes++;
+            }
+        }
+
+        assertThat(successfulResumes, is(1));
+        assertThat(asyncHandle.applicationTasks.size(), is(1));
+        assertThat(asyncResponse.isSuspended(), is(false));
+        assertThat(asyncResponse.isDone(), is(false));
+
+        asyncHandle.runNextApplicationTask();
+        assertThat(consumed.get(), is(1));
+        assertThat(asyncResponse.isDone(), is(true));
+    }
+
+    @Test
+    public void queuedResumeDoesNotSerializeAfterExchangeCompletion() {
+        var handle = new QueuedAsyncHandle();
+        var consumed = new AtomicInteger();
+        var response = new AsyncResponseAdapter(handle, ignored -> consumed.incrementAndGet());
+        assertThat(response.resume("late result"), is(true));
+        response.onComplete(new ResponseInfo() {
+            public long duration() { return 0; }
+            public boolean completedSuccessfully() { return true; }
+            public MuRequest request() { throw new UnsupportedOperationException(); }
+            public MuResponse response() { throw new UnsupportedOperationException(); }
+        });
+        handle.runNextApplicationTask();
+        assertThat(consumed.get(), is(0));
+        assertThat(response.isDone(), is(true));
+    }
+
+    @Test
+    public void cancellationIsAtomicAndIdempotent() {
+        var asyncHandle = new QueuedAsyncHandle();
+        var sentResponse = new AtomicReference<Object>();
+        var asyncResponse = new AsyncResponseAdapter(asyncHandle, sentResponse::set);
+
+        assertThat(asyncResponse.cancel(), is(true));
+        assertThat(asyncResponse.cancel(), is(true));
+        assertThat(asyncResponse.resume("too late"), is(false));
+        assertThat(asyncResponse.isCancelled(), is(true));
+        assertThat(asyncResponse.isSuspended(), is(false));
+        assertThat(asyncHandle.applicationTasks.size(), is(1));
+
+        asyncHandle.runNextApplicationTask();
+        assertThat(sentResponse.get(), instanceOf(jakarta.ws.rs.core.Response.class));
+        assertThat(((jakarta.ws.rs.core.Response) sentResponse.get()).getStatus(), is(503));
+        assertThat(asyncResponse.isDone(), is(true));
+    }
+
+    @Test
+    public void nonPositiveTimeoutMeansSuspendIndefinitely() {
+        var asyncHandle = new QueuedAsyncHandle();
+        var asyncResponse = new AsyncResponseAdapter(asyncHandle, ignored -> {});
+
+        assertThat(asyncResponse.setTimeout(0, TimeUnit.MILLISECONDS), is(true));
+        assertThat(asyncResponse.setTimeout(-1, TimeUnit.SECONDS), is(true));
+
+        assertThat(asyncHandle.delayedTasks.size(), is(0));
+        assertThat(asyncResponse.isSuspended(), is(true));
+    }
+
+    @Test
+    public void unresolvedCustomTimeoutFallsBackToA503() {
+        var asyncHandle = new QueuedAsyncHandle();
+        var sentResponse = new AtomicReference<Object>();
+        var handlerInvocations = new AtomicInteger();
+        var asyncResponse = new AsyncResponseAdapter(asyncHandle, sentResponse::set);
+        asyncResponse.setTimeoutHandler(ignored -> handlerInvocations.incrementAndGet());
+
+        assertThat(asyncResponse.setTimeout(1, TimeUnit.MILLISECONDS), is(true));
+        asyncHandle.runNextDelayedTask();
+
+        assertThat(handlerInvocations.get(), is(1));
+        assertThat(asyncHandle.applicationTasks.size(), is(1));
+        asyncHandle.runNextApplicationTask();
+        assertThat(sentResponse.get(), instanceOf(ServiceUnavailableException.class));
+        assertThat(asyncResponse.isDone(), is(true));
+    }
+
 
     @Test
     public void completionCallbacksCanBeRegistered() {
@@ -308,7 +602,122 @@ public class AsynchronousProcessingTest {
 
     @AfterEach
     public void stop() {
-        MuAssert.stopAndCheck(server);
+        try {
+            MuAssert.stopAndCheck(server);
+        } finally {
+            for (ExecutorService executorService : executors) {
+                executorService.shutdownNow();
+            }
+        }
+    }
+
+    private <T extends ExecutorService> T track(T executorService) {
+        executors.add(executorService);
+        return executorService;
+    }
+
+    private static ThreadFactory namedThreads(String prefix) {
+        var count = new AtomicInteger();
+        return runnable -> new Thread(runnable, prefix + count.incrementAndGet());
+    }
+
+    private static ThreadPoolExecutor nonQueueingApplicationExecutor() {
+        return new ThreadPoolExecutor(
+            1,
+            1,
+            0,
+            TimeUnit.MILLISECONDS,
+            new SynchronousQueue<>(),
+            namedThreads("application-")
+        );
+    }
+
+    private static MessageBodyWriter<ThreadReportingEntity> threadReportingWriter() {
+        return new MessageBodyWriter<ThreadReportingEntity>() {
+            @Override
+            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations,
+                                       jakarta.ws.rs.core.MediaType mediaType) {
+                return type == ThreadReportingEntity.class;
+            }
+
+            @Override
+            public void writeTo(ThreadReportingEntity entity, Class<?> type, Type genericType,
+                                Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType,
+                                MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream)
+                throws IOException {
+                entityStream.write(Thread.currentThread().getName().getBytes(StandardCharsets.UTF_8));
+            }
+        };
+    }
+
+    private static final class ThreadReportingEntity {
+    }
+
+    private static final class CallbackSignallingFuture<T> extends CompletableFuture<T> {
+        private final CountDownLatch callbackRegistered = new CountDownLatch(1);
+
+        @Override
+        public CompletableFuture<T> whenComplete(
+            BiConsumer<? super T, ? super Throwable> action
+        ) {
+            CompletableFuture<T> continuation = super.whenComplete(action);
+            callbackRegistered.countDown();
+            return continuation;
+        }
+    }
+
+    private static final class QueuedAsyncHandle implements AsyncHandle, io.muserver.internal.AsyncExecution {
+        private final Queue<Runnable> applicationTasks = new ConcurrentLinkedQueue<>();
+        private final Queue<Runnable> delayedTasks = new ConcurrentLinkedQueue<>();
+        private final AtomicReference<ResponseCompleteListener> responseCompleteListener = new AtomicReference<>();
+
+        @Override
+        public void setReadListener(RequestBodyListener readListener) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void complete() {
+        }
+
+        @Override
+        public void complete(Throwable throwable) {
+        }
+
+        @Override
+        public void write(ByteBuffer data, DoneCallback callback) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public Future<Void> write(ByteBuffer data) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public void executeApplicationTask(Runnable task) {
+            applicationTasks.add(task);
+        }
+
+        @Override
+        public Future<?> scheduleApplicationTask(Runnable task, long delay, TimeUnit unit) {
+            var delayed = new FutureTask<Void>(task, null);
+            delayedTasks.add(delayed);
+            return delayed;
+        }
+
+        @Override
+        public void addResponseCompleteHandler(ResponseCompleteListener listener) {
+            responseCompleteListener.set(listener);
+        }
+
+        private void runNextApplicationTask() {
+            Objects.requireNonNull(applicationTasks.poll(), "No application task queued").run();
+        }
+
+        private void runNextDelayedTask() {
+            Objects.requireNonNull(delayedTasks.poll(), "No delayed task queued").run();
+        }
     }
 
 }

@@ -77,6 +77,36 @@ class FieldBlockDecoderTest {
     }
 
     @Test
+    void truncatedHpackIntegersAreCompressionErrors() {
+        var ex = assertThrows(
+            Http2Exception.class,
+            () -> readHpackInt(7, (byte) 0xff, ByteBuffer.allocate(0))
+        );
+
+        assertThat(ex.errorType(), equalTo(Http2Level.CONNECTION));
+        assertThat(ex.errorCode(), equalTo(Http2ErrorCode.COMPRESSION_ERROR));
+    }
+
+    @Test
+    void truncatedLiteralFieldsAreCompressionErrors() {
+        byte[][] malformedBlocks = {
+            {0x00},
+            {0x00, 0x05, 'a'},
+            {0x01},
+            {0x01, (byte) 0x85, 'a'}
+        };
+
+        for (byte[] malformedBlock : malformedBlocks) {
+            var ex = assertThrows(
+                Http2Exception.class,
+                () -> decoder.decodeFrom(ByteBuffer.wrap(malformedBlock))
+            );
+            assertThat(ex.errorType(), equalTo(Http2Level.CONNECTION));
+            assertThat(ex.errorCode(), equalTo(Http2ErrorCode.COMPRESSION_ERROR));
+        }
+    }
+
+    @Test
     public void integerMaxValueIsMaxValue() throws Http2Exception {
         assertThat(readHpackInt(5, (byte) 31, buffed((byte) 224, (byte) 255, (byte) 255, (byte) 255, (byte) 7)), equalTo(Integer.MAX_VALUE));
 
@@ -84,6 +114,29 @@ class FieldBlockDecoderTest {
             buffed((byte) 224, (byte) 255, (byte) 255, (byte) 255, (byte) 8)
             ));
         assertThat(ex.getMessage(), equalTo("hpack integer overflow"));
+    }
+
+    @Test
+    void shiftsBeyondAnIntegerDoNotWrapIntoAnAcceptedValue() {
+        var ex = assertThrows(
+            Http2Exception.class,
+            () -> readHpackInt(
+                7,
+                (byte) 0x7f,
+                buffed(
+                    (byte) 0x80,
+                    (byte) 0x80,
+                    (byte) 0x80,
+                    (byte) 0x80,
+                    (byte) 0x80,
+                    (byte) 0x01
+                )
+            )
+        );
+
+        assertThat(ex.errorType(), equalTo(Http2Level.CONNECTION));
+        assertThat(ex.errorCode(), equalTo(Http2ErrorCode.COMPRESSION_ERROR));
+        assertThat(ex.getMessage(), equalTo("hpack integer too long"));
     }
 
     @Test
@@ -226,6 +279,26 @@ class FieldBlockDecoderTest {
         var decoder = new FieldBlockDecoder(new HpackTable(4096), 8192, 64);
 
         var ex = assertThrows(HttpException.class, () -> decoder.decodeFrom(ByteBuffer.wrap(indexedAcceptEncoding)));
+        assertThat(ex.status(), equalTo(HttpStatus.REQUEST_HEADER_FIELDS_TOO_LARGE_431));
+    }
+
+    @Test
+    void maxHeaderSizeIncludesThePerFieldOverhead() throws Exception {
+        var indexedAcceptEncoding = ByteBuffer.wrap(new byte[] {(byte) 0x90});
+        var table = new HpackTable(4096);
+        int fieldSize = table.getValue(16).hpackSize();
+
+        var exactLimit = new FieldBlockDecoder(table, 8192, fieldSize);
+        assertThat(
+            exactLimit.decodeFrom(indexedAcceptEncoding.duplicate()).get("accept-encoding"),
+            equalTo("gzip, deflate")
+        );
+
+        var belowLimit = new FieldBlockDecoder(new HpackTable(4096), 8192, fieldSize - 1);
+        var ex = assertThrows(
+            HttpException.class,
+            () -> belowLimit.decodeFrom(indexedAcceptEncoding.duplicate())
+        );
         assertThat(ex.status(), equalTo(HttpStatus.REQUEST_HEADER_FIELDS_TOO_LARGE_431));
     }
 

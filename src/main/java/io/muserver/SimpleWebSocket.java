@@ -67,7 +67,9 @@ public abstract class SimpleWebSocket implements MuWebSocket {
     @Override
     public void onClientClosed(int statusCode, @Nullable String reason) throws Exception {
         MuWebSocketSession sesh = session();
-        if (!sesh.closeSent()) {
+        // A peer can respond before the server's close write has returned.
+        if (sesh.state() != WebsocketSessionState.SERVER_CLOSING
+            && !sesh.closeSent()) {
             if (statusCode == 1005) {
                 // the client didn't send a code so we won't either
                 sesh.close();
@@ -143,7 +145,7 @@ public abstract class SimpleWebSocket implements MuWebSocket {
         Long latency = session().pongLatencyMillis(payload);
         if (latency != null) {
             latencyChecks.incrementAndGet();
-            latencyTime.incrementAndGet();
+            latencyTime.addAndGet(latency);
         }
     }
 

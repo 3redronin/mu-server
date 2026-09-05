@@ -153,6 +153,27 @@ class RFC9113_7_ErrorCodesTest {
         }
     }
 
+    @Test
+    void truncatedCompressionBlocksBecomeConnectionErrors() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeRaw(headersFrame(1, true, true, new byte[]{0x00}))
+                .flush();
+
+            assertThat(
+                con.readLogicalFrame(),
+                equalTo(goAway(0, Http2ErrorCode.COMPRESSION_ERROR))
+            );
+            assertThrows(IOException.class, con::readFrameHeader);
+        }
+    }
+
     private int getPort() {
         return server.uri().getPort();
     }
@@ -162,7 +183,6 @@ class RFC9113_7_ErrorCodesTest {
         if (server != null) server.stop();
     }
 }
-
 
 
 

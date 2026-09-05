@@ -7,22 +7,20 @@ import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * <p>A base class for server-side web sockets, that takes care of capturing the web socket session, responding
- * to pings, and closure events.</p>
- * <p>This is an alternative to implementing the {@link MuWebSocket} interface and is recommended so that any
- * additions to the interface are non-breaking to implementors.</p>
- * @deprecated As part of the Mu Server 3 move to blocking IO over non-blocking IO, this websocket is no longer
- * supported. Implementors should now override the simpler {@link SimpleWebSocket}. Note that this base socket
- * will continue to work until Mu Server 4.
+ * A base class for asynchronous WebSocket message handling. It stores the session,
+ * assembles message fragments, responds to pings and handles connection closure.
+ * <p>Override {@link #onText(String, boolean, DoneCallback)} or
+ * {@link #onBinary(ByteBuffer, boolean, DoneCallback)} and call the supplied completion
+ * callback when processing finishes. Returning from these methods releases the application
+ * worker; the next message waits for completion. The internal connection reader still waits.</p>
+ * <p>For blocking message handling, extend {@link SimpleWebSocket} instead.</p>
  */
 @SuppressWarnings("RedundantThrows") // because implementing classes might throw exceptions
-@Deprecated
 public abstract class BaseWebSocket implements MuWebSocket {
     private @Nullable MuWebSocketSession session;
     private @Nullable NiceByteArrayOutputStream fragmentBuffer;
@@ -60,7 +58,9 @@ public abstract class BaseWebSocket implements MuWebSocket {
     @Override
     public void onClientClosed(int statusCode, @Nullable String reason) throws Exception {
         MuWebSocketSession sesh = session();
-        if (!sesh.closeSent()) {
+        // A peer can respond before the server's close write has returned.
+        if (sesh.state() != WebsocketSessionState.SERVER_CLOSING
+            && !sesh.closeSent()) {
             if (statusCode == 1005) {
                 // the client didn't send a code so we won't either
                 sesh.close();
@@ -75,24 +75,16 @@ public abstract class BaseWebSocket implements MuWebSocket {
      */
     @Override
     public void onText(String message) throws Exception {
-        // Adapter code for old-style implementations that rely on non-blocking behaviour.
-        // This calls the old-style methods in a new thread and blocks until the done callback is invoked.
-        // Overriders of this base class should just override this method and block until the data is finished with.
         CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
-        CompletableFuture.runAsync(() -> {
-            try {
-                onText(message, true, error -> {
-                    if (error == null) {
-                        result.complete(null);
-                    } else {
-                        result.completeExceptionally(error);
-                    }
-                });
-            } catch (Exception e) {
-                result.completeExceptionally(e);
-            }
-        });
-        blockUntilDone(result);
+        try {
+            onText(message, true, error -> {
+                if (error == null) result.complete(null);
+                else result.completeExceptionally(error);
+            });
+        } catch (Exception failure) {
+            result.completeExceptionally(failure);
+        }
+        WebSocketEventCompletion.awaitOrDefer(result);
     }
 
     /**
@@ -141,19 +133,17 @@ public abstract class BaseWebSocket implements MuWebSocket {
     }
 
     /**
-     * Called when a text message is received from the client.
+     * Called when a complete text message is received from the client.
+     * <p>This method may return before processing finishes. Call {@code onComplete.onComplete(null)}
+     * when finished, or pass a failure to report it through {@link #onError(Throwable)}.
+     * The connection does not deliver the next message until completion is signalled.</p>
      *
      * @param message    The message as a string.
-     * @param isLast     Returns <code>true</code> if this message is the last part of the complete message. This is only <code>false</code>
-     *                   when clients send fragmented messages in which case only the last part of the fragmented message will return <code>true</code>.
-     * @param onComplete A callback that must be run with <code>onComplete.run()</code> when the byte buffer is no longer needed.
+     * @param isLast Always true when invoked by the default base-class implementation, which assembles fragments.
+     * @param onComplete Call once when processing finishes. For an asynchronous echo, this can be passed to
+     *                   {@link MuWebSocketSession#sendText(String, DoneCallback)}.
      * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
-     * @deprecated The more efficient {@link #onText(String)} should be used instead. Note that for that use case
-     * the byte buffer will be reused after the method call returns, so implementations needing to keep a reference
-     * to the byte buffer for a longer period of time will need to either copy the data or block the onText method
-     * until it is no longer needed.
      */
-    @Deprecated
     public void onText(String message, boolean isLast, DoneCallback onComplete) throws Exception {
         onComplete.onComplete(null);
     }
@@ -163,60 +153,47 @@ public abstract class BaseWebSocket implements MuWebSocket {
      */
     @Override
     public void onBinary(ByteBuffer buffer) throws Exception {
-        // Adapter code for old-style implementations that rely on non-blocking behaviour.
-        // This calls the old-style methods in a new thread and blocks until the done callback is invoked.
-        // Overriders of this base class should just override this method and block until the data is finished with.
         CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
-        CompletableFuture.runAsync(() -> {
-            try {
-                onBinary(buffer, true, error -> {
-                    if (error == null) {
-                        result.complete(null);
-                    } else {
-                        result.completeExceptionally(error);
-                    }
-                }, () -> {});
-            } catch (Exception e) {
-                result.completeExceptionally(e);
-            }
-        });
-        blockUntilDone(result);
-    }
-
-    private static void blockUntilDone(CompletableFuture<@Nullable Void> result) throws Exception {
         try {
-            result.get();
-        } catch (ExecutionException e) {
-            throw e.getCause() instanceof Exception ? (Exception) e.getCause() : e;
+            onBinary(buffer, true, error -> {
+                if (error == null) result.complete(null);
+                else result.completeExceptionally(error);
+            }, () -> {});
+        } catch (Exception failure) {
+            result.completeExceptionally(failure);
         }
+        WebSocketEventCompletion.awaitOrDefer(result);
     }
 
     /**
-     * Called when a message is received from the client.
+     * Called when a complete binary message is received from the client.
+     * <p>This method may return before processing finishes. The buffer remains available until
+     * {@code onComplete.onComplete(null)} is called. Stop using the buffer before signalling
+     * completion; Mu may then reuse it and deliver the next message. Pass a failure instead of
+     * null to report it through {@link #onError(Throwable)}.</p>
      *
      * @param buffer     The message as a byte buffer.
-     * @param isLast     Returns <code>true</code> if this message is the last part of the complete message. This is only <code>false</code>
-     *                   when clients send fragmented messages in which case only the last part of the fragmented message will return <code>true</code>.
-     * @param onComplete A callback that must be run with <code>onComplete.run()</code> when the byte buffer is no longer needed. Failure to call this will result in memory leaks.
+     * @param isLast Always true when invoked by the default base-class implementation, which assembles fragments.
+     * @param onComplete Call once when processing finishes and the buffer is no longer needed. For an asynchronous
+     *                   echo, pass this to {@link MuWebSocketSession#sendBinary(ByteBuffer, DoneCallback)}.
      * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
-     * @deprecated non-blocking callbacks no longer supported. For best efficiency override {@link #onBinary(ByteBuffer)} and block until data is no longer needed.
      */
-    @Deprecated
     public void onBinary(ByteBuffer buffer, boolean isLast, DoneCallback onComplete) throws Exception {
         onComplete.onComplete(null);
     }
 
     /**
-     * Called when a message is received from the client. Consider using this API when separation of control for pulling data and releasing buffer are required.
-     * Otherwise, please use {@link #onBinary(ByteBuffer, boolean, DoneCallback)} instead.
+     * Compatibility overload for binary message handling.
+     * <p>Mu no longer provides separate message-completion and buffer-release lifetimes through
+     * this overload. Stop using the buffer before calling {@code doneAndPullData.onComplete(null)};
+     * the supplied {@code releaseBuffer} does not extend its lifetime.</p>
      *
      * @param buffer     The message as a byte buffer.
-     * @param isLast     Returns <code>true</code> if this message is the last part of the complete message. This is only <code>false</code>
-     *                   when clients send fragmented messages in which case only the last part of the fragmented message will return <code>true</code>.
-     * @param doneAndPullData A callback that must be run with <code>doneAndPullData.onComplete()</code> when ready to pull more data from websocket.
-     * @param releaseBuffer A callback that must be run with <code>releaseBuffer.run()</code> when the byte buffer is no longer needed. Failure to call this will result in memory leaks.
+     * @param isLast Always true when invoked by the default base-class implementation.
+     * @param doneAndPullData Call once when processing finishes and the buffer is no longer needed.
+     * @param releaseBuffer A compatibility callback; Mu supplies a no-op when dispatching messages.
      * @throws Exception Any exceptions thrown will result in the onError method being called with the thrown exception being used as the <code>cause</code> parameter.
-     * @deprecated non-blocking callbacks no longer supported. For best efficiency override {@link #onBinary(ByteBuffer)} and block until data is no longer needed.
+     * @deprecated Override {@link #onBinary(ByteBuffer, boolean, DoneCallback)} instead, which uses one completion callback.
      */
     @Deprecated
     public void onBinary(ByteBuffer buffer, boolean isLast, DoneCallback doneAndPullData, Runnable releaseBuffer) throws Exception {
@@ -246,7 +223,7 @@ public abstract class BaseWebSocket implements MuWebSocket {
         Long latency = session().pongLatencyMillis(payload);
         if (latency != null) {
             latencyChecks.incrementAndGet();
-            latencyTime.incrementAndGet();
+            latencyTime.addAndGet(latency);
         }
     }
 

@@ -4,76 +4,123 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.LongSupplier;
 
 class RateLimiterImpl implements RateLimiter {
+    static final class Decision {
+        private final RateLimitRejectionAction action;
+        private final @Nullable String retryAfter;
+
+        private Decision(
+            RateLimitRejectionAction action,
+            @Nullable String retryAfter
+        ) {
+            this.action = action;
+            this.retryAfter = retryAfter;
+        }
+
+        RateLimitRejectionAction action() {
+            return action;
+        }
+
+        @Nullable String retryAfter() {
+            return retryAfter;
+        }
+    }
+
     private final Logger log = LoggerFactory.getLogger(RateLimiterImpl.class);
 
     private final Lock lock = new ReentrantLock();
     private final RateLimitSelector selector;
-    private final Map<String, Queue<Instant>> map = new HashMap<>();
+    private final LongSupplier nanoTime;
+    private final Map<String, Queue<Long>> map = new HashMap<>();
 
     RateLimiterImpl(RateLimitSelector selector) {
-        this.selector = selector;
+        this(selector, System::nanoTime);
     }
 
-    private void removeExpired(String bucket, @Nullable Queue<Instant> queue) {
+    RateLimiterImpl(RateLimitSelector selector, LongSupplier nanoTime) {
+        this.selector = selector;
+        this.nanoTime = nanoTime;
+    }
+
+    private static void removeExpired(
+        @Nullable Queue<Long> queue,
+        long nowNanos
+    ) {
         if (queue == null) {
             return;
         }
-        var cutoff = Instant.now();
         var head = queue.peek();
-        while (head != null) {
-            if (head.isBefore(cutoff)) {
-                queue.poll();
-                if (queue.isEmpty()) {
-                    map.remove(bucket);
-                    head = null;
-                } else {
-                    head = queue.peek();
-                }
-            } else {
-                break;
-            }
+        while (head != null
+            && MonotonicTime.nanosUntil(head, nowNanos) <= 0L) {
+            queue.poll();
+            head = queue.peek();
         }
     }
 
-    @Nullable RateLimitRejectionAction record(MuRequest request) {
+    @Nullable Decision record(MuRequest request) {
         RateLimit rateLimit = selector.select(request);
         if (rateLimit == null || rateLimit.bucket == null) {
             return null;
         }
         String name = rateLimit.bucket;
         RateLimitRejectionAction action = null;
-        Instant nextExpiry = null;
+        Long nextExpiryNanos = null;
         lock.lock();
         try {
-            removeExpired(name, map.get(name));
-            var queue = map.computeIfAbsent(name, s -> new LinkedList<>());
+            long nowNanos = nanoTime.getAsLong();
+            Queue<Long> existing = map.get(name);
+            removeExpired(existing, nowNanos);
+            if (existing != null && existing.isEmpty()) {
+                map.remove(name);
+            }
+            var queue = map.computeIfAbsent(name, s -> new ArrayDeque<>());
             long curVal = queue.size();
             if (curVal >= rateLimit.allowed) {
                 action = rateLimit.action;
                 if (action == RateLimitRejectionAction.SEND_429) {
-                    nextExpiry = queue.peek();
+                    nextExpiryNanos = queue.peek();
                 }
             } else {
-                queue.add(Instant.now().plusMillis(rateLimit.expiryMillis()));
+                queue.add(
+                    MonotonicTime.deadlineAfter(
+                        nowNanos,
+                        rateLimit.expiryNanos()
+                    )
+                );
             }
         } finally {
             lock.unlock();
         }
-        if (action != null) {
-            log.info("Rate limit for {} exceeded. Action: {}", rateLimit.bucket, rateLimit.action);
-            if (action == RateLimitRejectionAction.SEND_429 && request != null && nextExpiry != null) {
-                long secondsToNext = (nextExpiry.toEpochMilli() - System.currentTimeMillis()) / 1000L;
-                long fuzz = (long) (Math.random() * 20.0);
-                request.headers().set(HeaderNames.RETRY_AFTER, secondsToNext + fuzz);
-            }
+        if (action == null) {
+            return null;
         }
-        return action;
+        log.info(
+            "Rate limit for {} exceeded. Action: {}",
+            rateLimit.bucket,
+            rateLimit.action
+        );
+        String retryAfter = null;
+        if (action == RateLimitRejectionAction.SEND_429
+            && nextExpiryNanos != null) {
+            long remainingNanos = Math.max(
+                0L,
+                MonotonicTime.nanosUntil(
+                    nextExpiryNanos,
+                    nanoTime.getAsLong()
+                )
+            );
+            long secondsToNext =
+                TimeUnit.NANOSECONDS.toSeconds(remainingNanos);
+            long fuzz = (long) (Math.random() * 20.0);
+            retryAfter = Long.toString(secondsToNext + fuzz);
+        }
+        return new Decision(action, retryAfter);
     }
 
     @Override
@@ -81,11 +128,19 @@ class RateLimiterImpl implements RateLimiter {
         HashMap<String, Long> copy = new HashMap<>();
         lock.lock();
         try {
-            for (Map.Entry<String, Queue<Instant>> entry : map.entrySet()) {
+            long nowNanos = nanoTime.getAsLong();
+            Iterator<Map.Entry<String, Queue<Long>>> iterator =
+                map.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<String, Queue<Long>> entry = iterator.next();
                 String bucket = entry.getKey();
-                Queue<Instant> expiries = entry.getValue();
-                removeExpired(bucket, expiries);
-                copy.put(bucket, (long) expiries.size());
+                Queue<Long> expiries = entry.getValue();
+                removeExpired(expiries, nowNanos);
+                if (expiries.isEmpty()) {
+                    iterator.remove();
+                } else {
+                    copy.put(bucket, (long) expiries.size());
+                }
             }
         } finally {
             lock.unlock();
@@ -100,8 +155,13 @@ class RateLimiterImpl implements RateLimiter {
 
     @Override
     public String toString() {
-        return "RateLimiterImpl{" +
-            "buckets=" + map +
-            '}';
+        lock.lock();
+        try {
+            return "RateLimiterImpl{" +
+                "buckets=" + map +
+                '}';
+        } finally {
+            lock.unlock();
+        }
     }
 }

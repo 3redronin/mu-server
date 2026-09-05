@@ -9,9 +9,8 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.ConcurrentLinkedQueue;
-
-import static java.util.Collections.emptyList;
+import java.util.ArrayDeque;
+import java.util.Queue;
 
 abstract class BaseResponse implements MuResponse {
 
@@ -22,8 +21,14 @@ abstract class BaseResponse implements MuResponse {
     @Nullable
     protected volatile OutputStream wrappedOut;
 
+    private final Object completionListenersLock = new Object();
+    // Guarded by completionListenersLock.
+    private @Nullable Queue<ResponseCompleteListener> completionListeners;
     @Nullable
-    private ConcurrentLinkedQueue<ResponseCompleteListener> completionListeners = null;
+    // Guarded by completionListenersLock.
+    private ResponseInfo completionInfo;
+    // Guarded by completionListenersLock.
+    private boolean completionListenersDrained;
 
     private volatile ResponseState state = ResponseState.NOTHING;
 
@@ -32,8 +37,24 @@ abstract class BaseResponse implements MuResponse {
         this.headers = headers;
     }
 
-    void setState(ResponseState newState) {
+    /** Cancels output that has reached the transport; safe to call from an I/O failure path. */
+    void abortAsyncOutput(boolean activeWrite) {
+        if (activeWrite || hasStartedSendingData()) {
+            setState(ResponseState.ERRORED);
+            ((BaseHttpConnection) request.connection()).forceShutdown();
+        }
+    }
+
+    /**
+     * Publishes a state transition. The first terminal state wins so that
+     * concurrent cleanup cannot turn a failed exchange into a successful one.
+     */
+    synchronized boolean setState(ResponseState newState) {
+        if (state.endState()) {
+            return false;
+        }
         state = newState;
+        return true;
     }
 
     @Nullable
@@ -204,16 +225,39 @@ abstract class BaseResponse implements MuResponse {
         if (listener == null) {
             throw new NullPointerException("Null completion listener");
         }
-        if (completionListeners == null) {
-            completionListeners = new ConcurrentLinkedQueue<>();
+        ResponseInfo completed;
+        synchronized (completionListenersLock) {
+            completed = completionInfo;
+            if (completed == null || !completionListenersDrained) {
+                if (completionListeners == null) completionListeners = new ArrayDeque<>();
+                completionListeners.add(listener);
+                return;
+            }
         }
-        completionListeners.add(listener);
+        request.serverImpl().executeResponseCompletionTask(() ->
+            request.serverImpl().invokeResponseCompletionListener(listener, completed)
+        );
     }
 
-    Iterable<ResponseCompleteListener> completionListeners() {
-        var cl = completionListeners;
-        return cl == null ? emptyList() : cl;
+    void notifyCompletionListeners(ResponseInfo completed) {
+        synchronized (completionListenersLock) {
+            if (completionInfo != null) {
+                return;
+            }
+            completionInfo = completed;
+        }
+
+        while (true) {
+            ResponseCompleteListener listener;
+            synchronized (completionListenersLock) {
+                listener = completionListeners == null ? null : completionListeners.poll();
+                if (listener == null) {
+                    completionListenersDrained = true;
+                    completionListeners = null;
+                    return;
+                }
+            }
+            request.serverImpl().invokeResponseCompletionListener(listener, completed);
+        }
     }
-
-
 }

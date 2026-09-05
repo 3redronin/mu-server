@@ -41,6 +41,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static scaffolding.ClientUtils.*;
 import static scaffolding.MuAssert.assertEventually;
@@ -266,6 +267,56 @@ public class WebSocketsTest {
             assertThat(closeReason, equalTo("Unmasked client data"));
         }
 
+    }
+
+    @Test
+    public void incomingWebSocketBytesAreCountedOnceByTheConnection() throws Exception {
+        server = httpServer()
+            .addHandler(webSocketHandler(
+                (request, responseHeaders) -> serverSocket
+            ))
+            .start();
+
+        try (Socket socket = new Socket(
+                 server.uri().getHost(),
+                 server.uri().getPort()
+             );
+             OutputStream out = socket.getOutputStream();
+             InputStream in = socket.getInputStream()) {
+            int handshakeBytes = handshake(out, in);
+            assertEventually(
+                () -> server.stats().bytesRead(),
+                equalTo((long) handshakeBytes)
+            );
+
+            // A masked "hi" text frame. A zero mask leaves the payload unchanged.
+            byte[] frame = {
+                (byte) 0x81, (byte) 0x82,
+                0, 0, 0, 0,
+                'h', 'i'
+            };
+            out.write(frame);
+            out.flush();
+
+            assertEventually(
+                () -> serverSocket.received,
+                contains("connected", "onText: hi")
+            );
+            assertThat(
+                server.stats().bytesRead(),
+                equalTo((long) handshakeBytes + frame.length)
+            );
+
+            sendMaskedFrame(
+                out,
+                true,
+                0x8,
+                new byte[]{0x03, (byte) 0xE8},
+                new byte[4]
+            );
+            out.flush();
+            assertNotTimedOut("closing server socket", serverSocket.closedLatch);
+        }
     }
 
     @Test
@@ -570,7 +621,7 @@ public class WebSocketsTest {
     }
 
 
-    private void handshake(OutputStream out, InputStream in) throws IOException {
+    private int handshake(OutputStream out, InputStream in) throws IOException {
         // Perform WebSocket handshake
         String request = "GET / HTTP/1.1\r\n" +
             "Host: " + server.uri().getAuthority() + "\r\n" +
@@ -585,6 +636,7 @@ public class WebSocketsTest {
         var reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.US_ASCII));
         while (!reader.readLine().isEmpty()) {
         }
+        return request.getBytes(StandardCharsets.US_ASCII).length;
     }
 
 
@@ -968,6 +1020,49 @@ public class WebSocketsTest {
 
         clientSocket.close(1000, "Finished");
         assertNotTimedOut("Closing", serverSocket.closedLatch);
+    }
+
+    @Test
+    void outgoingControlFramesCannotExceed125Bytes() throws Exception {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket).withPath("/ws"))
+            .start();
+
+        ClientListener listener = new ClientListener();
+        WebSocket clientSocket = client.newWebSocket(
+            webSocketRequest(server.uri().resolve("/ws")),
+            listener
+        );
+        assertNotTimedOut("Connecting", serverSocket.connectedLatch);
+
+        var tooLarge = ByteBuffer.allocate(126);
+        assertAll(
+            () -> assertThrows(
+                IllegalArgumentException.class,
+                () -> serverSocket.session().sendPing(tooLarge.duplicate())
+            ),
+            () -> assertThrows(
+                IllegalArgumentException.class,
+                () -> serverSocket.session().sendPong(tooLarge.duplicate())
+            ),
+            () -> assertThrows(
+                IllegalArgumentException.class,
+                () -> serverSocket.session().close(1000, "x".repeat(124))
+            )
+        );
+        assertThat(serverSocket.state(), equalTo(WebsocketSessionState.OPEN));
+
+        assertDoesNotThrow(() ->
+            serverSocket.session().sendPing(ByteBuffer.allocate(125))
+        );
+        assertNotTimedOut("Pong wait", serverSocket.pongLatch);
+        assertDoesNotThrow(() ->
+            serverSocket.session().sendPong(ByteBuffer.allocate(125))
+        );
+        assertDoesNotThrow(() ->
+            serverSocket.session().close(1000, "x".repeat(123))
+        );
+        assertNotTimedOut("Closing", listener.closedLatch);
     }
 
     @Test

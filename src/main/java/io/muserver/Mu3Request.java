@@ -13,6 +13,13 @@ import java.util.*;
 import static java.lang.Math.min;
 
 class Mu3Request implements MuRequest {
+    volatile RequestAdmission.@Nullable Slot admissionSlot;
+
+    void releaseAdmission() {
+        RequestAdmission.Slot slot = admissionSlot;
+        if (slot != null) slot.close();
+    }
+
     private final HttpConnection connection;
     private final Method method;
     private final URI requestUri;
@@ -25,15 +32,21 @@ class Mu3Request implements MuRequest {
     @Nullable
     private BaseResponse response;
     private final long startTime;
+    private final long startNanos;
     @Nullable private QueryString query;
     @Nullable private Map<String, Object> attributes;
     private String contextPath = "";
     private String relativePath;
     @Nullable private List<Cookie> cookies;
-    private boolean bodyClaimed;
-    private boolean inputStreamAccessed;
+    private enum BodyAccess {
+        UNCLAIMED,
+        INPUT_STREAM,
+        EXCLUSIVE
+    }
+    private BodyAccess bodyAccess = BodyAccess.UNCLAIMED;
     @Nullable private volatile Mu3AsyncHandleImpl asyncHandle;
     private boolean clientCancelled;
+    private volatile boolean rateLimitRejected;
 
     Mu3Request(HttpConnection connection,
                Method method,
@@ -51,6 +64,7 @@ class Mu3Request implements MuRequest {
         this.mu3Headers = mu3Headers;
         this.bodySize = bodySize;
         this.body = body;
+        this.startNanos = System.nanoTime();
         this.startTime = System.currentTimeMillis();
         this.relativePath = requestUri.getRawPath();
     }
@@ -61,16 +75,35 @@ class Mu3Request implements MuRequest {
         return mu3Headers.get("content-type");
     }
 
-    private void claimbody() {
-        if (bodyClaimed || inputStreamAccessed) {
+    private synchronized void claimBody() {
+        if (bodyAccess != BodyAccess.UNCLAIMED) {
             throw new IllegalStateException("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods.");
         }
-        bodyClaimed = true;
+        bodyAccess = BodyAccess.EXCLUSIVE;
+    }
+
+    private synchronized void claimInputStream() {
+        if (bodyAccess == BodyAccess.EXCLUSIVE) {
+            throw new IllegalStateException("The body of the request message cannot be read twice. This can happen when calling any 2 of inputStream(), readBodyAsString(), or form() methods.");
+        }
+        bodyAccess = BodyAccess.INPUT_STREAM;
     }
 
     @Override
     public long startTime() {
         return startTime;
+    }
+
+    void onRateLimitRejected() {
+        rateLimitRejected = true;
+    }
+
+    boolean wasRateLimitRejected() {
+        return rateLimitRejected;
+    }
+
+    long startNanos() {
+        return startNanos;
     }
 
     @Override
@@ -98,7 +131,7 @@ class Mu3Request implements MuRequest {
         if (BodySize.NONE.equals(bodySize)) {
             return Optional.empty();
         }
-        inputStreamAccessed = true;
+        claimInputStream();
         return Optional.of(body);
     }
 
@@ -120,7 +153,7 @@ class Mu3Request implements MuRequest {
 
     @Override
     public InputStream body() {
-        claimbody();
+        claimBody();
         return body;
     }
 
@@ -131,7 +164,7 @@ class Mu3Request implements MuRequest {
 
     @Override
     public String readBodyAsString() throws IOException {
-        claimbody();
+        claimBody();
         Long size = bodySize.size();
         if (size == null || size > 4096) {
             return streamBodyToString(Headtils.bodyCharset(mu3Headers, true));
@@ -168,7 +201,7 @@ class Mu3Request implements MuRequest {
     @Override
     public MuForm form() throws IOException {
         if (this.form == null) {
-            claimbody();
+            claimBody();
             MediaType bodyType = mu3Headers.contentType();
             if (bodyType == null) {
                 this.form = EmptyForm.VALUE;
@@ -249,29 +282,39 @@ class Mu3Request implements MuRequest {
         return attributes;
     }
 
-    @Deprecated
     @Override
-    public synchronized AsyncHandle handleAsync() {
-        if (asyncHandle == null) {
-            asyncHandle = new Mu3AsyncHandleImpl(this,
-                Objects.requireNonNull(response, "The response has not been initialized"));
+    public AsyncHandle handleAsync() {
+        Mu3AsyncHandleImpl handle;
+        boolean cancelled;
+        synchronized (this) {
+            if (asyncHandle == null) {
+                asyncHandle = new Mu3AsyncHandleImpl(this,
+                    Objects.requireNonNull(response, "The response has not been initialized"), serverImpl());
+            }
+            handle = asyncHandle;
+            cancelled = clientCancelled;
         }
-        if (clientCancelled) {
-            asyncHandle.complete();
-        }
-        return asyncHandle;
+        if (cancelled) handle.complete(new ClientDisconnectedException());
+        return handle;
     }
 
-    synchronized void onClientCancelled() {
-        clientCancelled = true;
-        if (asyncHandle != null) {
-            asyncHandle.complete();
+    void onClientCancelled() {
+        Mu3AsyncHandleImpl handle;
+        synchronized (this) {
+            clientCancelled = true;
+            handle = asyncHandle;
         }
+        if (handle != null) handle.complete(new ClientDisconnectedException());
     }
 
     @Override
     public boolean isAsync() {
         return asyncHandle != null;
+    }
+
+    boolean asyncCompletionIsPending() {
+        Mu3AsyncHandleImpl current = asyncHandle;
+        return current != null && current.completionIsPending();
     }
 
     @Override
@@ -341,7 +384,18 @@ class Mu3Request implements MuRequest {
         return asyncHandle;
     }
 
+    Mu3ServerImpl serverImpl() {
+        return (Mu3ServerImpl) connection.server();
+    }
+
     public void setResponse(BaseResponse response) {
         this.response = response;
+    }
+
+    BaseResponse responseForConnection() {
+        return Objects.requireNonNull(
+            response,
+            "The response has not been initialized"
+        );
     }
 }

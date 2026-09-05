@@ -6,19 +6,22 @@ import java.io.OutputStream;
 class FieldBlockEncoder {
 
     private final HpackTable table;
+    private int pendingMinimumTableSize = -1;
+    private int pendingFinalTableSize = -1;
 
     FieldBlockEncoder(HpackTable table) {
         this.table = table;
     }
 
     void encodeTo(FieldBlock block, OutputStream out) throws IOException {
+        writePendingTableSizeChanges(out);
         for (FieldLine line : block.lineIterator()) {
-            int lineCode = table.codeFor(line);
+            int lineCode = line.neverIndexed() ? -1 : table.codeFor(line);
             if (lineCode > 0) {
                 // indexed name and value
                 writeHpackInt(7, (byte)0b10000000, out, lineCode);
             } else {
-                int designation = table.isNeverIndex(line) ? 0b00010000 : 0b00000000;
+                int designation = line.neverIndexed() ? 0b00010000 : 0b00000000;
                 int headerCode = table.codeFor(line.name());
                 if (headerCode >= 0) {
                     // indexed name; literal value
@@ -36,6 +39,21 @@ class FieldBlockEncoder {
                 out.write(line.value().bytes);
             }
         }
+    }
+
+    private void writePendingTableSizeChanges(OutputStream out) throws IOException {
+        if (pendingMinimumTableSize < 0) {
+            return;
+        }
+
+        // RFC 7541 Section 4.2 requires the smallest size followed by the final
+        // size when the limit changes more than once between field blocks.
+        writeHpackInt(5, (byte) 0b00100000, out, pendingMinimumTableSize);
+        if (pendingFinalTableSize != pendingMinimumTableSize) {
+            writeHpackInt(5, (byte) 0b00100000, out, pendingFinalTableSize);
+        }
+        pendingMinimumTableSize = -1;
+        pendingFinalTableSize = -1;
     }
 
     static int writeHpackInt(int n, byte prefix, OutputStream out, int I) throws IOException {
@@ -74,7 +92,19 @@ class FieldBlockEncoder {
         }
     }
 
-    public void changeTableSize(int headerTableSize) {
+    void changeTableSize(int headerTableSize) {
+        if (headerTableSize < 0) {
+            throw new IllegalArgumentException("The HPACK table size cannot be negative");
+        }
+        if (headerTableSize == table.maxSize()) {
+            return;
+        }
         table.changeMaxSize(headerTableSize);
+        if (pendingMinimumTableSize < 0) {
+            pendingMinimumTableSize = headerTableSize;
+        } else {
+            pendingMinimumTableSize = Math.min(pendingMinimumTableSize, headerTableSize);
+        }
+        pendingFinalTableSize = headerTableSize;
     }
 }

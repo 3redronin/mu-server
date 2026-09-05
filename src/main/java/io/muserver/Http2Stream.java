@@ -14,36 +14,45 @@ class Http2Stream implements ResponseInfo {
 
     private static final Logger log = LoggerFactory.getLogger(Http2Stream.class);
 
-
-    private enum State {
-        /* IDLE, RESERVED_LOCAL, RESERVED_REMOTE, */ OPEN, HALF_CLOSED_LOCAL, HALF_CLOSED_REMOTE, CLOSED
-
-
-    }
     final int id;
     private final Http2Connection connection;
     final Mu3Request request;
-    private final Http2IncomingFlowController incomingFlowControl;
 
-    private final Http2OutgoingFlowController outgoingFlowControl;
     @Nullable
     private Http2Response response;
-    private State state;
-    private long endTime = 0;
+    // Reader-owned monotonic fences. They prevent frames following END_STREAM or
+    // RST_STREAM on the wire from reaching the body before the coordinator applies
+    // the corresponding command.
+    private boolean remoteEndStreamRead;
+    private boolean peerResetRead;
+    // A monotonic published fence used to stop input delivery and to avoid
+    // starting new response work after any thread has initiated a reset.
+    private volatile boolean resetInitiated;
+    // Guarded by this stream's monitor.
+    // Cancellation must find the write whose buffer is still in use.
+    private @Nullable WriteTask activeWrite;
+    // Guarded by this stream's monitor.
+    // A reset can be recorded before output abort has started; these are separate events.
+    private boolean outputAborted;
+    private volatile boolean applicationExchangeEnded;
+    private volatile boolean protocolStateClosed;
+    // Writer-published after the complete END_STREAM frame is handed to output
+    // and before flush, matching the stream-admission publication boundary.
+    private volatile boolean localEndStreamPublished;
+    @Nullable
+    private Long endNanos;
     private final InputStream bodyInputStream;
     private final @Nullable Long declaredRequestBodyLength;
     private long receivedRequestBodyLength;
-    Http2Stream(int id, Http2Connection connection, State state, Mu3Request request, Http2IncomingFlowController incomingFlowControl, Http2OutgoingFlowController outgoingFlowControl, InputStream bodyInputStream) {
-        this(id, connection, state, request, incomingFlowControl, outgoingFlowControl, bodyInputStream, request.declaredBodySize().size());
+    Http2Stream(int id, Http2Connection connection, Http2StreamState state, Mu3Request request, InputStream bodyInputStream) {
+        this(id, connection, state, request, bodyInputStream, request.declaredBodySize().size());
     }
 
-    Http2Stream(int id, Http2Connection connection, State state, Mu3Request request, Http2IncomingFlowController incomingFlowControl, Http2OutgoingFlowController outgoingFlowControl, InputStream bodyInputStream, @Nullable Long declaredRequestBodyLength) {
+    Http2Stream(int id, Http2Connection connection, Http2StreamState state, Mu3Request request, InputStream bodyInputStream, @Nullable Long declaredRequestBodyLength) {
         this.id = id;
         this.connection = connection;
-        this.state = state;
+        this.remoteEndStreamRead = !state.canReceiveEndStream();
         this.request = request;
-        this.incomingFlowControl = incomingFlowControl;
-        this.outgoingFlowControl = outgoingFlowControl;
         this.bodyInputStream = bodyInputStream;
         this.declaredRequestBodyLength = declaredRequestBodyLength;
     }
@@ -52,37 +61,12 @@ class Http2Stream implements ResponseInfo {
         return connection.maxFrameSize();
     }
 
-    private int currentWritableDataCredit() {
-        return Math.max(0, Math.min(outgoingFlowControl.credit(), connection.currentWriteCredit()));
-    }
-
-    private boolean waitUntilWritableDataCreditAvailable(long timeout, TimeUnit unit) throws InterruptedException {
-        while (true) {
-            if (outgoingFlowControl.terminated() || !canSendFrames()) {
-                return false;
-            }
-            int streamCredit = outgoingFlowControl.credit();
-            int connectionCredit = connection.currentWriteCredit();
-            if (streamCredit > 0 && connectionCredit > 0) {
-                return true;
-            }
-            if (streamCredit <= 0) {
-                if (!outgoingFlowControl.waitUntilAvailable(1, timeout, unit)) {
-                    return false;
-                }
-            }
-            if (connectionCredit <= 0) {
-                if (!connection.waitUntilWriteCreditAvailable(1, timeout, unit)) {
-                    return false;
-                }
-            }
-        }
-    }
-
     @Override
     public long duration() {
-        var end = endTime;
-        return (end == 0L ? System.currentTimeMillis() : end) - request.startTime();
+        Long end = endNanos;
+        return end == null
+            ? MonotonicTime.elapsedMillisSince(request.startNanos())
+            : MonotonicTime.elapsedMillis(request.startNanos(), end);
     }
 
 
@@ -91,50 +75,111 @@ class Http2Stream implements ResponseInfo {
         return request.completedSuccessfully() && requiredResponse().responseState().completedSuccessfully();
     }
 
-    void onWindowUpdate(Http2WindowUpdate windowUpdate) throws Http2Exception {
-        outgoingFlowControl.applyWindowUpdate(windowUpdate);
+    void recordPeerResetFromReader() {
+        // A queued handler can finish as soon as it sees resetInitiated.
+        // Publish the response outcome first so its completion listeners see cancellation.
+        requiredResponse().setState(ResponseState.CLIENT_CANCELLED);
+        peerResetRead = true;
+        resetInitiated = true;
     }
 
-    void applyClientSettingsChange(Http2Settings oldSettings, Http2Settings newSettings) throws Http2Exception {
-        outgoingFlowControl.applySettingsChange(oldSettings, newSettings);
+    void recordLocalResetFromReader() {
+        resetInitiated = true;
     }
 
-    void onReset(Http2ResetStreamFrame rstStream) {
-        state = State.CLOSED;
-        outgoingFlowControl.terminate();
-        Http2Response currentResponse = requiredResponse();
-        if (!currentResponse.responseState().endState()) {
-            currentResponse.setState(ResponseState.CLIENT_CANCELLED);
+    boolean peerResetWasRead() {
+        return peerResetRead;
+    }
+
+    void onProtocolResetApplied() {
+        resetInitiated = true;
+    }
+
+    boolean resetWasInitiated() {
+        return resetInitiated;
+    }
+
+    void onApplicationExchangeEnded() {
+        applicationExchangeEnded = true;
+        if (bodyInputStream instanceof Http2BodyInputStream) {
+            ((Http2BodyInputStream) bodyInputStream).discardRemaining();
         }
-        request.onClientCancelled();
+    }
+
+    boolean applicationExchangeEnded() {
+        return applicationExchangeEnded;
+    }
+
+    boolean applicationExchangeNeedsTermination() {
+        return !applicationExchangeEnded
+            && request.asyncCompletionIsPending();
+    }
+
+    void onProtocolStateClosed() {
+        protocolStateClosed = true;
+    }
+
+    void onLocalEndStreamPublished() {
+        localEndStreamPublished = true;
+    }
+
+    boolean protocolStateClosed() {
+        return protocolStateClosed;
+    }
+
+    boolean countsTowardsMaxConcurrentStreams() {
+        return !protocolStateClosed
+            && !peerResetRead
+            && !(remoteEndStreamRead && localEndStreamPublished);
+    }
+
+    void onProtocolStreamRetired() {
+        connection.removeProtocolStream(this);
+    }
+
+    /**
+     * Applies the I/O-safe application effects after the coordinator closes the
+     * protocol stream. This wakes body or async waiters and does not invoke
+     * completion listeners or other application callbacks.
+     */
+    void applyPeerReset(Http2ResetStreamFrame rstStream) {
+        Http2Response currentResponse = requiredResponse();
+        currentResponse.setState(ResponseState.CLIENT_CANCELLED);
+        onProtocolResetApplied();
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).onStreamReset(rstStream);
         }
+        // This only completes the private future that the handler task is waiting on.
+        // Completion listeners remain on that application task.
+        request.onClientCancelled();
     }
 
     void cancel(IOException reason) {
-        cancel(reason, true);
+        cancel(reason, UnreadDataCredit.REFUND_CONNECTION);
     }
 
-    void cancel(IOException reason, boolean refundUnreadData) {
-        state = State.CLOSED;
-        outgoingFlowControl.terminate();
+    void cancel(IOException reason, UnreadDataCredit refundUnreadData) {
+        resetInitiated = true;
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).cancel(reason, refundUnreadData);
         }
     }
 
-    boolean canReceiveData() {
-        return state == State.OPEN || state == State.HALF_CLOSED_LOCAL;
+    void onConnectionTerminated(IOException reason, ResponseState terminalState) {
+        cancel(reason, UnreadDataCredit.CONNECTION_CLOSED_OR_TRANSFERRED);
+        Http2Response currentResponse = requiredResponse();
+        currentResponse.setState(terminalState);
+        // Complete the private async-exchange future. Its continuation is
+        // dispatched to the handler executor before application cleanup runs.
+        request.onClientCancelled();
     }
 
-    boolean canSendFrames() {
-        return state == State.OPEN || state == State.HALF_CLOSED_REMOTE;
+    boolean canReceiveData() {
+        return !remoteEndStreamRead && !resetInitiated;
     }
 
     void onTrailers(Http2HeadersFrame headersFrame) throws Http2Exception {
         if (!canReceiveData()) {
-            state = State.CLOSED;
             throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Invalid state for trailers", id);
         }
         if (!headersFrame.endStream()) {
@@ -147,30 +192,16 @@ class Http2Stream implements ResponseInfo {
             }
         }
         validateRequestBodyLengthAtEnd();
+        recordRemoteEndStreamFromReader();
+        connection.remoteEndStream(id);
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).onTrailers(headersFrame.headers());
-        }
-        switch (state) {
-            case OPEN:
-                state = State.HALF_CLOSED_REMOTE;
-                break;
-            case HALF_CLOSED_LOCAL:
-                state = State.CLOSED;
-                break;
-            default:
-                throw new IllegalStateException("Invalid state for trailers: " + state);
         }
     }
 
     void onData(int flowControlSize, Http2DataFrame dataFrame) throws Http2Exception {
-        // todo: thread safety
         if (!canReceiveData()) {
-            state = State.CLOSED;
             throw new Http2Exception(Http2ErrorCode.STREAM_CLOSED, "Invalid state for data", id);
-        }
-
-        if (!incomingFlowControl.withdrawIfCan(flowControlSize)) {
-            throw new Http2Exception(Http2ErrorCode.FLOW_CONTROL_ERROR, "Not enough flow control credit for stream", id);
         }
 
         if (bodyInputStream instanceof Http2BodyInputStream) {
@@ -182,23 +213,19 @@ class Http2Stream implements ResponseInfo {
                 // Validate before making the terminal frame visible to the handler. Otherwise the
                 // handler can observe EOF and send a response before this stream error is raised.
                 validateRequestBodyLengthAtEnd();
+                recordRemoteEndStreamFromReader();
+                // The command is enqueued before EOF becomes visible, so any response awakened
+                // by EOF is ordered after the remote transition in the coordinator mailbox.
+                connection.remoteEndStream(id);
             }
             ((Http2BodyInputStream)bodyInputStream).onData(dataFrame, flowControlSize);
-            if (dataFrame.endStream()) {
-                switch (state) {
-                    case OPEN:
-                        state = State.HALF_CLOSED_REMOTE;
-                        break;
-                    case HALF_CLOSED_LOCAL:
-                        state = State.CLOSED;
-                        break;
-                    default:
-                        throw new IllegalStateException("Invalid state for data: " + state);
-                }
-            }
         } else {
             throw new Http2Exception(Http2ErrorCode.INTERNAL_ERROR, "Received data on a stream with no body", id);
         }
+    }
+
+    private void recordRemoteEndStreamFromReader() {
+        remoteEndStreamRead = true;
     }
 
     private void validateRequestBodyLengthAtEnd() throws Http2Exception {
@@ -217,7 +244,7 @@ class Http2Stream implements ResponseInfo {
         return requiredResponse();
     }
 
-    static Http2Stream start(Http2Connection connection, Http2HeadersFrame headerFrame, Http2Settings serverSettings, Http2Settings clientSettings) throws Http2Exception {
+    static Http2Stream start(Http2Connection connection, Http2HeadersFrame headerFrame) throws Http2Exception {
         var id = headerFrame.streamId();
         FieldBlock headers = headerFrame.headers();
 
@@ -337,29 +364,35 @@ class Http2Stream implements ResponseInfo {
         var serverUri = connection.creator.uri().resolve(relativeUrl);
         var requestUri = Headtils.getUri(log, headers, relativeUrl, serverUri);
 
-        var outgoingFlowControl = new Http2OutgoingFlowController(id, clientSettings.initialWindowSize);
-        var incomingFlowControl = new Http2IncomingFlowController(id, serverSettings.initialWindowSize);
-
-        InputStream body = BodySize.NONE.equals(bodySize) ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(
+        // A content-length of zero describes the message body, but it does not close the
+        // remote side of the HTTP/2 stream. Keep a private protocol-aware input until
+        // END_STREAM while exposing the documented empty body to the application.
+        InputStream protocolBody = headerFrame.endStream() ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(
             connection.server.requestIdleTimeoutMillis(),
-            read -> {
-                var update = incomingFlowControl.incrementCredit(read);
-                if (update > 0) {
-                    connection.write(new Http2WindowUpdate(id, update));
-                }
-                connection.creditAvailable(read);
-            },
-            connection
+            read -> connection.returnInboundCredit(id, read, true),
+            read -> connection.returnInboundCredit(id, read, false)
         );
-        var request = new Mu3Request(connection, method, requestUri, serverUri, HttpVersion.HTTP_2, headers, bodySize, body);
+        InputStream applicationBody = BodySize.NONE.equals(bodySize)
+            ? EmptyInputStream.INSTANCE
+            : protocolBody;
+        var request = new Mu3Request(
+            connection,
+            method,
+            requestUri,
+            serverUri,
+            HttpVersion.HTTP_2,
+            headers,
+            bodySize,
+            applicationBody
+        );
 
         if (headerFrame.endStream() && cl != null && cl != 0L) {
             throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "content-length does not match received DATA", id);
         }
 
 
-        var state = headerFrame.endStream() ? State.HALF_CLOSED_REMOTE : State.OPEN;
-        Http2Stream stream = new Http2Stream(id, connection, state, request, incomingFlowControl, outgoingFlowControl, body, cl);
+        var state = headerFrame.endStream() ? Http2StreamState.HALF_CLOSED_REMOTE : Http2StreamState.OPEN;
+        Http2Stream stream = new Http2Stream(id, connection, state, request, protocolBody, cl);
         stream.response = new Http2Response(stream, new FieldBlock(), request);
         request.setResponse(stream.response);
         return stream;
@@ -371,7 +404,15 @@ class Http2Stream implements ResponseInfo {
             request.cleanup();
             requiredResponse().cleanup();
         } finally {
-            endTime = System.currentTimeMillis();
+            endNanos = System.nanoTime();
+        }
+    }
+
+    void abandonApplicationExchange() {
+        try {
+            request.cleanup();
+        } finally {
+            endNanos = System.nanoTime();
         }
     }
 
@@ -383,16 +424,7 @@ class Http2Stream implements ResponseInfo {
         int remaining = length;
         int frameOffset = offset;
         while (remaining > 0) {
-            if (!waitUntilWritableDataCreditAvailable(1, TimeUnit.HOURS)) {
-                if (outgoingFlowControl.terminated() || !canSendFrames()) {
-                    throw new IOException("Stream closed while waiting for flow control credit");
-                }
-                throw new IOException("Timed out waiting for flow control credit");
-            }
-            int frameLength = Math.min(Math.min(remaining, maxFrameSize()), currentWritableDataCredit());
-            if (frameLength <= 0) {
-                continue;
-            }
+            int frameLength = Math.min(remaining, maxFrameSize());
             blockingWrite(new Http2DataFrame(id, false, payload, frameOffset, frameLength));
             frameOffset += frameLength;
             remaining -= frameLength;
@@ -403,40 +435,42 @@ class Http2Stream implements ResponseInfo {
      * Writes a frame, blocking if needed until there is enough flow control credit.
      */
     void blockingWrite(LogicalHttp2Frame frame) throws IOException, InterruptedException {
-
-        // DATA frames are subject to flow control and can only be sent when a stream is in the "open" or "half-closed (remote)" state
-
-        // todo: synchronise access to the state
-        if (state == State.HALF_CLOSED_LOCAL) {
-            if (!(frame instanceof Http2WindowUpdate) && !(frame instanceof Http2ResetStreamFrame)) {
-                throw new IllegalStateException("Cannot send data after the stream has been half closed locally. Tried to send " + frame);
-            }
-        } else if (state == State.CLOSED) {
-            throw new IllegalStateException("Cannot send data after the stream has been closed. Tried to send " + frame);
-        }
-
-        // todo: use a proper timeout
-        int neededCredit = frame.flowControlSize();
-        if (neededCredit != 0) {
-            if (!outgoingFlowControl.waitUntilWithdraw(neededCredit, 1, TimeUnit.HOURS)) {
-                if (outgoingFlowControl.terminated() || !canSendFrames()) {
-                    throw new IOException("Stream closed while waiting for flow control credit");
-                }
-                throw new IOException("Timed out waiting for flow control credit");
-            }
-        }
         WriteTask writeTask = new WriteTask(frame, true);
-        connection.write(writeTask);
-        if (frame.endStream()) {
-            if (state == State.OPEN) {
-                state = State.HALF_CLOSED_LOCAL;
-            } else if (state == State.HALF_CLOSED_REMOTE) {
-                state = State.CLOSED;
-            }
-        } else if (frame instanceof Http2ResetStreamFrame) {
-            state = State.CLOSED;
+        synchronized (this) {
+            if (resetInitiated) throw new IOException("HTTP/2 stream output is closed");
+            activeWrite = writeTask;
         }
-        writeTask.await(2, TimeUnit.HOURS);
+        try {
+            connection.write(writeTask);
+            try {
+                writeTask.await();
+            } catch (InterruptedException interrupted) {
+                abortOutput(new IOException("Interrupted while writing HTTP/2 output", interrupted));
+                writeTask.awaitTermination();
+                throw interrupted;
+            }
+        } finally {
+            synchronized (this) { activeWrite = null; }
+        }
+    }
+
+    void abortOutput(IOException reason) {
+        WriteTask writing;
+        boolean sendReset;
+        synchronized (this) {
+            if (outputAborted) return;
+            outputAborted = true;
+            sendReset = !resetInitiated;
+            resetInitiated = true;
+            writing = activeWrite;
+        }
+        if (writing != null && writing.cancel(reason)) {
+            // A frame cannot be interrupted midway and followed by another frame.
+            connection.forceShutdown();
+        } else if (sendReset) {
+            connection.write(new Http2ResetStreamFrame(id, Http2ErrorCode.CANCEL.code()));
+        }
+        cancel(reason);
     }
 
     @Override
@@ -452,6 +486,9 @@ class Http2Stream implements ResponseInfo {
  */
 interface LogicalHttp2Frame {
     void writeTo(Http2Peer connection, OutputStream out) throws IOException;
+    default int streamId() {
+        return 0;
+    }
     default int flowControlSize() {
         return 0;
     }

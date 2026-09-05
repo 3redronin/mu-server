@@ -10,7 +10,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.muserver.GZIPEncoderBuilder.gzipEncoder;
 import static java.util.Collections.emptyList;
@@ -32,11 +36,15 @@ class Mu3ServerImpl implements MuServer {
     private final int maxHeadersSize;
     final List<RateLimiterImpl> rateLimiters;
     final Path tempDir;
-    private final ExecutorService executorService;
+    private final ExecutionResources executionResources;
+    private final RequestAdmission requestAdmission;
+    private final ThreadLocal<ApplicationTaskContext> applicationTaskContext = new ThreadLocal<>();
+    private final ApplicationTaskTracker detachedApplicationTasks = new ApplicationTaskTracker();
+    private final ThreadLocal<@Nullable DetachedApplicationTask> activeDetachedApplicationTask =
+        new ThreadLocal<>();
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
-    private final ScheduledExecutorService scheduledExecutor;
 
-    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService executorService) {
+    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutionResources executionResources, int maxConcurrentRequests) {
         this.acceptors = acceptors;
         this.handlers = handlers;
         this.responseCompleteListeners = responseCompleteListeners;
@@ -50,14 +58,25 @@ class Mu3ServerImpl implements MuServer {
         this.maxHeadersSize = maxHeadersSize;
         this.rateLimiters = rateLimiters;
         this.tempDir = tempDir;
-        this.executorService = executorService;
-        this.scheduledExecutor = new OffloadingScheduledExecutorService(executorService);
+        this.executionResources = executionResources;
+        this.requestAdmission = new RequestAdmission(maxConcurrentRequests);
     }
 
     private void startListening() {
-        if (acceptors.isEmpty()) throw new IllegalStateException("No listener ports defined");
-        for (ConnectionAcceptor acceptor : acceptors) {
-            acceptor.start();
+        try {
+            if (acceptors.isEmpty()) {
+                throw new IllegalStateException("No listener ports defined");
+            }
+            for (ConnectionAcceptor acceptor : acceptors) {
+                acceptor.start();
+            }
+        } catch (RuntimeException | Error startFailure) {
+            try {
+                stop(0, TimeUnit.MILLISECONDS);
+            } catch (RuntimeException | Error cleanupFailure) {
+                startFailure.addSuppressed(cleanupFailure);
+            }
+            throw startFailure;
         }
     }
 
@@ -70,15 +89,171 @@ class Mu3ServerImpl implements MuServer {
     @Override
     public boolean stop(long duration, java.util.concurrent.TimeUnit unit) {
         long timeoutMillis = Math.max(0L, unit.toMillis(duration));
-        long deadline = System.currentTimeMillis() + timeoutMillis;
+        long deadlineNanos = MonotonicTime.deadlineAfterMillis(timeoutMillis);
         boolean stoppedCleanly = true;
         for (var acceptor : acceptors) {
-            long remaining = Math.max(0L, deadline - System.currentTimeMillis());
-            if (!acceptor.stop(remaining)) {
+            if (!acceptor.stopUntil(deadlineNanos)) {
                 stoppedCleanly = false;
             }
         }
+        if (!awaitDetachedApplicationTasks(deadlineNanos)) {
+            stoppedCleanly = false;
+        }
+        executionResources.shutdown();
         return stoppedCleanly;
+    }
+
+    private boolean awaitDetachedApplicationTasks(long deadlineNanos) {
+        // A callback cannot safely wait for other detached callbacks: with a
+        // single-worker application executor, they may be queued behind this
+        // callback and cannot start until stop() returns. Leave every registration
+        // intact so a concurrent external stop caller still observes and waits for
+        // the callback until its wrapper finishes.
+        if (activeDetachedApplicationTask.get() != null) {
+            return true;
+        }
+        return detachedApplicationTasks.awaitUntil(deadlineNanos);
+    }
+
+    void executeResponseCompletionTask(Runnable task) {
+        executeTrackedApplicationTask(
+            task,
+            "response completion callback"
+        );
+    }
+
+    @Nullable RejectedExecutionException executeTrackedApplicationTask(
+        Runnable task,
+        String description
+    ) {
+        DetachedApplicationTask registration = new DetachedApplicationTask();
+        Runnable trackedTask = () -> {
+            DetachedApplicationTask previous = activeDetachedApplicationTask.get();
+            activeDetachedApplicationTask.set(registration);
+            try {
+                task.run();
+            } finally {
+                registration.deregister();
+                if (previous == null) {
+                    activeDetachedApplicationTask.remove();
+                } else {
+                    activeDetachedApplicationTask.set(previous);
+                }
+            }
+        };
+        RejectedExecutionException rejected;
+        try {
+            rejected = tryExecuteHandlerTask(trackedTask);
+        } catch (RuntimeException | Error submissionFailure) {
+            registration.deregister();
+            throw submissionFailure;
+        }
+        if (rejected != null) {
+            registration.deregister();
+            log.warn("Dropping {} because its application executor rejected it", description, rejected);
+        }
+        return rejected;
+    }
+
+    private final class DetachedApplicationTask {
+        private final ApplicationTaskTracker.Registration registration = detachedApplicationTasks.register();
+
+        private void deregister() {
+            registration.close();
+        }
+    }
+
+    /** Nested application work is queued to avoid recursive callback delivery. */
+    @Nullable RejectedExecutionException tryExecuteHandlerTask(Runnable task) {
+        ApplicationTaskContext current = applicationTaskContext.get();
+        if (current != null) {
+            current.tasks.add(task);
+            return null;
+        }
+        try {
+            executionResources.application.execute(handlerApplicationTask(task));
+            return null;
+        } catch (RejectedExecutionException rejected) {
+            return rejected;
+        }
+    }
+
+    void executeAsyncApplicationTask(Runnable task) {
+        RejectedExecutionException rejected = tryExecuteHandlerTask(task);
+        if (rejected != null) throw rejected;
+    }
+
+    void executeInternalTask(Runnable task) {
+        executionResources.internal.execute(task);
+    }
+
+    Runnable handlerApplicationTask(Runnable task) {
+        Objects.requireNonNull(task, "task");
+        return () -> runHandlerApplicationTask(task);
+    }
+
+    void runHandlerApplicationTask(Runnable task) {
+        ApplicationTaskContext current = applicationTaskContext.get();
+        if (current != null) {
+            current.tasks.add(task);
+            return;
+        }
+        ApplicationTaskContext context = new ApplicationTaskContext();
+        context.tasks.add(task);
+        applicationTaskContext.set(context);
+        Throwable failure;
+        try {
+            failure = drainApplicationTasks(context, null);
+        } finally {
+            applicationTaskContext.remove();
+        }
+        if (failure != null) throwUnchecked(failure);
+    }
+
+    @SuppressWarnings("ReferenceEquality") // Throwable forbids suppressing itself; identity is required.
+    private static @Nullable Throwable drainApplicationTasks(
+        ApplicationTaskContext context,
+        @Nullable Throwable failure
+    ) {
+        Runnable task;
+        while ((task = context.tasks.poll()) != null) {
+            try {
+                task.run();
+            } catch (Throwable taskFailure) {
+                FatalErrors.rethrow(taskFailure);
+                if (failure == null) {
+                    failure = taskFailure;
+                } else if (failure != taskFailure) {
+                    failure.addSuppressed(taskFailure);
+                }
+            }
+        }
+        return failure;
+    }
+
+    private static void throwUnchecked(Throwable failure) {
+        if (failure instanceof RuntimeException) {
+            throw (RuntimeException) failure;
+        }
+        if (failure instanceof Error) {
+            throw (Error) failure;
+        }
+        throw new MuException("Application task failed", failure);
+    }
+
+    private static final class ApplicationTaskContext {
+        private final Queue<Runnable> tasks = new ArrayDeque<>();
+    }
+
+    ExecutorService internalExecutor() {
+        return executionResources.internal;
+    }
+
+    boolean tryAdmit(Mu3Request request) {
+        RequestAdmission.Slot slot = requestAdmission.tryAcquire();
+        if (slot == null) return false;
+        request.admissionSlot = slot;
+        return true;
     }
 
     @Override
@@ -243,19 +418,51 @@ class Mu3ServerImpl implements MuServer {
         statsImpl.onRequestStarted(req);
     }
 
-    void onExchangeEnded(ResponseInfo exchange) {
+    void onRequestSubmissionRejected(Mu3Request req) {
+        req.releaseAdmission();
+        statsImpl.onRequestSubmissionRejected(req);
+    }
+
+    void recordExchangeEnded(ResponseInfo exchange) {
+        ((Mu3Request) exchange.request()).releaseAdmission();
         statsImpl.onRequestEnded(exchange);
+    }
+
+    void notifyExchangeEnded(ResponseInfo exchange) {
         for (var listener : responseCompleteListeners) {
+            invokeResponseCompletionListener(listener, exchange);
+        }
+    }
+
+    void invokeResponseCompletionListener(
+        ResponseCompleteListener listener,
+        ResponseInfo exchange
+    ) {
+        try {
             listener.onComplete(exchange);
+        } catch (Throwable failure) {
+            FatalErrors.rethrow(failure);
+            log.error("Error from response completion listener", failure);
         }
     }
 
     void onRequestRejected(RejectedRequest info) {
+        if (requestRejectListeners.isEmpty()) {
+            return;
+        }
+        executeTrackedApplicationTask(
+            () -> notifyRequestRejected(info),
+            "request rejection notification"
+        );
+    }
+
+    private void notifyRequestRejected(RejectedRequest info) {
         for (var listener : requestRejectListeners) {
             try {
                 listener.onRejected(info);
-            } catch (Exception e) {
-                log.error("Error from request reject listener", e);
+            } catch (Throwable failure) {
+                FatalErrors.rethrow(failure);
+                log.error("Error from request reject listener", failure);
             }
         }
     }
@@ -263,10 +470,11 @@ class Mu3ServerImpl implements MuServer {
     static MuServer start(MuServerBuilder builder) throws IOException {
 
         var exceptionHandler = UnhandledExceptionHandler.getDefault(builder.unhandledExceptionHandler());
-        ExecutorService executor = builder.executor();
-        if (executor == null) {
-            executor = MuServerBuilder.defaultExecutor();
+        var tempDir = builder.tempDirectory();
+        if (tempDir == null) {
+            tempDir = Files.createTempDirectory("muservertemp");
         }
+
         var acceptors = new ArrayList<ConnectionAcceptor>(2);
 
         var actualHandlers = new ArrayList<MuHandler>();
@@ -281,15 +489,15 @@ class Mu3ServerImpl implements MuServer {
             contentEncoders = List.of(gzipEncoder().build());
         }
 
-        var tempDir = builder.tempDirectory();
-        if (tempDir == null) {
-            tempDir = Files.createTempDirectory("muservertemp");
-        }
-
         List<RateLimiterImpl> limiters = builder.rateLimiters;
         if (limiters == null) {
             limiters = emptyList();
         }
+
+        ExecutionResources resources = builder.executionResourcesFactory.create(builder.executor());
+        ExecutorService handlerExecutor = resources.application;
+        ExecutorService connectionExecutor = resources.connectionExecutor();
+        ExecutorService http2WriterExecutor = resources.writerExecutor();
 
         var impl = new Mu3ServerImpl(
             acceptors,
@@ -305,46 +513,118 @@ class Mu3ServerImpl implements MuServer {
             builder.maxHeadersSize(),
             limiters,
             tempDir,
-            executor
+            resources,
+            builder.maxConcurrentRequests()
             );
 
-        var ih = builder.interfaceHost();
-        var address = ih == null ? null : InetAddress.getByName(ih);
+        try {
+            var ih = builder.interfaceHost();
+            var address = ih == null ? null : InetAddress.getByName(ih);
 
-        var configuredHttp2 = builder.http2Config();
-        Http2Config http2ConfigForHttp = configuredHttp2;
-        if (http2ConfigForHttp != null && http2ConfigForHttp.maxHeaderListSize() == -1) {
-            http2ConfigForHttp = http2ConfigForHttp.toBuilder().withMaxHeaderListSize(builder.maxHeadersSize()).build();
-        }
-
-        if (builder.httpsPort() >= 0) {
-            var http2Config = configuredHttp2;
-            if (http2Config == null) {
-                http2Config = Http2ConfigBuilder.http2Config().withMaxHeaderListSize(builder.maxHeadersSize()).build();
-            }
-            if (http2Config.maxHeaderListSize() == -1) {
-                http2Config = http2Config.toBuilder().withMaxHeaderListSize(builder.maxHeadersSize()).build();
+            var configuredHttp2 = builder.http2Config();
+            Http2Config http2ConfigForHttp = configuredHttp2;
+            if (http2ConfigForHttp != null && http2ConfigForHttp.maxHeaderListSize() == -1) {
+                http2ConfigForHttp = http2ConfigForHttp.toBuilder().withMaxHeaderListSize(builder.maxHeadersSize()).build();
             }
 
-            var httpsConfigBuilder = builder.httpsConfigBuilder();
-            if (httpsConfigBuilder == null) {
-                httpsConfigBuilder = HttpsConfigBuilder.unsignedLocalhost();
-            }
-            var httpsConfig = httpsConfigBuilder.build3();
+            if (builder.httpsPort() >= 0) {
+                var http2Config = configuredHttp2;
+                if (http2Config == null) {
+                    http2Config = Http2ConfigBuilder.http2Config().withMaxHeaderListSize(builder.maxHeadersSize()).build();
+                }
+                if (http2Config.maxHeaderListSize() == -1) {
+                    http2Config = http2Config.toBuilder().withMaxHeaderListSize(builder.maxHeadersSize()).build();
+                }
 
-            var acceptor = ConnectionAcceptor.create(impl, address, builder.httpsPort(), httpsConfig, http2Config, executor, contentEncoders);
-            acceptors.add(acceptor);
-            httpsConfig.setHttpsUri(acceptor.uri());
+                var httpsConfigBuilder = builder.httpsConfigBuilder();
+                if (httpsConfigBuilder == null) {
+                    httpsConfigBuilder = HttpsConfigBuilder.unsignedLocalhost();
+                }
+                var httpsConfig = httpsConfigBuilder.build3();
+
+                var acceptor = ConnectionAcceptor.create(
+                    impl,
+                    address,
+                    builder.httpsPort(),
+                    httpsConfig,
+                    http2Config,
+                    handlerExecutor,
+                    connectionExecutor,
+                    http2WriterExecutor,
+                    contentEncoders
+                );
+                acceptors.add(acceptor);
+                httpsConfig.setHttpsUri(acceptor.uri());
+            }
+            if (builder.httpPort() >= 0) {
+                acceptors.add(ConnectionAcceptor.create(
+                    impl,
+                    address,
+                    builder.httpPort(),
+                    null,
+                    http2ConfigForHttp,
+                    handlerExecutor,
+                    connectionExecutor,
+                    http2WriterExecutor,
+                    contentEncoders
+                ));
+            }
+            impl.startListening();
+            return impl;
+        } catch (IOException | RuntimeException | Error startFailure) {
+            try {
+                impl.stop(0, TimeUnit.MILLISECONDS);
+            } catch (RuntimeException | Error cleanupFailure) {
+                startFailure.addSuppressed(cleanupFailure);
+            }
+            throw startFailure;
         }
-        if (builder.httpPort() >= 0) {
-            acceptors.add(ConnectionAcceptor.create(impl, address, builder.httpPort(), null, http2ConfigForHttp, executor, contentEncoders));
-        }
-        impl.startListening();
-        return impl;
     }
 
-    public ScheduledExecutorService getScheduledExecutor() {
-        return scheduledExecutor;
+    ScheduledFuture<?> scheduleConnectionTask(Runnable task, long delay, TimeUnit unit) {
+        return executionResources.timer.schedule(() -> tryDispatchConnectionTask(task), delay, unit);
+    }
+
+    ScheduledFuture<?> scheduleTimerCallback(Runnable task, long delay, TimeUnit unit) {
+        return executionResources.timer.schedule(task, delay, unit);
+    }
+
+    ScheduledFuture<?> scheduleConnectionTaskAtFixedRate(
+        Runnable task,
+        long initialDelay,
+        long period,
+        TimeUnit unit
+    ) {
+        var pending = new AtomicBoolean();
+        return executionResources.timer.scheduleAtFixedRate(
+            () -> {
+                if (pending.compareAndSet(false, true)) {
+                    boolean accepted = tryDispatchConnectionTask(() -> {
+                        try {
+                            task.run();
+                        } finally {
+                            pending.set(false);
+                        }
+                    });
+                    if (!accepted) {
+                        pending.set(false);
+                    }
+                }
+            },
+            initialDelay,
+            period,
+            unit
+        );
+    }
+
+    private boolean tryDispatchConnectionTask(Runnable task) {
+        try {
+            executionResources.internal.execute(task);
+            return true;
+        } catch (RejectedExecutionException e) {
+            log.debug("Connection maintenance executor rejected timed work because the server is stopping or overloaded");
+            return false;
+        }
     }
 
     public Mu3StatsImpl getStatsImpl() {

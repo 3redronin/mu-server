@@ -16,6 +16,7 @@ import java.net.Socket;
 import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -26,23 +27,29 @@ abstract class BaseHttpConnection implements HttpConnection {
     protected final Socket clientSocket;
     @Nullable
     protected final Certificate clientCertificate;
-    protected final Instant handshakeStartTime;
-    protected final long connectionStartTime = System.currentTimeMillis();
+    private final ConnectionAcceptedTime acceptedTime;
+    private final long connectionReadyNanos = System.nanoTime();
     protected final InetSocketAddress remoteAddress;
     protected final InetSocketAddress localAddress;
-    protected volatile long lastIO = connectionStartTime;
+    protected final AtomicLong lastIONanos = new AtomicLong(System.nanoTime());
     protected final AtomicLong completedRequests = new AtomicLong(0);
     protected final AtomicLong invalidHttpRequests = new AtomicLong(0);
     protected final AtomicLong rejectedDueToOverload = new AtomicLong(0);
     protected final AtomicBoolean closed = new AtomicBoolean(false);
     protected final int requestTimeout;
 
-    BaseHttpConnection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime) {
+    BaseHttpConnection(
+        Mu3ServerImpl server,
+        ConnectionAcceptor creator,
+        Socket clientSocket,
+        @Nullable Certificate clientCertificate,
+        ConnectionAcceptedTime acceptedTime
+    ) {
         this.server = server;
         this.creator = creator;
         this.clientSocket = clientSocket;
         this.clientCertificate = clientCertificate;
-        this.handshakeStartTime = handshakeStartTime;
+        this.acceptedTime = acceptedTime;
         remoteAddress = (InetSocketAddress) clientSocket.getRemoteSocketAddress();
         localAddress = (InetSocketAddress) clientSocket.getLocalSocketAddress();
         requestTimeout = (int) Math.min(Integer.MAX_VALUE, server.requestIdleTimeoutMillis());
@@ -64,8 +71,22 @@ abstract class BaseHttpConnection implements HttpConnection {
         server.onRequestStarted(req);
     }
 
-    protected void handleExchange(Mu3Request muRequest, BaseResponse muResponse) throws Throwable {
+    protected RejectedRequest rateLimitRejection(Mu3Request request) {
+        String reason = HttpStatus.TOO_MANY_REQUESTS_429.toString();
+        return new RejectedRequestImpl(
+            HttpStatus.TOO_MANY_REQUESTS_429.code(),
+            reason,
+            request.method().name(),
+            request.uri().toString(),
+            this
+        );
+    }
+
+    protected @Nullable CompletableFuture<@Nullable Void> handleExchange(Mu3Request muRequest, BaseResponse muResponse) throws Throwable {
         try {
+            if (applyRateLimits(muRequest, muResponse)) {
+                return null;
+            }
             var handled = false;
             for (var handler : server.handlers()) {
                 if (handler.handle(muRequest, muResponse)) {
@@ -77,33 +98,75 @@ abstract class BaseHttpConnection implements HttpConnection {
 
             if (muRequest.isAsync()) {
                 var asyncHandle = java.util.Objects.requireNonNull(muRequest.getAsyncHandle());
-                    // TODO set proper timeout
-                asyncHandle.waitForCompletion(Long.MAX_VALUE);
+                return asyncHandle.exchangeCompletion();
             }
-
         } catch (Exception e) {
-            if (muResponse.hasStartedSendingData()) {
-                // can't write a custom error at this point
-                throw e;
-            } else {
-                server.exceptionHandler().handle(muRequest, muResponse, e);
+            handleExchangeException(muRequest, muResponse, e);
+        }
+        return null;
+    }
+
+    private boolean applyRateLimits(
+        Mu3Request request,
+        BaseResponse response
+    ) {
+        RateLimiterImpl.Decision first = null;
+        for (RateLimiterImpl rateLimiter : server.rateLimiters) {
+            RateLimiterImpl.Decision decision = rateLimiter.record(request);
+            if (decision != null && first == null) {
+                first = decision;
             }
+        }
+        if (first == null
+            || first.action() != RateLimitRejectionAction.SEND_429) {
+            return false;
+        }
+
+        HttpException rejection =
+            new HttpException(HttpStatus.TOO_MANY_REQUESTS_429);
+        onInvalidRequest(rejection);
+        request.onRateLimitRejected();
+        response.status(rejection.status());
+        String retryAfter = first.retryAfter();
+        if (retryAfter != null) {
+            response.headers().set(HeaderNames.RETRY_AFTER, retryAfter);
+        }
+        response.write(java.util.Objects.requireNonNull(rejection.getMessage()));
+        return true;
+    }
+
+    protected void handleExchangeException(Mu3Request muRequest, BaseResponse muResponse, Exception failure) throws Throwable {
+        if (muResponse.hasStartedSendingData() || muResponse.responseState().endState()) {
+            // can't write a custom error at this point
+            throw failure;
+        } else {
+            server.exceptionHandler().handle(muRequest, muResponse, failure);
         }
     }
 
     protected void onExchangeEnded(ResponseInfo exchange) {
+        recordExchangeEnded(exchange);
+        notifyExchangeEnded(exchange);
+    }
+
+    protected void recordExchangeEnded(ResponseInfo exchange) {
         completedRequests.incrementAndGet();
+        server.recordExchangeEnded(exchange);
+    }
+
+    protected void notifyExchangeEnded(ResponseInfo exchange) {
         BaseResponse resp = (BaseResponse) exchange.response();
-        for (var listener : resp.completionListeners()) {
-            listener.onComplete(exchange);
-        }
-        server.onExchangeEnded(exchange);
+        resp.notifyCompletionListeners(exchange);
+        server.notifyExchangeEnded(exchange);
     }
 
 
     @Override
     public long idleTimeMillis() {
-        return System.currentTimeMillis() - lastIO;
+        long idleNanos = MonotonicTime.elapsedNanosSince(lastIONanos.get());
+        return idleNanos <= 0L
+            ? 0L
+            : java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(idleNanos);
     }
     @Override
     public boolean isHttps() {
@@ -128,12 +191,12 @@ abstract class BaseHttpConnection implements HttpConnection {
 
     @Override
     public Instant startTime() {
-        return this.handshakeStartTime;
+        return acceptedTime.instant();
     }
 
     @Override
     public long handshakeDurationMillis() {
-        return connectionStartTime - handshakeStartTime.toEpochMilli();
+        return acceptedTime.elapsedMillisUntil(connectionReadyNanos);
     }
 
     @Override
@@ -175,22 +238,31 @@ abstract class BaseHttpConnection implements HttpConnection {
         return activeRequests().isEmpty() && activeWebsockets().isEmpty();
     }
 
-    protected void onBytesRead(int read) {
+    void onBytesRead(int read) {
         onIO();
         server.getStatsImpl().onBytesRead(read);
     }
 
-    protected void onBytesRead(byte[] buffer, int off, int len) {
+    void onBytesSent(int sent) {
         onIO();
-        server.getStatsImpl().onBytesRead(len);
+        server.getStatsImpl().onBytesSent(sent);
+    }
+
+    void onTransportInputEnd() {
+    }
+
+    void onTransportInputFailure(IOException failure) {
+    }
+
+    void onTransportOutputFailure(IOException failure) {
     }
 
     private void onIO() {
-        lastIO = System.currentTimeMillis();
+        MonotonicTime.advanceIfLater(lastIONanos, System.nanoTime());
     }
 
-    public long lastIO() {
-        return lastIO;
+    boolean hasBeenIdleFor(long nowNanos, long timeoutNanos) {
+        return nowNanos - lastIONanos.get() >= timeoutNanos;
     }
 
     @Override

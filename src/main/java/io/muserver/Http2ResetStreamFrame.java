@@ -15,6 +15,7 @@ class Http2ResetStreamFrame implements LogicalHttp2Frame {
         this.errorCode = errorCode;
     }
 
+    @Override
     public int streamId() {
         return streamId;
     }

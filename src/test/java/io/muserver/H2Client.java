@@ -119,6 +119,17 @@ class H2ClientConnection implements Http2Peer, Closeable {
         return Http2FrameHeader.readFrom(readBuffer);
     }
 
+    byte[] readRawPayload(Http2FrameHeader header) throws IOException {
+        Mutils.readAtLeast(readBuffer, inputStream, header.length());
+        byte[] payload = new byte[header.length()];
+        readBuffer.get(payload);
+        return payload;
+    }
+
+    void changeResponseHeaderTableSizeLimit(int headerTableSize) {
+        fieldBlockDecoder.changeTableSize(headerTableSize);
+    }
+
     LogicalHttp2Frame readLogicalFrame(Http2FrameHeader header) throws IOException, Http2Exception {
         Mutils.readAtLeast(readBuffer, inputStream, header.length());
         switch (header.frameType()) {
@@ -169,8 +180,12 @@ class H2ClientConnection implements Http2Peer, Closeable {
     }
 
     public H2ClientConnection handshake() throws IOException, Http2Exception {
+        return handshake(Http2Settings.DEFAULT_CLIENT_SETTINGS);
+    }
+
+    H2ClientConnection handshake(Http2Settings initialSettings) throws IOException, Http2Exception {
         writePreface();
-        writeFrame(Http2Settings.DEFAULT_CLIENT_SETTINGS);
+        writeFrame(initialSettings);
         flush();
         var settings1 = readLogicalFrame(Http2Settings.class);
         var settings2 = readLogicalFrame(Http2Settings.class);

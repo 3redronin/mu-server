@@ -9,14 +9,22 @@ class FieldLine implements Map.Entry<String,String> {
 
     private final HeaderString name;
     private final HeaderString value;
+    private final boolean neverIndexed;
 
     FieldLine(HeaderString name, HeaderString value) {
-        this.name = name;
-        this.value = value;
+        this(name, value, false);
     }
 
-    int length() {
-        return name.length() + value.length();
+    FieldLine(HeaderString name, HeaderString value, boolean neverIndexed) {
+        this.name = name;
+        this.value = value;
+        this.neverIndexed = neverIndexed;
+    }
+
+    int hpackSize() {
+        // RFC 7541 section 4.1 and RFC 9113 section 6.5.2 use the same
+        // accounting: name octets + value octets + 32 octets of overhead.
+        return name.length() + value.length() + 32;
     }
 
     public HeaderString name() {
@@ -25,6 +33,10 @@ class FieldLine implements Map.Entry<String,String> {
 
     public HeaderString value() {
         return value;
+    }
+
+    boolean neverIndexed() {
+        return neverIndexed;
     }
 
     @Override
@@ -64,4 +76,3 @@ class FieldLine implements Map.Entry<String,String> {
     }
 
 }
-

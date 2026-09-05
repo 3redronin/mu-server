@@ -34,9 +34,17 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
     private final CreditAvailableListener onDataReadCallback;
     private final CreditAvailableListener onDataDiscardedCallback;
     private final Lock lock = new ReentrantLock();
+    // Guarded by lock.
     private final Queue<Object> frames = new LinkedList<>();
     private final Condition hasData = lock.newCondition();
+    // Guarded by lock.
     private boolean requestBodyComplete;
+    // Guarded by lock.
+    private boolean discarding;
+    /** The first terminal failure; independent of the contents of the data queue. */
+    // Guarded by lock.
+    private @org.jspecify.annotations.Nullable IOException failure;
+    // Guarded by lock.
     private @org.jspecify.annotations.Nullable FieldBlock trailers;
 
     private static final class EndOfStreamMarker {
@@ -44,7 +52,13 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
         }
     }
 
+    private static final class DiscardingMarker {
+        private DiscardingMarker() {
+        }
+    }
+
     private static final EndOfStreamMarker END_OF_STREAM = new EndOfStreamMarker();
+    private static final DiscardingMarker DISCARDING = new DiscardingMarker();
 
     Http2BodyInputStream(long readTimeoutMillis, CreditAvailableListener onDataReadCallback, CreditAvailableListener onDataDiscardedCallback) {
         this.readTimeoutMillis = readTimeoutMillis;
@@ -62,14 +76,27 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
 
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
+        Objects.checkFromIndexSize(off, len, b.length);
+        if (len == 0) {
+            return 0;
+        }
+
+        int readAmount;
+        int creditToReturn;
         lock.lock();
         try {
+            long remainingNanos = TimeUnit.MILLISECONDS.toNanos(readTimeoutMillis);
             while (true) {
                 Object frame;
                 while ((frame = frames.peek()) == null) {
                     try {
-                        if (!hasData.await(readTimeoutMillis, TimeUnit.MILLISECONDS)) {
-                            throw new IOException("Timed out waiting for data");
+                        if (readTimeoutMillis == 0) {
+                            hasData.await();
+                        } else {
+                            if (remainingNanos <= 0) {
+                                throw new HttpException(HttpStatus.REQUEST_TIMEOUT_408);
+                            }
+                            remainingNanos = hasData.awaitNanos(remainingNanos);
                         }
                     } catch (InterruptedException e) {
                         throw new InterruptedIOException("Interrupted waiting for data");
@@ -89,8 +116,6 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
                         frames.remove();
                         continue;
                     }
-                    int readAmount;
-                    int creditToReturn;
                     if (remaining < len) {
                         // the user wants more than what is available in the first frame, so give all the rest of it
                         System.arraycopy(data.payload(), offset, b, off, remaining);
@@ -113,14 +138,8 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
                         creditToReturn += pending.flowControlSize - data.payloadLength();
                     }
                     pending.creditReturned += creditToReturn;
-
-                    try {
-                        onDataReadCallback.creditAvailable(creditToReturn);
-                    } catch (Http2Exception e) {
-                        throw new IOException("Http2 error updating flow control", e);
-                    }
-                    return readAmount;
-                } else if (frame == END_OF_STREAM) {
+                    break;
+                } else if (frame == END_OF_STREAM || frame == DISCARDING) {
                     return -1;
                 } else if (frame instanceof IOException) {
                     throw (IOException) frame;
@@ -132,6 +151,12 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
         } finally {
             lock.unlock();
         }
+        try {
+            onDataReadCallback.creditAvailable(creditToReturn);
+        } catch (Http2Exception e) {
+            throw new IOException("Http2 error updating flow control", e);
+        }
+        return readAmount;
     }
 
     public void onData(Http2DataFrame dataFrame) {
@@ -139,18 +164,61 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
     }
 
     public void onData(Http2DataFrame dataFrame, int flowControlSize) {
-        if (dataFrame.payloadLength() > 0 || dataFrame.endStream()) {
-            lock.lock();
-            try {
+        int discardedCredit = 0;
+        int resetCredit = 0;
+        lock.lock();
+        try {
+            if (failure != null) {
+                resetCredit = flowControlSize;
+            } else if (discarding) {
+                discardedCredit = flowControlSize;
+                if (dataFrame.endStream()) {
+                    requestBodyComplete = true;
+                }
+            } else if (dataFrame.payloadLength() == 0) {
+                // RFC 9113 Section 6.9.1 counts the complete DATA payload,
+                // including the Pad Length field and padding, against flow
+                // control. There are no application bytes to retain in this
+                // case, so all of that capacity is reusable immediately.
+                discardedCredit = flowControlSize;
+                if (dataFrame.endStream()) {
+                    requestBodyComplete = true;
+                    frames.add(END_OF_STREAM);
+                    hasData.signal();
+                }
+            } else {
                 frames.add(new PendingDataFrame(dataFrame, flowControlSize));
                 if (dataFrame.endStream()) {
                     requestBodyComplete = true;
                 }
                 hasData.signal();
-            } finally {
-                lock.unlock();
             }
+        } finally {
+            lock.unlock();
         }
+        returnReusableCredit(discardedCredit);
+        refundDiscardedCredit(resetCredit);
+    }
+
+    void discardRemaining() {
+        int discardedCredit = 0;
+        lock.lock();
+        try {
+            if (!discarding && !isErrored()) {
+                discarding = true;
+                for (Object frame : frames) {
+                    if (frame instanceof PendingDataFrame) {
+                        discardedCredit += ((PendingDataFrame) frame).unreadCredit();
+                    }
+                }
+                frames.clear();
+                frames.add(DISCARDING);
+                hasData.signalAll();
+            }
+        } finally {
+            lock.unlock();
+        }
+        returnReusableCredit(discardedCredit);
     }
 
     void onTrailers(FieldBlock trailers) {
@@ -158,8 +226,10 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
         try {
             this.trailers = trailers;
             this.requestBodyComplete = true;
-            frames.add(END_OF_STREAM);
-            hasData.signal();
+            if (!discarding) {
+                frames.add(END_OF_STREAM);
+                hasData.signal();
+            }
         } finally {
             lock.unlock();
         }
@@ -170,15 +240,16 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
         var ex = (err == Http2ErrorCode.CANCEL)
             ? new EOFException("Client cancelled the request")
             : new IOException("Error reading request body: " + err.name() + " (" + err.code() + ")");
-        setErrored(ex, true);
+        setErrored(ex, UnreadDataCredit.REFUND_CONNECTION);
     }
 
-    private void setErrored(IOException ex, boolean refundUnreadData) {
+    private void setErrored(IOException ex, UnreadDataCredit refundUnreadData) {
         int discardedCredit = 0;
         lock.lock();
         try {
             if (!isErrored()) {
-                if (refundUnreadData) {
+                failure = ex;
+                if (refundUnreadData == UnreadDataCredit.REFUND_CONNECTION) {
                     for (Object frame : frames) {
                         if (frame instanceof PendingDataFrame) {
                             discardedCredit += ((PendingDataFrame) frame).unreadCredit();
@@ -187,11 +258,15 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
                 }
                 frames.clear();
                 frames.add(ex);
-                hasData.signal();
+                hasData.signalAll();
             }
         } finally {
             lock.unlock();
         }
+        refundDiscardedCredit(discardedCredit);
+    }
+
+    private void refundDiscardedCredit(int discardedCredit) {
         if (discardedCredit > 0) {
             try {
                 onDataDiscardedCallback.creditAvailable(discardedCredit);
@@ -201,15 +276,26 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
         }
     }
 
+    private void returnReusableCredit(int credit) {
+        if (credit > 0) {
+            try {
+                onDataReadCallback.creditAvailable(credit);
+            } catch (Http2Exception e) {
+                throw new IllegalStateException("Could not return HTTP/2 data credit", e);
+            }
+        }
+    }
+
+    // Guarded by lock.
     private boolean isErrored() {
-        return frames.size() == 1 && frames.peek() instanceof Exception;
+        return failure != null;
     }
 
     void cancel(IOException reason) {
-        cancel(reason, true);
+        cancel(reason, UnreadDataCredit.REFUND_CONNECTION);
     }
 
-    void cancel(IOException reason, boolean refundUnreadData) {
+    void cancel(IOException reason, UnreadDataCredit refundUnreadData) {
         setErrored(reason, refundUnreadData);
     }
 
@@ -234,8 +320,17 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
 
     @Override
     public @org.jspecify.annotations.Nullable Headers trailers() {
-        return trailers;
+        lock.lock();
+        try {
+            return trailers;
+        } finally {
+            lock.unlock();
+        }
     }
 
 
+}
+
+interface CreditAvailableListener {
+    void creditAvailable(int credit) throws Http2Exception;
 }

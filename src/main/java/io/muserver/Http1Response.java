@@ -12,7 +12,7 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
     @Nullable
     private WebsocketConnection websocket;
     @Nullable
-    private Long endMillis;
+    private Long endNanos;
     private boolean shouldCloseConnectionAfterResponse;
 
     Http1Response(Mu3Request muRequest, OutputStream socketOut) {
@@ -103,23 +103,26 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
                 out.close();
             }
         }
-        if (!responseState().endState()) {
-            setState(ResponseState.FINISHED);
-        }
+        setState(ResponseState.FINISHED);
     }
 
     @Override
-    void setState(ResponseState newState) {
-        super.setState(newState);
-        if (newState.endState()) {
-            endMillis = System.currentTimeMillis();
+    synchronized boolean setState(ResponseState newState) {
+        if (responseState().endState()) {
+            return false;
         }
+        if (newState.endState()) {
+            endNanos = System.nanoTime();
+        }
+        return super.setState(newState);
     }
 
     @Override
     public long duration() {
-        long endTime = endMillis != null ? endMillis : System.currentTimeMillis();
-        return endTime - request.startTime();
+        Long end = endNanos;
+        return end == null
+            ? MonotonicTime.elapsedMillisSince(request.startNanos())
+            : MonotonicTime.elapsedMillis(request.startNanos(), end);
     }
 
     @Override

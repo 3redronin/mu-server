@@ -268,6 +268,7 @@
                     <source>${jdk.version}</source>
                     <detectJavaApiLink>false</detectJavaApiLink>
                     <doclint>all</doclint>
+                    <excludePackageNames>io.muserver.internal</excludePackageNames>
                     <failOnWarnings>true</failOnWarnings>
                 </configuration>
                 <executions>

@@ -39,8 +39,8 @@ public interface RequestBodyListener {
 
     /**
      * <p>Called when request data is received from the client.</p>
-     * <p>NOTE: this method should not block as it runs on a socket acceptor thread. If you need to do any blocking operations
-     * it is recommended you process the data on another thread.</p>
+     * <p>This callback is dispatched on the server's asynchronous application executor.
+     * It should not block if other asynchronous application work shares that executor.</p>
      *
      * @param buffer       A buffer holding some of the request body data
      * @param doneCallback This must be called when the buffer is no longer needed

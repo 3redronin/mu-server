@@ -2,9 +2,7 @@ package io.muserver;
 
 import org.jspecify.annotations.Nullable;
 
-import java.util.HashSet;
 import java.util.LinkedList;
-import java.util.Set;
 
 class HpackTable {
 
@@ -83,8 +81,6 @@ class HpackTable {
      */
     private int maxSize;
 
-    private final Set<FieldLine> neverIndex = new HashSet<>();
-
     HpackTable(int maxSize) {
         this.maxSize = maxSize;
     }
@@ -159,15 +155,6 @@ class HpackTable {
         trimSize();
     }
 
-    void neverIndex(FieldLine line) {
-        System.out.println("Never index " + line);
-        neverIndex.add(line);
-    }
-
-    boolean isNeverIndex(FieldLine line) {
-        return neverIndex.contains(line);
-    }
-
     /**
      * From rfc7541 4.1:
      *
@@ -182,7 +169,7 @@ class HpackTable {
     public int dynamicTableSizeInBytes() {
         int size = 0;
         for (FieldLine line : dynamicQueue) {
-            size += line.length() + 32;
+            size += line.hpackSize();
         }
         return size;
     }

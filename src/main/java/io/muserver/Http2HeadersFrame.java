@@ -34,12 +34,34 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
      * @throws IOException if there is an error reading from the client input during processing
      */
     static Http2HeadersFrame readLogicalFrame(Http2FrameHeader frameHeader, FieldBlockDecoder fieldBlockDecoder, ByteBuffer buffer, InputStream clientIn) throws HttpException, Http2Exception, IOException {
+        return readLogicalFrame(
+            frameHeader,
+            fieldBlockDecoder,
+            buffer,
+            clientIn,
+            Integer.MAX_VALUE
+        );
+    }
+
+    static Http2HeadersFrame readLogicalFrame(
+        Http2FrameHeader frameHeader,
+        FieldBlockDecoder fieldBlockDecoder,
+        ByteBuffer buffer,
+        InputStream clientIn,
+        int maxBufferedFieldBlockSize
+    ) throws HttpException, Http2Exception, IOException {
+        if (maxBufferedFieldBlockSize < 1) {
+            throw new IllegalArgumentException(
+                "The maximum buffered field block size must be positive"
+            );
+        }
         // figure out the fields
         var priority = (frameHeader.flags() & 0b00100000) > 0;
         var padded = (frameHeader.flags() & 0b00001000) > 0;
         var endHeaders = (frameHeader.flags() & 0b00000100) > 0;
         var endStream = (frameHeader.flags() & 0b0000001) > 0;
         int hpackLength = frameHeader.length();
+        Http2Exception deferredStreamError = null;
 
         int padLength = 0;
         if (padded) {
@@ -62,7 +84,14 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
             int streamDependency = buffer.getInt() & 0x7FFFFFFF;
             buffer.get();
             if (streamDependency == frameHeader.streamId()) {
-                throw Http2Exception.stream(Http2ErrorCode.PROTOCOL_ERROR, "HEADERS stream cannot depend on itself", frameHeader.streamId());
+                // This is a stream error, so the connection remains usable. Consume and
+                // decode the complete field block before throwing to preserve HPACK state
+                // and leave the reader positioned at the next frame.
+                deferredStreamError = Http2Exception.stream(
+                    Http2ErrorCode.PROTOCOL_ERROR,
+                    "HEADERS stream cannot depend on itself",
+                    frameHeader.streamId()
+                );
             }
         }
 
@@ -86,7 +115,17 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
                 headers = new FieldBlock();
             }
         } else {
-            baos = new NiceByteArrayOutputStream(Math.max(32, hpackLength * 2));
+            requireFieldBlockCapacity(
+                0,
+                hpackLength,
+                maxBufferedFieldBlockSize
+            );
+            baos = new NiceByteArrayOutputStream(
+                Math.min(
+                    maxBufferedFieldBlockSize,
+                    Math.max(32, hpackLength)
+                )
+            );
             if (hpackLength > 0) {
                 if (buffer.hasArray()) {
                     baos.write(buffer.array(), buffer.arrayOffset() + buffer.position(), hpackLength);
@@ -111,13 +150,26 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
                 if (hf.frameType() != Http2FrameType.CONTINUATION) {
                     throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "invalid frame type: expected CONTINUATION");
                 }
-                Mutils.readAtLeast(buffer, clientIn, hf.length());
-                var cf = Http2ContinuationFrame.readFrom(hf, buffer);
-                if (cf.streamId() != frameHeader.streamId()) {
+                if (hf.streamId() != frameHeader.streamId()) {
                     throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "stream id mismatch");
                 }
-                baos.write(cf.fragment());
-                ended = cf.endHeaders();
+                requireFieldBlockCapacity(
+                    baos.size(),
+                    hf.length(),
+                    maxBufferedFieldBlockSize
+                );
+                Mutils.readAtLeast(buffer, clientIn, hf.length());
+                if (buffer.hasArray()) {
+                    baos.write(
+                        buffer.array(),
+                        buffer.arrayOffset() + buffer.position(),
+                        hf.length()
+                    );
+                    buffer.position(buffer.position() + hf.length());
+                } else {
+                    throw new IllegalStateException("Not supported");
+                }
+                ended = (hf.flags() & 0b00000100) > 0;
             }
             try {
                 headers = fieldBlockDecoder.decodeFrom(baos.toByteBuffer());
@@ -127,11 +179,30 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
             }
         }
 
+        if (deferredStreamError != null) {
+            throw deferredStreamError;
+        }
         if (invalidRequestException != null) {
             throw invalidRequestException;
         }
 
         return new Http2HeadersFrame(frameHeader.streamId(), endStream, java.util.Objects.requireNonNull(headers));
+    }
+
+    private static void requireFieldBlockCapacity(
+        int currentSize,
+        int fragmentSize,
+        int maximumSize
+    ) throws Http2Exception {
+        if (fragmentSize > maximumSize - currentSize) {
+            // RFC 9113 Sections 4.3 and 10.5.1 require either processing the
+            // complete field block or closing the connection. Closing bounds
+            // memory without leaving the shared HPACK context inconsistent.
+            throw Http2Exception.connection(
+                Http2ErrorCode.COMPRESSION_ERROR,
+                "Encoded field block exceeds the configured buffering limit"
+            );
+        }
     }
 
     @Override
@@ -228,6 +299,7 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
             '}';
     }
 
+    @Override
     public int streamId() {
         return streamId;
     }

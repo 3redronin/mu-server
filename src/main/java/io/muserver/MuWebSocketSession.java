@@ -7,13 +7,41 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 
 /**
  * <p>A web socket session used to send messages and events to a web socket client.</p>
- * <p>The simplest way to get a reference to a session is to extend {@link BaseWebSocket} and use the {@link BaseWebSocket#session()} method.</p>
+ * <p>Extend {@link SimpleWebSocket} for blocking receive methods or {@link BaseWebSocket} for
+ * asynchronous receive methods. Both expose the session through their {@code session()} method.</p>
+ * <p>Send methods with a {@link DoneCallback} return without waiting for the write. Mu performs
+ * the write on its internal IO executor and invokes the callback on the configured application
+ * executor, passing null on success or the failure. Chain sends through their completion callbacks
+ * when their order matters. A rejected completion callback closes the connection and may not be delivered.</p>
+ * <p>For asynchronous sends of a byte buffer, do not change its contents, position or limit until
+ * the callback runs. When echoing a buffer from an asynchronous receive method, pass that method's
+ * completion callback to the send. Buffers from blocking receive methods must be copied before
+ * returning if an asynchronous send still needs them.</p>
  */
 public interface MuWebSocketSession {
+
+    private void runAsync(Runnable task, DoneCallback doneCallback) {
+        Executor executor = this instanceof WebsocketConnection
+            ? ((WebsocketConnection) this).asyncExecutor() : ForkJoinPool.commonPool();
+        CompletableFuture<Void> result;
+        try { result = CompletableFuture.runAsync(task, executor); }
+        catch (RuntimeException failure) { result = CompletableFuture.failedFuture(failure); }
+        result.whenComplete((ignored, failure) -> {
+            Throwable cause = failure instanceof java.util.concurrent.CompletionException ? failure.getCause() : failure;
+            if (this instanceof WebsocketConnection) {
+                ((WebsocketConnection) this).dispatchWriteCallback(doneCallback, cause);
+            } else {
+                try { doneCallback.onComplete(cause); }
+                catch (Exception ignoredFailure) { }
+            }
+        });
+    }
 
     /**
      * Specifies whether a close frame sent from the client has been received
@@ -48,23 +76,17 @@ public interface MuWebSocketSession {
      * Sends a message to the client asynchronously
      * @param message The message to be sent
      * @param doneCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
-     *                      use {@link DoneCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
-     *                      pass the <code>onComplete</code> received to this parameter.
-     * @deprecated Non-blocking operations no longer supported. Use the blocking {@link #sendText(String)} instead
+     *                      use {@link DoneCallback#NoOp}. For asynchronous {@link BaseWebSocket} receives,
+     *                      the receive completion callback can be passed here.
      */
-    @Deprecated
     default void sendText(String message, DoneCallback doneCallback) {
-        CompletableFuture.runAsync(() -> {
+        runAsync(() -> {
             try {
                 sendText(message);
-                doneCallback.onComplete(null);
             } catch (Exception e) {
-                try {
-                    doneCallback.onComplete(e);
-                } catch (Exception ignored) {
-                }
+                throw new java.util.concurrent.CompletionException(e);
             }
-        });
+        }, doneCallback);
     }
 
 
@@ -73,23 +95,17 @@ public interface MuWebSocketSession {
      * @param message The message to be sent
      * @param isLastFragment If <code>false</code> then this message will be sent as a partial fragment
      * @param doneCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
-     *                      use {@link DoneCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
-     *                      pass the <code>onComplete</code> received to this parameter.
-     * @deprecated Non-blocking operations no longer supported. Use the blocking {@link #sendText(String)} instead
+     *                      use {@link DoneCallback#NoOp}. For asynchronous {@link BaseWebSocket} receives,
+     *                      the receive completion callback can be passed here.
      */
-    @Deprecated
     default void sendText(String message, boolean isLastFragment, DoneCallback doneCallback) {
-        CompletableFuture.runAsync(() -> {
+        runAsync(() -> {
             try {
                 sendTextFragment(ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8)), isLastFragment);
-                doneCallback.onComplete(null);
             } catch (Exception e) {
-                try {
-                    doneCallback.onComplete(e);
-                } catch (Exception ignored) {
-                }
+                throw new java.util.concurrent.CompletionException(e);
             }
-        });
+        }, doneCallback);
     }
 
 
@@ -105,23 +121,17 @@ public interface MuWebSocketSession {
      * Sends a message to the client asynchronously
      * @param message The message to be sent
      * @param doneCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
-     *                      use {@link DoneCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
-     *                      pass the <code>onComplete</code> received to this parameter.
-     * @deprecated Non-blocking operations no longer supported. Use the blocking {@link #sendText(String)} instead
+     *                      use {@link DoneCallback#NoOp}. For asynchronous {@link BaseWebSocket} receives,
+     *                      the receive completion callback can be passed here.
      */
-    @Deprecated
     default void sendBinary(ByteBuffer message, DoneCallback doneCallback) {
-        CompletableFuture.runAsync(() -> {
+        runAsync(() -> {
             try {
                 sendBinary(message);
-                doneCallback.onComplete(null);
             } catch (Exception e) {
-                try {
-                    doneCallback.onComplete(e);
-                } catch (Exception ignored) {
-                }
+                throw new java.util.concurrent.CompletionException(e);
             }
-        });
+        }, doneCallback);
     }
 
     /**
@@ -138,29 +148,24 @@ public interface MuWebSocketSession {
      * @param message The message to be sent
      * @param isLastFragment If <code>false</code> then this message will be sent as a partial fragment
      * @param doneCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
-     *                      use {@link DoneCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
-     *                      pass the <code>onComplete</code> received to this parameter.
-     * @deprecated Non-blocking operations no longer supported. Use the blocking {@link #sendText(String)} instead
+     *                      use {@link DoneCallback#NoOp}. For asynchronous {@link BaseWebSocket} receives,
+     *                      the receive completion callback can be passed here.
      */
-    @Deprecated
     default void sendBinary(ByteBuffer message, boolean isLastFragment, DoneCallback doneCallback) {
-        CompletableFuture.runAsync(() -> {
+        runAsync(() -> {
             try {
                 sendBinaryFragment(message, isLastFragment);
-                doneCallback.onComplete(null);
             } catch (Exception e) {
-                try {
-                    doneCallback.onComplete(e);
-                } catch (Exception ignored) {
-                }
+                throw new java.util.concurrent.CompletionException(e);
             }
-        });
+        }, doneCallback);
     }
 
     /**
      * Sends a ping message to the client, which is used for keeping sockets alive.
      * @param payload The message to send.
      * @throws IOException If the ping cannot be written to the client.
+     * @throws IllegalArgumentException if the payload exceeds 125 bytes
      */
     void sendPing(ByteBuffer payload) throws IOException;
 
@@ -168,29 +173,24 @@ public interface MuWebSocketSession {
      * Sends a ping message to the client, which is used for keeping sockets alive.
      * @param payload The message to send.
      * @param doneCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
-     *                      use {@link DoneCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
-     *                      pass the <code>onComplete</code> received to this parameter.
-     * @deprecated Non-blocking operations no longer supported. Use the blocking {@link #sendText(String)} instead
+     *                      use {@link DoneCallback#NoOp}. For asynchronous {@link BaseWebSocket} receives,
+     *                      the receive completion callback can be passed here.
      */
-    @Deprecated
     default void sendPing(ByteBuffer payload, DoneCallback doneCallback) {
-        CompletableFuture.runAsync(() -> {
+        runAsync(() -> {
             try {
                 sendPing(payload);
-                doneCallback.onComplete(null);
             } catch (Exception e) {
-                try {
-                    doneCallback.onComplete(e);
-                } catch (Exception ignored) {
-                }
+                throw new java.util.concurrent.CompletionException(e);
             }
-        });
+        }, doneCallback);
     }
 
     /**
      * Sends a pong message to the client, generally in response to receiving a ping via {@link MuWebSocket#onPing(ByteBuffer)}
      * @param payload The payload to send back to the client.
      * @throws IOException If the pong cannot be written to the client.
+     * @throws IllegalArgumentException if the payload exceeds 125 bytes
      */
     void sendPong(ByteBuffer payload) throws IOException;
 
@@ -198,23 +198,17 @@ public interface MuWebSocketSession {
      * Sends a pong message to the client, generally in response to receiving a ping via {@link MuWebSocket#onPing(ByteBuffer)}
      * @param payload The payload to send back to the client.
      * @param doneCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
-     *                      use {@link DoneCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
-     *                      pass the <code>onComplete</code> received to this parameter.
-     * @deprecated Non-blocking operations no longer supported. Use the blocking {@link #sendText(String)} instead
+     *                      use {@link DoneCallback#NoOp}. For asynchronous {@link BaseWebSocket} receives,
+     *                      the receive completion callback can be passed here.
      */
-    @Deprecated
     default void sendPong(ByteBuffer payload, DoneCallback doneCallback) {
-        CompletableFuture.runAsync(() -> {
+        runAsync(() -> {
             try {
                 sendPong(payload);
-                doneCallback.onComplete(null);
             } catch (Exception e) {
-                try {
-                    doneCallback.onComplete(e);
-                } catch (Exception ignored) {
-                }
+                throw new java.util.concurrent.CompletionException(e);
             }
-        });
+        }, doneCallback);
     }
 
     /**
@@ -228,6 +222,7 @@ public interface MuWebSocketSession {
      * @param statusCode The status code to send, such as <code>1000</code>. See <a href="https://tools.ietf.org/html/rfc6455#section-7.4">https://tools.ietf.org/html/rfc6455#section-7.4</a>
      * @param reason An optional reason for closing.
      * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
+     * @throws IllegalArgumentException if the UTF-8-encoded reason exceeds 123 bytes
      */
     void close(int statusCode, @Nullable String reason) throws IOException;
 
@@ -256,7 +251,9 @@ public interface MuWebSocketSession {
      * are configured using {@link WebSocketHandlerBuilder#withPingInterval(int, TimeUnit)}.
      * If the ping was initiated by your own code by calling {@link MuWebSocketSession#sendPing(ByteBuffer)}
      * or the client sent an unsolicited pong message, or the pong response does not contain the
-     * payload sent in the ping, then <code>null</code> is returned.</p>
+     * payload sent in the ping, then <code>null</code> is returned. Each outstanding ping is
+     * measured at most once: repeated calls with the same payload, replayed pongs and pings
+     * evicted from the bounded outstanding-ping history also return null.</p>
      *
      * @param pongPayload the payload received in a pong message. The buffer will be read from its current position
      *                    and after returning the position will not have been incremented.

@@ -11,10 +11,13 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.security.cert.Certificate;
-import java.time.Instant;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -23,6 +26,7 @@ import static java.util.Collections.emptySet;
 class Http1Connection extends BaseHttpConnection {
 
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
+    private final ExecutorService handlerExecutor;
     private final Queue<HttpRequestTemp> requestPipeline = new ConcurrentLinkedQueue<>();
     // At most one active exchange exists on HTTP/1.1: either an HTTP request/response or a websocket takeover.
     private final AtomicReference<@Nullable ActiveExchange> activeExchange = new AtomicReference<>();
@@ -33,24 +37,55 @@ class Http1Connection extends BaseHttpConnection {
         @Nullable
         final Mu3Request request;
         @Nullable
+        final BaseResponse response;
+        @Nullable
         final WebsocketConnection websocket;
 
-        private ActiveExchange(@Nullable Mu3Request request, @Nullable WebsocketConnection websocket) {
+        private ActiveExchange(
+            @Nullable Mu3Request request,
+            @Nullable BaseResponse response,
+            @Nullable WebsocketConnection websocket
+        ) {
             this.request = request;
+            this.response = response;
             this.websocket = websocket;
         }
 
-        static ActiveExchange forRequest(Mu3Request request) {
-            return new ActiveExchange(request, null);
+        static ActiveExchange forRequest(
+            Mu3Request request,
+            BaseResponse response
+        ) {
+            return new ActiveExchange(request, response, null);
         }
 
         static ActiveExchange forWebsocket(WebsocketConnection websocket) {
-            return new ActiveExchange(null, websocket);
+            return new ActiveExchange(null, null, websocket);
         }
     }
 
-    Http1Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, @Nullable Certificate clientCertificate, Instant handshakeStartTime) {
-        super(server, creator, clientSocket, clientCertificate, handshakeStartTime);
+    private static final class HandlerExecution {
+        private final boolean accepted;
+        private final @Nullable CompletableFuture<@Nullable Void> asyncCompletion;
+
+        private HandlerExecution(boolean accepted, @Nullable CompletableFuture<@Nullable Void> asyncCompletion) {
+            this.accepted = accepted;
+            this.asyncCompletion = asyncCompletion;
+        }
+
+        private static HandlerExecution accepted(@Nullable CompletableFuture<@Nullable Void> asyncCompletion) {
+            return new HandlerExecution(true, asyncCompletion);
+        }
+
+        private static HandlerExecution rejected() {
+            return new HandlerExecution(false, null);
+        }
+    }
+
+    Http1Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket,
+                    @Nullable Certificate clientCertificate, ConnectionAcceptedTime acceptedTime,
+                    ExecutorService handlerExecutor) {
+        super(server, creator, clientSocket, clientCertificate, acceptedTime);
+        this.handlerExecutor = handlerExecutor;
     }
 
     @Override
@@ -108,47 +143,59 @@ class Http1Connection extends BaseHttpConnection {
                 muRequest.setResponse(muResponse);
                 closeConnection = muRequest.headers().closeConnectionRequested(httpVersion);
 
-                if (rejectException == null) {
-                    RateLimitRejectionAction first = null;
-                    for (RateLimiterImpl rateLimiter : server.rateLimiters) {
-                        var action = rateLimiter.record(muRequest);
-                        if (action != null && first == null) {
-                            first = action;
-                        }
-                    }
-                    if (first != null) {
-                        if (first == RateLimitRejectionAction.SEND_429) {
-                            rejectException = new HttpException(HttpStatus.TOO_MANY_REQUESTS_429);
-                            rejectException.responseHeaders().setAll(request.headers());
-                        }
-                    }
-                }
-
                 if (rejectException != null) {
                     onInvalidRequest(rejectException);
                     String rejectedMethod = method.name();
                     String rejectReason = rejectException.getMessage() != null ? rejectException.getMessage() : rejectException.status().toString();
-                    server.onRequestRejected(new RejectedRequestImpl(rejectException.status().code(),
-                        rejectReason, rejectedMethod, requestUri.toString(), this));
-                    muResponse.status(rejectException.status());
-                    muResponse.headers().set(rejectException.responseHeaders());
-                    if (rejectException.getMessage() != null) {
-                        muResponse.write(rejectException.getMessage());
+                    var rejectedRequest = new RejectedRequestImpl(
+                        rejectException.status().code(),
+                        rejectReason,
+                        rejectedMethod,
+                        requestUri.toString(),
+                        this
+                    );
+                    try {
+                        muResponse.status(rejectException.status());
+                        muResponse.headers().set(rejectException.responseHeaders());
+                        if (rejectException.getMessage() != null) {
+                            muResponse.write(rejectException.getMessage());
+                        }
+                        closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest);
+                    } finally {
+                        // Rejection listeners are also an audit/metrics hook. Notify after
+                        // attempting the response even when the client aborts during its write.
+                        server.onRequestRejected(rejectedRequest);
                     }
-                    closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest);
                 } else {
 
                     onRequestStarted(muRequest);
 
+                    boolean rejectedByHandlerExecutor = false;
                     try {
-                        handleExchange(muRequest, muResponse);
-                        closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest);
+                        HandlerExecution execution = handleExchangeOnHandlerExecutor(muRequest, muResponse);
+                        if (execution.accepted) {
+                            CompletableFuture<@Nullable Void> asyncCompletion = execution.asyncCompletion;
+                            if (asyncCompletion != null) {
+                                awaitAsyncCompletion(asyncCompletion, muRequest, muResponse);
+                            }
+                            closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest);
+                        } else {
+                            rejectedByHandlerExecutor = true;
+                            closeConnection = rejectRequestDueToHandlerOverload(muRequest, outputStream);
+                        }
                     } catch (Throwable e) {
+                        if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+                        FatalErrors.rethrow(e);
                         closeConnection = true;
                         log.warn("Unrecoverable error for " + muRequest, e);
                         muResponse.setState(ResponseState.ERRORED);
                     } finally {
-                        onExchangeEnded(muResponse);
+                        if (muRequest.wasRateLimitRejected()) {
+                            onApplicationRequestRejected(muRequest);
+                            server.onRequestRejected(rateLimitRejection(muRequest));
+                        } else if (!rejectedByHandlerExecutor) {
+                            onExchangeEndedOnHandler(muResponse);
+                        }
                         clientSocket.setSoTimeout(0);
                     }
                     var websocket = muResponse.getWebsocket();
@@ -162,12 +209,101 @@ class Http1Connection extends BaseHttpConnection {
                 closeConnection = closeConnection || state.get() != HttpConnectionState.OPEN || closed.get();
             }
         } catch (Exception e) {
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             // probably shouldn't log here so much for things like IO errors which would be common when clients disconnect
             log.error("Unhandled error at the socket", e);
         } finally {
             activeExchange.set(null);
             closeTransportQuietly();
         }
+    }
+
+    private HandlerExecution handleExchangeOnHandlerExecutor(Mu3Request request, Http1Response response) throws Throwable {
+        if (!server.tryAdmit(request)) return HandlerExecution.rejected();
+        CompletableFuture<@Nullable CompletableFuture<@Nullable Void>> completion = new CompletableFuture<>();
+        try {
+            handlerExecutor.execute(server.handlerApplicationTask(() -> {
+                try {
+                    completion.complete(response.responseState().endState() ? null : handleExchange(request, response));
+                } catch (Throwable t) {
+                    completion.completeExceptionally(t);
+                    FatalErrors.rethrow(t);
+                }
+            }));
+        } catch (RejectedExecutionException rejected) {
+            return HandlerExecution.rejected();
+        }
+        try {
+            return HandlerExecution.accepted(completion.get());
+        } catch (ExecutionException e) {
+            throw e.getCause();
+        }
+    }
+
+    private void awaitAsyncCompletion(CompletableFuture<@Nullable Void> completion, Mu3Request request,
+                                      Http1Response response) throws Throwable {
+        try {
+            completion.get();
+        } catch (ExecutionException e) {
+            Throwable failure = e.getCause();
+            if (!(failure instanceof Exception)) {
+                throw failure;
+            }
+            handleAsyncExceptionOnHandler(request, response, (Exception) failure);
+        }
+    }
+
+    private void handleAsyncExceptionOnHandler(Mu3Request request, Http1Response response,
+                                               Exception failure) throws Throwable {
+        CompletableFuture<@Nullable Void> handled = new CompletableFuture<>();
+        Runnable task = () -> {
+            try {
+                handleExchangeException(request, response, failure);
+                handled.complete(null);
+            } catch (Throwable t) {
+                handled.completeExceptionally(t);
+                FatalErrors.rethrow(t);
+            }
+        };
+        RejectedExecutionException rejected = server.tryExecuteHandlerTask(task);
+        if (rejected != null) {
+            handled.completeExceptionally(rejected);
+        }
+        try {
+            handled.get();
+        } catch (ExecutionException e) {
+            throw e.getCause();
+        }
+    }
+
+    private void onExchangeEndedOnHandler(Http1Response response) {
+        recordExchangeEnded(response);
+        server.executeResponseCompletionTask(() -> notifyExchangeEnded(response));
+    }
+
+    private boolean rejectRequestDueToHandlerOverload(Mu3Request request, OutputStream outputStream) throws IOException {
+        rejectedDueToOverload.incrementAndGet();
+        server.getStatsImpl().onRejectedDueToOverload();
+        onApplicationRequestRejected(request);
+
+        String rejectionReason = "503 Service Unavailable";
+        outputStream.write(ConnectionAcceptor.serverUnavailableResponse);
+        outputStream.flush();
+        server.onRequestRejected(new RejectedRequestImpl(
+            HttpStatus.SERVICE_UNAVAILABLE_503.code(),
+            rejectionReason,
+            request.method().name(),
+            request.uri().toString(),
+            this
+        ));
+        return true;
+    }
+
+    private void onApplicationRequestRejected(Mu3Request request) {
+        server.onRequestSubmissionRejected(request);
+        activeExchange.updateAndGet(cur ->
+            cur != null && isSameRequest(cur.request, request) ? null : cur
+        );
     }
 
     private boolean cleanUpNicely(Boolean closeConnection, Http1Response muResponse, Mu3Request muRequest) {
@@ -195,14 +331,17 @@ class Http1Connection extends BaseHttpConnection {
 
     @Override
     public void onRequestStarted(Mu3Request req) {
-        activeExchange.set(ActiveExchange.forRequest(req));
+        activeExchange.set(ActiveExchange.forRequest(
+            req,
+            req.responseForConnection()
+        ));
         super.onRequestStarted(req);
     }
 
     @Override
-    public void onExchangeEnded(ResponseInfo exchange) {
+    protected void recordExchangeEnded(ResponseInfo exchange) {
         activeExchange.updateAndGet(cur -> cur != null && isSameRequest(cur.request, exchange.request()) ? null : cur);
-        super.onExchangeEnded(exchange);
+        super.recordExchangeEnded(exchange);
     }
 
     @SuppressWarnings("ReferenceEquality") // Connection ownership belongs to the exact request instance.
@@ -231,7 +370,10 @@ class Http1Connection extends BaseHttpConnection {
     @Override
     public void abort() throws IOException {
         if (closed.compareAndSet(false, true)) {
-            completeAsyncRequest(new MuException("Connection aborted"));
+            terminateActiveRequest(
+                ResponseState.ERRORED,
+                new MuException("Connection aborted")
+            );
             state.set(HttpConnectionState.CLOSED);
             clientSocket.close();
         } else {
@@ -242,7 +384,10 @@ class Http1Connection extends BaseHttpConnection {
     @Override
     public void abortWithTimeout() throws IOException {
         if (closed.compareAndSet(false, true)) {
-            completeAsyncRequest(new TimeoutException("Idle timeout exceeded"));
+            terminateActiveRequest(
+                ResponseState.TIMED_OUT,
+                new TimeoutException("Idle timeout exceeded")
+            );
             notifyWebsocketTimeout();
             state.set(HttpConnectionState.CLOSED);
             clientSocket.close();
@@ -258,10 +403,11 @@ class Http1Connection extends BaseHttpConnection {
         if (isIdle()) {
             log.info("Connection is idle; shutting down");
             forceShutdown();
-        } else if (!activeWebsockets().isEmpty()) {
-            for (MuWebSocket activeWebsocket : activeWebsockets()) {
+        } else {
+            var cur = activeExchange.get();
+            if (cur != null && cur.websocket != null) {
                 try {
-                    activeWebsocket.onServerShuttingDown();
+                    cur.websocket.onServerShuttingDown();
                 } catch (Exception e) {
                     log.info("Error while aborting websocket: {}", e.getMessage());
                     forceShutdown();
@@ -302,7 +448,11 @@ class Http1Connection extends BaseHttpConnection {
         }
     }
 
-    private void completeAsyncRequest(Exception error) {
+    private void terminateActiveRequest(
+        ResponseState terminalState,
+        Exception error
+    ) {
+        markActiveResponse(terminalState);
         var cur = activeExchange.get();
         if (cur != null && cur.request != null) {
             Mu3AsyncHandleImpl asyncHandle = cur.request.getAsyncHandle();
@@ -312,10 +462,38 @@ class Http1Connection extends BaseHttpConnection {
         }
     }
 
+    private void markActiveResponse(ResponseState terminalState) {
+        var cur = activeExchange.get();
+        if (cur != null && cur.response != null) {
+            cur.response.setState(terminalState);
+        }
+    }
+
+    @Override
+    void onTransportInputEnd() {
+        markActiveResponse(ResponseState.CLIENT_DISCONNECTED);
+    }
+
+    @Override
+    void onTransportInputFailure(IOException failure) {
+        // The HTTP/1 request deadline is implemented as a socket read timeout.
+        // Leave that non-terminal so the parser can turn it into a 408 response;
+        // connection-idle timeout is published by abortWithTimeout().
+        if (!(failure instanceof java.net.SocketTimeoutException)) {
+            markActiveResponse(ResponseState.CLIENT_DISCONNECTED);
+        }
+    }
+
+    @Override
+    void onTransportOutputFailure(IOException failure) {
+        markActiveResponse(ResponseState.CLIENT_DISCONNECTED);
+    }
+
     private void notifyWebsocketTimeout() {
         var cur = activeExchange.get();
         if (cur != null && cur.websocket != null) {
             cur.websocket.onTimeout();
         }
     }
+
 }

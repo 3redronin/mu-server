@@ -86,6 +86,60 @@ class RFC9113_6_10_ContinuationTest {
         }
     }
 
+    @Test
+    void aContinuationSequenceCannotGrowTheFieldBlockWithoutBound() throws Exception {
+        server = httpsServer()
+            .withMaxHeadersSize(65536)
+            .withHttp2Config(
+                Http2ConfigBuilder.http2Enabled().withMaxHeaderListSize(512)
+            )
+            .start();
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            byte[] fullFrame = new byte[16384];
+            Arrays.fill(fullFrame, (byte) 0x82);
+
+            con.handshake()
+                .writeRaw(headersFrame(1, true, false, fullFrame))
+                .writeRaw(continuationFrame(1, true, new byte[]{(byte) 0x82}))
+                .flush();
+
+            assertThat(
+                con.readLogicalFrame(),
+                equalTo(goAway(0, Http2ErrorCode.COMPRESSION_ERROR))
+            );
+            assertThrows(IOException.class, con::readFrameHeader);
+        }
+    }
+
+    @Test
+    void http2HeaderLimitCanExceedTheServerWideLimit() throws Exception {
+        server = httpsServer()
+            .withMaxHeadersSize(128)
+            .withHttp2Config(
+                Http2ConfigBuilder.http2Enabled().withMaxHeaderListSize(512)
+            )
+            .addHandler(
+                Method.GET,
+                "/hello",
+                (request, response, pathParams) -> response.status(202)
+            )
+            .start();
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            var headers = getHelloHeaders(getPort());
+            headers.add("x-large-for-http1", "x".repeat(200));
+
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, true, headers))
+                .flush();
+
+            var response = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(response.streamId(), equalTo(1));
+            assertThat(response.headers().get(":status"), equalTo("202"));
+        }
+    }
+
     private byte[] priorityFrame(int streamId) {
         return new byte[] {
             0, 0, 5,

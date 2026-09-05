@@ -14,14 +14,18 @@ import java.io.PushbackInputStream;
 import java.net.*;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.Certificate;
-import java.time.Instant;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
 
 class ConnectionAcceptor {
     private static final Logger log = LoggerFactory.getLogger(ConnectionAcceptor.class);
@@ -33,7 +37,9 @@ class ConnectionAcceptor {
     private final URI uri;
     private volatile @Nullable HttpsConfig httpsConfig;
     private final @Nullable Http2Config http2Config;
-    private final ExecutorService executorService;
+    private final ExecutorService handlerExecutor;
+    private final ExecutorService connectionExecutor;
+    private final ExecutorService http2WriterExecutor;
     private final List<ContentEncoder> contentEncoders;
 
     public boolean isHttps() {
@@ -57,38 +63,50 @@ class ConnectionAcceptor {
 
     private enum State { NOT_STARTED, STARTED, STOPPING, STOPPED }
 
-    private final ConcurrentHashMap.KeySetView<BaseHttpConnection, Boolean> connections = ConcurrentHashMap.newKeySet();
+    // Owns listener state, accepted-to-live connection promotion, and shutdown
+    // drain signalling. Socket close and connection callbacks happen outside it.
+    private final ReentrantLock lifecycleLock = new ReentrantLock();
+    private final Condition connectionRetired = lifecycleLock.newCondition();
+    private final Set<Socket> acceptedSockets = new HashSet<>();
+    private final Set<BaseHttpConnection> connections = new HashSet<>();
 
     public Set<HttpConnection> activeConnections() {
-        return Set.copyOf(connections);
+        lifecycleLock.lock();
+        try {
+            return Set.copyOf(connections);
+        } finally {
+            lifecycleLock.unlock();
+        }
     }
 
     private volatile State state = State.NOT_STARTED;
-    private volatile long gracefulShutdownTimeoutMillis = 20_000;
-    private volatile long gracefulShutdownDeadlineMillis = Long.MAX_VALUE;
+    private static final long FALLBACK_SHUTDOWN_TIMEOUT_MILLIS = 20_000;
+    private volatile long gracefulShutdownDeadlineNanos = Long.MAX_VALUE;
     private volatile boolean lastStopWasGraceful = true;
 
     private final boolean isHttps;
 
     private final Thread acceptorThread;
-    private final @Nullable Thread timeoutThread;
+    private volatile @Nullable ScheduledFuture<?> timeoutTask;
 
     ConnectionAcceptor(Mu3ServerImpl server, ServerSocket socketServer, InetSocketAddress address, URI uri,
                        @Nullable HttpsConfig httpsConfig, @Nullable Http2Config http2Config,
-                       ExecutorService executorService, List<ContentEncoder> contentEncoders) {
+                       ExecutorService handlerExecutor, ExecutorService connectionExecutor,
+                       ExecutorService http2WriterExecutor,
+                       List<ContentEncoder> contentEncoders) {
         this.server = server;
         this.socketServer = socketServer;
         this.address = address;
         this.uri = uri;
         this.httpsConfig = httpsConfig;
         this.http2Config = http2Config;
-        this.executorService = executorService;
+        this.handlerExecutor = handlerExecutor;
+        this.connectionExecutor = connectionExecutor;
+        this.http2WriterExecutor = http2WriterExecutor;
         this.contentEncoders = contentEncoders;
         this.isHttps = httpsConfig != null;
 
         this.acceptorThread = new Thread(this::acceptLoop, toString());
-        this.timeoutThread = server.idleTimeoutMillis() == 0 ? null :
-            new Thread(this::timeoutLoop, this + "-watcher");
     }
 
 
@@ -98,23 +116,29 @@ class ConnectionAcceptor {
             try {
                 Socket clientSocket = socketServer.accept();
                 clientSocket.setTcpNoDelay(true);
-                Instant startTime = Instant.now();
+                if (!registerAcceptedSocket(clientSocket)) {
+                    closeQuietly(clientSocket);
+                    continue;
+                }
+                ConnectionAcceptedTime acceptedTime = ConnectionAcceptedTime.now();
                 try {
-                    executorService.submit(() -> {
-                        handleClientSocket(clientSocket, startTime, h2, false);
-                    });
+                    connectionExecutor.execute(
+                        () -> runAcceptedSocket(clientSocket, acceptedTime, h2, false)
+                    );
                 } catch (RejectedExecutionException e) {
-                    int oldTimeout = clientSocket.getSoTimeout();
                     try {
                         clientSocket.setSoTimeout(2000);
-                        handleClientSocket(clientSocket, startTime, false, true);
+                        runAcceptedSocket(clientSocket, acceptedTime, false, true);
                     } catch (Exception e2) {
-                        log.info("Exception while writing 503 when executor is full: {}", e.getMessage());
-                    } finally {
-                        clientSocket.setSoTimeout(oldTimeout);
+                        log.info("Exception while writing 503 when executor is full: {}", e2.getMessage());
                     }
+                } catch (RuntimeException | Error submissionFailure) {
+                    retireAcceptedSocket(clientSocket);
+                    closeQuietly(clientSocket);
+                    throw submissionFailure;
                 }
             } catch (Throwable e) {
+                FatalErrors.rethrow(e);
                 if (Thread.interrupted() || e instanceof SocketException) {
                     log.info("Accept listening stopped");
                 } else {
@@ -126,31 +150,74 @@ class ConnectionAcceptor {
             }
         }
         lastStopWasGraceful = shutdownConnections();
-        state = State.STOPPED;
+        lifecycleLock.lock();
+        try {
+            state = State.STOPPED;
+            connectionRetired.signalAll();
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    private boolean registerAcceptedSocket(Socket socket) {
+        lifecycleLock.lock();
+        try {
+            if (state != State.STARTED) {
+                return false;
+            }
+            acceptedSockets.add(socket);
+            return true;
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    private void runAcceptedSocket(
+        Socket socket,
+        ConnectionAcceptedTime acceptedTime,
+        boolean http2Enabled,
+        boolean rejectDueToOverload
+    ) {
+        try {
+            handleClientSocket(
+                socket,
+                acceptedTime,
+                http2Enabled,
+                rejectDueToOverload
+            );
+        } finally {
+            retireAcceptedSocket(socket);
+            closeQuietly(socket);
+        }
+    }
+
+    private void retireAcceptedSocket(Socket socket) {
+        lifecycleLock.lock();
+        try {
+            acceptedSockets.remove(socket);
+        } finally {
+            lifecycleLock.unlock();
+        }
     }
 
     private boolean shutdownConnections() {
-        log.info("Closing server with " + connections.size() + " connected connections");
-        long waitUntil = gracefulShutdownDeadlineMillis;
-        if (waitUntil == Long.MAX_VALUE) {
-            waitUntil = System.currentTimeMillis() + gracefulShutdownTimeoutMillis;
+        closePendingAcceptedSockets();
+        List<BaseHttpConnection> active = connectionSnapshot();
+        log.info("Closing server with " + active.size() + " connected connections");
+        if (gracefulShutdownDeadlineNanos == Long.MAX_VALUE) {
+            gracefulShutdownDeadlineNanos =
+                MonotonicTime.deadlineAfterMillis(
+                    FALLBACK_SHUTDOWN_TIMEOUT_MILLIS
+                );
         }
-        for (BaseHttpConnection connection : connections) {
+        for (BaseHttpConnection connection : active) {
             try {
                 connection.initiateGracefulShutdown();
             } catch (IOException ignored) {
             }
         }
-        while (!connections.isEmpty() && System.currentTimeMillis() < waitUntil) {
-            try {
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            }
-        }
-        boolean drainedCleanly = connections.isEmpty();
-        for (BaseHttpConnection connection : connections) {
+        boolean drainedCleanly = awaitConnectionsRetired();
+        for (BaseHttpConnection connection : connectionSnapshot()) {
             log.info("Force closure of active connection {} with requests {}", connection, connection.activeRequests());
             try {
                 connection.abort();
@@ -167,29 +234,81 @@ class ConnectionAcceptor {
         return drainedCleanly;
     }
 
-    private void timeoutLoop() {
-        while (state == State.STARTED) {
-            try {
-                long cutoff = System.currentTimeMillis() - server.idleTimeoutMillis();
-                for (BaseHttpConnection con : connections) {
-                    if (con.lastIO() < cutoff) {
-                        log.info("Timing out {}", con);
-                        con.abortWithTimeout();
-                    }
+    private void closePendingAcceptedSockets() {
+        List<Socket> pending;
+        lifecycleLock.lock();
+        try {
+            pending = new ArrayList<>(acceptedSockets);
+            acceptedSockets.clear();
+        } finally {
+            lifecycleLock.unlock();
+        }
+        for (Socket socket : pending) {
+            closeQuietly(socket);
+        }
+    }
+
+    private List<BaseHttpConnection> connectionSnapshot() {
+        lifecycleLock.lock();
+        try {
+            return new ArrayList<>(connections);
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    private boolean awaitConnectionsRetired() {
+        lifecycleLock.lock();
+        try {
+            while (!connections.isEmpty()) {
+                long remaining = MonotonicTime.nanosUntil(
+                    gracefulShutdownDeadlineNanos
+                );
+                if (remaining <= 0L) {
+                    return false;
                 }
-                Thread.sleep(200);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            } catch (Throwable t) {
-                if (state == State.STARTED) {
-                    log.error("Exception while doing timeouts", t);
+                try {
+                    connectionRetired.awaitNanos(remaining);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return false;
                 }
+            }
+            return true;
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    private void checkIdleTimeouts() {
+        if (state != State.STARTED) {
+            return;
+        }
+        try {
+            long nowNanos = System.nanoTime();
+            long idleTimeoutNanos = TimeUnit.MILLISECONDS.toNanos(
+                server.idleTimeoutMillis()
+            );
+            for (BaseHttpConnection con : connectionSnapshot()) {
+                if (con.hasBeenIdleFor(nowNanos, idleTimeoutNanos)) {
+                    log.info("Timing out {}", con);
+                    con.abortWithTimeout();
+                }
+            }
+        } catch (Throwable t) {
+            FatalErrors.rethrow(t);
+            if (state == State.STARTED) {
+                log.error("Exception while doing timeouts", t);
             }
         }
     }
 
-    private void handleClientSocket(Socket clientSocket, Instant startTime, boolean http2Enabled, boolean rejectDueToOverload) {
+    private void handleClientSocket(
+        Socket clientSocket,
+        ConnectionAcceptedTime acceptedTime,
+        boolean http2Enabled,
+        boolean rejectDueToOverload
+    ) {
         Socket socket = clientSocket;
         Certificate clientCert = null;
         PushbackInputStream inputStream = null;
@@ -261,7 +380,14 @@ class ConnectionAcceptor {
         if (rejectDueToOverload) {
             handleOverload(socket);
         } else {
-            handleRequest(socket, clientCert, startTime, httpVersion, inputStream);
+            handleRequest(
+                clientSocket,
+                socket,
+                clientCert,
+                acceptedTime,
+                httpVersion,
+                inputStream
+            );
         }
     }
 
@@ -314,84 +440,201 @@ class ConnectionAcceptor {
         }
     }
 
-    private void handleRequest(Socket socket, @Nullable Certificate clientCert, Instant startTime, HttpVersion httpVersion, @Nullable InputStream providedInputStream) {
+    @SuppressWarnings("ReferenceEquality") // Sharing is defined by the exact configured executor instance.
+    private void handleRequest(
+        Socket acceptedSocket,
+        Socket socket,
+        @Nullable Certificate clientCert,
+        ConnectionAcceptedTime acceptedTime,
+        HttpVersion httpVersion,
+        @Nullable InputStream providedInputStream
+    ) {
         BaseHttpConnection con;
         if (httpVersion == HttpVersion.HTTP_2) {
             if (http2Config == null) {
                 throw new IllegalStateException("HTTP/2 was selected but no HTTP/2 config is available");
             }
-            con = new Http2Connection(server, this, socket, clientCert, startTime, http2Config.initialSettings(), http2Config.settingsAckTimeoutMillis(), executorService);
+            con = new Http2Connection(
+                server,
+                this,
+                socket,
+                clientCert,
+                acceptedTime,
+                http2Config.initialSettings(),
+                http2Config.settingsAckTimeoutMillis(),
+                handlerExecutor,
+                http2WriterExecutor
+            );
         } else {
-            con = new Http1Connection(server, this, socket, clientCert, startTime);
+            con = new Http1Connection(
+                server,
+                this,
+                socket,
+                clientCert,
+                acceptedTime,
+                handlerExecutor
+            );
         }
 
-        connections.add(con);
+        if (!promoteAcceptedSocket(acceptedSocket, con)) {
+            return;
+        }
         server.getStatsImpl().onConnectionOpened(con);
         try {
             InputStream requestIn = providedInputStream == null ? socket.getInputStream() : providedInputStream;
-            try (OutputStream clientOut = socket.getOutputStream();
+            try (OutputStream clientOut = new HttpConnectionOutputStream(
+                     con,
+                     socket.getOutputStream()
+                 );
                  InputStream clientIn = new HttpConnectionInputStream(con, requestIn)) {
                 con.start(clientIn, clientOut);
             }
         } catch (Throwable t) {
+            FatalErrors.rethrow(t);
             log.error("Unhandled exception for {}", con, t);
         } finally {
             server.getStatsImpl().onConnectionClosed(con);
-            connections.remove(con);
+            retireConnection(con);
+        }
+    }
+
+    private boolean promoteAcceptedSocket(
+        Socket acceptedSocket,
+        BaseHttpConnection connection
+    ) {
+        lifecycleLock.lock();
+        try {
+            acceptedSockets.remove(acceptedSocket);
+            if (state != State.STARTED) {
+                return false;
+            }
+            connections.add(connection);
+            return true;
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    private void retireConnection(BaseHttpConnection connection) {
+        lifecycleLock.lock();
+        try {
+            if (connections.remove(connection)) {
+                connectionRetired.signalAll();
+            }
+        } finally {
+            lifecycleLock.unlock();
         }
     }
 
     public void start() {
-        if (state != State.STOPPED && state != State.NOT_STARTED) {
-            throw new IllegalStateException("Cannot start with state " + state);
+        lifecycleLock.lock();
+        try {
+            if (state != State.STOPPED && state != State.NOT_STARTED) {
+                throw new IllegalStateException("Cannot start with state " + state);
+            }
+            state = State.STARTED;
+        } finally {
+            lifecycleLock.unlock();
         }
         acceptorThread.setDaemon(false);
-        state = State.STARTED;
-        acceptorThread.start();
-        if (timeoutThread != null) {
-            timeoutThread.start();
+        try {
+            if (server.idleTimeoutMillis() > 0) {
+                timeoutTask = server.scheduleConnectionTaskAtFixedRate(
+                    this::checkIdleTimeouts,
+                    0,
+                    200,
+                    TimeUnit.MILLISECONDS
+                );
+            }
+            acceptorThread.start();
+        } catch (RuntimeException | Error e) {
+            ScheduledFuture<?> currentTimeoutTask = timeoutTask;
+            if (currentTimeoutTask != null) {
+                currentTimeoutTask.cancel(false);
+                timeoutTask = null;
+            }
+            lifecycleLock.lock();
+            try {
+                state = State.NOT_STARTED;
+            } finally {
+                lifecycleLock.unlock();
+            }
+            throw e;
         }
     }
 
-    public boolean stop(long timeoutMillis) {
-        if (state == State.STOPPED) {
-            return lastStopWasGraceful;
-        }
-        log.info("Stopping server 1");
-        state = State.STOPPING;
-        gracefulShutdownTimeoutMillis = Math.max(0L, timeoutMillis);
-        long deadline = System.currentTimeMillis() + gracefulShutdownTimeoutMillis;
-        gracefulShutdownDeadlineMillis = deadline;
-        if (timeoutThread != null) {
-            timeoutThread.interrupt();
-            long remaining = Math.max(0L, deadline - System.currentTimeMillis());
-            if (remaining > 0) {
-                try {
-                    timeoutThread.join(remaining);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
+    boolean stopUntil(long callerDeadlineNanos) {
+        lifecycleLock.lock();
+        try {
+            if (state == State.STOPPED) {
+                return lastStopWasGraceful;
             }
+            log.info("Stopping server 1");
+            if (state != State.STOPPING) {
+                gracefulShutdownDeadlineNanos = callerDeadlineNanos;
+                state = State.STOPPING;
+            } else if (MonotonicTime.isAfter(
+                callerDeadlineNanos,
+                gracefulShutdownDeadlineNanos
+            )) {
+                // A callback-local stop can have a shorter deadline than a concurrent
+                // external stop. Preserve the longer opportunity to drain.
+                gracefulShutdownDeadlineNanos = callerDeadlineNanos;
+                connectionRetired.signalAll();
+            }
+        } finally {
+            lifecycleLock.unlock();
+        }
+        closePendingAcceptedSockets();
+        ScheduledFuture<?> currentTimeoutTask = timeoutTask;
+        if (currentTimeoutTask != null) {
+            currentTimeoutTask.cancel(false);
+            timeoutTask = null;
         }
         try {
             socketServer.close();
         } catch (IOException e) {
             log.warn("Error closing server socket", e);
         }
-        long remaining = Math.max(0L, deadline - System.currentTimeMillis());
-        if (remaining > 0) {
-            try {
-                acceptorThread.join(remaining);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
+        joinAcceptorUntil(callerDeadlineNanos);
         if (acceptorThread.isAlive()) {
-            log.warn("Could not kill " + this + " after " + timeoutMillis + " ms");
+            log.warn("Could not stop {} before the shutdown deadline", this);
             lastStopWasGraceful = false;
             return false;
         }
-        return lastStopWasGraceful;
+        lifecycleLock.lock();
+        try {
+            state = State.STOPPED;
+            return lastStopWasGraceful;
+        } finally {
+            lifecycleLock.unlock();
+        }
+    }
+
+    private void joinAcceptorUntil(long deadlineNanos) {
+        while (acceptorThread.isAlive()) {
+            long remaining = MonotonicTime.nanosUntil(deadlineNanos);
+            if (remaining <= 0L) {
+                return;
+            }
+            long millis = TimeUnit.NANOSECONDS.toMillis(remaining);
+            int nanos = (int) (
+                remaining - TimeUnit.MILLISECONDS.toNanos(millis)
+            );
+            try {
+                acceptorThread.join(millis, nanos);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    private static void closeQuietly(Socket socket) {
+        try {
+            socket.close();
+        } catch (IOException ignored) {
+        }
     }
 
     @Override
@@ -410,18 +653,29 @@ class ConnectionAcceptor {
         int bindPort,
         @Nullable HttpsConfig httpsConfig,
         @Nullable Http2Config h2Config,
-        ExecutorService executor,
+        ExecutorService handlerExecutor,
+        ExecutorService connectionExecutor,
+        ExecutorService http2WriterExecutor,
         List<ContentEncoder> contentEncoders) throws IOException {
 
         ServerSocket socketServer = new ServerSocket(bindPort, ACCEPT_BACKLOG, address);
-        configureSocketOptions(socketServer);
+        try {
+            configureSocketOptions(socketServer);
 
-        String uriHost = address != null ? address.getHostName() : "localhost";
-        URI uri = URI.create("http" + (httpsConfig == null ? "" : "s") + "://" + uriHost + ":" + socketServer.getLocalPort());
+            String uriHost = address != null ? address.getHostName() : "localhost";
+            URI uri = URI.create("http" + (httpsConfig == null ? "" : "s") + "://" + uriHost + ":" + socketServer.getLocalPort());
 
-        return new ConnectionAcceptor(server, socketServer,
-            (InetSocketAddress) socketServer.getLocalSocketAddress(),
-            uri, httpsConfig, h2Config, executor, contentEncoders);
+            return new ConnectionAcceptor(server, socketServer,
+                (InetSocketAddress) socketServer.getLocalSocketAddress(),
+                uri, httpsConfig, h2Config, handlerExecutor, connectionExecutor, http2WriterExecutor, contentEncoders);
+        } catch (IOException | RuntimeException | Error creationFailure) {
+            try {
+                socketServer.close();
+            } catch (IOException cleanupFailure) {
+                creationFailure.addSuppressed(cleanupFailure);
+            }
+            throw creationFailure;
+        }
     }
 
     private static void configureSocketOptions(ServerSocket socketServer) throws IOException {

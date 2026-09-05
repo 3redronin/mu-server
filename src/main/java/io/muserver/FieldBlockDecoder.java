@@ -1,5 +1,6 @@
 package io.muserver;
 
+import java.nio.BufferUnderflowException;
 import java.nio.ByteBuffer;
 
 class FieldBlockDecoder {
@@ -17,9 +18,21 @@ class FieldBlockDecoder {
     }
 
     FieldBlock decodeFrom(ByteBuffer buffer) throws HttpException, Http2Exception {
+        try {
+            return decodeCompleteBlock(buffer);
+        } catch (BufferUnderflowException truncated) {
+            throw new Http2Exception(
+                Http2ErrorCode.COMPRESSION_ERROR,
+                "truncated HPACK field block"
+            );
+        }
+    }
+
+    private FieldBlock decodeCompleteBlock(ByteBuffer buffer)
+        throws HttpException, Http2Exception {
         var fb = new FieldBlock();
-        int totalLen = 0;
-        int uriLen = 0;
+        long totalLen = 0;
+        long uriLen = 0;
         boolean canChangeTableSize = true;
 
         while (buffer.hasRemaining()) {
@@ -33,7 +46,7 @@ class FieldBlockDecoder {
                 if (HeaderNames.PSEUDO_PATH.equals(line.name())) {
                     uriLen += line.value().length();
                 }
-                totalLen += line.length();
+                totalLen += line.hpackSize();
                 if (totalLen <= maxHeadersSize) {
                     fb.add(line);
                 }
@@ -75,14 +88,10 @@ class FieldBlockDecoder {
                         uriLen += value.length();
                     }
 
-                    totalLen += name.length() + value.length();
-
-                    var line = new FieldLine(name, value);
+                    var line = new FieldLine(name, value, litNever);
+                    totalLen += line.hpackSize();
                     if (totalLen <= maxHeadersSize) {
                         fb.add(line);
-                        if (litNever) {
-                            table.neverIndex(line);
-                        }
                     }
                     if (litWith) {
                         table.indexField(line);
@@ -115,29 +124,56 @@ class FieldBlockDecoder {
             return I;
         }
 
-        var M = 0;
+        int shift = 0; // RFC 7541 M: number of continuation bits already decoded.
+        long value = I; // RFC 7541 I, widened to detect overflow before narrowing.
 
         // repeat
         int B;
         do {
             // B = next octet
+            if (!buffer.hasRemaining()) {
+                throw new Http2Exception(
+                    Http2ErrorCode.COMPRESSION_ERROR,
+                    "truncated HPACK integer"
+                );
+            }
             B = buffer.get() & 0xFF;
 
             // I = I + (B & 127) * 2^M
-            I = I + ((B & 127) * (1 << M));
-            if (I < 0) {
+            value += (long) (B & 127) << shift;
+            if (value > Integer.MAX_VALUE) {
                 throw new Http2Exception(Http2ErrorCode.COMPRESSION_ERROR, "hpack integer overflow");
             }
 
-            M = M + 7;
-            if (M > 80) throw new Http2Exception(Http2ErrorCode.COMPRESSION_ERROR, "hpack integer too long");
+            shift += 7;
+            if (shift >= 35 && (B & 128) == 128) {
+                // Five continuation octets can represent every non-negative
+                // Java int. RFC 7541 Section 5.1 requires encodings beyond an
+                // implementation's value or octet-length limit to fail.
+                throw new Http2Exception(
+                    Http2ErrorCode.COMPRESSION_ERROR,
+                    "hpack integer too long"
+                );
+            }
         } while ((B & 128) == 128);
-        return I;
+        return (int) value;
     }
 
     private static HeaderString readHeaderString(ByteBuffer buffer, HeaderString.Type type) throws Http2Exception {
+        if (!buffer.hasRemaining()) {
+            throw new Http2Exception(
+                Http2ErrorCode.COMPRESSION_ERROR,
+                "missing HPACK string length"
+            );
+        }
         byte decl = buffer.get();
         int codeLen = readHpackInt(7, decl, buffer);
+        if (codeLen > buffer.remaining()) {
+            throw new Http2Exception(
+                Http2ErrorCode.COMPRESSION_ERROR,
+                "HPACK string exceeds the field block"
+            );
+        }
         if ((decl & 0b10000000) > 0) {
             return HuffmanDecoder.decodeFrom(buffer, codeLen, type);
         } else {
