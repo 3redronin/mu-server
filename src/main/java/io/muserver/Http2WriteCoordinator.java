@@ -22,7 +22,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 final class Http2WriteCoordinator {
 
-    enum ResetRetention { UNTIL_APPLICATION_ENDS, NONE }
+    /** How long to remember a locally reset stream, independently of sending its reset frame. */
+    enum ResetRetention {
+        /** Keep a reset record for a still-tracked stream until application completion and pending output permit retirement. */
+        UNTIL_APPLICATION_ENDS,
+        /** Track only pending reset output; do not retain an additional record after it is sent. */
+        NONE
+    }
 
     final class WritableFrame {
         private final LogicalHttp2Frame frame;
@@ -190,6 +196,7 @@ final class Http2WriteCoordinator {
     }
 
     private enum SettingsTimeout implements Command {
+        /** Apply a SETTINGS acknowledgement timeout on the coordinator. */
         INSTANCE
     }
 
@@ -204,6 +211,7 @@ final class Http2WriteCoordinator {
     }
 
     private enum WakeUp implements Command {
+        /** Prompt the writer to reconsider pending output and shutdown deadlines. */
         INSTANCE
     }
 

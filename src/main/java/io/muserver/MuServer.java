@@ -25,25 +25,24 @@ public interface MuServer extends Closeable {
     }
 
     /**
-     * Shuts down the server
+     * Stops the server, allowing up to ten seconds for graceful shutdown.
+     * @see #stop(long, TimeUnit)
      */
     void stop();
 
     /**
-     * Gracefully shuts down the server with a timeout. During the graceful shutdown period, the server will stop
-     * accepting new connections and wait for in-flight requests to complete. When timeout is reached and there
-     * are still in-flight requests, all the http connections will be aborted, no exception will be thrown.
-     *
-     * <p>
-     * This is a blocking call and will not return until the server is fully stopped or the timeout is reached.
-     * </p>
-     *
-     * @param duration The duration of the graceful timeout period, or 0 to shut down immediately.
-     * @param unit     The time unit of the duration.
-     * <p>The same deadline includes accepted detached completion/rejection callbacks. Timeout
-     * cannot forcibly stop arbitrary application code. Calling stop from such a callback does
-     * not wait for that callback or work queued behind it.</p>
-     * @return false if requests, connections or tracked callbacks did not drain before the deadline.
+     * Stops accepting new connections and waits for existing requests and connections to finish.
+     * Also waits for response-completion and request-rejection listeners already scheduled by the server.
+     * <p>The timeout applies to the whole shutdown process. If it expires while work remains,
+     * the server closes the remaining connections and returns false. Application code that is
+     * still running may continue after this method returns.</p>
+     * <p>If called from a response-completion or request-rejection listener, this method skips
+     * waiting for callbacks to avoid deadlock. In that case, a true return value does not mean
+     * all callbacks have finished.</p>
+     * @param duration How long to wait before closing remaining connections, or zero to close them immediately.
+     * @param unit The time unit for duration.
+     * @return true if shutdown finished within the timeout, subject to the callback exception
+     *         described above; false otherwise.
      */
     boolean stop(long duration, TimeUnit unit);
 

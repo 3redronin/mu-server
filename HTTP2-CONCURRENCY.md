@@ -29,8 +29,13 @@ Mu cannot discover tasks silently removed from an opaque caller-owned executor.
 Nested application tasks use a short FIFO within the current application turn.
 This preserves nonrecursive callback delivery and avoids resubmitting work to the
 same occupied worker. Per-response write callbacks and WebSocket events also have
-serialized mailboxes. Deprecated WebSocket event adapters release the worker while
-their completion is pending; their blocking writes still run on internal workers.
+serialized mailboxes. `BaseWebSocket` supports asynchronous receive callbacks with
+one completion signal; `SimpleWebSocket` supports blocking receive methods.
+Asynchronous receives release the application worker while completion is pending,
+but the internal connection reader still waits before delivering another event or
+reusing its buffer. Asynchronous sends perform their writes on internal workers.
+The older binary overload with a separate buffer-release callback remains deprecated;
+it does not provide independent buffer and message-completion lifetimes.
 
 ## Request admission
 
@@ -40,7 +45,11 @@ negative values are invalid. Acquisition is nonblocking and precedes application
 submission. Excess requests receive 503. Queued handlers, suspended async work
 and SSE retain admission until internal exchange cleanup. Release is idempotent
 and occurs before detached completion listeners. A completed WebSocket upgrade
-releases the HTTP slot; the session remains a live connection.
+releases the HTTP slot; the session remains a live connection. This is not a total
+connection or thread limit: idle connection readers, WebSockets and completion
+listeners can still occupy resources outside the request count. Both default task
+executors remain unbounded, avoiding rejection due to configured executor capacity.
+A custom bounded executor can reject work needed to finish an accepted request.
 
 This is separate from HTTP/2's default limit of 200 concurrent protocol streams
 per connection. A completed application exchange may retain protocol state while
@@ -77,11 +86,12 @@ followed by another frame. There is no separate two-hour waiter timeout.
 
 Completion listeners added to a response before it completes run in registration
 order. Listeners added after completion have no ordering guarantee and may run
-concurrently. They run after internal cleanup, may overlap the next HTTP/1 request, and have no same-thread
-guarantee. `stop(timeout)` waits for accepted detached callbacks within the shared
-shutdown deadline. It cannot force arbitrary caller code to stop. Callback-local
-stop avoids waiting for itself or work queued behind it; a concurrent external stop
-still sees the callback's registration. Ordinary listener failures do not strand
+concurrently. They run after internal cleanup, may overlap the next HTTP/1 request,
+and need not run on the handler's thread. `stop(timeout)` waits for scheduled
+application callbacks within the same timeout used for connections and requests.
+It cannot force application code to stop. When called from a tracked callback,
+stop skips waiting for callbacks to avoid deadlock; an external stop caller still
+waits for them within its own timeout. Ordinary listener failures do not strand
 later listeners. Fatal VM failures and ThreadDeath are rethrown after available
 cleanup, rather than converted into ordinary HTTP responses.
 
@@ -203,13 +213,22 @@ commands from being accepted. The exception is an additional `RST_STREAM`
 generated in response to a frame that arrives on the closed stream, as permitted
 by RFC 9113 Section 5.4.2.
 
+Reset records are retained only while the coordinator still tracks the stream.
+Late peer resets and stale local-retention instructions cannot recreate persistent
+records after retirement. Pending reset frames are still sent, and resets still
+cancel pending response output after application processing has finished. This
+prevents historical stream IDs from accumulating; it does not bound the command
+mailbox when incoming work outpaces processing.
+
 `RST_STREAM` is therefore the final non-priority frame emitted for a stream,
 apart from those permitted additional resets. Frames already written before the
 reset command is processed remain validly ordered before the reset.
 
-Applying a peer reset can close protocol state, error the request-body buffer,
-mark the response cancelled, and signal an async handler waiter on the
-coordinator because none of those operations invokes user code. Completion
+The reader publishes the cancelled response outcome before the reset-seen flag,
+so even a queued handler that skips execution reports a terminal outcome to its
+completion listeners. The coordinator then closes protocol state, errors the
+request-body buffer and signals async completion; none of these operations
+invokes user code. Completion
 listeners and other application callbacks continue on the handler task. Unread
 DATA is returned to the connection window and advertised with `WINDOW_UPDATE`;
 the peer cannot reuse that credit until it receives the update. RFC 9113
@@ -372,9 +391,7 @@ No lock is held while:
 
 ## Required invariants
 
-These are required end-state invariants. Full single-owner enforcement in
-invariant 2, and invariants 9 and 10, depend on the future ownership and
-execution-domain phases identified above.
+These invariants apply to the current implementation.
 
 1. Inbound frame events from the reader are processed in wire order.
 2. Every protocol state mutation has an explicit linearization point: the
@@ -406,7 +423,7 @@ Socket integration tests then cover:
 * early responses with a still-open request side;
 * resets while handlers are reading or writing;
 * multiple streams with independent progress;
-* handler-executor saturation and rejection (after execution-domain separation);
+* handler-executor saturation and rejection;
 * graceful and forced connection shutdown; and
 * completion callback state and exactly-once behaviour.
 

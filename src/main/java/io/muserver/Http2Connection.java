@@ -23,7 +23,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private static final Http2GoAway GO_AWAY_WARNING = new Http2GoAway(MAX_POSSIBLE_STREAM_ID, Http2ErrorCode.NO_ERROR.code(), null);
 
     private enum HState {
-        ACTIVE(true), SHUTDOWN_INITIATED(true), COMPLETED(false), ERRORED(false);
+        /** Normal input or output processing is allowed. */
+        ACTIVE(true),
+        /** Graceful shutdown has started; frames can still be processed while existing work finishes. */
+        SHUTDOWN_INITIATED(true),
+        /** This direction finished normally and no longer processes frames. */
+        COMPLETED(false),
+        /** This direction stopped because of a failure and no longer processes frames. */
+        ERRORED(false);
         final boolean canSendFrames;
         /**
          * @param canSendFrames if true then frames can still be sent/received

@@ -6,64 +6,71 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.Future;
 
 /**
- * <p>A class to handle the request and response handling when using asynchronous request handling.</p>
- * <p>To asynchronously read the request body, see {@link #setReadListener(RequestBodyListener)}. To
- * write data, this interface provides asynchronous write operations, or alternatively you can use the
- * blocking write operations on the original {@link MuResponse}.</p>
+ * Controls a response that can remain open after its request handler returns.
+ * Obtain it from {@link MuRequest#handleAsync()} and call {@link #complete()} when finished.
+ * <p>Use {@link #setReadListener(RequestBodyListener)} to read the request body asynchronously
+ * and the write methods here to send the response asynchronously. Blocking request and response
+ * methods are also available, but do not read the body in both ways or mix blocking and
+ * asynchronous writes while a write is still in progress.</p>
  */
 public interface AsyncHandle {
 
     /**
      * <p>Sets a listener that will be notified when chunks of request data become available.</p>
      * <p>If this is not set, then the usual (blocking) request reading methods on the request object can be used.</p>
+     * <p>Callbacks run on the configured application executor. Call the completion callback supplied
+     * with each chunk when that chunk is no longer needed; Mu can then reuse its buffer and read
+     * the next chunk. Registering this listener prevents other request-body reading methods from being used.</p>
      * @param readListener The listener.
      * @throws IllegalStateException if request-body access has already been claimed
      */
     void setReadListener(RequestBodyListener readListener);
 
     /**
-     * Rejects subsequent writes and completes the exchange after all accepted writes drain.
+     * Finishes the response after all writes already submitted to this handle have finished.
+     * Later writes are rejected. This method does not wait for those writes or their callbacks.
      */
     void complete();
 
     /**
-     * Call this to indicate that the response is complete.
-     * <p>A non-null error cancels queued writes and terminates active output before releasing its
-     * buffers. If output has not begun, the exception handler may send a 500 response; otherwise
-     * the HTTP/1 connection is closed or the HTTP/2 stream is reset. An active HTTP/2 socket
-     * frame may require closing its connection. Write futures fail independently of callback delivery.
+     * Finishes the response, optionally reporting a failure. Passing null is equivalent to {@link #complete()}.
+     * <p>A failure cancels writes that have not started and stops any write in progress before
+     * returning its buffer to the application. If no response has been sent yet, the configured
+     * exception handler may send HTTP 500. Otherwise Mu closes the HTTP/1 connection or resets
+     * the HTTP/2 stream. If an HTTP/2 frame is partly transmitted, Mu may need to close that
+     * connection as well to avoid corrupting other responses.</p>
      * @param throwable an exception to log, or null if there was no problem
      */
     void complete(@Nullable Throwable throwable);
 
     /**
-     * <p>Writes data to the response asynchronously.</p>
-     * <p>Note that even in async mode it is possible to use the blocking write methods on the {@link MuResponse}</p>
-     * <p>See {@link #write(ByteBuffer)} for an alternative that returns a future.</p>
-     * <p>If {@link #complete()} or {@link #complete(Throwable)} has already been called, the callback is
-     * invoked with an {@link IllegalStateException}.</p>
-     * <p>Multiple submissions are supported and written in order. Mu owns each buffer until its
-     * future completes or callback runs; do not modify or reuse it sooner. Waiting for completion
-     * before submitting more data provides backpressure. Do not mix concurrent blocking writes
-     * with these submissions. Callbacks use the application executor and can be dropped if it rejects.</p>
+     * Writes data to the response asynchronously and reports the result to a callback.
+     * <p>You can submit several writes; Mu sends them in submission order. Do not change the
+     * buffer's contents, position or limit until its callback runs. Submitting the next write
+     * from that callback limits how much data waits in memory for a slow client.</p>
+     * <p>The callback runs on the configured application executor with null on success or the
+     * failure. Writes submitted after {@link #complete()} or {@link #complete(Throwable)} report
+     * {@link IllegalStateException}. If a supplied executor rejects the callback, the notification
+     * may not be delivered. See {@link #write(ByteBuffer)} for a future whose completion does not
+     * require an application executor worker.</p>
      * @param data The data to write
      * @param callback The callback when the write succeeds or fails
      */
     void write(ByteBuffer data, DoneCallback callback);
 
     /**
-     * <p>Writes data to the response asynchronously.</p>
-     * <p>Note that even in async mode it is possible to use the blocking write methods on the {@link MuResponse}</p>
-     * <p>See {@link #write(ByteBuffer, DoneCallback)} for an alternative that uses a callback.</p>
+     * Writes data to the response asynchronously and returns a future for the result.
+     * <p>You can submit several writes; Mu sends them in submission order. Do not change the
+     * buffer's contents, position or limit until its future finishes, successfully or otherwise.
+     * Waiting for each write before submitting the next limits memory use with a slow client.
+     * See {@link #write(ByteBuffer, DoneCallback)} for a callback-based alternative.</p>
      * <p>If {@link #complete()} or {@link #complete(Throwable)} has already been called, the returned future
      * fails with an {@link IllegalStateException}.</p>
-     * <p>Multiple submissions are supported and written in order. Mu owns each buffer until its
-     * future completes or callback runs; do not modify or reuse it sooner. Waiting for completion
-     * before submitting more data provides backpressure. Do not mix concurrent blocking writes
-     * with these submissions. Callbacks use the application executor and can be dropped if it rejects.</p>
+     * <p>Cancelling the future cancels the whole asynchronous response. Cancellation waits for
+     * any active write to stop using its buffer before returning.</p>
      * @param data The data to write
-     * @return A future resolved after I/O releases the buffer, independently of application workers.
-     * Cancelling it cancels the asynchronous response and waits for active I/O to release its buffer.
+     * @return A future that finishes when the write succeeds or fails and Mu no longer uses its buffer.
+     *         Completing this future does not require an application executor worker.
      */
     Future<@Nullable Void> write(ByteBuffer data);
 
