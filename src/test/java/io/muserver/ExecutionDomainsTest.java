@@ -11,6 +11,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.Http1Client;
 
 import java.io.EOFException;
@@ -1147,15 +1149,8 @@ class ExecutionDomainsTest {
     }
 
     @Test
-    void oneSharedNonQueueingWorkerCanReadAndEchoARequestBody() throws Exception {
-        var applicationExecutor = track(new ThreadPoolExecutor(
-            1,
-            1,
-            0,
-            TimeUnit.MILLISECONDS,
-            new SynchronousQueue<>(),
-            namedThreads("application-")
-        ));
+    void oneQueuedApplicationWorkerCanReadAndEchoARequestBody() throws Exception {
+        var applicationExecutor = track(Executors.newSingleThreadExecutor(namedThreads("application-")));
         var callbackThreads = new CopyOnWriteArrayList<String>();
         byte[] payload = new byte[20_000];
         for (int i = 0; i < payload.length; i++) {
@@ -1201,11 +1196,81 @@ class ExecutionDomainsTest {
             }
         };
         try (Response response = call(request(server.uri()).post(body))) {
+            assertThat(response.code(), is(200));
             assertThat(response.body().bytes(), equalTo(payload));
         }
         assertThat(callbackThreads.size(), greaterThanOrEqualTo(3));
         for (String callbackThread : callbackThreads) {
             assertThat(callbackThread, startsWith("application-"));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void rejectedAsyncCallbackTerminatesTheRequestAndReleasesAdmission(boolean outputStarted) throws Exception {
+        var rejectNext = new AtomicBoolean();
+        var rejection = new CompletableFuture<RejectedExecutionException>();
+        var callbackInvoked = new AtomicBoolean();
+        var completed = new CompletableFuture<ResponseState>();
+        var applicationExecutor = track(new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
+            new java.util.concurrent.LinkedBlockingQueue<>(), namedThreads("application-")) {
+            @Override public void execute(Runnable task) {
+                if (rejectNext.compareAndSet(true, false)) {
+                    var failure = new RejectedExecutionException("deliberate callback rejection");
+                    rejection.complete(failure);
+                    throw failure;
+                }
+                super.execute(task);
+            }
+        });
+        server = httpServer().withHandlerExecutor(applicationExecutor).withMaxConcurrentRequests(1)
+            .addResponseCompleteListener(info -> {
+                if (info.request().relativePath().equals("/")) {
+                    completed.complete(info.response().responseState());
+                }
+            })
+            .addHandler((request, response) -> {
+                if (request.relativePath().equals("/next")) {
+                    response.write("next");
+                    return true;
+                }
+                AsyncHandle handle = request.handleAsync();
+                rejectNext.set(true);
+                if (outputStarted) {
+                    handle.write(ByteBuffer.wrap(new byte[]{1, 2, 3}), error -> {
+                        callbackInvoked.set(true);
+                        handle.complete(error);
+                    });
+                } else {
+                    handle.setReadListener(new RequestBodyListener() {
+                        @Override public void onDataReceived(ByteBuffer data, DoneCallback done) throws Exception {
+                            callbackInvoked.set(true);
+                            done.onComplete(null);
+                        }
+                        @Override public void onComplete() { handle.complete(); }
+                        @Override public void onError(Throwable failure) { handle.complete(failure); }
+                    });
+                }
+                return true;
+            }).start();
+
+        var firstRequest = request(server.uri());
+        if (!outputStarted) firstRequest.post(RequestBody.create(new byte[]{1}, null));
+        try (Response response = call(firstRequest)) {
+            if (outputStarted) {
+                assertThat(response.code(), is(200));
+                // The body was started, so failure must close it without a successful chunk terminator.
+                assertThrows(IOException.class, () -> response.body().bytes());
+            } else {
+                assertThat(response.code(), is(500));
+            }
+        }
+        assertThat(rejection.get(5, TimeUnit.SECONDS).getMessage(), is("deliberate callback rejection"));
+        assertThat(completed.get(5, TimeUnit.SECONDS).endState(), is(true));
+        assertThat(callbackInvoked.get(), is(false));
+        try (Response next = call(request(server.uri().resolve("/next")))) {
+            assertThat(next.code(), is(200));
+            assertThat(next.body().string(), is("next"));
         }
     }
 

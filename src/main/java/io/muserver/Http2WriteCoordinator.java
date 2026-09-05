@@ -476,7 +476,11 @@ final class Http2WriteCoordinator {
             queue(write.task, false, write.retainResetState);
         } else if (command instanceof ResetStream) {
             ResetStream reset = (ResetStream) command;
-            peerResetStreams.add(reset.streamId);
+            // Retirement may already have run before this reset command. A retired
+            // stream rejects later writes without needing another persistent record.
+            if (streamStates.containsKey(reset.streamId)) {
+                peerResetStreams.add(reset.streamId);
+            }
             streamCredits.remove(reset.streamId);
             applyResetState(reset.streamId);
             markProtocolStateClosed(reset.streamId);
@@ -595,7 +599,8 @@ final class Http2WriteCoordinator {
             streamCredits.remove(streamId);
             applyResetState(streamId);
             localResetsPendingWrite.add(streamId);
-            if (retainResetState == ResetRetention.UNTIL_APPLICATION_ENDS) {
+            // The caller's retention decision can precede a queued retirement.
+            if (retainResetState == ResetRetention.UNTIL_APPLICATION_ENDS && streamStates.containsKey(streamId)) {
                 retainedLocalResetStreams.add(streamId);
             }
             // RFC 9113 Section 5.4.2 permits additional RST_STREAM responses to frames that
@@ -793,6 +798,11 @@ final class Http2WriteCoordinator {
 
     @Nullable Http2StreamState streamState(int streamId) {
         return streamStates.get(streamId);
+    }
+
+    // Inspect only from the coordinator owner, after queued commands have been processed.
+    int resetRecordCount() {
+        return peerResetStreams.size() + retainedLocalResetStreams.size() + localResetsPendingWrite.size();
     }
 
     private void forgetResetState(int streamId) {
