@@ -7,9 +7,6 @@ import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicLong;
@@ -79,28 +76,16 @@ public abstract class BaseWebSocket implements MuWebSocket {
      */
     @Override
     public void onText(String message) throws Exception {
-        // Adapter code for old-style implementations that rely on non-blocking behaviour.
-        // This calls the old-style methods in a new thread and blocks until the done callback is invoked.
-        // Overriders of this base class should just override this method and block until the data is finished with.
         CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
         try {
-            CompletableFuture.runAsync(() -> {
-                try {
-                    onText(message, true, error -> {
-                        if (error == null) {
-                            result.complete(null);
-                        } else {
-                            result.completeExceptionally(error);
-                        }
-                    });
-                } catch (Exception e) {
-                    result.completeExceptionally(e);
-                }
-            }, asyncExecutor());
-        } catch (RuntimeException failure) {
+            onText(message, true, error -> {
+                if (error == null) result.complete(null);
+                else result.completeExceptionally(error);
+            });
+        } catch (Exception failure) {
             result.completeExceptionally(failure);
         }
-        blockUntilDone(result);
+        WebSocketCompatibility.awaitOrDefer(result);
     }
 
     /**
@@ -171,43 +156,16 @@ public abstract class BaseWebSocket implements MuWebSocket {
      */
     @Override
     public void onBinary(ByteBuffer buffer) throws Exception {
-        // Adapter code for old-style implementations that rely on non-blocking behaviour.
-        // This calls the old-style methods in a new thread and blocks until the done callback is invoked.
-        // Overriders of this base class should just override this method and block until the data is finished with.
         CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
         try {
-            CompletableFuture.runAsync(() -> {
-                try {
-                    onBinary(buffer, true, error -> {
-                        if (error == null) {
-                            result.complete(null);
-                        } else {
-                            result.completeExceptionally(error);
-                        }
-                    }, () -> {});
-                } catch (Exception e) {
-                    result.completeExceptionally(e);
-                }
-            }, asyncExecutor());
-        } catch (RuntimeException failure) {
+            onBinary(buffer, true, error -> {
+                if (error == null) result.complete(null);
+                else result.completeExceptionally(error);
+            }, () -> {});
+        } catch (Exception failure) {
             result.completeExceptionally(failure);
         }
-        blockUntilDone(result);
-    }
-
-    private Executor asyncExecutor() {
-        MuWebSocketSession currentSession = session;
-        return currentSession instanceof WebsocketConnection
-            ? ((WebsocketConnection) currentSession).asyncExecutor()
-            : ForkJoinPool.commonPool();
-    }
-
-    private static void blockUntilDone(CompletableFuture<@Nullable Void> result) throws Exception {
-        try {
-            result.get();
-        } catch (ExecutionException e) {
-            throw e.getCause() instanceof Exception ? (Exception) e.getCause() : e;
-        }
+        WebSocketCompatibility.awaitOrDefer(result);
     }
 
     /**

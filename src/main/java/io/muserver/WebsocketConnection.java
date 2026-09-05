@@ -36,8 +36,8 @@ class WebsocketConnection implements MuWebSocketSession {
     private final WebsocketLifecycle lifecycle = new WebsocketLifecycle();
     private final Http1Connection httpConnection;
     private final Mu3ServerImpl server;
+    private final SerialApplicationTasks writeCallbacks;
     private final MuWebSocket webSocket;
-    private final boolean eventsRunOnConnectionTask;
     private final Queue<ApplicationEventTask> applicationEvents = new ConcurrentLinkedQueue<>();
     private final AtomicBoolean applicationEventRunnerScheduled = new AtomicBoolean();
     private final AtomicBoolean errorEventQueued = new AtomicBoolean();
@@ -48,7 +48,6 @@ class WebsocketConnection implements MuWebSocketSession {
     private final @Nullable WebsocketPingTracker pingTracker;
     private ReadState readState = ReadState.NONE;
     private volatile @Nullable ScheduledFuture<?> pingFuture;
-    private volatile @Nullable Thread connectionTaskThread;
 
     private enum ReadState {
         NONE, TEXT, BINARY,
@@ -75,9 +74,9 @@ class WebsocketConnection implements MuWebSocketSession {
     WebsocketConnection(Http1Connection httpConnection, MuWebSocket webSocket, WebSocketHandlerBuilder.Settings settings) {
         this.httpConnection = httpConnection;
         this.server = httpConnection.serverImpl();
+        this.writeCallbacks = new SerialApplicationTasks(server);
         this.webSocket = webSocket;
         this.settings = settings;
-        this.eventsRunOnConnectionTask = httpConnection.webSocketEventsRunOnConnectionTask();
         if (settings.pingIntervalMillis == 0) {
             pingTracker = null;
         } else {
@@ -90,8 +89,15 @@ class WebsocketConnection implements MuWebSocketSession {
         return webSocket;
     }
 
+    void dispatchWriteCallback(DoneCallback callback, @Nullable Throwable failure) {
+        writeCallbacks.submit(() -> {
+            try { callback.onComplete(failure); }
+            catch (Exception callbackFailure) { log.warn("WebSocket write callback failed", callbackFailure); }
+        }, rejected -> httpConnection.forceShutdown());
+    }
+
     ExecutorService asyncExecutor() {
-        return server.asyncExecutor();
+        return server.internalExecutor();
     }
 
     private void startPinging() {
@@ -120,7 +126,6 @@ class WebsocketConnection implements MuWebSocketSession {
         this.inputStream = inputStream;
         this.outputStream = outputStream;
         this.buffer = ByteBuffer.wrap(readBuffer).flip();
-        connectionTaskThread = Thread.currentThread();
 
         try {
             lifecycle.onConnected();
@@ -280,15 +285,11 @@ class WebsocketConnection implements MuWebSocketSession {
                 invokeApplicationError(e, errorState);
             }
         } finally {
-            if (eventsRunOnConnectionTask) {
-                drainApplicationEvents();
-            }
             ScheduledFuture<?> currentPing = pingFuture;
             if (currentPing != null) {
                 currentPing.cancel(false);
                 pingFuture = null;
             }
-            connectionTaskThread = null;
         }
     }
 
@@ -402,18 +403,6 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     private void invokeApplicationEvent(ApplicationEvent event) throws InterruptedException, ApplicationEventFailure {
-        if (eventsRunOnConnectionTask) {
-            try {
-                callApplicationEvent(event);
-            } catch (Exception | Error failure) {
-                throw new ApplicationEventFailure(failure);
-            } finally {
-                // A terminal event can be queued by a write attempted inside a callback.
-                // Drain it before returning to the blocking socket read.
-                drainApplicationEvents();
-            }
-            return;
-        }
         CompletableFuture<@Nullable Void> completion = enqueueApplicationEvent(event);
         try {
             completion.get();
@@ -432,17 +421,8 @@ class WebsocketConnection implements MuWebSocketSession {
         }
     }
 
-    private void callApplicationEvent(ApplicationEvent event) throws Exception {
-        try {
-            server.callHandlerApplicationTask(() -> {
-                event.run();
-                return null;
-            });
-        } catch (Exception | Error failure) {
-            throw failure;
-        } catch (Throwable failure) {
-            throw new MuException("Unexpected WebSocket callback failure", failure);
-        }
+    private @Nullable CompletableFuture<@Nullable Void> callApplicationEvent(ApplicationEvent event) throws Exception {
+        return WebSocketCompatibility.invoke(event::run);
     }
 
     private void invokeApplicationError(Throwable cause, WebsocketSessionState errorState) throws InterruptedException, ApplicationEventFailure {
@@ -471,16 +451,7 @@ class WebsocketConnection implements MuWebSocketSession {
     private CompletableFuture<@Nullable Void> enqueueApplicationEvent(ApplicationEvent event) {
         var task = new ApplicationEventTask(event);
         applicationEvents.add(task);
-        if (eventsRunOnConnectionTask) {
-            if (Thread.currentThread() != connectionTaskThread) {
-                // A shared single-thread executor cannot run another task while its
-                // connection reader is blocked. Terminal external events wake that reader,
-                // which drains this mailbox from its finally block.
-                httpConnection.wakeWebSocketReader();
-            }
-        } else {
-            scheduleApplicationEventRunner();
-        }
+        scheduleApplicationEventRunner();
         return task.completion;
     }
 
@@ -503,24 +474,29 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     private void runApplicationEvents() {
-        while (true) {
-            drainApplicationEvents();
-            applicationEventRunnerScheduled.set(false);
-            if (applicationEvents.isEmpty()
-                || !applicationEventRunnerScheduled.compareAndSet(false, true)) {
-                return;
+        for (;;) {
+            ApplicationEventTask task = applicationEvents.poll();
+            if (task == null) {
+                applicationEventRunnerScheduled.set(false);
+                if (applicationEvents.isEmpty()
+                    || !applicationEventRunnerScheduled.compareAndSet(false, true)) return;
+                continue;
             }
-        }
-    }
-
-    private void drainApplicationEvents() {
-        ApplicationEventTask task;
-        while ((task = applicationEvents.poll()) != null) {
             try {
-                callApplicationEvent(task.event);
+                CompletableFuture<@Nullable Void> deferred = callApplicationEvent(task.event);
+                if (deferred != null && !deferred.isDone()) {
+                    deferred.whenComplete((ignored, failure) -> {
+                        if (failure == null) task.completion.complete(null);
+                        else task.completion.completeExceptionally(failure);
+                        applicationEventRunnerScheduled.set(false);
+                        if (!applicationEvents.isEmpty()) scheduleApplicationEventRunner();
+                    });
+                    return;
+                }
+                if (deferred != null) deferred.join();
                 task.completion.complete(null);
-            } catch (Throwable t) {
-                task.completion.completeExceptionally(t);
+            } catch (Throwable failure) {
+                task.completion.completeExceptionally(failure);
             }
         }
     }

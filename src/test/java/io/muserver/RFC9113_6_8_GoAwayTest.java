@@ -135,9 +135,8 @@ class RFC9113_6_8_GoAwayTest {
         });
         assertThat(writerStarted.await(5, TimeUnit.SECONDS), equalTo(true));
 
-        server = httpsServer()
+        server = TestExecutionResources.configure(httpsServer(), null, writerExecutor, null, null)
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
-            .withHttp2WriterExecutor(writerExecutor)
             .start();
 
         try (var client = new H2Client();

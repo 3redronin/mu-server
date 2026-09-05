@@ -150,7 +150,6 @@ public class AsynchronousProcessingTest {
 
         server = ServerUtils.httpsServerForTest("http")
             .withHandlerExecutor(handlerExecutor)
-            .withAsyncExecutor(asyncExecutor)
             .addHandler(restHandler(new Sample()).addCustomWriter(threadReportingWriter()))
             .start();
 
@@ -176,7 +175,6 @@ public class AsynchronousProcessingTest {
 
         server = ServerUtils.httpsServerForTest("http")
             .withHandlerExecutor(handlerExecutor)
-            .withAsyncExecutor(asyncExecutor)
             .addHandler(restHandler(new Sample()).addCustomWriter(threadReportingWriter()))
             .start();
 
@@ -207,8 +205,6 @@ public class AsynchronousProcessingTest {
 
         server = ServerUtils.httpsServerForTest("http")
             .withHandlerExecutor(handlerExecutor)
-            .withAsyncExecutor(asyncExecutor)
-            .withTimerExecutor(timerExecutor)
             .addHandler(restHandler(new Sample()).addCustomWriter(threadReportingWriter()))
             .start();
 
@@ -259,7 +255,6 @@ public class AsynchronousProcessingTest {
 
         server = ServerUtils.httpsServerForTest("http")
             .withHandlerExecutor(applicationExecutor)
-            .withAsyncExecutor(applicationExecutor)
             .addHandler(restHandler(new Sample()).addCustomWriter(threadReportingWriter()))
             .start();
 
@@ -283,7 +278,6 @@ public class AsynchronousProcessingTest {
 
         server = ServerUtils.httpsServerForTest("http")
             .withHandlerExecutor(applicationExecutor)
-            .withAsyncExecutor(applicationExecutor)
             .addHandler(restHandler(new Sample()).addCustomWriter(threadReportingWriter()))
             .start();
 
@@ -311,8 +305,6 @@ public class AsynchronousProcessingTest {
 
         server = ServerUtils.httpsServerForTest("http")
             .withHandlerExecutor(applicationExecutor)
-            .withAsyncExecutor(applicationExecutor)
-            .withTimerExecutor(timerExecutor)
             .addHandler(restHandler(new Sample()).addCustomWriter(threadReportingWriter()))
             .start();
 

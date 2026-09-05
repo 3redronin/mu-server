@@ -27,7 +27,6 @@ class Http1Connection extends BaseHttpConnection {
 
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
     private final ExecutorService handlerExecutor;
-    private final boolean handlersRunOnConnectionTask;
     private final Queue<HttpRequestTemp> requestPipeline = new ConcurrentLinkedQueue<>();
     // At most one active exchange exists on HTTP/1.1: either an HTTP request/response or a websocket takeover.
     private final AtomicReference<@Nullable ActiveExchange> activeExchange = new AtomicReference<>();
@@ -84,10 +83,9 @@ class Http1Connection extends BaseHttpConnection {
 
     Http1Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket,
                     @Nullable Certificate clientCertificate, ConnectionAcceptedTime acceptedTime,
-                    ExecutorService handlerExecutor, boolean handlersRunOnConnectionTask) {
+                    ExecutorService handlerExecutor) {
         super(server, creator, clientSocket, clientCertificate, acceptedTime);
         this.handlerExecutor = handlerExecutor;
-        this.handlersRunOnConnectionTask = handlersRunOnConnectionTask;
     }
 
     @Override
@@ -219,11 +217,7 @@ class Http1Connection extends BaseHttpConnection {
     }
 
     private HandlerExecution handleExchangeOnHandlerExecutor(Mu3Request request, Http1Response response) throws Throwable {
-        if (handlersRunOnConnectionTask) {
-            return HandlerExecution.accepted(
-                server.callHandlerApplicationTask(() -> handleExchange(request, response))
-            );
-        }
+        if (!server.tryAdmit(request)) return HandlerExecution.rejected();
         CompletableFuture<@Nullable CompletableFuture<@Nullable Void>> completion = new CompletableFuture<>();
         try {
             handlerExecutor.execute(server.handlerApplicationTask(() -> {
@@ -258,13 +252,6 @@ class Http1Connection extends BaseHttpConnection {
 
     private void handleAsyncExceptionOnHandler(Mu3Request request, Http1Response response,
                                                Exception failure) throws Throwable {
-        if (handlersRunOnConnectionTask) {
-            server.callHandlerApplicationTask(() -> {
-                handleExchangeException(request, response, failure);
-                return null;
-            });
-            return;
-        }
         CompletableFuture<@Nullable Void> handled = new CompletableFuture<>();
         Runnable task = () -> {
             try {
@@ -287,10 +274,6 @@ class Http1Connection extends BaseHttpConnection {
 
     private void onExchangeEndedOnHandler(Http1Response response) {
         recordExchangeEnded(response);
-        if (handlersRunOnConnectionTask) {
-            server.runHandlerApplicationTask(() -> notifyExchangeEnded(response));
-            return;
-        }
         server.executeResponseCompletionTask(() -> notifyExchangeEnded(response));
     }
 
@@ -509,15 +492,4 @@ class Http1Connection extends BaseHttpConnection {
         }
     }
 
-    void wakeWebSocketReader() {
-        try {
-            clientSocket.shutdownInput();
-        } catch (IOException e) {
-            log.debug("Could not wake WebSocket reader", e);
-        }
-    }
-
-    boolean webSocketEventsRunOnConnectionTask() {
-        return handlersRunOnConnectionTask;
-    }
 }

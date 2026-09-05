@@ -39,11 +39,8 @@ public class MuServerBuilder {
     private long requestReadTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(20);
     private @Nullable ExecutorService executor;
-    private @Nullable ExecutorService asyncExecutor;
-    private @Nullable ExecutorService connectionExecutor;
-    private @Nullable ExecutorService http2WriterExecutor;
-    private @Nullable ExecutorService connectionMaintenanceExecutor;
-    private @Nullable ScheduledExecutorService timerExecutor;
+    private int maxConcurrentRequests = 1000;
+    ExecutionResources.Factory executionResourcesFactory = ExecutionResources::create;
     private long maxRequestSize = 24 * 1024 * 1024;
     private @Nullable List<ResponseCompleteListener> responseCompleteListeners;
     private @Nullable List<RequestRejectListener> requestRejectListeners;
@@ -203,24 +200,15 @@ public class MuServerBuilder {
     }
 
     /**
-     * Sets the thread executor service to run requests on. By default, a
-     * server-owned virtual-thread-per-task executor is used when the runtime supports
-     * virtual threads, otherwise {@link Executors#newCachedThreadPool()} is used. A
-     * caller-supplied executor remains owned by the caller and is not shut down when
-     * the server stops.
-     *
-     * <p>Use an executor that is independent from the executor configured by
-     * {@link #withConnectionExecutor(ExecutorService)} to keep request handling isolated
-     * from long-lived connection tasks. If the same executor instance is supplied for
-     * both, HTTP/1 handlers run on their connection task to avoid submitting work back
-     * to an executor that may already be at capacity.</p>
-     *
-     * <p>This executor also dispatches response-completion listeners and serialized
-     * WebSocket lifecycle and message callbacks. A WebSocket connection does not retain
-     * a worker while waiting for frames; each callback is short-lived executor work.</p>
-     *
-     * @param executor The executor service to use to handle requests
-     * @return The current Mu Server builder
+     * Sets the executor for handlers, application callbacks and JAX-RS continuations.
+     * By default Mu uses virtual threads when available, otherwise cached platform threads.
+     * A supplied executor remains caller-owned and must remain available until the server stops.
+     * It must dispatch asynchronously and reject visibly; direct executors, caller-runs and
+     * silent-discard rejection policies are unsupported. Rejected requests receive 503;
+     * rejected continuations fail their exchange and notifications may be dropped.
+     * Blocking adapter I/O runs independently on Mu-owned workers.
+     * @param executor The application executor, or null for Mu's default
+     * @return This builder
      */
     public MuServerBuilder withHandlerExecutor(@Nullable ExecutorService executor) {
         this.executor = executor;
@@ -228,135 +216,25 @@ public class MuServerBuilder {
     }
 
     /**
-     * Sets the executor used for asynchronous request body reads, asynchronous response
-     * writes, request-rejection notifications, and deprecated asynchronous WebSocket
-     * compatibility methods.
-     *
-     * <p>These operations adapt blocking I/O to callback-based APIs and must not use an
-     * executor whose workers can all be retained by connection readers, request handlers,
-     * HTTP/2 writers, or timed maintenance. A single-thread executor is supported:
-     * asynchronous request body delivery releases the worker while waiting for its
-     * {@link DoneCallback}.</p>
-     *
-     * <p>By default, a server-owned virtual-thread-per-task executor is used when the
-     * runtime supports virtual threads, otherwise a cached thread pool is used. A
-     * caller-supplied executor remains owned by the caller and is not shut down when
-     * the server stops.</p>
-     *
-     * @param asyncExecutor The executor for callback-based asynchronous I/O, or
-     *                      <code>null</code> to use the default
-     * @return The current Mu Server builder
+     * Limits admitted unfinished requests across all listeners and HTTP versions.
+     * Queued handlers, suspended async requests and SSE count until exchange cleanup.
+     * Completed WebSocket upgrades release their HTTP request slot. Excess requests receive
+     * 503 without blocking connection readers. HTTP/2 per-connection stream limits still apply.
+     * @param maximum The limit (default 1000), or zero for unlimited
+     * @return This builder
      */
-    public MuServerBuilder withAsyncExecutor(@Nullable ExecutorService asyncExecutor) {
-        this.asyncExecutor = asyncExecutor;
+    public MuServerBuilder withMaxConcurrentRequests(int maximum) {
+        if (maximum < 0) throw new IllegalArgumentException("maximum must be non-negative");
+        maxConcurrentRequests = maximum;
         return this;
     }
 
     /**
-     * Sets the executor used for connection setup and connection input processing.
-     *
-     * <p>HTTP/1 uses one long-lived keep-alive connection task and HTTP/2 uses one
-     * long-lived reader task per connection on this executor. Request handlers are
-     * submitted separately to the executor configured by
-     * {@link #withHandlerExecutor(ExecutorService)}. HTTP/2 writes use the executor configured by
-     * {@link #withHttp2WriterExecutor(ExecutorService)} so a fixed-size connection pool
-     * cannot be occupied by readers while their writers wait in the same queue.</p>
-     *
-     * <p>Use an executor that is independent from the executor configured by
-     * {@link #withHandlerExecutor(ExecutorService)} to keep long-lived connection tasks
-     * from consuming handler capacity. If the same executor instance is supplied for
-     * both, HTTP/1 handlers run on their connection task to avoid self-deadlock.</p>
-     *
-     * <p>By default, a server-owned virtual-thread-per-task executor is used when the
-     * runtime supports virtual threads, otherwise a cached thread pool is used. A
-     * caller-supplied executor remains owned by the caller and is not shut down when
-     * the server stops.</p>
-     *
-     * @param connectionExecutor The executor for connection setup and input processing, or
-     *                           <code>null</code> to use the default
-     * @return The current Mu Server builder
+     * Gets the server-wide limit on unfinished requests.
+     * @return The limit; zero means unlimited.
      */
-    public MuServerBuilder withConnectionExecutor(@Nullable ExecutorService connectionExecutor) {
-        this.connectionExecutor = connectionExecutor;
-        return this;
-    }
-
-    /**
-     * Sets the executor used by HTTP/2 connection writers.
-     *
-     * <p>HTTP/2 schedules serialized drain tasks on this executor when a connection has
-     * frames that can be written. A task returns when no further write can make progress,
-     * so an idle connection does not retain a worker. At most one task writes for a
-     * connection at a time.</p>
-     *
-     * <p>This executor must be independent from the executor configured by
-     * {@link #withConnectionExecutor(ExecutorService)}: supplying the same bounded
-     * executor to both methods can allow reader tasks to occupy every thread while writer
-     * tasks wait in its queue. A bounded writer executor limits the number of connections
-     * that can perform socket writes concurrently.</p>
-     *
-     * <p>By default, a server-owned virtual-thread-per-task executor is used when the
-     * runtime supports virtual threads, otherwise a cached thread pool is used. A
-     * caller-supplied executor remains owned by the caller and is not shut down when
-     * the server stops.</p>
-     *
-     * @param http2WriterExecutor The executor for HTTP/2 connection writers, or
-     *                            <code>null</code> to use the default
-     * @return The current Mu Server builder
-     */
-    public MuServerBuilder withHttp2WriterExecutor(@Nullable ExecutorService http2WriterExecutor) {
-        this.http2WriterExecutor = http2WriterExecutor;
-        return this;
-    }
-
-    /**
-     * Sets the executor used for timed connection maintenance, including idle timeout
-     * checks and automatic WebSocket pings.
-     *
-     * <p>Timer threads only determine when work is due and dispatch it to this executor.
-     * This executor must be independent from bounded executors containing long-lived
-     * connection tasks, otherwise those tasks can prevent timeouts and pings from
-     * running.</p>
-     *
-     * <p>By default, a server-owned virtual-thread-per-task executor is used when the
-     * runtime supports virtual threads, otherwise a cached thread pool is used. A
-     * caller-supplied executor remains owned by the caller and is not shut down when
-     * the server stops.</p>
-     *
-     * @param connectionMaintenanceExecutor The executor for timed connection work, or
-     *                                      <code>null</code> to use the default
-     * @return The current Mu Server builder
-     */
-    public MuServerBuilder withConnectionMaintenanceExecutor(
-        @Nullable ExecutorService connectionMaintenanceExecutor
-    ) {
-        this.connectionMaintenanceExecutor = connectionMaintenanceExecutor;
-        return this;
-    }
-
-    /**
-     * Sets the executor used to schedule server connection timers.
-     *
-     * <p>Timer threads only determine when work is due. Connection work is dispatched
-     * to the executor configured by
-     * {@link #withConnectionMaintenanceExecutor(ExecutorService)}
-     * so that timer threads do not perform socket I/O or invoke application callbacks.</p>
-     *
-     * <p>The supplied scheduled executor must remain able to execute brief scheduling
-     * callbacks promptly. It should not be shared with an executor that can be occupied
-     * by long-running tasks.</p>
-     *
-     * <p>By default, a server-owned single-thread scheduled executor is used. A
-     * caller-supplied executor remains owned by the caller and is not shut down when
-     * the server stops.</p>
-     *
-     * @param timerExecutor The executor used to schedule connection timers, or
-     *                      <code>null</code> to use the default
-     * @return The current Mu Server builder
-     */
-    public MuServerBuilder withTimerExecutor(@Nullable ScheduledExecutorService timerExecutor) {
-        this.timerExecutor = timerExecutor;
-        return this;
+    public int maxConcurrentRequests() {
+        return maxConcurrentRequests;
     }
 
     /**
@@ -528,7 +406,7 @@ public class MuServerBuilder {
      * headers are too large). Such rejections are never reported to
      * {@link #addResponseCompleteListener(ResponseCompleteListener)}.
      * Listeners are dispatched on the executor configured by
-     * {@link #withAsyncExecutor(ExecutorService)} so they cannot block connection input
+     * {@link #withHandlerExecutor(ExecutorService)} so they cannot block connection input
      * processing.
      *
      * @param listener A listener. If <code>null</code>, then nothing is added.
@@ -754,51 +632,6 @@ public class MuServerBuilder {
     }
 
     /**
-     * Gets the executor used for callback-based asynchronous I/O.
-     *
-     * @return The configured executor, or <code>null</code> if the default executor will be used.
-     */
-    public @Nullable ExecutorService asyncExecutor() {
-        return asyncExecutor;
-    }
-
-    /**
-     * Gets the executor used for connection setup and connection input processing.
-     *
-     * @return The configured executor, or <code>null</code> if the default executor will be used.
-     */
-    public @Nullable ExecutorService connectionExecutor() {
-        return connectionExecutor;
-    }
-
-    /**
-     * Gets the executor used by HTTP/2 connection writers.
-     *
-     * @return The configured executor, or <code>null</code> if the default executor will be used.
-     */
-    public @Nullable ExecutorService http2WriterExecutor() {
-        return http2WriterExecutor;
-    }
-
-    /**
-     * Gets the executor used for timed connection maintenance.
-     *
-     * @return The configured executor, or <code>null</code> if the default executor will be used.
-     */
-    public @Nullable ExecutorService connectionMaintenanceExecutor() {
-        return connectionMaintenanceExecutor;
-    }
-
-    /**
-     * Gets the executor used to schedule server connection timers.
-     *
-     * @return The configured executor, or <code>null</code> if the default executor will be used.
-     */
-    public @Nullable ScheduledExecutorService timerExecutor() {
-        return timerExecutor;
-    }
-
-    /**
      * Gets the maximum allowed request body size.
      *
      * @return The request body size limit in bytes.
@@ -906,10 +739,6 @@ public class MuServerBuilder {
             ", requestReadTimeoutMillis=" + requestReadTimeoutMillis +
             ", idleTimeoutMills=" + idleTimeoutMills +
             ", executor=" + executor +
-            ", connectionExecutor=" + connectionExecutor +
-            ", http2WriterExecutor=" + http2WriterExecutor +
-            ", connectionMaintenanceExecutor=" + connectionMaintenanceExecutor +
-            ", timerExecutor=" + timerExecutor +
             ", maxRequestSize=" + maxRequestSize +
             ", responseCompleteListeners=" + responseCompleteListeners +
             ", requestRejectListeners=" + requestRejectListeners +
