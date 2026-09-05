@@ -76,8 +76,9 @@ HTTP/2 waiter cancels the underlying write; cancellation of an active socket fra
 can require closing the entire transport because a partial frame cannot safely be
 followed by another frame. There is no separate two-hour waiter timeout.
 
-Completion listeners retain registration order per response. They run after
-internal cleanup, may overlap the next HTTP/1 request, and have no same-thread
+Completion listeners added to a response before it completes run in registration
+order. Listeners added after completion have no ordering guarantee and may run
+concurrently. They run after internal cleanup, may overlap the next HTTP/1 request, and have no same-thread
 guarantee. `stop(timeout)` waits for accepted detached callbacks within the shared
 shutdown deadline. It cannot force arbitrary caller code to stop. Callback-local
 stop avoids waiting for itself or work queued behind it; a concurrent external stop

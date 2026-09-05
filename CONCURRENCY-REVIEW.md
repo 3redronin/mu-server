@@ -42,7 +42,7 @@ The current contract is [HTTP2-CONCURRENCY.md](HTTP2-CONCURRENCY.md).
 | Async API deprecation | Keep handleAsync supported. Move implementation-only dispatch methods to a hidden core/JAX-RS bridge with custom-handle compatibility. |
 | Multiple async writes, completion/error races | Preserve ordered submissions and callbacks; document ownership and backpressure. Successful completion drains accepted output. Error completion/cancellation terminates active I/O before releasing buffers and fails queued work. |
 | Two-hour blocking wait | Remove it after making interrupt/future cancellation authoritative. A queued frame cannot continue using a returned buffer. |
-| Detached completion listeners | Keep ordered delivery and bounded stop tracking. Document overlap with later requests and lack of a same-thread guarantee. |
+| Detached completion listeners | Keep ordered delivery for listeners registered before completion and bounded stop tracking. Late registrations have no ordering guarantee. Document overlap with later requests and lack of a same-thread guarantee. |
 | synchronized and virtual threads | Move future completion outside the request monitor; annotate actual lock ownership. Avoid a blanket monitor rewrite. Blocking I/O and unknown user code remain outside state locks. |
 | One WebSocket lock | Keep output serialization separate from lifecycle/callback state so blocked socket writes cannot prevent abort/timeout. Remove the shared-executor mode instead. |
 | Catching Error | Isolate ordinary listener failures, including nonfatal AssertionError. Rethrow VirtualMachineError and ThreadDeath; do not silently convert them to HTTP errors. |
@@ -58,7 +58,7 @@ input-ownership, pipelining, half-close and TLS design.
 
 ## Validation
 
-The final code is commit `970aef7997bb7531ca8826df179c628e66bd605b`.
+The code validated below, before PR review fixes, is commit `970aef7997bb7531ca8826df179c628e66bd605b`.
 The temporary integration combines it with current mu4
 `4526b6543794335c0a3b160a0bbf09789eb74233`; it merges without conflicts.
 Its tree is `60b841a0f031fe3b2952f7129b0cfe2b391792a7`.

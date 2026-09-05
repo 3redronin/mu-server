@@ -77,6 +77,9 @@ class Http2Stream implements ResponseInfo {
     }
 
     void recordPeerResetFromReader() {
+        // A queued handler can finish as soon as it sees resetInitiated.
+        // Publish the response outcome first so its completion listeners see cancellation.
+        requiredResponse().setState(ResponseState.CLIENT_CANCELLED);
         peerResetRead = true;
         resetInitiated = true;
     }
@@ -141,9 +144,9 @@ class Http2Stream implements ResponseInfo {
      * completion listeners or other application callbacks.
      */
     void applyPeerReset(Http2ResetStreamFrame rstStream) {
-        onProtocolResetApplied();
         Http2Response currentResponse = requiredResponse();
         currentResponse.setState(ResponseState.CLIENT_CANCELLED);
+        onProtocolResetApplied();
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).onStreamReset(rstStream);
         }

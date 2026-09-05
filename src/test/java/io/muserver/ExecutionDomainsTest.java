@@ -128,6 +128,68 @@ class ExecutionDomainsTest {
     }
 
     @Test
+    void queuedHttp2RequestReportsClientCancellationBeforeTheWriterProcessesTheReset() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var writerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("h2-writer-")));
+        var handlerBlocked = new CountDownLatch(1);
+        var releaseHandler = new CountDownLatch(1);
+        var writerBlocked = new CountDownLatch(1);
+        var releaseWriter = new CountDownLatch(1);
+        var handledRequests = new AtomicInteger();
+        var stateAtCompletion = new CompletableFuture<ResponseState>();
+        handlerExecutor.submit(() -> {
+            handlerBlocked.countDown();
+            releaseHandler.await();
+            return null;
+        });
+
+        server = TestExecutionResources.configure(httpServer(), null, writerExecutor, null, null)
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .withHandlerExecutor(handlerExecutor)
+            .addHandler((request, response) -> {
+                handledRequests.incrementAndGet();
+                response.write("Should not run");
+                return true;
+            })
+            // Snapshot the state here: the response can change after the callback returns.
+            .addResponseCompleteListener(info -> stateAtCompletion.complete(info.response().responseState()))
+            .start();
+
+        try (var client = new H2Client(); var connection = client.connectClearText(server)) {
+            connection.socket().setSoTimeout(5000);
+            connection.handshake();
+            assertThat(handlerBlocked.await(5, TimeUnit.SECONDS), is(true));
+            writerExecutor.submit(() -> {
+                writerBlocked.countDown();
+                releaseWriter.await();
+                return null;
+            });
+            assertThat(writerBlocked.await(5, TimeUnit.SECONDS), is(true));
+
+            var serverConnection = (Http2Connection) server.activeConnections().iterator().next();
+            var headers = new FieldBlock();
+            headers.set(":method", "GET");
+            headers.set(":scheme", "http");
+            headers.set(":authority", "localhost");
+            headers.set(":path", "/");
+            connection.writeFrame(new Http2HeadersFrame(1, true, headers))
+                .writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code())).flush();
+            assertEventually(() -> {
+                Http2Stream stream = serverConnection.testProbe().streams().applicationStream(1);
+                return stream != null && stream.resetWasInitiated();
+            }, is(true));
+
+            // Let application completion run while the coordinator still cannot apply the reset.
+            releaseHandler.countDown();
+            assertThat(stateAtCompletion.get(5, TimeUnit.SECONDS), is(ResponseState.CLIENT_CANCELLED));
+            assertThat(handledRequests.get(), is(0));
+        } finally {
+            releaseHandler.countDown();
+            releaseWriter.countDown();
+        }
+    }
+
+    @Test
     void handlerRejectionAfterFinalGoAwayStillSendsTheAdmittedResponse() throws Exception {
         var submitting = new CountDownLatch(1);
         var reject = new CountDownLatch(1);
