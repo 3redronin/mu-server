@@ -4,8 +4,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import org.jspecify.annotations.Nullable;
 
-/** Lets the connection mailbox suspend legacy callback events without retaining a worker. */
-final class WebSocketCompatibility {
+/**
+ * Lets an asynchronous receive callback return its application worker while the connection
+ * waits for its completion callback before delivering another event or reusing the input buffer.
+ * The internal connection reader still waits for completion.
+ */
+final class WebSocketEventCompletion {
+    // Passes the completion future through the unchanged void receive methods. This context
+    // exists only during invocation; asynchronous completion uses the captured future directly.
     private static final ThreadLocal<Context> current = new ThreadLocal<>();
 
     @FunctionalInterface
@@ -30,6 +36,7 @@ final class WebSocketCompatibility {
             context.completion = completion;
             return;
         }
+        // Direct calls outside connection dispatch retain their blocking behaviour.
         try { completion.get(); }
         catch (ExecutionException e) {
             Throwable cause = e.getCause();

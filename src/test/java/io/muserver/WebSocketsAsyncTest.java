@@ -40,9 +40,9 @@ import static scaffolding.MuAssert.assertEventually;
 import static scaffolding.MuAssert.assertNotTimedOut;
 
 /**
- * Tests to make sure using the deprecated methods still work
+ * Asynchronous WebSocket receive and send contracts.
  */
-public class WebSocketsDeprecatedTest {
+public class WebSocketsAsyncTest {
 
     private MuServer server;
     private RecordingMuWebSocket serverSocket = new RecordingMuWebSocket();

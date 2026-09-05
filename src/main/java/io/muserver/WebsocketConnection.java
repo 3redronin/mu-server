@@ -425,7 +425,7 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     private @Nullable CompletableFuture<@Nullable Void> callApplicationEvent(ApplicationEvent event) throws Exception {
-        return WebSocketCompatibility.invoke(event::run);
+        return WebSocketEventCompletion.invoke(event::run);
     }
 
     private void invokeApplicationError(Throwable cause, WebsocketSessionState errorState) throws InterruptedException, ApplicationEventFailure {
