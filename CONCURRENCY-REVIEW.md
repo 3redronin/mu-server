@@ -56,5 +56,45 @@ reset-after-response as a new wire policy, a generic timestamp type, and specula
 allocation optimization. A competing HTTP/1 socket reader would require a separate
 input-ownership, pipelining, half-close and TLS design.
 
-Validation results are recorded below when the final code and integration candidate
-have completed the Java version matrix and independent protocol checks.
+## Validation
+
+The final code is commit `970aef7997bb7531ca8826df179c628e66bd605b`.
+The temporary integration combines it with current mu4
+`4526b6543794335c0a3b160a0bbf09789eb74233`; it merges without conflicts.
+Its tree is `60b841a0f031fe3b2952f7129b0cfe2b391792a7`.
+Neither original branch is modified by that integration check.
+
+| Build | Result |
+| --- | --- |
+| Temurin 11, 17, 21, 25 | 1,744 tests each; zero failures/errors; five existing skips |
+| Java 21 Error Prone/NullAway | Passed |
+| Javadoc and dependency analysis | Passed on all four runtimes |
+| Temporary current-mu4 integration, Java 21/NullAway | 1,767 tests; zero failures/errors; five existing skips |
+
+Clean `mvn verify` was used for Java 11, 17 and 25. Java 21 ran the full
+`-Pnullaway verify` suite; a documentation-only warning was then corrected and
+packaging/static checks rerun without repeating unchanged tests. Earlier follow-up
+commits also have the required interruption/nullability fixes folded into them,
+so they do not depend on the last PR merely to compile.
+
+Independent clients verified HTTP/1 keep-alive, concurrent HTTP/2 responses,
+small credit updates with slow reads, suspended SSE and WebSocket echo on Java 11
+and 21, against both #195 and the final implementation. Three alternating runs
+per implementation/runtime ran without other local builds. All protocol checks
+passed. Raw observations and workload details are in
+[validation/concurrency-followup.json](validation/concurrency-followup.json).
+
+Median elapsed times (seconds; each cell is original → final):
+
+| Workload | Java 11 | Java 21 |
+| --- | --- | --- |
+| 1600 HTTP/1 requests, 16 connections | 0.295 → 0.302 | 0.312 → 0.321 |
+| 64 HTTP/2 streams, 16 KiB each | 0.081 → 0.097 | 0.058 → 0.064 |
+| Same HTTP/2 workload, small windows/slow reads | 0.543 → 0.489 | 0.459 → 0.521 |
+| 64 suspended SSE responses | 0.229 → 0.225 | 0.216 → 0.218 |
+| 200 WebSocket echoes over 20 sessions | 0.109 → 0.114 | 0.096 → 0.108 |
+
+These short local runs show both increases and decreases; the Java 21 slow-read
+case was about 62 ms slower. They establish continued protocol progress under
+the tested workloads, not a general performance improvement or a production
+capacity claim. No broad command-allocation optimization was made on this evidence.
