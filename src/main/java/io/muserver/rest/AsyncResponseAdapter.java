@@ -1,6 +1,5 @@
 package io.muserver.rest;
 
-import io.muserver.internal.FatalErrors;
 import io.muserver.internal.AsyncExecution;
 
 import io.muserver.*;
@@ -73,6 +72,7 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
         return beginResuming(response.build(), true);
     }
 
+    /** Claims one resume/cancel against timeout or exchange completion before dispatching user serialization. */
     private boolean beginResuming(@Nullable Object response, boolean cancellation) {
         @Nullable Future<?> timeoutToCancel;
         synchronized (stateLock) {
@@ -93,7 +93,7 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
             exceptionWhileWriting = dispatchFailure;
             markDone();
             asyncHandle.complete(dispatchFailure);
-                FatalErrors.rethrow(dispatchFailure);
+            FatalErrors.rethrow(dispatchFailure);
         }
         return true;
     }

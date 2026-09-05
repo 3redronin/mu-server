@@ -124,8 +124,8 @@ class FieldBlockDecoder {
             return I;
         }
 
-        int shift = 0;
-        long value = I;
+        int shift = 0; // RFC 7541 M: number of continuation bits already decoded.
+        long value = I; // RFC 7541 I, widened to detect overflow before narrowing.
 
         // repeat
         int B;

@@ -258,7 +258,7 @@ abstract class BaseHttpConnection implements HttpConnection {
     }
 
     private void onIO() {
-        MonotonicTime.publishLatest(lastIONanos, System.nanoTime());
+        MonotonicTime.advanceIfLater(lastIONanos, System.nanoTime());
     }
 
     boolean hasBeenIdleFor(long nowNanos, long timeoutNanos) {

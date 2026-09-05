@@ -46,6 +46,7 @@ final class Http2StreamRegistry {
     }
 
     private final Lock lock = new ReentrantLock();
+    // Guarded by lock.
     private final Map<Integer, Lookup> entries = new HashMap<>();
 
     void registerApplicationStream(Http2Stream stream) {

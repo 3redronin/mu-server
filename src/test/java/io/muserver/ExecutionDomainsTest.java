@@ -11,6 +11,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.Http1Client;
 
 import java.io.EOFException;
@@ -124,6 +126,68 @@ class ExecutionDomainsTest {
             assertThat(handledRequests.get(), equalTo(0));
         } finally {
             releaseBlocker.countDown();
+        }
+    }
+
+    @Test
+    void queuedHttp2RequestReportsClientCancellationBeforeTheWriterProcessesTheReset() throws Exception {
+        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
+        var writerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("h2-writer-")));
+        var handlerBlocked = new CountDownLatch(1);
+        var releaseHandler = new CountDownLatch(1);
+        var writerBlocked = new CountDownLatch(1);
+        var releaseWriter = new CountDownLatch(1);
+        var handledRequests = new AtomicInteger();
+        var stateAtCompletion = new CompletableFuture<ResponseState>();
+        handlerExecutor.submit(() -> {
+            handlerBlocked.countDown();
+            releaseHandler.await();
+            return null;
+        });
+
+        server = TestExecutionResources.configure(httpServer(), null, writerExecutor, null, null)
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .withHandlerExecutor(handlerExecutor)
+            .addHandler((request, response) -> {
+                handledRequests.incrementAndGet();
+                response.write("Should not run");
+                return true;
+            })
+            // Snapshot the state here: the response can change after the callback returns.
+            .addResponseCompleteListener(info -> stateAtCompletion.complete(info.response().responseState()))
+            .start();
+
+        try (var client = new H2Client(); var connection = client.connectClearText(server)) {
+            connection.socket().setSoTimeout(5000);
+            connection.handshake();
+            assertThat(handlerBlocked.await(5, TimeUnit.SECONDS), is(true));
+            writerExecutor.submit(() -> {
+                writerBlocked.countDown();
+                releaseWriter.await();
+                return null;
+            });
+            assertThat(writerBlocked.await(5, TimeUnit.SECONDS), is(true));
+
+            var serverConnection = (Http2Connection) server.activeConnections().iterator().next();
+            var headers = new FieldBlock();
+            headers.set(":method", "GET");
+            headers.set(":scheme", "http");
+            headers.set(":authority", "localhost");
+            headers.set(":path", "/");
+            connection.writeFrame(new Http2HeadersFrame(1, true, headers))
+                .writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code())).flush();
+            assertEventually(() -> {
+                Http2Stream stream = serverConnection.testProbe().streams().applicationStream(1);
+                return stream != null && stream.resetWasInitiated();
+            }, is(true));
+
+            // Let application completion run while the coordinator still cannot apply the reset.
+            releaseHandler.countDown();
+            assertThat(stateAtCompletion.get(5, TimeUnit.SECONDS), is(ResponseState.CLIENT_CANCELLED));
+            assertThat(handledRequests.get(), is(0));
+        } finally {
+            releaseHandler.countDown();
+            releaseWriter.countDown();
         }
     }
 
@@ -249,7 +313,7 @@ class ExecutionDomainsTest {
             var connection =
                 (Http2Connection) server.activeConnections().iterator().next();
             Http2StreamRegistry streamRegistry =
-                getField(connection, "streamRegistry", Http2StreamRegistry.class);
+                connection.testProbe().streams();
             assertThat(
                 streamRegistry.lookup(1).rejectedRequestBody(),
                 is(true)
@@ -1085,15 +1149,8 @@ class ExecutionDomainsTest {
     }
 
     @Test
-    void oneSharedNonQueueingWorkerCanReadAndEchoARequestBody() throws Exception {
-        var applicationExecutor = track(new ThreadPoolExecutor(
-            1,
-            1,
-            0,
-            TimeUnit.MILLISECONDS,
-            new SynchronousQueue<>(),
-            namedThreads("application-")
-        ));
+    void oneQueuedApplicationWorkerCanReadAndEchoARequestBody() throws Exception {
+        var applicationExecutor = track(Executors.newSingleThreadExecutor(namedThreads("application-")));
         var callbackThreads = new CopyOnWriteArrayList<String>();
         byte[] payload = new byte[20_000];
         for (int i = 0; i < payload.length; i++) {
@@ -1139,11 +1196,81 @@ class ExecutionDomainsTest {
             }
         };
         try (Response response = call(request(server.uri()).post(body))) {
+            assertThat(response.code(), is(200));
             assertThat(response.body().bytes(), equalTo(payload));
         }
         assertThat(callbackThreads.size(), greaterThanOrEqualTo(3));
         for (String callbackThread : callbackThreads) {
             assertThat(callbackThread, startsWith("application-"));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void rejectedAsyncCallbackTerminatesTheRequestAndReleasesAdmission(boolean outputStarted) throws Exception {
+        var rejectNext = new AtomicBoolean();
+        var rejection = new CompletableFuture<RejectedExecutionException>();
+        var callbackInvoked = new AtomicBoolean();
+        var completed = new CompletableFuture<ResponseState>();
+        var applicationExecutor = track(new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
+            new java.util.concurrent.LinkedBlockingQueue<>(), namedThreads("application-")) {
+            @Override public void execute(Runnable task) {
+                if (rejectNext.compareAndSet(true, false)) {
+                    var failure = new RejectedExecutionException("deliberate callback rejection");
+                    rejection.complete(failure);
+                    throw failure;
+                }
+                super.execute(task);
+            }
+        });
+        server = httpServer().withHandlerExecutor(applicationExecutor).withMaxConcurrentRequests(1)
+            .addResponseCompleteListener(info -> {
+                if (info.request().relativePath().equals("/")) {
+                    completed.complete(info.response().responseState());
+                }
+            })
+            .addHandler((request, response) -> {
+                if (request.relativePath().equals("/next")) {
+                    response.write("next");
+                    return true;
+                }
+                AsyncHandle handle = request.handleAsync();
+                rejectNext.set(true);
+                if (outputStarted) {
+                    handle.write(ByteBuffer.wrap(new byte[]{1, 2, 3}), error -> {
+                        callbackInvoked.set(true);
+                        handle.complete(error);
+                    });
+                } else {
+                    handle.setReadListener(new RequestBodyListener() {
+                        @Override public void onDataReceived(ByteBuffer data, DoneCallback done) throws Exception {
+                            callbackInvoked.set(true);
+                            done.onComplete(null);
+                        }
+                        @Override public void onComplete() { handle.complete(); }
+                        @Override public void onError(Throwable failure) { handle.complete(failure); }
+                    });
+                }
+                return true;
+            }).start();
+
+        var firstRequest = request(server.uri());
+        if (!outputStarted) firstRequest.post(RequestBody.create(new byte[]{1}, null));
+        try (Response response = call(firstRequest)) {
+            if (outputStarted) {
+                assertThat(response.code(), is(200));
+                // The body was started, so failure must close it without a successful chunk terminator.
+                assertThrows(IOException.class, () -> response.body().bytes());
+            } else {
+                assertThat(response.code(), is(500));
+            }
+        }
+        assertThat(rejection.get(5, TimeUnit.SECONDS).getMessage(), is("deliberate callback rejection"));
+        assertThat(completed.get(5, TimeUnit.SECONDS).endState(), is(true));
+        assertThat(callbackInvoked.get(), is(false));
+        try (Response next = call(request(server.uri().resolve("/next")))) {
+            assertThat(next.code(), is(200));
+            assertThat(next.body().string(), is("next"));
         }
     }
 
@@ -1323,9 +1450,8 @@ class ExecutionDomainsTest {
         }
     }
 
-    @SuppressWarnings("deprecation")
     @Test
-    void deprecatedWebSocketAdaptersUseOneApplicationWorkerWithoutSelfDeadlock() throws Exception {
+    void asyncWebSocketCallbacksUseOneApplicationWorkerWithoutSelfDeadlock() throws Exception {
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
         var callbackThreads = new CopyOnWriteArrayList<String>();
         var clientMessage = new CompletableFuture<String>();
@@ -1359,6 +1485,140 @@ class ExecutionDomainsTest {
         assertEventually(callbackThreads::size, is(2));
         for (String callbackThread : callbackThreads) {
             assertThat(callbackThread, startsWith("async-"));
+        }
+    }
+
+    @Test
+    void asyncBinaryCompletionProtectsTheBufferAndReleasesTheApplicationWorker() throws Exception {
+        var application = track(Executors.newSingleThreadExecutor(namedThreads("application-")));
+        var firstBuffer = new CompletableFuture<ByteBuffer>();
+        var echoFirst = new CompletableFuture<Runnable>();
+        var secondReceived = new CompletableFuture<Void>();
+        var received = new AtomicInteger();
+        var echoes = new java.util.concurrent.LinkedBlockingQueue<okio.ByteString>();
+        server = httpServer().withHandlerExecutor(application)
+            .addHandler(webSocketHandler((request, headers) -> new BaseWebSocket() {
+                @Override public void onBinary(ByteBuffer buffer, boolean isLast, DoneCallback done) {
+                    if (received.getAndIncrement() == 0) {
+                        echoFirst.complete(() -> session().sendBinary(buffer, done));
+                        firstBuffer.complete(buffer);
+                    } else {
+                        secondReceived.complete(null);
+                        session().sendBinary(buffer, done);
+                    }
+                }
+            })).start();
+        WebSocket socket = client.newWebSocket(request().url("ws" + server.uri().toString().substring(4)).build(),
+            new WebSocketListener() {
+                @Override public void onMessage(WebSocket socket, okio.ByteString bytes) { echoes.add(bytes); }
+            });
+        try {
+            socket.send(okio.ByteString.encodeUtf8("first"));
+            ByteBuffer retained = firstBuffer.get(5, TimeUnit.SECONDS);
+            // This must run even though the first message's completion is still pending.
+            assertThat(application.submit(() -> Thread.currentThread().getName()).get(5, TimeUnit.SECONDS),
+                startsWith("application-"));
+            socket.send(okio.ByteString.encodeUtf8("second"));
+            assertThrows(TimeoutException.class, () -> secondReceived.get(100, TimeUnit.MILLISECONDS));
+            assertThat(StandardCharsets.UTF_8.decode(retained.duplicate()).toString(), is("first"));
+            application.submit(echoFirst.get(5, TimeUnit.SECONDS)).get(5, TimeUnit.SECONDS);
+            assertThat(echoes.poll(5, TimeUnit.SECONDS), is(okio.ByteString.encodeUtf8("first")));
+            secondReceived.get(5, TimeUnit.SECONDS);
+            assertThat(echoes.poll(5, TimeUnit.SECONDS), is(okio.ByteString.encodeUtf8("second")));
+        } finally {
+            socket.cancel();
+        }
+    }
+
+    @Test
+    void asyncWebSocketReceiveFailureIsReportedOnTheApplicationExecutor() throws Exception {
+        var application = track(Executors.newSingleThreadExecutor(namedThreads("application-")));
+        var completion = new CompletableFuture<DoneCallback>();
+        var reported = new CompletableFuture<Throwable>();
+        var errorThread = new CompletableFuture<String>();
+        IOException failure = new IOException("async receive failed");
+        server = httpServer().withHandlerExecutor(application)
+            .addHandler(webSocketHandler((request, headers) -> new BaseWebSocket() {
+                @Override public void onText(String message, boolean isLast, DoneCallback done) {
+                    completion.complete(done);
+                }
+                @Override public void onError(Throwable cause) throws Exception {
+                    reported.complete(cause);
+                    errorThread.complete(Thread.currentThread().getName());
+                    super.onError(cause);
+                }
+            })).start();
+        WebSocket socket = client.newWebSocket(request().url("ws" + server.uri().toString().substring(4)).build(),
+            new WebSocketListener() { });
+        try {
+            socket.send("message");
+            completion.get(5, TimeUnit.SECONDS).onComplete(failure);
+            assertThat(reported.get(5, TimeUnit.SECONDS), is(failure));
+            assertThat(errorThread.get(5, TimeUnit.SECONDS), startsWith("application-"));
+        } finally { socket.cancel(); }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void rejectedWebSocketWriteCallbackReleasesTheConnection(boolean receiveReturned) throws Exception {
+        var rejectNext = new AtomicBoolean();
+        var rejected = new CompletableFuture<Void>();
+        var callbackInvoked = new AtomicBoolean();
+        var receiveCompletion = new CompletableFuture<DoneCallback>();
+        var send = new CompletableFuture<Runnable>();
+        var releaseReceive = new CountDownLatch(1);
+        var disconnected = new CompletableFuture<Void>();
+        var application = track(new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
+            new java.util.concurrent.LinkedBlockingQueue<>(), namedThreads("application-")) {
+            @Override public void execute(Runnable task) {
+                if (rejectNext.compareAndSet(true, false)) {
+                    rejected.complete(null);
+                    throw new RejectedExecutionException("deliberate WebSocket callback rejection");
+                }
+                super.execute(task);
+            }
+        });
+        var connection = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
+        server = TestExecutionResources.configure(httpServer(), connection, null, null, null)
+            .withHandlerExecutor(application)
+            .addHandler(webSocketHandler((request, headers) -> new BaseWebSocket() {
+                @Override public void onBinary(ByteBuffer buffer, boolean isLast, DoneCallback done) throws Exception {
+                    receiveCompletion.complete(done);
+                    send.complete(() -> session().sendBinary(buffer, failure -> {
+                        callbackInvoked.set(true);
+                        done.onComplete(failure);
+                    }));
+                    if (!receiveReturned) releaseReceive.await();
+                }
+            }).withPingInterval(0, TimeUnit.MILLISECONDS)).start();
+        WebSocket socket = client.newWebSocket(request().url("ws" + server.uri().toString().substring(4)).build(),
+            new WebSocketListener() {
+                @Override public void onFailure(WebSocket socket, Throwable failure, @Nullable Response response) {
+                    disconnected.complete(null);
+                }
+            });
+        try {
+            socket.send(okio.ByteString.encodeUtf8("echo"));
+            Runnable echo = send.get(5, TimeUnit.SECONDS);
+            if (receiveReturned) {
+                // The event runner has installed the deferred completion and released its worker.
+                application.submit(() -> { }).get(5, TimeUnit.SECONDS);
+            }
+            rejectNext.set(true);
+            echo.run();
+            rejected.get(5, TimeUnit.SECONDS);
+            disconnected.get(5, TimeUnit.SECONDS);
+            releaseReceive.countDown();
+            // Closing the socket alone cannot release a reader waiting on receive completion.
+            connection.submit(() -> { }).get(2, TimeUnit.SECONDS);
+            assertThat(server.activeConnections().size(), is(0));
+            assertThat(callbackInvoked.get(), is(false));
+            assertThat(server.stop(1, TimeUnit.SECONDS), is(true));
+        } finally {
+            releaseReceive.countDown();
+            // Also lets the unfixed implementation clean up after the regression fails.
+            if (receiveCompletion.isDone()) receiveCompletion.get().onComplete(null);
+            socket.cancel();
         }
     }
 
@@ -1983,11 +2243,7 @@ class ExecutionDomainsTest {
         return runnable -> new Thread(runnable, prefix + count.incrementAndGet());
     }
 
-    private static <T> T getField(Object target, String name, Class<T> type) throws Exception {
-        var field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        return type.cast(field.get(target));
-    }
+
 
     @AfterEach
     void stop() {

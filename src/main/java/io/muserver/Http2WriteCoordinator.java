@@ -22,6 +22,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 final class Http2WriteCoordinator {
 
+    /** How long to remember a locally reset stream, independently of sending its reset frame. */
+    enum ResetRetention {
+        /** Keep a reset record for a still-tracked stream until application completion and pending output permit retirement. */
+        UNTIL_APPLICATION_ENDS,
+        /** Track only pending reset output; do not retain an additional record after it is sent. */
+        NONE
+    }
+
     final class WritableFrame {
         private final LogicalHttp2Frame frame;
         private final WriteTask task;
@@ -83,9 +91,9 @@ final class Http2WriteCoordinator {
 
     private static final class QueueWrite implements Command {
         private final WriteTask task;
-        private final boolean retainResetState;
+        private final ResetRetention retainResetState;
 
-        private QueueWrite(WriteTask task, boolean retainResetState) {
+        private QueueWrite(WriteTask task, ResetRetention retainResetState) {
             this.task = task;
             this.retainResetState = retainResetState;
         }
@@ -188,6 +196,7 @@ final class Http2WriteCoordinator {
     }
 
     private enum SettingsTimeout implements Command {
+        /** Apply a SETTINGS acknowledgement timeout on the coordinator. */
         INSTANCE
     }
 
@@ -202,6 +211,7 @@ final class Http2WriteCoordinator {
     }
 
     private enum WakeUp implements Command {
+        /** Prompt the writer to reconsider pending output and shutdown deadlines. */
         INSTANCE
     }
 
@@ -237,10 +247,10 @@ final class Http2WriteCoordinator {
     }
 
     void submit(WriteTask task) {
-        submit(task, true);
+        submit(task, ResetRetention.UNTIL_APPLICATION_ENDS);
     }
 
-    void submit(WriteTask task, boolean retainResetState) {
+    void submit(WriteTask task, ResetRetention retainResetState) {
         enqueue(new QueueWrite(task, retainResetState));
     }
 
@@ -474,7 +484,11 @@ final class Http2WriteCoordinator {
             queue(write.task, false, write.retainResetState);
         } else if (command instanceof ResetStream) {
             ResetStream reset = (ResetStream) command;
-            peerResetStreams.add(reset.streamId);
+            // Retirement may already have run before this reset command. A retired
+            // stream rejects later writes without needing another persistent record.
+            if (streamStates.containsKey(reset.streamId)) {
+                peerResetStreams.add(reset.streamId);
+            }
             streamCredits.remove(reset.streamId);
             applyResetState(reset.streamId);
             markProtocolStateClosed(reset.streamId);
@@ -547,7 +561,7 @@ final class Http2WriteCoordinator {
                     streamCredits.putAll(changedCredits);
                 }
                 fieldBlockEncoder.changeTableSize(change.headerTableSize);
-                queue(change.acknowledgement, true, false);
+                queue(change.acknowledgement, true, ResetRetention.NONE);
             } catch (Http2Exception e) {
                 queueConnectionError(
                     Http2Exception.connection(e.errorCode(), e.getMessage()),
@@ -574,14 +588,14 @@ final class Http2WriteCoordinator {
         }
     }
 
-    private void queue(WriteTask task, boolean first, boolean retainResetState) {
+    private void queue(WriteTask task, boolean first, ResetRetention retainResetState) {
         queue(task, first, retainResetState, null);
     }
 
     private void queue(
         WriteTask task,
         boolean first,
-        boolean retainResetState,
+        ResetRetention retainResetState,
         @Nullable Http2Exception protocolError
     ) {
         LogicalHttp2Frame frame = task.frame();
@@ -593,7 +607,8 @@ final class Http2WriteCoordinator {
             streamCredits.remove(streamId);
             applyResetState(streamId);
             localResetsPendingWrite.add(streamId);
-            if (retainResetState) {
+            // The caller's retention decision can precede a queued retirement.
+            if (retainResetState == ResetRetention.UNTIL_APPLICATION_ENDS && streamStates.containsKey(streamId)) {
                 retainedLocalResetStreams.add(streamId);
             }
             // RFC 9113 Section 5.4.2 permits additional RST_STREAM responses to frames that
@@ -695,7 +710,7 @@ final class Http2WriteCoordinator {
         queue(
             new WriteTask(new Http2ResetStreamFrame(error.streamId(), error.errorCode().code()), false),
             true,
-            true,
+            ResetRetention.UNTIL_APPLICATION_ENDS,
             error
         );
     }
@@ -791,6 +806,11 @@ final class Http2WriteCoordinator {
 
     @Nullable Http2StreamState streamState(int streamId) {
         return streamStates.get(streamId);
+    }
+
+    // Inspect only from the coordinator owner, after queued commands have been processed.
+    int resetRecordCount() {
+        return peerResetStreams.size() + retainedLocalResetStreams.size() + localResetsPendingWrite.size();
     }
 
     private void forgetResetState(int streamId) {

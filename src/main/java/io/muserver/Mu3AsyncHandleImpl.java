@@ -1,7 +1,5 @@
 package io.muserver;
 
-import io.muserver.internal.FatalErrors;
-
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;

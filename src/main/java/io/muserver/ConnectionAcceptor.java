@@ -1,7 +1,5 @@
 package io.muserver;
 
-import io.muserver.internal.FatalErrors;
-
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -124,7 +122,7 @@ class ConnectionAcceptor {
                 }
                 ConnectionAcceptedTime acceptedTime = ConnectionAcceptedTime.now();
                 try {
-                    connectionExecutor.submit(
+                    connectionExecutor.execute(
                         () -> runAcceptedSocket(clientSocket, acceptedTime, h2, false)
                     );
                 } catch (RejectedExecutionException e) {
@@ -140,7 +138,7 @@ class ConnectionAcceptor {
                     throw submissionFailure;
                 }
             } catch (Throwable e) {
-            FatalErrors.rethrow(e);
+                FatalErrors.rethrow(e);
                 if (Thread.interrupted() || e instanceof SocketException) {
                     log.info("Accept listening stopped");
                 } else {

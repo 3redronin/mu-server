@@ -179,10 +179,10 @@ class RFC9113_6_4_RstStreamTest {
 
             Http2Connection connection = connectionRef.get();
             Http2StreamRegistry streamRegistry =
-                getField(connection, "streamRegistry", Http2StreamRegistry.class);
+                connection.testProbe().streams();
             Http2Stream stream =
                 Objects.requireNonNull(streamRegistry.applicationStream(1));
-            Lock stateLock = getField(connection, "stateLock", Lock.class);
+            Lock stateLock = connection.testProbe().lifecycleLock();
             stateLock.lock();
             try {
                 con.writeFrame(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()))
@@ -231,7 +231,7 @@ class RFC9113_6_4_RstStreamTest {
 
             Http2Connection connection = (Http2Connection) server.activeConnections().iterator().next();
             Http2StreamRegistry streamRegistry =
-                getField(connection, "streamRegistry", Http2StreamRegistry.class);
+                connection.testProbe().streams();
             Http2Stream stream =
                 Objects.requireNonNull(streamRegistry.applicationStream(1));
             var stateAtWriteFailure = new AtomicReference<ResponseState>();
@@ -661,11 +661,7 @@ class RFC9113_6_4_RstStreamTest {
         return server.uri().getPort();
     }
 
-    private static <T> T getField(Object target, String name, Class<T> type) throws Exception {
-        var field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        return type.cast(field.get(target));
-    }
+
 
     @AfterEach
     public void stop() {

@@ -358,7 +358,7 @@ class RFC9113_6_2_HeadersTest {
 
             var connection = (Http2Connection) server.activeConnections().iterator().next();
             Http2StreamRegistry streamRegistry =
-                getField(connection, "streamRegistry", Http2StreamRegistry.class);
+                connection.testProbe().streams();
             var trailers = new FieldBlock();
             trailers.add("checksum", "x".repeat(1024));
             con.writeFrame(new Http2HeadersFrame(1, true, trailers)).flush();
@@ -502,11 +502,7 @@ class RFC9113_6_2_HeadersTest {
             assertThat(con.readLogicalFrame(Http2DataFrame.class).streamId(), equalTo(1));
 
             var connection = (Http2Connection) server.activeConnections().iterator().next();
-            Http2WriteCoordinator coordinator = getField(
-                connection,
-                "writeCoordinator",
-                Http2WriteCoordinator.class
-            );
+            Http2WriteCoordinator coordinator = connection.testProbe().coordinator();
             assertThat(coordinator.streamState(1), equalTo(Http2StreamState.HALF_CLOSED_LOCAL));
 
             byte[] barrierData = {1, 2, 3, 4, 5, 6, 7, 8};
@@ -581,11 +577,7 @@ class RFC9113_6_2_HeadersTest {
         return server.uri().getPort();
     }
 
-    private static <T> T getField(Object target, String name, Class<T> type) throws Exception {
-        var field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        return type.cast(field.get(target));
-    }
+
 
     @AfterEach
     public void stop() {

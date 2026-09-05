@@ -13,6 +13,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
@@ -40,6 +41,30 @@ class RequestAdmissionTest {
         next.close();
         RequestAdmission unlimited = new RequestAdmission(0);
         for (int i = 0; i < 2000; i++) assertNotNull(unlimited.tryAcquire());
+    }
+
+    @Test
+    void admissionIsSharedAcrossHttpAndHttpsListeners() throws Exception {
+        var handleReady = new CompletableFuture<AsyncHandle>();
+        var callers = Executors.newSingleThreadExecutor();
+        MuServer server = MuServerBuilder.muServer().withHttpPort(0).withHttpsPort(0)
+            .withMaxConcurrentRequests(1).addHandler((req, resp) -> {
+                if (req.uri().getPath().equals("/hold")) handleReady.complete(req.handleAsync());
+                else resp.write("available");
+                return true;
+            }).start();
+        try {
+            Future<Response> held = callers.submit(() -> client.newCall(request(server.httpUri().resolve("/hold")).build()).execute());
+            AsyncHandle handle = handleReady.get(5, TimeUnit.SECONDS);
+            try (Response excess = client.newCall(request(server.httpsUri()).build()).execute()) {
+                assertEquals(503, excess.code());
+            }
+            handle.complete();
+            try (Response response = held.get(5, TimeUnit.SECONDS)) { assertEquals(200, response.code()); }
+            try (Response accepted = client.newCall(request(server.httpsUri()).build()).execute()) {
+                assertEquals("available", accepted.body().string());
+            }
+        } finally { server.stop(); callers.shutdownNow(); }
     }
 
     @ParameterizedTest

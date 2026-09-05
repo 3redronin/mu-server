@@ -7,7 +7,6 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Queue;
@@ -710,7 +709,7 @@ class RFC9113_6_5_SettingsTest {
                     executor
                 );
 
-                Queue<?> settingsAckQueue = getField(queuedOnlyConnection, "settingsAckQueue", Queue.class);
+                Queue<Http2Connection.PendingSettingsAck> settingsAckQueue = queuedOnlyConnection.testProbe().pendingSettingsAcks();
                 assertThat(settingsAckQueue.size(), equalTo(0));
 
                 queuedOnlyConnection.write(new Http2Settings(false, 8192, 123, 65535, 16384, 32768));
@@ -730,12 +729,12 @@ class RFC9113_6_5_SettingsTest {
                 assertNotTimedOut("waiting for SETTINGS flush", flushEntered);
 
                 assertThat(settingsAckQueue.size(), equalTo(1));
-                Object pendingAck = settingsAckQueue.peek();
-                assertThat(getField(pendingAck, "timeoutTask", Object.class), nullValue());
+                Http2Connection.PendingSettingsAck pendingAck = java.util.Objects.requireNonNull(settingsAckQueue.peek());
+                assertThat(pendingAck.timeoutTask(), nullValue());
 
                 releaseFlush.countDown();
                 assertEventually(
-                    () -> getField(pendingAck, "timeoutTask", Object.class),
+                    () -> pendingAck.timeoutTask(),
                     notNullValue()
                 );
             } finally {
@@ -824,11 +823,7 @@ class RFC9113_6_5_SettingsTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> T getField(Object target, String name, Class<T> type) throws Exception {
-        Field field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        return (T) type.cast(field.get(target));
-    }
+
 
     @AfterEach
     public void stop() {

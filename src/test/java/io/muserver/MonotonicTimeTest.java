@@ -29,14 +29,14 @@ class MonotonicTimeTest {
     void anOlderConcurrentPublicationCannotMoveActivityBackwards() {
         var latest = new AtomicLong(100L);
 
-        MonotonicTime.publishLatest(latest, 200L);
-        MonotonicTime.publishLatest(latest, 150L);
+        MonotonicTime.advanceIfLater(latest, 200L);
+        MonotonicTime.advanceIfLater(latest, 150L);
 
         assertThat(latest.get(), is(200L));
 
         latest.set(Long.MAX_VALUE - 5L);
-        MonotonicTime.publishLatest(latest, Long.MIN_VALUE + 4L);
-        MonotonicTime.publishLatest(latest, Long.MAX_VALUE - 2L);
+        MonotonicTime.advanceIfLater(latest, Long.MIN_VALUE + 4L);
+        MonotonicTime.advanceIfLater(latest, Long.MAX_VALUE - 2L);
 
         assertThat(latest.get(), is(Long.MIN_VALUE + 4L));
     }

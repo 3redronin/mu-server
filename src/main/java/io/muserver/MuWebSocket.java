@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit;
  * <ul>
  *     <li>For most cases where you just want to send and receive text and/or binary messages, extend
  *     {@link SimpleWebSocket}</li>
+ *     <li>For asynchronous processing with a completion callback, extend {@link BaseWebSocket}.</li>
  *     <li>For cases where you desire lower level control over aspects such as handling message fragments,
  *     handling pings and pongs, and handling close events, implement this interface.</li>
  * </ul>

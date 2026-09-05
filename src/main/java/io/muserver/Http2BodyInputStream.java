@@ -34,12 +34,17 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
     private final CreditAvailableListener onDataReadCallback;
     private final CreditAvailableListener onDataDiscardedCallback;
     private final Lock lock = new ReentrantLock();
+    // Guarded by lock.
     private final Queue<Object> frames = new LinkedList<>();
     private final Condition hasData = lock.newCondition();
+    // Guarded by lock.
     private boolean requestBodyComplete;
+    // Guarded by lock.
     private boolean discarding;
     /** The first terminal failure; independent of the contents of the data queue. */
+    // Guarded by lock.
     private @org.jspecify.annotations.Nullable IOException failure;
+    // Guarded by lock.
     private @org.jspecify.annotations.Nullable FieldBlock trailers;
 
     private static final class EndOfStreamMarker {
@@ -235,16 +240,16 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
         var ex = (err == Http2ErrorCode.CANCEL)
             ? new EOFException("Client cancelled the request")
             : new IOException("Error reading request body: " + err.name() + " (" + err.code() + ")");
-        setErrored(ex, true);
+        setErrored(ex, UnreadDataCredit.REFUND_CONNECTION);
     }
 
-    private void setErrored(IOException ex, boolean refundUnreadData) {
+    private void setErrored(IOException ex, UnreadDataCredit refundUnreadData) {
         int discardedCredit = 0;
         lock.lock();
         try {
             if (!isErrored()) {
                 failure = ex;
-                if (refundUnreadData) {
+                if (refundUnreadData == UnreadDataCredit.REFUND_CONNECTION) {
                     for (Object frame : frames) {
                         if (frame instanceof PendingDataFrame) {
                             discardedCredit += ((PendingDataFrame) frame).unreadCredit();
@@ -281,15 +286,16 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
         }
     }
 
+    // Guarded by lock.
     private boolean isErrored() {
         return failure != null;
     }
 
     void cancel(IOException reason) {
-        cancel(reason, true);
+        cancel(reason, UnreadDataCredit.REFUND_CONNECTION);
     }
 
-    void cancel(IOException reason, boolean refundUnreadData) {
+    void cancel(IOException reason, UnreadDataCredit refundUnreadData) {
         setErrored(reason, refundUnreadData);
     }
 

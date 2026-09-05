@@ -8,6 +8,7 @@ import java.util.concurrent.locks.ReentrantLock;
 final class ApplicationTaskTracker {
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition drained = lock.newCondition();
+    // Guarded by lock.
     private long pending;
 
     Registration register() {

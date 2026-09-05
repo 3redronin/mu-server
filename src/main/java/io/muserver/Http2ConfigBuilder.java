@@ -225,7 +225,7 @@ public class Http2ConfigBuilder {
     /**
      * Sets the timeout for receiving acknowledgements to locally-sent SETTINGS frames.
      *
-     * <p>The default is 10 seconds.</p>
+     * <p>The default is 10 seconds. Zero means immediate expiry, not disabled.</p>
      *
      * @param settingsAckTimeoutMillis the timeout in milliseconds
      * @return this builder

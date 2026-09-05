@@ -1,7 +1,5 @@
 package io.muserver;
 
-import io.muserver.internal.FatalErrors;
-
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -143,10 +141,16 @@ class Mu3ServerImpl implements MuServer {
                 }
             }
         };
-        RejectedExecutionException rejected = tryExecuteHandlerTask(trackedTask);
+        RejectedExecutionException rejected;
+        try {
+            rejected = tryExecuteHandlerTask(trackedTask);
+        } catch (RuntimeException | Error submissionFailure) {
+            registration.deregister();
+            throw submissionFailure;
+        }
         if (rejected != null) {
             registration.deregister();
-            log.warn("Dropping {} because its application executors rejected it", description, rejected);
+            log.warn("Dropping {} because its application executor rejected it", description, rejected);
         }
         return rejected;
     }
@@ -206,10 +210,6 @@ class Mu3ServerImpl implements MuServer {
         if (failure != null) throwUnchecked(failure);
     }
 
-    <T> @Nullable T callHandlerApplicationTask(ApplicationCallable<T> task) throws Throwable {
-        return task.call();
-    }
-
     @SuppressWarnings("ReferenceEquality") // Throwable forbids suppressing itself; identity is required.
     private static @Nullable Throwable drainApplicationTasks(
         ApplicationTaskContext context,
@@ -220,7 +220,7 @@ class Mu3ServerImpl implements MuServer {
             try {
                 task.run();
             } catch (Throwable taskFailure) {
-            FatalErrors.rethrow(taskFailure);
+                FatalErrors.rethrow(taskFailure);
                 if (failure == null) {
                     failure = taskFailure;
                 } else if (failure != taskFailure) {
@@ -239,11 +239,6 @@ class Mu3ServerImpl implements MuServer {
             throw (Error) failure;
         }
         throw new MuException("Application task failed", failure);
-    }
-
-    @FunctionalInterface
-    interface ApplicationCallable<T> {
-        @Nullable T call() throws Throwable;
     }
 
     private static final class ApplicationTaskContext {
@@ -466,7 +461,7 @@ class Mu3ServerImpl implements MuServer {
             try {
                 listener.onRejected(info);
             } catch (Throwable failure) {
-            FatalErrors.rethrow(failure);
+                FatalErrors.rethrow(failure);
                 log.error("Error from request reject listener", failure);
             }
         }

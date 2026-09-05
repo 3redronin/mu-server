@@ -6,7 +6,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
-import java.lang.reflect.Field;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -49,11 +48,7 @@ class RFC9113_5_2_FlowControlTest {
                     executor,
                     executor
                 );
-                Http2InboundFlowControl flow = getField(
-                    writerConnection,
-                    "inboundFlowControl",
-                    Http2InboundFlowControl.class
-                );
+                Http2InboundFlowControl flow = writerConnection.testProbe().inbound();
                 flow.openStream(1, 100_000);
                 assertThat(flow.reserve(1, 65_535).error(), nullValue());
 
@@ -640,12 +635,7 @@ class RFC9113_5_2_FlowControlTest {
     }
 
     @SuppressWarnings("unchecked")
-    private static <T> T getField(Object target, String name, Class<T> type)
-        throws Exception {
-        Field field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        return (T) type.cast(field.get(target));
-    }
+
 
     @AfterEach
     public void stop() {

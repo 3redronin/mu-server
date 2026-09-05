@@ -17,6 +17,59 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class Http2WriteCoordinatorTest {
 
     @Test
+    void latePeerResetsDoNotAccumulateRecordsForRetiredStreams() {
+        var coordinator = new Http2WriteCoordinator(100);
+        for (int id = 1; id < 2000; id += 2) {
+            coordinator.openStream(id, 100);
+            coordinator.applicationExchangeEnded(id);
+            // Exercise both an already-applied retirement and retirement queued before reset.
+            if (id % 4 == 1) coordinator.processAvailableCommands();
+            var reset = new Http2ResetStreamFrame(id, Http2ErrorCode.CANCEL.code());
+            coordinator.resetStream(reset, new IOException("late reset"), null);
+            coordinator.resetStream(reset, new IOException("duplicate reset"), null);
+            coordinator.processAvailableCommands();
+            assertThat(coordinator.streamState(id), nullValue());
+            assertThat(coordinator.resetRecordCount(), is(0));
+        }
+    }
+
+    @Test
+    void staleLocalResetRetentionDoesNotRecreateRetiredStreamRecords() {
+        var coordinator = new Http2WriteCoordinator(100);
+        for (int id = 1; id < 2000; id += 2) {
+            coordinator.openStream(id, 100);
+            coordinator.applicationExchangeEnded(id);
+            if (id % 4 == 1) coordinator.processAvailableCommands();
+            var reset = new Http2ResetStreamFrame(id, Http2ErrorCode.CANCEL.code());
+            coordinator.submit(task(reset), Http2WriteCoordinator.ResetRetention.UNTIL_APPLICATION_ENDS);
+            coordinator.processAvailableCommands();
+            // Retirement must not discard a reset that still needs to reach the peer.
+            var writable = coordinator.pollWritable();
+            assertThat(writable.frame(), is(reset));
+            writable.complete();
+            assertThat(coordinator.pollWritable(), nullValue());
+            assertThat(coordinator.streamState(id), nullValue());
+            assertThat(coordinator.resetRecordCount(), is(0));
+        }
+    }
+
+    @Test
+    void peerResetRecordRemainsUntilTheApplicationEnds() throws Exception {
+        var coordinator = coordinator(100, 1, 100);
+        coordinator.resetStream(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()),
+            new IOException("peer reset"), null);
+        coordinator.processAvailableCommands();
+        assertThat(coordinator.resetRecordCount(), is(1));
+        var late = task(data(1, "late"));
+        coordinator.submit(late);
+        coordinator.processAvailableCommands();
+        assertThrows(IOException.class, () -> late.await(1, TimeUnit.SECONDS));
+        coordinator.applicationExchangeEnded(1);
+        coordinator.processAvailableCommands();
+        assertThat(coordinator.resetRecordCount(), is(0));
+    }
+
+    @Test
     void resetDiscardsBlockedDataAndLaterCreditCannotMakeItWritable() throws Exception {
         var coordinator = coordinator(0, 1, 100);
         var blockedData = task(data(1, "not sent"));

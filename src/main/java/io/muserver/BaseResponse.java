@@ -22,9 +22,12 @@ abstract class BaseResponse implements MuResponse {
     protected volatile OutputStream wrappedOut;
 
     private final Object completionListenersLock = new Object();
-    private final Queue<ResponseCompleteListener> completionListeners = new ArrayDeque<>();
+    // Guarded by completionListenersLock.
+    private @Nullable Queue<ResponseCompleteListener> completionListeners;
     @Nullable
+    // Guarded by completionListenersLock.
     private ResponseInfo completionInfo;
+    // Guarded by completionListenersLock.
     private boolean completionListenersDrained;
 
     private volatile ResponseState state = ResponseState.NOTHING;
@@ -226,6 +229,7 @@ abstract class BaseResponse implements MuResponse {
         synchronized (completionListenersLock) {
             completed = completionInfo;
             if (completed == null || !completionListenersDrained) {
+                if (completionListeners == null) completionListeners = new ArrayDeque<>();
                 completionListeners.add(listener);
                 return;
             }
@@ -246,9 +250,10 @@ abstract class BaseResponse implements MuResponse {
         while (true) {
             ResponseCompleteListener listener;
             synchronized (completionListenersLock) {
-                listener = completionListeners.poll();
+                listener = completionListeners == null ? null : completionListeners.poll();
                 if (listener == null) {
                     completionListenersDrained = true;
+                    completionListeners = null;
                     return;
                 }
             }

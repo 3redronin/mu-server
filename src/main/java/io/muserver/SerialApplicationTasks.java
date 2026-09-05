@@ -9,7 +9,9 @@ import java.util.function.Consumer;
 final class SerialApplicationTasks {
     private final Mu3ServerImpl server;
     private final Object lock = new Object();
+    // Guarded by lock.
     private final Queue<Entry> tasks = new ArrayDeque<>();
+    // Guarded by lock.
     private boolean scheduled;
 
     SerialApplicationTasks(Mu3ServerImpl server) { this.server = server; }

@@ -13,7 +13,16 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * <p>A web socket session used to send messages and events to a web socket client.</p>
- * <p>The simplest way to get a reference to a session is to extend {@link BaseWebSocket} and use the {@link BaseWebSocket#session()} method.</p>
+ * <p>Extend {@link SimpleWebSocket} for blocking receive methods or {@link BaseWebSocket} for
+ * asynchronous receive methods. Both expose the session through their {@code session()} method.</p>
+ * <p>Send methods with a {@link DoneCallback} return without waiting for the write. Mu performs
+ * the write on its internal IO executor and invokes the callback on the configured application
+ * executor, passing null on success or the failure. Chain sends through their completion callbacks
+ * when their order matters. A rejected completion callback closes the connection and may not be delivered.</p>
+ * <p>For asynchronous sends of a byte buffer, do not change its contents, position or limit until
+ * the callback runs. When echoing a buffer from an asynchronous receive method, pass that method's
+ * completion callback to the send. Buffers from blocking receive methods must be copied before
+ * returning if an asynchronous send still needs them.</p>
  */
 public interface MuWebSocketSession {
 
@@ -67,11 +76,9 @@ public interface MuWebSocketSession {
      * Sends a message to the client asynchronously
      * @param message The message to be sent
      * @param doneCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
-     *                      use {@link DoneCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
-     *                      pass the <code>onComplete</code> received to this parameter.
-     * @deprecated Non-blocking operations no longer supported. Use the blocking {@link #sendText(String)} instead
+     *                      use {@link DoneCallback#NoOp}. For asynchronous {@link BaseWebSocket} receives,
+     *                      the receive completion callback can be passed here.
      */
-    @Deprecated
     default void sendText(String message, DoneCallback doneCallback) {
         runAsync(() -> {
             try {
@@ -88,11 +95,9 @@ public interface MuWebSocketSession {
      * @param message The message to be sent
      * @param isLastFragment If <code>false</code> then this message will be sent as a partial fragment
      * @param doneCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
-     *                      use {@link DoneCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
-     *                      pass the <code>onComplete</code> received to this parameter.
-     * @deprecated Non-blocking operations no longer supported. Use the blocking {@link #sendText(String)} instead
+     *                      use {@link DoneCallback#NoOp}. For asynchronous {@link BaseWebSocket} receives,
+     *                      the receive completion callback can be passed here.
      */
-    @Deprecated
     default void sendText(String message, boolean isLastFragment, DoneCallback doneCallback) {
         runAsync(() -> {
             try {
@@ -116,11 +121,9 @@ public interface MuWebSocketSession {
      * Sends a message to the client asynchronously
      * @param message The message to be sent
      * @param doneCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
-     *                      use {@link DoneCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
-     *                      pass the <code>onComplete</code> received to this parameter.
-     * @deprecated Non-blocking operations no longer supported. Use the blocking {@link #sendText(String)} instead
+     *                      use {@link DoneCallback#NoOp}. For asynchronous {@link BaseWebSocket} receives,
+     *                      the receive completion callback can be passed here.
      */
-    @Deprecated
     default void sendBinary(ByteBuffer message, DoneCallback doneCallback) {
         runAsync(() -> {
             try {
@@ -145,11 +148,9 @@ public interface MuWebSocketSession {
      * @param message The message to be sent
      * @param isLastFragment If <code>false</code> then this message will be sent as a partial fragment
      * @param doneCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
-     *                      use {@link DoneCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
-     *                      pass the <code>onComplete</code> received to this parameter.
-     * @deprecated Non-blocking operations no longer supported. Use the blocking {@link #sendText(String)} instead
+     *                      use {@link DoneCallback#NoOp}. For asynchronous {@link BaseWebSocket} receives,
+     *                      the receive completion callback can be passed here.
      */
-    @Deprecated
     default void sendBinary(ByteBuffer message, boolean isLastFragment, DoneCallback doneCallback) {
         runAsync(() -> {
             try {
@@ -172,11 +173,9 @@ public interface MuWebSocketSession {
      * Sends a ping message to the client, which is used for keeping sockets alive.
      * @param payload The message to send.
      * @param doneCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
-     *                      use {@link DoneCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
-     *                      pass the <code>onComplete</code> received to this parameter.
-     * @deprecated Non-blocking operations no longer supported. Use the blocking {@link #sendText(String)} instead
+     *                      use {@link DoneCallback#NoOp}. For asynchronous {@link BaseWebSocket} receives,
+     *                      the receive completion callback can be passed here.
      */
-    @Deprecated
     default void sendPing(ByteBuffer payload, DoneCallback doneCallback) {
         runAsync(() -> {
             try {
@@ -199,11 +198,9 @@ public interface MuWebSocketSession {
      * Sends a pong message to the client, generally in response to receiving a ping via {@link MuWebSocket#onPing(ByteBuffer)}
      * @param payload The payload to send back to the client.
      * @param doneCallback The callback to call when the write succeeds or fails. To ignore the write result, you can
-     *                      use {@link DoneCallback#NoOp}. If using a buffer received from a {@link MuWebSocket} event,
-     *                      pass the <code>onComplete</code> received to this parameter.
-     * @deprecated Non-blocking operations no longer supported. Use the blocking {@link #sendText(String)} instead
+     *                      use {@link DoneCallback#NoOp}. For asynchronous {@link BaseWebSocket} receives,
+     *                      the receive completion callback can be passed here.
      */
-    @Deprecated
     default void sendPong(ByteBuffer payload, DoneCallback doneCallback) {
         runAsync(() -> {
             try {
@@ -254,7 +251,9 @@ public interface MuWebSocketSession {
      * are configured using {@link WebSocketHandlerBuilder#withPingInterval(int, TimeUnit)}.
      * If the ping was initiated by your own code by calling {@link MuWebSocketSession#sendPing(ByteBuffer)}
      * or the client sent an unsolicited pong message, or the pong response does not contain the
-     * payload sent in the ping, then <code>null</code> is returned.</p>
+     * payload sent in the ping, then <code>null</code> is returned. Each outstanding ping is
+     * measured at most once: repeated calls with the same payload, replayed pongs and pings
+     * evicted from the bounded outstanding-ping history also return null.</p>
      *
      * @param pongPayload the payload received in a pong message. The buffer will be read from its current position
      *                    and after returning the position will not have been incremented.

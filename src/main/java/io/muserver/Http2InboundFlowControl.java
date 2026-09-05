@@ -77,14 +77,16 @@ final class Http2InboundFlowControl {
             return false;
         }
 
+        /** All returned credit remains bounded even before it is advertised. */
+        private void checkTotalCreditDoesNotOverflow(int pending) {
+            Math.addExact(credit, Math.addExact(pending, updateInFlight));
+        }
+
         private int returnCredit(int amount) throws Http2Exception {
             final int newPendingCredit;
             try {
                 newPendingCredit = Math.addExact(pendingCredit, amount);
-                Math.addExact(
-                    credit,
-                    Math.addExact(newPendingCredit, updateInFlight)
-                );
+                checkTotalCreditDoesNotOverflow(newPendingCredit);
             } catch (ArithmeticException e) {
                 throw streamId == 0
                     ? Http2Exception.connection(Http2ErrorCode.FLOW_CONTROL_ERROR, "Credit overflow")
@@ -117,7 +119,9 @@ final class Http2InboundFlowControl {
     }
 
     private final Lock lock = new ReentrantLock();
+    // Guarded by lock.
     private final Window connectionWindow;
+    // Guarded by lock.
     private final Map<Integer, Window> streamWindows = new HashMap<>();
 
     Http2InboundFlowControl(int initialConnectionCredit) {

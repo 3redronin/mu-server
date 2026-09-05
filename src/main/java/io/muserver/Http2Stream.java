@@ -28,8 +28,11 @@ class Http2Stream implements ResponseInfo {
     // A monotonic published fence used to stop input delivery and to avoid
     // starting new response work after any thread has initiated a reset.
     private volatile boolean resetInitiated;
-    private final Object outputLock = new Object();
+    // Guarded by this stream's monitor.
+    // Cancellation must find the write whose buffer is still in use.
     private @Nullable WriteTask activeWrite;
+    // Guarded by this stream's monitor.
+    // A reset can be recorded before output abort has started; these are separate events.
     private boolean outputAborted;
     private volatile boolean applicationExchangeEnded;
     private volatile boolean protocolStateClosed;
@@ -73,6 +76,9 @@ class Http2Stream implements ResponseInfo {
     }
 
     void recordPeerResetFromReader() {
+        // A queued handler can finish as soon as it sees resetInitiated.
+        // Publish the response outcome first so its completion listeners see cancellation.
+        requiredResponse().setState(ResponseState.CLIENT_CANCELLED);
         peerResetRead = true;
         resetInitiated = true;
     }
@@ -137,9 +143,9 @@ class Http2Stream implements ResponseInfo {
      * completion listeners or other application callbacks.
      */
     void applyPeerReset(Http2ResetStreamFrame rstStream) {
-        onProtocolResetApplied();
         Http2Response currentResponse = requiredResponse();
         currentResponse.setState(ResponseState.CLIENT_CANCELLED);
+        onProtocolResetApplied();
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).onStreamReset(rstStream);
         }
@@ -149,10 +155,10 @@ class Http2Stream implements ResponseInfo {
     }
 
     void cancel(IOException reason) {
-        cancel(reason, true);
+        cancel(reason, UnreadDataCredit.REFUND_CONNECTION);
     }
 
-    void cancel(IOException reason, boolean refundUnreadData) {
+    void cancel(IOException reason, UnreadDataCredit refundUnreadData) {
         resetInitiated = true;
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).cancel(reason, refundUnreadData);
@@ -160,7 +166,7 @@ class Http2Stream implements ResponseInfo {
     }
 
     void onConnectionTerminated(IOException reason, ResponseState terminalState) {
-        cancel(reason, false);
+        cancel(reason, UnreadDataCredit.CONNECTION_CLOSED_OR_TRANSFERRED);
         Http2Response currentResponse = requiredResponse();
         currentResponse.setState(terminalState);
         // Complete the private async-exchange future. Its continuation is
@@ -430,7 +436,7 @@ class Http2Stream implements ResponseInfo {
      */
     void blockingWrite(LogicalHttp2Frame frame) throws IOException, InterruptedException {
         WriteTask writeTask = new WriteTask(frame, true);
-        synchronized (outputLock) {
+        synchronized (this) {
             if (resetInitiated) throw new IOException("HTTP/2 stream output is closed");
             activeWrite = writeTask;
         }
@@ -444,14 +450,14 @@ class Http2Stream implements ResponseInfo {
                 throw interrupted;
             }
         } finally {
-            synchronized (outputLock) { activeWrite = null; }
+            synchronized (this) { activeWrite = null; }
         }
     }
 
     void abortOutput(IOException reason) {
         WriteTask writing;
         boolean sendReset;
-        synchronized (outputLock) {
+        synchronized (this) {
             if (outputAborted) return;
             outputAborted = true;
             sendReset = !resetInitiated;

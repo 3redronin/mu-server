@@ -236,8 +236,10 @@ public interface MuRequest {
     Map<String, Object> attributes();
 
     /**
-     * <p>Specifies that you want to handle this response asynchronously.</p>
-     * <p>When finished, call {@link AsyncHandle#complete()}</p>
+     * Keeps the response open after the request handler returns, allowing asynchronous work
+     * to finish it later. Returning from the handler releases its application executor worker.
+     * <p>Use the returned handle to read or write asynchronously. When finished, call
+     * {@link AsyncHandle#complete()}, or {@link AsyncHandle#complete(Throwable)} if the work failed.</p>
      * <p>If called more than once, then the async handle created from the first call is returned.</p>
      * @return An object that you can use to mark the response as complete.
      */

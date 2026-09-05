@@ -200,13 +200,19 @@ public class MuServerBuilder {
     }
 
     /**
-     * Sets the executor for handlers, application callbacks and JAX-RS continuations.
-     * By default Mu uses virtual threads when available, otherwise cached platform threads.
-     * A supplied executor remains caller-owned and must remain available until the server stops.
-     * It must dispatch asynchronously and reject visibly; direct executors, caller-runs and
-     * silent-discard rejection policies are unsupported. Rejected requests receive 503;
-     * rejected continuations fail their exchange and notifications may be dropped.
-     * Blocking adapter I/O runs independently on Mu-owned workers.
+     * Sets the executor that runs request handlers and application callbacks, including
+     * WebSocket events, response-completion listeners and resumed asynchronous JAX-RS responses.
+     * <p>By default, Mu uses a new virtual thread per task when available, otherwise a cached
+     * pool of platform threads with no configured maximum. Use {@link #withMaxConcurrentRequests(int)}
+     * to limit unfinished requests. Network reads and writes use separate internal workers.</p>
+     * <p>If you supply an executor, keep it running until the server has stopped; Mu does not
+     * shut it down. It must run tasks asynchronously and throw
+     * {@link java.util.concurrent.RejectedExecutionException} when it cannot accept them.
+     * Executors that run tasks on the submitting thread or silently discard them are unsupported.</p>
+     * <p>A bounded executor can reject callbacks needed to finish a request that was already
+     * accepted. Such a rejection fails that request; completion and rejection notifications may
+     * not be delivered. Rejection of a new request produces HTTP 503. The unbounded default
+     * avoids rejection due to a configured pool or queue limit.</p>
      * @param executor The application executor, or null for Mu's default
      * @return This builder
      */
@@ -216,10 +222,15 @@ public class MuServerBuilder {
     }
 
     /**
-     * Limits admitted unfinished requests across all listeners and HTTP versions.
-     * Queued handlers, suspended async requests and SSE count until exchange cleanup.
-     * Completed WebSocket upgrades release their HTTP request slot. Excess requests receive
-     * 503 without blocking connection readers. HTTP/2 per-connection stream limits still apply.
+     * Limits how many requests the server handles at once, across all its HTTP and HTTPS ports.
+     * <p>A request counts while waiting for its handler to run, waiting for asynchronous work,
+     * or streaming a response, including server-sent events. It stops counting after response
+     * processing and internal cleanup finish, before completion listeners are called.</p>
+     * <p>When the limit is reached, new requests receive HTTP 503. Requests already accepted
+     * continue processing. An HTTP request that upgrades to WebSocket stops counting once the
+     * upgrade completes; the WebSocket connection itself does not count.</p>
+     * <p>This limits requests, not connections or threads. Idle connections are not counted.
+     * HTTP/2 also has a separate per-connection stream limit.</p>
      * @param maximum The limit (default 1000), or zero for unlimited
      * @return This builder
      */
@@ -623,7 +634,7 @@ public class MuServerBuilder {
     }
 
     /**
-     * Gets the executor used to run request handlers.
+     * Gets the executor used to run request handlers, application callbacks and continuations.
      *
      * @return The configured executor, or <code>null</code> if the default executor will be used.
      */
