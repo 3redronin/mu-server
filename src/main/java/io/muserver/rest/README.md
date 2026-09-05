@@ -14,7 +14,7 @@ returned by `Application.getClasses()` are instantiated once with a public no-ar
 components must be safe to use concurrently.
 
 Resource classes returned by `Application.getClasses()` are rejected because their default lifecycle is per-request,
-which Mu Server does not support. Application properties, features, dynamic features, context resolvers, and classpath
+which Mu Server does not support. Application properties, features, dynamic features, and classpath
 scanning are also not supported. `@ApplicationPath` is honored when starting an application with `SeBootstrap`; a
 handler created directly with `RestHandlerBuilder.fromApplication` can instead be mounted in a Mu context. All
 supported components can alternatively be registered programmatically using `RestHandlerBuilder`.
@@ -171,7 +171,9 @@ N/A as Mu will never instantiate user classes.
 
 #### 4.1.4 Priorities
 
-No plan to implement as it would add another dependency.
+- [x] Application-supplied message body readers, message body writers, and exception mappers honor `@Priority`,
+  defaulting to `Priorities.USER`. Application-supplied providers always take precedence over built-in providers.
+- [x] Context resolvers are ordered by `@Produces` media-type specificity as required by `Providers`.
 
 ### 4.2 Entity Providers 
 
@@ -216,11 +218,13 @@ No plan to implement as it would add another dependency.
 
 ### 4.3 Context Providers 
 
-- [ ] Not implemented.
+- [x] Context resolvers can be registered explicitly with `RestHandlerBuilder.addContextResolver`, or supplied as
+  singleton instances or provider classes from an `Application`.
 
 #### 4.3.1 Declaring Media Type Capabilities 
 
-- [ ] Not implemented.
+- [x] `@Produces` is used to filter and order context resolvers. When multiple resolvers match, they are called in
+  order until one returns a non-null context.
 
 ### 4.4 Exception Mapping Providers 
 
@@ -379,7 +383,11 @@ allows injection of `MuRequest`, `MuResponse` and `ContainerRequestContext`.
 
 #### 10.2.1 Application 
 
-N/A. Will not implement, as there is no support for `Application`.
+- [x] Implemented for resource method parameters using `@Context Application`.
+
+Applications supplied through `RestHandlerBuilder.fromApplication(...)` or `SeBootstrap` are injected directly.
+For handlers configured with `RestHandlerBuilder`, Mu Server creates an immutable application snapshot containing
+the handler's resource instances and custom JAX-RS provider instances.
 
 #### 10.2.2 URIs and URI Templates 
 
@@ -400,7 +408,11 @@ N/A. Will not implement, as there is no support for `Application`.
 
 #### 10.2.6 Providers 
 
-Will not implement.
+- [x] Implemented for resource method parameters using `@Context Providers`.
+
+Mu Server does not inject fields or bean properties on provider instances. Readers and writers that need access to
+the handler's providers can instead be registered with a factory, for example
+`addCustomWriter(providers -> new JsonWriter(providers))`.
 
 #### 10.2.7 Resource Context 
 

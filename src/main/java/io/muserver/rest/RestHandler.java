@@ -9,6 +9,7 @@ import jakarta.ws.rs.container.ContainerRequestContext;
 import jakarta.ws.rs.core.*;
 import jakarta.ws.rs.ext.MessageBodyWriter;
 import jakarta.ws.rs.ext.ParamConverterProvider;
+import jakarta.ws.rs.ext.Providers;
 import jakarta.ws.rs.ext.ReaderInterceptor;
 import jakarta.ws.rs.ext.WriterInterceptor;
 import jakarta.ws.rs.sse.Sse;
@@ -37,7 +38,8 @@ public class RestHandler implements MuHandler {
     private static final Logger log = LoggerFactory.getLogger(RestHandler.class);
 
     private final RequestMatcher requestMatcher;
-    private final EntityProviders entityProviders;
+    private final Application application;
+    private final JaxRSProviders providers;
     private final @Nullable MuHandler documentor;
     private final CustomExceptionMapper customExceptionMapper;
     private final FilterManagerThing filterManagerThing;
@@ -49,9 +51,10 @@ public class RestHandler implements MuHandler {
     private final List<WriterInterceptor> writerInterceptors;
     private final CollectionParameterStrategy collectionParameterStrategy;
 
-    RestHandler(EntityProviders entityProviders, List<ResourceClass> roots, @Nullable MuHandler documentor, CustomExceptionMapper customExceptionMapper, FilterManagerThing filterManagerThing, CORSConfig corsConfig, List<ParamConverterProvider> paramConverterProviders, SchemaObjectCustomizer schemaObjectCustomizer, List<ReaderInterceptor> readerInterceptors, List<WriterInterceptor> writerInterceptors, CollectionParameterStrategy collectionParameterStrategy) {
+    RestHandler(Application application, JaxRSProviders providers, List<ResourceClass> roots, @Nullable MuHandler documentor, CustomExceptionMapper customExceptionMapper, FilterManagerThing filterManagerThing, CORSConfig corsConfig, List<ParamConverterProvider> paramConverterProviders, SchemaObjectCustomizer schemaObjectCustomizer, List<ReaderInterceptor> readerInterceptors, List<WriterInterceptor> writerInterceptors, CollectionParameterStrategy collectionParameterStrategy) {
         this.requestMatcher = new RequestMatcher(roots);
-        this.entityProviders = entityProviders;
+        this.application = Objects.requireNonNull(application, "application");
+        this.providers = providers;
         this.documentor = documentor;
         this.customExceptionMapper = customExceptionMapper;
         this.filterManagerThing = filterManagerThing;
@@ -74,7 +77,7 @@ public class RestHandler implements MuHandler {
         List<MediaType> directlyProducesRef = null;
         SecurityContext securityContext = muRequest.uri().getScheme().equals("https") ? MuSecurityContext.notLoggedInHttpsContext : MuSecurityContext.notLoggedInHttpContext;
 
-        JaxRSRequest requestContext = new JaxRSRequest(muRequest, muResponse, new LazyAccessInputStream(muRequest), Mutils.trim(muRequest.relativePath(), "/"), securityContext, readerInterceptors, entityProviders);
+        JaxRSRequest requestContext = new JaxRSRequest(muRequest, muResponse, new LazyAccessInputStream(muRequest), Mutils.trim(muRequest.relativePath(), "/"), securityContext, readerInterceptors, providers);
         try {
             final List<MediaType> acceptHeaders;
             try {
@@ -96,7 +99,7 @@ public class RestHandler implements MuHandler {
                 ResourceMethod rm = matchedMethod.resourceMethod;
                 try {
                     Object instance = Objects.requireNonNull(
-                        invokeResourceMethod(requestContext, muResponse, matchedMethod, onSuspended, entityProviders, collectionParameterStrategy),
+                        invokeResourceMethod(requestContext, muResponse, matchedMethod, onSuspended, application, providers, collectionParameterStrategy),
                         "Sub-resource locator returned null");
                     return ResourceClass.forSubResourceLocator(rm, instance.getClass(), instance, schemaObjectCustomizer, paramConverterProviders);
                 } catch (WebApplicationException wae) {
@@ -146,7 +149,7 @@ public class RestHandler implements MuHandler {
             };
 
 
-            @Nullable Object result = invokeResourceMethod(requestContext, muResponse, mm, suspendedParamCallback, entityProviders, collectionParameterStrategy);
+            @Nullable Object result = invokeResourceMethod(requestContext, muResponse, mm, suspendedParamCallback, application, providers, collectionParameterStrategy);
 
             if (!muRequest.isAsync()) {
                 if (result instanceof CompletionStage) {
@@ -183,7 +186,7 @@ public class RestHandler implements MuHandler {
         return GenericTypeResolver.resolveTypeArgument(returnType, CompletionStage.class, 0);
     }
 
-    static @Nullable Object invokeResourceMethod(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, Function<ResourceMethod, @Nullable Object> suspendedParamCallback, EntityProviders entityProviders, CollectionParameterStrategy collectionParameterStrategy) throws Exception {
+    static @Nullable Object invokeResourceMethod(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, Function<ResourceMethod, @Nullable Object> suspendedParamCallback, Application application, JaxRSProviders providers, CollectionParameterStrategy collectionParameterStrategy) throws Exception {
         ResourceMethod rm = mm.resourceMethod;
         @Nullable Object[] params = new Object[rm.methodHandle().getParameterCount()];
         for (ResourceMethodParam param : rm.params) {
@@ -191,7 +194,7 @@ public class RestHandler implements MuHandler {
             if (param.source() == ResourceMethodParam.ValueSource.MESSAGE_BODY) {
                 paramValue = readRequestEntity(requestContext, param);
             } else if (param.source() == ResourceMethodParam.ValueSource.CONTEXT) {
-                paramValue = getContextParam(requestContext, muResponse, mm, param, entityProviders);
+                paramValue = getContextParam(requestContext, muResponse, mm, param, application, providers);
             } else if (param.source() == ResourceMethodParam.ValueSource.SUSPENDED) {
                 paramValue = suspendedParamCallback.apply(rm);
             } else {
@@ -278,7 +281,7 @@ public class RestHandler implements MuHandler {
                     jaxRSResponse.setAnnotations(writerAnnontations);
 
                     if (obj.entity != null) {
-                        MediaType responseMediaType = MediaTypeDeterminer.determine(obj, produces, directlyProduces, entityProviders.writers, acceptHeaders, writerAnnontations);
+                        MediaType responseMediaType = MediaTypeDeterminer.determine(obj, produces, directlyProduces, providers.writers(), acceptHeaders, writerAnnontations);
                         jaxRSResponse.setMediaType(responseMediaType);
                     }
 
@@ -324,9 +327,10 @@ public class RestHandler implements MuHandler {
                             "A response entity must have a raw type");
                         Type entityGenericType = Objects.requireNonNull(jaxRSResponse.getEntityType(),
                             "A response entity must have a generic type");
-                        MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(entityType, entityGenericType, writerAnnontations, responseMediaType);
+                        MessageBodyWriter messageBodyWriter = JaxRSProviders.requireMessageBodyWriter(
+                            providers, entityType, entityGenericType, writerAnnontations, responseMediaType);
 
-                        if (!entityStreamReplaced && !muResponse.hasStartedSendingData() && entityProviders.isBuiltInWriter(messageBodyWriter)) {
+                        if (!entityStreamReplaced && !muResponse.hasStartedSendingData() && providers.isBuiltInWriter(messageBodyWriter)) {
                             long size = messageBodyWriter.getSize(jaxRSResponse.getEntity(), entityType, entityGenericType, writerAnnontations, responseMediaType);
                             if (size >= 0) {
                                 jaxRSResponse.getHeaders().putSingle("content-length", Long.toString(size));
@@ -395,7 +399,7 @@ public class RestHandler implements MuHandler {
         }
     }
 
-    private static @Nullable Object getContextParam(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, ResourceMethodParam param, EntityProviders providers) {
+    private static @Nullable Object getContextParam(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, ResourceMethodParam param, Application application, JaxRSProviders providers) {
         MuRequest request = requestContext.muRequest;
         Object paramValue;
         Class<?> type = param.type();
@@ -407,6 +411,10 @@ public class RestHandler implements MuHandler {
             paramValue = request;
         } else if (type.equals(HttpHeaders.class)) {
             paramValue = new JaxRsHttpHeadersAdapter(request.headers(), request.cookies());
+        } else if (type.equals(Providers.class)) {
+            paramValue = providers;
+        } else if (type.equals(Application.class)) {
+            paramValue = application;
         } else if (SecurityContext.class.isAssignableFrom(type)) {
             SecurityContext sc = requestContext.getSecurityContext();
             if (sc != null && !type.isAssignableFrom(sc.getClass())) {

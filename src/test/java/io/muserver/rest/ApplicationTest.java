@@ -18,13 +18,16 @@ import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.container.ContainerResponseContext;
 import jakarta.ws.rs.container.ContainerResponseFilter;
 import jakarta.ws.rs.core.Application;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.ext.ContextResolver;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.MessageBodyReader;
 import jakarta.ws.rs.ext.MessageBodyWriter;
 import jakarta.ws.rs.ext.ParamConverter;
 import jakarta.ws.rs.ext.ParamConverterProvider;
+import jakarta.ws.rs.ext.Providers;
 import jakarta.ws.rs.ext.ReaderInterceptor;
 import jakarta.ws.rs.ext.ReaderInterceptorContext;
 import jakarta.ws.rs.ext.WriterInterceptor;
@@ -50,14 +53,18 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.sameInstance;
 import static org.junit.Assert.assertThrows;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
@@ -107,6 +114,190 @@ public class ApplicationTest {
         assertThat(builder.customWriters(), contains(provider));
         assertThat(builder.customParamConverterProviders(), contains(provider));
         assertThat(builder.exceptionMappers(), hasEntry(SampleException.class, provider));
+    }
+
+    @Test
+    public void suppliedApplicationIsInjectedIntoSubResourceLocators() throws IOException {
+        AtomicReference<Application> injected = new AtomicReference<>();
+        class ChildResource {
+            @GET
+            public String get() {
+                return "injected";
+            }
+        }
+        @Path("application-injection")
+        class RootResource {
+            @Path("child")
+            public ChildResource child(@Context Application application) {
+                injected.set(application);
+                return new ChildResource();
+            }
+        }
+        Application application = singletonApplication(new RootResource());
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.fromApplication(application))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/application-injection/child")))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), is("injected"));
+        }
+        assertThat(injected.get(), sameInstance(application));
+    }
+
+    @Test
+    public void regularBuildersExposeAnImmutableApplicationSnapshot() throws IOException {
+        AtomicReference<Application> injected = new AtomicReference<>();
+        @Path("application-snapshot")
+        class Resource {
+            @GET
+            public String get(@Context Application application) {
+                injected.set(application);
+                return "snapshotted";
+            }
+        }
+        Resource resource = new Resource();
+        SupportedProvider provider = new SupportedProvider();
+        ContextResolver<ApplicationContext> resolver = type -> new ApplicationContext("resolved");
+        RestHandlerBuilder builder = RestHandlerBuilder.restHandler(resource)
+            .addCustomReader(providers -> provider)
+            .addCustomWriter(providers -> provider)
+            .addCustomParamConverterProvider(provider)
+            .addExceptionMapper(SampleException.class, provider)
+            .addContextResolver(ApplicationContext.class, resolver)
+            .addRequestFilter(provider)
+            .addResponseFilter(provider)
+            .addReaderInterceptor(provider)
+            .addWriterInterceptor(provider);
+        server = ServerUtils.httpsServerForTest().addHandler(builder).start();
+
+        try (Response response = call(request(server.uri().resolve("/application-snapshot")))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), is("snapshotted"));
+        }
+
+        Application application = injected.get();
+        assertThat(application.getSingletons(), containsInAnyOrder(resource, provider, resolver));
+        assertThat(application.getSingletons(), hasSize(3));
+        assertThat(application.getClasses(), is(empty()));
+        assertThat(application.getProperties().entrySet(), is(empty()));
+        assertThrows(UnsupportedOperationException.class,
+            () -> application.getSingletons().add(new Object()));
+    }
+
+    @Test
+    public void applicationSnapshotDeduplicatesByIdentityRatherThanEquality() throws IOException {
+        AtomicReference<Application> injected = new AtomicReference<>();
+        AtomicInteger filterCalls = new AtomicInteger();
+        @Path("identity-application-snapshot")
+        class Resource {
+            @GET
+            public String get(@Context Application application) {
+                injected.set(application);
+                return "snapshotted";
+            }
+        }
+        class EqualFilter implements ContainerResponseFilter {
+            @Override
+            public void filter(ContainerRequestContext requestContext, ContainerResponseContext responseContext) {
+                filterCalls.incrementAndGet();
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                return other instanceof EqualFilter;
+            }
+
+            @Override
+            public int hashCode() {
+                return 1;
+            }
+        }
+        Resource resource = new Resource();
+        EqualFilter first = new EqualFilter();
+        EqualFilter second = new EqualFilter();
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.restHandler(resource)
+                .addResponseFilter(first)
+                .addResponseFilter(second))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/identity-application-snapshot")))) {
+            assertThat(response.code(), is(200));
+        }
+
+        assertThat(filterCalls.get(), is(2));
+        Set<Object> singletons = injected.get().getSingletons();
+        assertThat(singletons, hasSize(3));
+        assertThat(singletons.stream().anyMatch(value -> value == first), is(true));
+        assertThat(singletons.stream().anyMatch(value -> value == second), is(true));
+    }
+
+    @Test
+    public void exceptionMappersForTheSameTypeAreSelectedByPriority() throws IOException {
+        @Path("priority-mapper")
+        class Resource {
+            @GET
+            public String get() throws SampleException {
+                throw new SampleException();
+            }
+        }
+        @Priority(200)
+        class LowerPriorityMapper implements ExceptionMapper<SampleException> {
+            @Override
+            public jakarta.ws.rs.core.Response toResponse(SampleException exception) {
+                return jakarta.ws.rs.core.Response.status(420).build();
+            }
+        }
+        @Priority(100)
+        class HigherPriorityMapper implements ExceptionMapper<SampleException> {
+            @Override
+            public jakarta.ws.rs.core.Response toResponse(SampleException exception) {
+                return jakarta.ws.rs.core.Response.status(421).build();
+            }
+        }
+        Application application = singletonApplication(
+            new Resource(), new LowerPriorityMapper(), new HigherPriorityMapper());
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.fromApplication(application))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/priority-mapper")))) {
+            assertThat(response.code(), is(421));
+        }
+    }
+
+    @Test
+    public void nearestExceptionMapperTypeWinsBeforePriority() throws IOException {
+        @Path("nearest-priority-mapper")
+        class Resource {
+            @GET
+            public String get() {
+                throw new IllegalArgumentException();
+            }
+        }
+        @Priority(1)
+        class BroadMapper implements ExceptionMapper<Exception> {
+            @Override
+            public jakarta.ws.rs.core.Response toResponse(Exception exception) {
+                return jakarta.ws.rs.core.Response.status(420).build();
+            }
+        }
+        @Priority(5000)
+        class ExactMapper implements ExceptionMapper<IllegalArgumentException> {
+            @Override
+            public jakarta.ws.rs.core.Response toResponse(IllegalArgumentException exception) {
+                return jakarta.ws.rs.core.Response.status(421).build();
+            }
+        }
+        Application application = singletonApplication(new Resource(), new BroadMapper(), new ExactMapper());
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.fromApplication(application))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/nearest-priority-mapper")))) {
+            assertThat(response.code(), is(421));
+        }
     }
 
     @Test
@@ -225,6 +416,29 @@ public class ApplicationTest {
         try (Response response = call(request(server.uri().resolve("/sample/fail")))) {
             assertThat(response.code(), is(409));
             assertThat(response.body().string(), is("mapped"));
+        }
+    }
+
+    @Test
+    public void contextResolverClassesAreRegistered() throws IOException {
+        Application application = new Application() {
+            @Override
+            public Set<Class<?>> getClasses() {
+                return Set.of(ApplicationContextResolver.class);
+            }
+
+            @Override
+            public Set<Object> getSingletons() {
+                return Set.of(new ContextResource());
+            }
+        };
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.fromApplication(application))
+            .start();
+
+        try (Response response = call(request(server.uri().resolve("/application-context")))) {
+            assertThat(response.code(), is(200));
+            assertThat(response.body().string(), is("application-context"));
         }
     }
 
@@ -417,6 +631,30 @@ public class ApplicationTest {
     }
 
     public static class SampleException extends RuntimeException {
+    }
+
+    private static class ApplicationContext {
+        private final String value;
+
+        private ApplicationContext(String value) {
+            this.value = value;
+        }
+    }
+
+    public static class ApplicationContextResolver implements ContextResolver<ApplicationContext> {
+        @Override
+        public ApplicationContext getContext(Class<?> type) {
+            return new ApplicationContext("application-context");
+        }
+    }
+
+    @Path("application-context")
+    private static class ContextResource {
+        @GET
+        public String context(@Context Providers providers) {
+            return providers.getContextResolver(ApplicationContext.class, MediaType.TEXT_PLAIN_TYPE)
+                .getContext(ContextResource.class).value;
+        }
     }
 
     private static class Converted {

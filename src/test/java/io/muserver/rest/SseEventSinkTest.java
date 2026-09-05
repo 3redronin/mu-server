@@ -6,7 +6,9 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedMap;
+import jakarta.ws.rs.ext.ContextResolver;
 import jakarta.ws.rs.ext.MessageBodyWriter;
+import jakarta.ws.rs.ext.Providers;
 import jakarta.ws.rs.sse.Sse;
 import jakarta.ws.rs.sse.SseEventSink;
 import org.junit.After;
@@ -78,7 +80,26 @@ public class SseEventSinkTest {
                 this.name = name;
             }
         }
+        class DogFormat {
+            final String prefix;
+
+            DogFormat(String prefix) {
+                this.prefix = prefix;
+            }
+        }
+        @Produces(MediaType.WILDCARD)
+        class DogFormatResolver implements ContextResolver<DogFormat> {
+            @Override
+            public DogFormat getContext(Class<?> type) {
+                return type.equals(Dog.class) ? new DogFormat("Dog ") : null;
+            }
+        }
         class DogWriter implements MessageBodyWriter<Dog> {
+            private final Providers providers;
+
+            DogWriter(Providers providers) {
+                this.providers = providers;
+            }
 
             @Override
             public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
@@ -87,7 +108,8 @@ public class SseEventSinkTest {
 
             @Override
             public void writeTo(Dog dog, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
-                entityStream.write(("Dog " + dog.name + " has tail? " + dog.hasTail).getBytes(UTF_8));
+                DogFormat format = providers.getContextResolver(DogFormat.class, mediaType).getContext(type);
+                entityStream.write((format.prefix + dog.name + " has tail? " + dog.hasTail).getBytes(UTF_8));
             }
         }
 
@@ -116,7 +138,8 @@ public class SseEventSinkTest {
 
         server = ServerUtils.httpsServerForTest().addHandler(
             restHandler(new Streamer())
-                .addCustomWriter(new DogWriter())
+                .addContextResolver(DogFormat.class, new DogFormatResolver())
+                .addCustomWriter(providers -> new DogWriter(providers))
         ).start();
 
         try (SseClient.ServerSentEvent ignored = sseClient.newServerSentEvent(request().url(server.uri().resolve("/streamer/eventStream").toString()).build(), listener)) {
