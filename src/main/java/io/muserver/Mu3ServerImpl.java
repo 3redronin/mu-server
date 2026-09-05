@@ -10,12 +10,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Phaser;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static io.muserver.GZIPEncoderBuilder.gzipEncoder;
@@ -51,14 +49,7 @@ class Mu3ServerImpl implements MuServer {
     private final ScheduledExecutorService timerExecutor;
     private final boolean ownsTimerExecutor;
     private final ThreadLocal<ApplicationTaskContext> applicationTaskContext = new ThreadLocal<>();
-    private final Phaser detachedApplicationTasks = new Phaser() {
-        @Override
-        protected boolean onAdvance(int phase, int registeredParties) {
-            // Keep accepting tasks after an idle phase. Server.stop() can also be called
-            // again after an earlier bounded stop timed out.
-            return false;
-        }
-    };
+    private final ApplicationTaskTracker detachedApplicationTasks = new ApplicationTaskTracker();
     private final ThreadLocal<@Nullable DetachedApplicationTask> activeDetachedApplicationTask =
         new ThreadLocal<>();
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
@@ -158,38 +149,7 @@ class Mu3ServerImpl implements MuServer {
         if (activeDetachedApplicationTask.get() != null) {
             return true;
         }
-        return awaitDetachedApplicationTasks(
-            detachedApplicationTasks,
-            deadlineNanos
-        );
-    }
-
-    static boolean awaitDetachedApplicationTasks(
-        Phaser tasks,
-        long deadlineNanos
-    ) {
-        while (true) {
-            int phase = tasks.getPhase();
-            if (tasks.getRegisteredParties() == 0) {
-                return true;
-            }
-            long remainingNanos = Math.max(
-                0L,
-                MonotonicTime.nanosUntil(deadlineNanos)
-            );
-            try {
-                tasks.awaitAdvanceInterruptibly(
-                    phase,
-                    remainingNanos,
-                    TimeUnit.NANOSECONDS
-                );
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return false;
-            } catch (TimeoutException e) {
-                return false;
-            }
-        }
+        return detachedApplicationTasks.awaitUntil(deadlineNanos);
     }
 
     void executeResponseCompletionTask(Runnable task) {
@@ -205,7 +165,6 @@ class Mu3ServerImpl implements MuServer {
         boolean preferHandlerExecutor,
         String description
     ) {
-        detachedApplicationTasks.register();
         DetachedApplicationTask registration = new DetachedApplicationTask();
         Runnable trackedTask = () -> {
             DetachedApplicationTask previous = activeDetachedApplicationTask.get();
@@ -233,13 +192,10 @@ class Mu3ServerImpl implements MuServer {
 
     private final class DetachedApplicationTask {
         private @Nullable DetachedApplicationTask previous;
-        private boolean registered = true;
+        private final ApplicationTaskTracker.Registration registration = detachedApplicationTasks.register();
 
         private void deregister() {
-            if (registered) {
-                registered = false;
-                detachedApplicationTasks.arriveAndDeregister();
-            }
+            registration.close();
         }
     }
 

@@ -471,6 +471,23 @@ public class AsynchronousProcessingTest {
     }
 
     @Test
+    public void queuedResumeDoesNotSerializeAfterExchangeCompletion() {
+        var handle = new QueuedAsyncHandle();
+        var consumed = new AtomicInteger();
+        var response = new AsyncResponseAdapter(handle, ignored -> consumed.incrementAndGet());
+        assertThat(response.resume("late result"), is(true));
+        response.onComplete(new ResponseInfo() {
+            public long duration() { return 0; }
+            public boolean completedSuccessfully() { return true; }
+            public MuRequest request() { throw new UnsupportedOperationException(); }
+            public MuResponse response() { throw new UnsupportedOperationException(); }
+        });
+        handle.runNextApplicationTask();
+        assertThat(consumed.get(), is(0));
+        assertThat(response.isDone(), is(true));
+    }
+
+    @Test
     public void cancellationIsAtomicAndIdempotent() {
         var asyncHandle = new QueuedAsyncHandle();
         var sentResponse = new AtomicReference<Object>();

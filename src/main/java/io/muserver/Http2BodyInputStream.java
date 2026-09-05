@@ -38,6 +38,8 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
     private final Condition hasData = lock.newCondition();
     private boolean requestBodyComplete;
     private boolean discarding;
+    /** The first terminal failure; independent of the contents of the data queue. */
+    private @org.jspecify.annotations.Nullable IOException failure;
     private @org.jspecify.annotations.Nullable FieldBlock trailers;
 
     private static final class EndOfStreamMarker {
@@ -158,9 +160,12 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
 
     public void onData(Http2DataFrame dataFrame, int flowControlSize) {
         int discardedCredit = 0;
+        int resetCredit = 0;
         lock.lock();
         try {
-            if (discarding) {
+            if (failure != null) {
+                resetCredit = flowControlSize;
+            } else if (discarding) {
                 discardedCredit = flowControlSize;
                 if (dataFrame.endStream()) {
                     requestBodyComplete = true;
@@ -187,6 +192,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
             lock.unlock();
         }
         returnReusableCredit(discardedCredit);
+        refundDiscardedCredit(resetCredit);
     }
 
     void discardRemaining() {
@@ -237,6 +243,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
         lock.lock();
         try {
             if (!isErrored()) {
+                failure = ex;
                 if (refundUnreadData) {
                     for (Object frame : frames) {
                         if (frame instanceof PendingDataFrame) {
@@ -246,7 +253,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
                 }
                 frames.clear();
                 frames.add(ex);
-                hasData.signal();
+                hasData.signalAll();
             }
         } finally {
             lock.unlock();
@@ -275,7 +282,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
     }
 
     private boolean isErrored() {
-        return frames.size() == 1 && frames.peek() instanceof Exception;
+        return failure != null;
     }
 
     void cancel(IOException reason) {

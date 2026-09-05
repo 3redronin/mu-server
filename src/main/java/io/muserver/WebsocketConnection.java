@@ -13,6 +13,7 @@ import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Queue;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
@@ -115,7 +116,7 @@ class WebsocketConnection implements MuWebSocketSession {
         }, settings.pingIntervalMillis, TimeUnit.MILLISECONDS);
     }
 
-    public void runAndBlockUntilDone(InputStream inputStream, OutputStream outputStream, byte[] readBuffer) throws Exception {
+    public void runAndBlockUntilDone(InputStream inputStream, OutputStream outputStream, byte[] readBuffer) throws InterruptedException, ApplicationEventFailure {
         this.inputStream = inputStream;
         this.outputStream = outputStream;
         this.buffer = ByteBuffer.wrap(readBuffer).flip();
@@ -262,8 +263,14 @@ class WebsocketConnection implements MuWebSocketSession {
             }
 
             // it's finished - the TCP connection will be closed
-        } catch (Throwable e) {
-            if (!serverShutdownRequested.get()
+        } catch (Throwable failure) {
+            if (failure instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+                throw (InterruptedException) failure;
+            }
+            boolean applicationFailure = failure instanceof ApplicationEventFailure;
+            Throwable e = applicationFailure ? Objects.requireNonNull(failure.getCause()) : failure;
+            if ((!serverShutdownRequested.get() || applicationFailure)
                 && !errorEventQueued.get()
                 && lifecycle.state() != WebsocketSessionState.TIMED_OUT) {
                 WebsocketSessionState errorState =
@@ -394,10 +401,12 @@ class WebsocketConnection implements MuWebSocketSession {
             });
     }
 
-    private void invokeApplicationEvent(ApplicationEvent event) throws Exception {
+    private void invokeApplicationEvent(ApplicationEvent event) throws InterruptedException, ApplicationEventFailure {
         if (eventsRunOnConnectionTask) {
             try {
                 callApplicationEvent(event);
+            } catch (Exception | Error failure) {
+                throw new ApplicationEventFailure(failure);
             } finally {
                 // A terminal event can be queued by a write attempted inside a callback.
                 // Drain it before returning to the blocking socket read.
@@ -412,14 +421,14 @@ class WebsocketConnection implements MuWebSocketSession {
             Thread.currentThread().interrupt();
             throw e;
         } catch (ExecutionException e) {
-            Throwable cause = e.getCause();
-            if (cause instanceof Exception) {
-                throw (Exception) cause;
-            }
-            if (cause instanceof Error) {
-                throw (Error) cause;
-            }
-            throw new MuException("Unexpected WebSocket callback failure", cause);
+            throw new ApplicationEventFailure(Objects.requireNonNull(e.getCause()));
+        }
+    }
+
+    /** Keeps application failures distinct from transport errors induced by shutdown. */
+    private static final class ApplicationEventFailure extends Exception {
+        private ApplicationEventFailure(Throwable cause) {
+            super(cause);
         }
     }
 
@@ -436,7 +445,7 @@ class WebsocketConnection implements MuWebSocketSession {
         }
     }
 
-    private void invokeApplicationError(Throwable cause, WebsocketSessionState errorState) throws Exception {
+    private void invokeApplicationError(Throwable cause, WebsocketSessionState errorState) throws InterruptedException, ApplicationEventFailure {
         if (errorEventQueued.compareAndSet(false, true)) {
             invokeApplicationEvent(errorEvent(cause, errorState));
         }

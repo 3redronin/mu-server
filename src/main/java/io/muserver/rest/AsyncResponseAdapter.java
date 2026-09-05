@@ -95,6 +95,12 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
     }
 
     private void processResponse(@Nullable Object response) {
+        synchronized (stateLock) {
+            if (state != State.RESUMING) {
+                return;
+            }
+            state = State.PROCESSING;
+        }
         try {
             if (response instanceof Throwable && !(response instanceof Exception)) {
                 Throwable failure = (Throwable) response;
@@ -332,6 +338,7 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
     private enum State {
         SUSPENDED,
         RESUMING,
+        PROCESSING,
         DONE
     }
 }
