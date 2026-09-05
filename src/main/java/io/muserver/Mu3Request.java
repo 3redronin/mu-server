@@ -282,25 +282,29 @@ class Mu3Request implements MuRequest {
         return attributes;
     }
 
-    @Deprecated
     @Override
-    public synchronized AsyncHandle handleAsync() {
-        if (asyncHandle == null) {
-            asyncHandle = new Mu3AsyncHandleImpl(this,
-                Objects.requireNonNull(response, "The response has not been initialized"),
-                serverImpl());
+    public AsyncHandle handleAsync() {
+        Mu3AsyncHandleImpl handle;
+        boolean cancelled;
+        synchronized (this) {
+            if (asyncHandle == null) {
+                asyncHandle = new Mu3AsyncHandleImpl(this,
+                    Objects.requireNonNull(response, "The response has not been initialized"), serverImpl());
+            }
+            handle = asyncHandle;
+            cancelled = clientCancelled;
         }
-        if (clientCancelled) {
-            asyncHandle.complete();
-        }
-        return asyncHandle;
+        if (cancelled) handle.complete(new ClientDisconnectedException());
+        return handle;
     }
 
-    synchronized void onClientCancelled() {
-        clientCancelled = true;
-        if (asyncHandle != null) {
-            asyncHandle.complete();
+    void onClientCancelled() {
+        Mu3AsyncHandleImpl handle;
+        synchronized (this) {
+            clientCancelled = true;
+            handle = asyncHandle;
         }
+        if (handle != null) handle.complete(new ClientDisconnectedException());
     }
 
     @Override

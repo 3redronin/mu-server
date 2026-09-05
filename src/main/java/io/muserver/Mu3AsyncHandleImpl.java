@@ -1,5 +1,7 @@
 package io.muserver;
 
+import io.muserver.internal.FatalErrors;
+
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -12,59 +14,25 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-class Mu3AsyncHandleImpl implements AsyncHandle {
+class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecution {
     private final Mu3Request request;
     private final BaseResponse response;
-    private CompletableFuture<@Nullable Void> responseFuture = CompletableFuture.completedFuture(null);
-    private final CompletableFuture<@Nullable Void> completionFuture = new CompletableFuture<>();
-    private final Lock lock = new ReentrantLock();
-    // Guarded by lock. This is the terminal gate for response writes and exchange completion.
-    private boolean completionRequested;
+    private final AsyncResponseOutput output;
     private final Mu3ServerImpl server;
-    private final Executor ioExecutor;
     private final SerialApplicationTasks callbacks;
 
     Mu3AsyncHandleImpl(Mu3Request request, BaseResponse response, Mu3ServerImpl server) {
         this.request = request;
         this.response = response;
         this.server = server;
-        this.ioExecutor = server::executeInternalTask;
         this.callbacks = new SerialApplicationTasks(server);
+        this.output = new AsyncResponseOutput(server::executeInternalTask,
+            this::copyBufferToResponseOutput, response::abortAsyncOutput, callbacks);
     }
 
-    CompletableFuture<@Nullable Void> exchangeCompletion() {
-        CompletableFuture<@Nullable Void> exchangeCompletion = new CompletableFuture<>();
-        completionFuture.whenComplete((ignored, completionFailure) -> {
-            if (completionFailure != null) {
-                exchangeCompletion.completeExceptionally(completionCause(completionFailure));
-                return;
-            }
-            CompletableFuture<@Nullable Void> writes;
-            lock.lock();
-            try {
-                writes = responseFuture;
-            } finally {
-                lock.unlock();
-            }
-            writes.whenComplete((writeIgnored, writeFailure) -> {
-                if (writeFailure == null) {
-                    exchangeCompletion.complete(null);
-                } else {
-                    exchangeCompletion.completeExceptionally(completionCause(writeFailure));
-                }
-            });
-        });
-        return exchangeCompletion;
-    }
+    CompletableFuture<@Nullable Void> exchangeCompletion() { return output.completion(); }
 
-    boolean completionIsPending() {
-        lock.lock();
-        try {
-            return !completionRequested;
-        } finally {
-            lock.unlock();
-        }
-    }
+    boolean completionIsPending() { return output.completionIsPending(); }
 
     @Override
     public void setReadListener(RequestBodyListener readListener) {
@@ -108,6 +76,7 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
                 read = clientIn.read(buffer);
             } catch (Throwable t) {
                 fail(t, true);
+                FatalErrors.rethrow(t);
                 return;
             }
             if (read == -1) {
@@ -133,6 +102,7 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
                 });
             } catch (Throwable failure) {
                 fail(failure, true);
+                FatalErrors.rethrow(failure);
             }
         }
 
@@ -144,6 +114,7 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
                 readListener.onComplete();
             } catch (Throwable t) {
                 complete(t);
+                FatalErrors.rethrow(t);
             } finally {
                 Mutils.closeSilently(clientIn);
             }
@@ -160,6 +131,7 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
                         readListener.onError(failure);
                     } catch (Throwable listenerFailure) {
                         addSuppressedIfDifferent(failure, listenerFailure);
+                        FatalErrors.rethrow(listenerFailure);
                     } finally {
                         complete(failure);
                     }
@@ -170,76 +142,15 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
         }
     }
 
-    @Override
-    public void complete() {
-        completeOnce(null);
+    @Override public void complete() { output.complete(null); }
+
+    @Override public void complete(@Nullable Throwable throwable) { output.complete(throwable); }
+
+    @Override public void write(ByteBuffer data, DoneCallback callback) {
+        output.write(data, Objects.requireNonNull(callback, "callback"));
     }
 
-    @Override
-    public void complete(@Nullable Throwable throwable) {
-        completeOnce(throwable);
-    }
-
-    private void completeOnce(@Nullable Throwable failure) {
-        lock.lock();
-        try {
-            if (completionRequested) {
-                return;
-            }
-            completionRequested = true;
-        } finally {
-            lock.unlock();
-        }
-        if (failure == null) {
-            completionFuture.complete(null);
-        } else {
-            completionFuture.completeExceptionally(failure);
-        }
-    }
-
-    @Override
-    public void write(ByteBuffer data, DoneCallback callback) {
-        Objects.requireNonNull(callback, "callback");
-        submitWrite(data).whenComplete((ignored, failure) -> callbacks.submit(() -> {
-            try {
-                callback.onComplete(failure == null ? null : completionCause(failure));
-            } catch (Throwable callbackFailure) {
-                complete(callbackFailure);
-            }
-        }, this::complete));
-    }
-
-    @Override
-    public Future<@Nullable Void> write(ByteBuffer data) {
-        return submitWrite(data);
-    }
-
-    private CompletableFuture<@Nullable Void> submitWrite(ByteBuffer data) {
-        Objects.requireNonNull(data, "data");
-        CompletableFuture<@Nullable Void> write;
-        lock.lock();
-        try {
-            if (completionRequested) return CompletableFuture.failedFuture(completedResponseWriteFailure());
-            write = responseFuture.thenRunAsync(() -> {
-                try {
-                    copyBufferToResponseOutput(data);
-                } catch (IOException e) {
-                    throw new CompletionException(e);
-                }
-            }, ioExecutor).thenApply(ignored -> null);
-            responseFuture = write;
-        } finally {
-            lock.unlock();
-        }
-        write.whenComplete((ignored, failure) -> {
-            if (failure != null) complete(completionCause(failure));
-        });
-        return write;
-    }
-
-    private static IllegalStateException completedResponseWriteFailure() {
-        return new IllegalStateException("The asynchronous response is already complete");
-    }
+    @Override public Future<@Nullable Void> write(ByteBuffer data) { return output.write(data, null); }
 
     @Override
     public void executeApplicationTask(Runnable task) {

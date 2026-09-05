@@ -3,10 +3,7 @@ package io.muserver;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.ByteBuffer;
-import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 
 /**
  * <p>A class to handle the request and response handling when using asynchronous request handling.</p>
@@ -25,14 +22,16 @@ public interface AsyncHandle {
     void setReadListener(RequestBodyListener readListener);
 
     /**
-     * Call this to indicate that the response is complete.
+     * Rejects subsequent writes and completes the exchange after all accepted writes drain.
      */
     void complete();
 
     /**
      * Call this to indicate that the response is complete.
-     * <p>If the <code>throwable</code> parameter is not null then the error will be logged and, if possible,
-     * a <code>500 Internal Server Error</code> message will be sent to the client.
+     * <p>A non-null error cancels queued writes and terminates active output before releasing its
+     * buffers. If output has not begun, the exception handler may send a 500 response; otherwise
+     * the HTTP/1 connection is closed or the HTTP/2 stream is reset. An active HTTP/2 socket
+     * frame may require closing its connection. Write futures fail independently of callback delivery.
      * @param throwable an exception to log, or null if there was no problem
      */
     void complete(@Nullable Throwable throwable);
@@ -43,6 +42,10 @@ public interface AsyncHandle {
      * <p>See {@link #write(ByteBuffer)} for an alternative that returns a future.</p>
      * <p>If {@link #complete()} or {@link #complete(Throwable)} has already been called, the callback is
      * invoked with an {@link IllegalStateException}.</p>
+     * <p>Multiple submissions are supported and written in order. Mu owns each buffer until its
+     * future completes or callback runs; do not modify or reuse it sooner. Waiting for completion
+     * before submitting more data provides backpressure. Do not mix concurrent blocking writes
+     * with these submissions. Callbacks use the application executor and can be dropped if it rejects.</p>
      * @param data The data to write
      * @param callback The callback when the write succeeds or fails
      */
@@ -54,56 +57,15 @@ public interface AsyncHandle {
      * <p>See {@link #write(ByteBuffer, DoneCallback)} for an alternative that uses a callback.</p>
      * <p>If {@link #complete()} or {@link #complete(Throwable)} has already been called, the returned future
      * fails with an {@link IllegalStateException}.</p>
+     * <p>Multiple submissions are supported and written in order. Mu owns each buffer until its
+     * future completes or callback runs; do not modify or reuse it sooner. Waiting for completion
+     * before submitting more data provides backpressure. Do not mix concurrent blocking writes
+     * with these submissions. Callbacks use the application executor and can be dropped if it rejects.</p>
      * @param data The data to write
-     * @return A future that is resolved when the write succeeds or fails.
+     * @return A future resolved after I/O releases the buffer, independently of application workers.
+     * Cancelling it cancels the asynchronous response and waits for active I/O to release its buffer.
      */
     Future<@Nullable Void> write(ByteBuffer data);
-
-    /**
-     * Executes an application continuation for this exchange.
-     *
-     * <p>Handles supplied by Mu Server dispatch the task to the request-handler
-     * execution domain when called from outside a Mu Server application callback.
-     * Tasks submitted by an application callback stay in the same execution turn and
-     * run after the current callback returns. This is useful when an asynchronous
-     * result becomes available on an executor that should not perform response
-     * serialization or invoke application callbacks.</p>
-     *
-     * <p>The default implementation runs the task immediately to retain compatibility
-     * with custom implementations of this interface.</p>
-     *
-     * @param task The application continuation to execute
-     */
-    default void executeApplicationTask(Runnable task) {
-        Objects.requireNonNull(task, "task").run();
-    }
-
-    /**
-     * Executes an application continuation after a delay.
-     *
-     * <p>Handles supplied by Mu Server use the server timer only to determine when the
-     * task is due, then dispatch the task to the request-handler execution domain. The
-     * returned future can be cancelled before the delay expires to prevent dispatch.
-     * Completion of the future does not guarantee that the application task has
-     * finished.</p>
-     *
-     * <p>The default implementation uses the JDK delayed executor and delegates to
-     * {@link #executeApplicationTask(Runnable)} to retain compatibility with custom implementations of
-     * this interface.</p>
-     *
-     * @param task The application continuation to execute
-     * @param delay The delay before execution
-     * @param unit The unit of {@code delay}
-     * @return A future representing the delayed execution
-     */
-    default Future<?> scheduleApplicationTask(Runnable task, long delay, TimeUnit unit) {
-        Objects.requireNonNull(task, "task");
-        Objects.requireNonNull(unit, "unit");
-        return CompletableFuture.runAsync(
-            () -> executeApplicationTask(task),
-            CompletableFuture.delayedExecutor(delay, unit)
-        );
-    }
 
     /**
      * Add a listener for when request processing is complete. One use of this is to detect early client disconnects

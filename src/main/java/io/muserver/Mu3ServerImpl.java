@@ -1,5 +1,7 @@
 package io.muserver;
 
+import io.muserver.internal.FatalErrors;
+
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -218,6 +220,7 @@ class Mu3ServerImpl implements MuServer {
             try {
                 task.run();
             } catch (Throwable taskFailure) {
+            FatalErrors.rethrow(taskFailure);
                 if (failure == null) {
                     failure = taskFailure;
                 } else if (failure != taskFailure) {
@@ -443,6 +446,7 @@ class Mu3ServerImpl implements MuServer {
         try {
             listener.onComplete(exchange);
         } catch (Throwable failure) {
+            FatalErrors.rethrow(failure);
             log.error("Error from response completion listener", failure);
         }
     }
@@ -462,6 +466,7 @@ class Mu3ServerImpl implements MuServer {
             try {
                 listener.onRejected(info);
             } catch (Throwable failure) {
+            FatalErrors.rethrow(failure);
                 log.error("Error from request reject listener", failure);
             }
         }

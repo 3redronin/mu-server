@@ -1,5 +1,8 @@
 package io.muserver.rest;
 
+import io.muserver.internal.FatalErrors;
+import io.muserver.internal.AsyncExecution;
+
 import io.muserver.*;
 import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.container.AsyncResponse;
@@ -85,11 +88,12 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
         }
         cancel(timeoutToCancel);
         try {
-            asyncHandle.executeApplicationTask(() -> processResponse(response));
+            AsyncExecution.forHandle(asyncHandle).executeApplicationTask(() -> processResponse(response));
         } catch (Throwable dispatchFailure) {
             exceptionWhileWriting = dispatchFailure;
             markDone();
             asyncHandle.complete(dispatchFailure);
+                FatalErrors.rethrow(dispatchFailure);
         }
         return true;
     }
@@ -106,6 +110,7 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
                 Throwable failure = (Throwable) response;
                 exceptionWhileWriting = failure;
                 asyncHandle.complete(failure);
+                FatalErrors.rethrow(failure);
             } else {
                 resultConsumer.accept(response);
                 asyncHandle.complete();
@@ -114,8 +119,10 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
             exceptionWhileWriting = responseFailure;
             try {
                 asyncHandle.complete(responseFailure);
+                FatalErrors.rethrow(responseFailure);
             } catch (Throwable completionFailure) {
                 addSuppressedIfDifferent(responseFailure, completionFailure);
+                FatalErrors.rethrow(completionFailure);
             }
         } finally {
             markDone();
@@ -162,7 +169,7 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
             return true;
         }
 
-        Future<?> scheduled = asyncHandle.scheduleApplicationTask(
+        Future<?> scheduled = AsyncExecution.forHandle(asyncHandle).scheduleApplicationTask(
             () -> timeoutExpired(generation),
             time,
             unit
@@ -195,6 +202,7 @@ class AsyncResponseAdapter implements AsyncResponse, ResponseCompleteListener {
                 handler.handleTimeout(this);
             } catch (Throwable timeoutFailure) {
                 resume(timeoutFailure);
+                FatalErrors.rethrow(timeoutFailure);
                 return;
             }
             synchronized (stateLock) {

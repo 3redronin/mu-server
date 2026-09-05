@@ -1,5 +1,7 @@
 package io.muserver;
 
+import io.muserver.internal.FatalErrors;
+
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -275,6 +277,7 @@ class WebsocketConnection implements MuWebSocketSession {
             }
             boolean applicationFailure = failure instanceof ApplicationEventFailure;
             Throwable e = applicationFailure ? Objects.requireNonNull(failure.getCause()) : failure;
+            FatalErrors.rethrow(e);
             if ((!serverShutdownRequested.get() || applicationFailure)
                 && !errorEventQueued.get()
                 && lifecycle.state() != WebsocketSessionState.TIMED_OUT) {
@@ -497,6 +500,7 @@ class WebsocketConnection implements MuWebSocketSession {
                 task.completion.complete(null);
             } catch (Throwable failure) {
                 task.completion.completeExceptionally(failure);
+                FatalErrors.rethrow(failure);
             }
         }
     }

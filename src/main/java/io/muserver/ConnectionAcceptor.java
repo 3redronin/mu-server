@@ -1,5 +1,7 @@
 package io.muserver;
 
+import io.muserver.internal.FatalErrors;
+
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -138,6 +140,7 @@ class ConnectionAcceptor {
                     throw submissionFailure;
                 }
             } catch (Throwable e) {
+            FatalErrors.rethrow(e);
                 if (Thread.interrupted() || e instanceof SocketException) {
                     log.info("Accept listening stopped");
                 } else {
@@ -295,6 +298,7 @@ class ConnectionAcceptor {
                 }
             }
         } catch (Throwable t) {
+            FatalErrors.rethrow(t);
             if (state == State.STARTED) {
                 log.error("Exception while doing timeouts", t);
             }
@@ -488,6 +492,7 @@ class ConnectionAcceptor {
                 con.start(clientIn, clientOut);
             }
         } catch (Throwable t) {
+            FatalErrors.rethrow(t);
             log.error("Unhandled exception for {}", con, t);
         } finally {
             server.getStatsImpl().onConnectionClosed(con);
