@@ -470,8 +470,7 @@ class ConnectionAcceptor {
                 socket,
                 clientCert,
                 acceptedTime,
-                handlerExecutor,
-                handlerExecutor == connectionExecutor
+                handlerExecutor
             );
         }
 

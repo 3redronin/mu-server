@@ -13,6 +13,13 @@ import java.util.*;
 import static java.lang.Math.min;
 
 class Mu3Request implements MuRequest {
+    volatile RequestAdmission.@Nullable Slot admissionSlot;
+
+    void releaseAdmission() {
+        RequestAdmission.Slot slot = admissionSlot;
+        if (slot != null) slot.close();
+    }
+
     private final HttpConnection connection;
     private final Method method;
     private final URI requestUri;

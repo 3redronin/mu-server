@@ -1298,6 +1298,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
 
         onRequestStarted(stream.request);
         try {
+            if (!server.tryAdmit(stream.request)) throw new RejectedExecutionException("Request limit reached");
             handlerExecutor.submit(server.handlerApplicationTask(() -> startHandledStream(stream)));
         } catch (RejectedExecutionException e) {
             server.onRequestSubmissionRejected(stream.request);

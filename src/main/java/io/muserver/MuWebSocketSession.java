@@ -19,16 +19,19 @@ public interface MuWebSocketSession {
 
     private void runAsync(Runnable task, DoneCallback doneCallback) {
         Executor executor = this instanceof WebsocketConnection
-            ? ((WebsocketConnection) this).asyncExecutor()
-            : ForkJoinPool.commonPool();
-        try {
-            CompletableFuture.runAsync(task, executor);
-        } catch (RuntimeException failure) {
-            try {
-                doneCallback.onComplete(failure);
-            } catch (Exception ignored) {
+            ? ((WebsocketConnection) this).asyncExecutor() : ForkJoinPool.commonPool();
+        CompletableFuture<Void> result;
+        try { result = CompletableFuture.runAsync(task, executor); }
+        catch (RuntimeException failure) { result = CompletableFuture.failedFuture(failure); }
+        result.whenComplete((ignored, failure) -> {
+            Throwable cause = failure instanceof java.util.concurrent.CompletionException ? failure.getCause() : failure;
+            if (this instanceof WebsocketConnection) {
+                ((WebsocketConnection) this).dispatchWriteCallback(doneCallback, cause);
+            } else {
+                try { doneCallback.onComplete(cause); }
+                catch (Exception ignoredFailure) { }
             }
-        }
+        });
     }
 
     /**
@@ -73,12 +76,8 @@ public interface MuWebSocketSession {
         runAsync(() -> {
             try {
                 sendText(message);
-                doneCallback.onComplete(null);
             } catch (Exception e) {
-                try {
-                    doneCallback.onComplete(e);
-                } catch (Exception ignored) {
-                }
+                throw new java.util.concurrent.CompletionException(e);
             }
         }, doneCallback);
     }
@@ -98,12 +97,8 @@ public interface MuWebSocketSession {
         runAsync(() -> {
             try {
                 sendTextFragment(ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8)), isLastFragment);
-                doneCallback.onComplete(null);
             } catch (Exception e) {
-                try {
-                    doneCallback.onComplete(e);
-                } catch (Exception ignored) {
-                }
+                throw new java.util.concurrent.CompletionException(e);
             }
         }, doneCallback);
     }
@@ -130,12 +125,8 @@ public interface MuWebSocketSession {
         runAsync(() -> {
             try {
                 sendBinary(message);
-                doneCallback.onComplete(null);
             } catch (Exception e) {
-                try {
-                    doneCallback.onComplete(e);
-                } catch (Exception ignored) {
-                }
+                throw new java.util.concurrent.CompletionException(e);
             }
         }, doneCallback);
     }
@@ -163,12 +154,8 @@ public interface MuWebSocketSession {
         runAsync(() -> {
             try {
                 sendBinaryFragment(message, isLastFragment);
-                doneCallback.onComplete(null);
             } catch (Exception e) {
-                try {
-                    doneCallback.onComplete(e);
-                } catch (Exception ignored) {
-                }
+                throw new java.util.concurrent.CompletionException(e);
             }
         }, doneCallback);
     }
@@ -194,12 +181,8 @@ public interface MuWebSocketSession {
         runAsync(() -> {
             try {
                 sendPing(payload);
-                doneCallback.onComplete(null);
             } catch (Exception e) {
-                try {
-                    doneCallback.onComplete(e);
-                } catch (Exception ignored) {
-                }
+                throw new java.util.concurrent.CompletionException(e);
             }
         }, doneCallback);
     }
@@ -225,12 +208,8 @@ public interface MuWebSocketSession {
         runAsync(() -> {
             try {
                 sendPong(payload);
-                doneCallback.onComplete(null);
             } catch (Exception e) {
-                try {
-                    doneCallback.onComplete(e);
-                } catch (Exception ignored) {
-                }
+                throw new java.util.concurrent.CompletionException(e);
             }
         }, doneCallback);
     }

@@ -335,7 +335,6 @@ public class RateLimiterTest {
         var selectorThread = new AtomicReference<String>();
         try (MuServer domainServer = ServerUtils.httpsServerForTest(protocol)
             .withHandlerExecutor(handlerExecutor)
-            .withConnectionExecutor(connectionExecutor)
             .withRateLimiter(request -> {
                 selectorThread.set(Thread.currentThread().getName());
                 return rateLimit()

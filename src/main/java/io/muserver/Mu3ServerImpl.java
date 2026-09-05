@@ -36,25 +36,15 @@ class Mu3ServerImpl implements MuServer {
     private final int maxHeadersSize;
     final List<RateLimiterImpl> rateLimiters;
     final Path tempDir;
-    private final ExecutorService handlerExecutor;
-    private final boolean ownsHandlerExecutor;
-    private final ExecutorService asyncExecutor;
-    private final boolean ownsAsyncExecutor;
-    private final ExecutorService connectionExecutor;
-    private final boolean ownsConnectionExecutor;
-    private final ExecutorService http2WriterExecutor;
-    private final boolean ownsHttp2WriterExecutor;
-    private final ExecutorService connectionMaintenanceExecutor;
-    private final boolean ownsConnectionMaintenanceExecutor;
-    private final ScheduledExecutorService timerExecutor;
-    private final boolean ownsTimerExecutor;
+    private final ExecutionResources executionResources;
+    private final RequestAdmission requestAdmission;
     private final ThreadLocal<ApplicationTaskContext> applicationTaskContext = new ThreadLocal<>();
     private final ApplicationTaskTracker detachedApplicationTasks = new ApplicationTaskTracker();
     private final ThreadLocal<@Nullable DetachedApplicationTask> activeDetachedApplicationTask =
         new ThreadLocal<>();
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
 
-    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutorService handlerExecutor, boolean ownsHandlerExecutor, ExecutorService asyncExecutor, boolean ownsAsyncExecutor, ExecutorService connectionExecutor, boolean ownsConnectionExecutor, ExecutorService http2WriterExecutor, boolean ownsHttp2WriterExecutor, ExecutorService connectionMaintenanceExecutor, boolean ownsConnectionMaintenanceExecutor, ScheduledExecutorService timerExecutor, boolean ownsTimerExecutor) {
+    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutionResources executionResources, int maxConcurrentRequests) {
         this.acceptors = acceptors;
         this.handlers = handlers;
         this.responseCompleteListeners = responseCompleteListeners;
@@ -68,18 +58,8 @@ class Mu3ServerImpl implements MuServer {
         this.maxHeadersSize = maxHeadersSize;
         this.rateLimiters = rateLimiters;
         this.tempDir = tempDir;
-        this.handlerExecutor = handlerExecutor;
-        this.ownsHandlerExecutor = ownsHandlerExecutor;
-        this.asyncExecutor = asyncExecutor;
-        this.ownsAsyncExecutor = ownsAsyncExecutor;
-        this.connectionExecutor = connectionExecutor;
-        this.ownsConnectionExecutor = ownsConnectionExecutor;
-        this.http2WriterExecutor = http2WriterExecutor;
-        this.ownsHttp2WriterExecutor = ownsHttp2WriterExecutor;
-        this.connectionMaintenanceExecutor = connectionMaintenanceExecutor;
-        this.ownsConnectionMaintenanceExecutor = ownsConnectionMaintenanceExecutor;
-        this.timerExecutor = timerExecutor;
-        this.ownsTimerExecutor = ownsTimerExecutor;
+        this.executionResources = executionResources;
+        this.requestAdmission = new RequestAdmission(maxConcurrentRequests);
     }
 
     private void startListening() {
@@ -119,24 +99,7 @@ class Mu3ServerImpl implements MuServer {
         if (!awaitDetachedApplicationTasks(deadlineNanos)) {
             stoppedCleanly = false;
         }
-        if (ownsTimerExecutor) {
-            timerExecutor.shutdown();
-        }
-        if (ownsConnectionExecutor) {
-            connectionExecutor.shutdown();
-        }
-        if (ownsHttp2WriterExecutor) {
-            http2WriterExecutor.shutdown();
-        }
-        if (ownsConnectionMaintenanceExecutor) {
-            connectionMaintenanceExecutor.shutdown();
-        }
-        if (ownsHandlerExecutor) {
-            handlerExecutor.shutdown();
-        }
-        if (ownsAsyncExecutor) {
-            asyncExecutor.shutdown();
-        }
+        executionResources.shutdown();
         return stoppedCleanly;
     }
 
@@ -155,20 +118,17 @@ class Mu3ServerImpl implements MuServer {
     void executeResponseCompletionTask(Runnable task) {
         executeTrackedApplicationTask(
             task,
-            true,
             "response completion callback"
         );
     }
 
-    private void executeTrackedApplicationTask(
+    @Nullable RejectedExecutionException executeTrackedApplicationTask(
         Runnable task,
-        boolean preferHandlerExecutor,
         String description
     ) {
         DetachedApplicationTask registration = new DetachedApplicationTask();
         Runnable trackedTask = () -> {
             DetachedApplicationTask previous = activeDetachedApplicationTask.get();
-            registration.previous = previous;
             activeDetachedApplicationTask.set(registration);
             try {
                 task.run();
@@ -181,17 +141,15 @@ class Mu3ServerImpl implements MuServer {
                 }
             }
         };
-        RejectedExecutionException rejected = preferHandlerExecutor
-            ? tryExecuteHandlerTask(trackedTask)
-            : tryExecuteAsyncTask(trackedTask);
+        RejectedExecutionException rejected = tryExecuteHandlerTask(trackedTask);
         if (rejected != null) {
             registration.deregister();
             log.warn("Dropping {} because its application executors rejected it", description, rejected);
         }
+        return rejected;
     }
 
     private final class DetachedApplicationTask {
-        private @Nullable DetachedApplicationTask previous;
         private final ApplicationTaskTracker.Registration registration = detachedApplicationTasks.register();
 
         private void deregister() {
@@ -199,149 +157,55 @@ class Mu3ServerImpl implements MuServer {
         }
     }
 
-    /**
-     * Dispatches accepted application work without ever falling back to the caller.
-     * The async executor is the secondary application domain when handler dispatch
-     * is unavailable; the returned rejection means neither domain can accept work.
-     */
+    /** Nested application work is queued to avoid recursive callback delivery. */
     @Nullable RejectedExecutionException tryExecuteHandlerTask(Runnable task) {
-        return tryExecuteApplicationTask(task, handlerExecutor, asyncExecutor);
-    }
-
-    @Nullable RejectedExecutionException tryExecuteAsyncTask(Runnable task) {
-        return tryExecuteApplicationTask(task, asyncExecutor, handlerExecutor);
-    }
-
-    void executeAsyncApplicationTask(Runnable task) {
-        RejectedExecutionException rejected = tryExecuteRequiredAsyncTask(task);
-        if (rejected != null) {
-            throw rejected;
-        }
-    }
-
-    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
-    private @Nullable RejectedExecutionException tryExecuteRequiredAsyncTask(Runnable task) {
-        ApplicationTaskContext currentContext = applicationTaskContext.get();
-        if (currentContext != null && currentContext.includes(asyncExecutor)) {
-            currentContext.tasks.add(task);
+        ApplicationTaskContext current = applicationTaskContext.get();
+        if (current != null) {
+            current.tasks.add(task);
             return null;
         }
         try {
-            asyncExecutor.execute(applicationTask(asyncExecutor, asyncExecutor, task));
+            executionResources.application.execute(handlerApplicationTask(task));
             return null;
         } catch (RejectedExecutionException rejected) {
             return rejected;
         }
     }
 
-    @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
-    private @Nullable RejectedExecutionException tryExecuteApplicationTask(
-        Runnable task,
-        ExecutorService primaryExecutor,
-        ExecutorService fallbackExecutor
-    ) {
-        ApplicationTaskContext currentContext = applicationTaskContext.get();
-        if (currentContext != null && currentContext.includes(primaryExecutor)) {
-            currentContext.tasks.add(task);
-            return null;
-        }
-        try {
-            primaryExecutor.execute(applicationTask(primaryExecutor, primaryExecutor, task));
-            return null;
-        } catch (RejectedExecutionException primaryRejected) {
-            if (fallbackExecutor != primaryExecutor) {
-                if (currentContext != null && currentContext.includes(fallbackExecutor)) {
-                    currentContext.tasks.add(task);
-                    return null;
-                }
-                try {
-                    fallbackExecutor.execute(applicationTask(primaryExecutor, fallbackExecutor, task));
-                    return null;
-                } catch (RejectedExecutionException fallbackRejected) {
-                    fallbackRejected.addSuppressed(primaryRejected);
-                    return fallbackRejected;
-                }
-            }
-            return primaryRejected;
-        }
+    void executeAsyncApplicationTask(Runnable task) {
+        RejectedExecutionException rejected = tryExecuteHandlerTask(task);
+        if (rejected != null) throw rejected;
+    }
+
+    void executeInternalTask(Runnable task) {
+        executionResources.internal.execute(task);
     }
 
     Runnable handlerApplicationTask(Runnable task) {
-        return applicationTask(handlerExecutor, handlerExecutor, task);
-    }
-
-    private Runnable applicationTask(
-        ExecutorService requestedExecutor,
-        ExecutorService executingExecutor,
-        Runnable task
-    ) {
         Objects.requireNonNull(task, "task");
-        return () -> runApplicationTask(requestedExecutor, executingExecutor, task);
+        return () -> runHandlerApplicationTask(task);
     }
 
     void runHandlerApplicationTask(Runnable task) {
-        runApplicationTask(handlerExecutor, handlerExecutor, task);
-    }
-
-    private void runApplicationTask(
-        ExecutorService requestedExecutor,
-        ExecutorService executingExecutor,
-        Runnable task
-    ) {
-        Objects.requireNonNull(task, "task");
-        ApplicationTaskContext currentContext = applicationTaskContext.get();
-        if (currentContext != null) {
-            if (currentContext.includes(requestedExecutor)) {
-                currentContext.tasks.add(task);
-                return;
-            }
-            throw new IllegalStateException("Cannot enter a different application execution domain");
+        ApplicationTaskContext current = applicationTaskContext.get();
+        if (current != null) {
+            current.tasks.add(task);
+            return;
         }
-
-        ApplicationTaskContext newContext =
-            new ApplicationTaskContext(requestedExecutor, executingExecutor);
-        newContext.tasks.add(task);
-        applicationTaskContext.set(newContext);
-        @Nullable Throwable failure = null;
+        ApplicationTaskContext context = new ApplicationTaskContext();
+        context.tasks.add(task);
+        applicationTaskContext.set(context);
+        Throwable failure;
         try {
-            failure = drainApplicationTasks(newContext, null);
+            failure = drainApplicationTasks(context, null);
         } finally {
             applicationTaskContext.remove();
         }
-        if (failure != null) {
-            throwUnchecked(failure);
-        }
+        if (failure != null) throwUnchecked(failure);
     }
 
     <T> @Nullable T callHandlerApplicationTask(ApplicationCallable<T> task) throws Throwable {
-        Objects.requireNonNull(task, "task");
-        ApplicationTaskContext currentContext = applicationTaskContext.get();
-        if (currentContext != null) {
-            if (currentContext.includes(handlerExecutor)) {
-                return task.call();
-            }
-            throw new IllegalStateException("Cannot enter the handler execution domain from another application domain");
-        }
-
-        ApplicationTaskContext newContext =
-            new ApplicationTaskContext(handlerExecutor, handlerExecutor);
-        applicationTaskContext.set(newContext);
-        @Nullable T result = null;
-        @Nullable Throwable failure = null;
-        try {
-            try {
-                result = task.call();
-            } catch (Throwable taskFailure) {
-                failure = taskFailure;
-            }
-            failure = drainApplicationTasks(newContext, failure);
-        } finally {
-            applicationTaskContext.remove();
-        }
-        if (failure != null) {
-            throw failure;
-        }
-        return result;
+        return task.call();
     }
 
     @SuppressWarnings("ReferenceEquality") // Throwable forbids suppressing itself; identity is required.
@@ -380,26 +244,18 @@ class Mu3ServerImpl implements MuServer {
     }
 
     private static final class ApplicationTaskContext {
-        private final ExecutorService requestedExecutor;
-        private final ExecutorService executingExecutor;
         private final Queue<Runnable> tasks = new ArrayDeque<>();
-
-        private ApplicationTaskContext(
-            ExecutorService requestedExecutor,
-            ExecutorService executingExecutor
-        ) {
-            this.requestedExecutor = requestedExecutor;
-            this.executingExecutor = executingExecutor;
-        }
-
-        @SuppressWarnings("ReferenceEquality") // Execution-domain identity belongs to the exact executor instance.
-        private boolean includes(ExecutorService executor) {
-            return requestedExecutor == executor || executingExecutor == executor;
-        }
     }
 
-    ExecutorService asyncExecutor() {
-        return asyncExecutor;
+    ExecutorService internalExecutor() {
+        return executionResources.internal;
+    }
+
+    boolean tryAdmit(Mu3Request request) {
+        RequestAdmission.Slot slot = requestAdmission.tryAcquire();
+        if (slot == null) return false;
+        request.admissionSlot = slot;
+        return true;
     }
 
     @Override
@@ -565,10 +421,12 @@ class Mu3ServerImpl implements MuServer {
     }
 
     void onRequestSubmissionRejected(Mu3Request req) {
+        req.releaseAdmission();
         statsImpl.onRequestSubmissionRejected(req);
     }
 
     void recordExchangeEnded(ResponseInfo exchange) {
+        ((Mu3Request) exchange.request()).releaseAdmission();
         statsImpl.onRequestEnded(exchange);
     }
 
@@ -595,7 +453,6 @@ class Mu3ServerImpl implements MuServer {
         }
         executeTrackedApplicationTask(
             () -> notifyRequestRejected(info),
-            false,
             "request rejection notification"
         );
     }
@@ -637,36 +494,10 @@ class Mu3ServerImpl implements MuServer {
             limiters = emptyList();
         }
 
-        ExecutorService handlerExecutor = builder.executor();
-        boolean ownsHandlerExecutor = handlerExecutor == null;
-        if (handlerExecutor == null) {
-            handlerExecutor = MuServerBuilder.defaultExecutor();
-        }
-        ExecutorService asyncExecutor = builder.asyncExecutor();
-        boolean ownsAsyncExecutor = asyncExecutor == null;
-        if (asyncExecutor == null) {
-            asyncExecutor = MuServerBuilder.defaultExecutor();
-        }
-        ExecutorService connectionExecutor = builder.connectionExecutor();
-        boolean ownsConnectionExecutor = connectionExecutor == null;
-        if (connectionExecutor == null) {
-            connectionExecutor = MuServerBuilder.defaultExecutor();
-        }
-        ExecutorService http2WriterExecutor = builder.http2WriterExecutor();
-        boolean ownsHttp2WriterExecutor = http2WriterExecutor == null;
-        if (http2WriterExecutor == null) {
-            http2WriterExecutor = MuServerBuilder.defaultExecutor();
-        }
-        ExecutorService connectionMaintenanceExecutor = builder.connectionMaintenanceExecutor();
-        boolean ownsConnectionMaintenanceExecutor = connectionMaintenanceExecutor == null;
-        if (connectionMaintenanceExecutor == null) {
-            connectionMaintenanceExecutor = MuServerBuilder.defaultExecutor();
-        }
-        ScheduledExecutorService timerExecutor = builder.timerExecutor();
-        boolean ownsTimerExecutor = timerExecutor == null;
-        if (timerExecutor == null) {
-            timerExecutor = MuServerBuilder.defaultTimerExecutor();
-        }
+        ExecutionResources resources = builder.executionResourcesFactory.create(builder.executor());
+        ExecutorService handlerExecutor = resources.application;
+        ExecutorService connectionExecutor = resources.connectionExecutor();
+        ExecutorService http2WriterExecutor = resources.writerExecutor();
 
         var impl = new Mu3ServerImpl(
             acceptors,
@@ -682,18 +513,8 @@ class Mu3ServerImpl implements MuServer {
             builder.maxHeadersSize(),
             limiters,
             tempDir,
-            handlerExecutor,
-            ownsHandlerExecutor,
-            asyncExecutor,
-            ownsAsyncExecutor,
-            connectionExecutor,
-            ownsConnectionExecutor,
-            http2WriterExecutor,
-            ownsHttp2WriterExecutor,
-            connectionMaintenanceExecutor,
-            ownsConnectionMaintenanceExecutor,
-            timerExecutor,
-            ownsTimerExecutor
+            resources,
+            builder.maxConcurrentRequests()
             );
 
         try {
@@ -761,11 +582,11 @@ class Mu3ServerImpl implements MuServer {
     }
 
     ScheduledFuture<?> scheduleConnectionTask(Runnable task, long delay, TimeUnit unit) {
-        return timerExecutor.schedule(() -> tryDispatchConnectionTask(task), delay, unit);
+        return executionResources.timer.schedule(() -> tryDispatchConnectionTask(task), delay, unit);
     }
 
     ScheduledFuture<?> scheduleTimerCallback(Runnable task, long delay, TimeUnit unit) {
-        return timerExecutor.schedule(task, delay, unit);
+        return executionResources.timer.schedule(task, delay, unit);
     }
 
     ScheduledFuture<?> scheduleConnectionTaskAtFixedRate(
@@ -775,7 +596,7 @@ class Mu3ServerImpl implements MuServer {
         TimeUnit unit
     ) {
         var pending = new AtomicBoolean();
-        return timerExecutor.scheduleAtFixedRate(
+        return executionResources.timer.scheduleAtFixedRate(
             () -> {
                 if (pending.compareAndSet(false, true)) {
                     boolean accepted = tryDispatchConnectionTask(() -> {
@@ -798,7 +619,7 @@ class Mu3ServerImpl implements MuServer {
 
     private boolean tryDispatchConnectionTask(Runnable task) {
         try {
-            connectionMaintenanceExecutor.execute(task);
+            executionResources.internal.execute(task);
             return true;
         } catch (RejectedExecutionException e) {
             log.debug("Connection maintenance executor rejected timed work because the server is stopping or overloaded");

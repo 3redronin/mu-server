@@ -21,13 +21,15 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
     // Guarded by lock. This is the terminal gate for response writes and exchange completion.
     private boolean completionRequested;
     private final Mu3ServerImpl server;
-    private final Executor asyncExecutor;
+    private final Executor ioExecutor;
+    private final SerialApplicationTasks callbacks;
 
     Mu3AsyncHandleImpl(Mu3Request request, BaseResponse response, Mu3ServerImpl server) {
         this.request = request;
         this.response = response;
         this.server = server;
-        this.asyncExecutor = server::executeAsyncApplicationTask;
+        this.ioExecutor = server::executeInternalTask;
+        this.callbacks = new SerialApplicationTasks(server);
     }
 
     CompletableFuture<@Nullable Void> exchangeCompletion() {
@@ -91,9 +93,9 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
                 return;
             }
             try {
-                server.executeAsyncApplicationTask(this::readNext);
+                server.executeInternalTask(this::readNext);
             } catch (RejectedExecutionException rejected) {
-                fail(rejected, false);
+                fail(rejected, true);
             }
         }
 
@@ -109,7 +111,7 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
                 return;
             }
             if (read == -1) {
-                finishReading();
+                callbacks.submit(this::finishReading, rejected -> fail(rejected, false));
                 return;
             }
             if (read == 0) {
@@ -117,22 +119,20 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
                 return;
             }
 
+            callbacks.submit(() -> deliver(read), rejected -> fail(rejected, false));
+        }
+
+        private void deliver(int read) {
+            if (finished.get()) return;
             var callbackUsed = new AtomicBoolean();
             try {
                 readListener.onDataReceived(ByteBuffer.wrap(buffer, 0, read), error -> {
-                    if (!callbackUsed.compareAndSet(false, true)) {
-                        return;
-                    }
-                    if (error == null) {
-                        scheduleNextRead();
-                    } else {
-                        fail(error, false);
-                    }
+                    if (!callbackUsed.compareAndSet(false, true)) return;
+                    if (error == null) scheduleNextRead();
+                    else fail(error, false);
                 });
-            } catch (Throwable t) {
-                // onDataReceived runs in the async application domain, so its
-                // documented error callback belongs to the same turn.
-                fail(t, true);
+            } catch (Throwable failure) {
+                fail(failure, true);
             }
         }
 
@@ -153,16 +153,20 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
             if (!finished.compareAndSet(false, true)) {
                 return;
             }
-            try {
-                if (notifyListener) {
-                    readListener.onError(failure);
-                }
-            } catch (Throwable listenerFailure) {
-                addSuppressedIfDifferent(failure, listenerFailure);
-            } finally {
-                Mutils.closeSilently(clientIn);
+            Mutils.closeSilently(clientIn);
+            if (notifyListener) {
+                callbacks.submit(() -> {
+                    try {
+                        readListener.onError(failure);
+                    } catch (Throwable listenerFailure) {
+                        addSuppressedIfDifferent(failure, listenerFailure);
+                    } finally {
+                        complete(failure);
+                    }
+                }, thisFailure -> complete(failure));
+            } else {
+                complete(failure);
             }
-            complete(failure);
         }
     }
 
@@ -195,100 +199,42 @@ class Mu3AsyncHandleImpl implements AsyncHandle {
 
     @Override
     public void write(ByteBuffer data, DoneCallback callback) {
-        var taskStarted = new AtomicBoolean();
-        @Nullable CompletableFuture<@Nullable Void> writeFuture;
-        lock.lock();
-        try {
-            if (completionRequested) {
-                writeFuture = null;
-            } else {
-                responseFuture = responseFuture.thenRunAsync(() -> {
-                    taskStarted.set(true);
-                    try {
-                        copyBufferToResponseOutput(data);
-                    } catch (Throwable e) {
-                        try {
-                            callback.onComplete(e);
-                        } catch (Throwable callbackFailure) {
-                            addSuppressedIfDifferent(e, callbackFailure);
-                        }
-                        complete(e);
-                        throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException("Error while writing body", e);
-                    }
-                    try {
-                        callback.onComplete(null);
-                    } catch (Throwable e) {
-                        complete(e);
-                        throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException("Error in write callback", e);
-                    }
-                }, asyncExecutor).thenApply(ignored -> null);
-                writeFuture = responseFuture;
-            }
-        } finally {
-            lock.unlock();
-        }
-        if (writeFuture == null) {
-            Throwable failure = completedResponseWriteFailure();
+        Objects.requireNonNull(callback, "callback");
+        submitWrite(data).whenComplete((ignored, failure) -> callbacks.submit(() -> {
             try {
-                server.executeAsyncApplicationTask(() ->
-                    invokeWriteCallback(callback, failure)
-                );
-            } catch (RejectedExecutionException rejected) {
-                // The callback contract still needs an outcome when the
-                // required async executor cannot accept the notification.
-                invokeWriteCallback(callback, failure);
+                callback.onComplete(failure == null ? null : completionCause(failure));
+            } catch (Throwable callbackFailure) {
+                complete(callbackFailure);
             }
-            return;
-        }
-        writeFuture.whenComplete((ignored, failure) -> {
-            if (failure != null && !taskStarted.get()) {
-                Throwable cause = completionCause(failure);
-                try {
-                    callback.onComplete(cause);
-                } catch (Throwable callbackFailure) {
-                    addSuppressedIfDifferent(cause, callbackFailure);
-                }
-                complete(cause);
-            }
-        });
+        }, this::complete));
     }
 
     @Override
     public Future<@Nullable Void> write(ByteBuffer data) {
-        var taskStarted = new AtomicBoolean();
-        CompletableFuture<@Nullable Void> writeFuture;
+        return submitWrite(data);
+    }
+
+    private CompletableFuture<@Nullable Void> submitWrite(ByteBuffer data) {
+        Objects.requireNonNull(data, "data");
+        CompletableFuture<@Nullable Void> write;
         lock.lock();
         try {
-            if (completionRequested) {
-                return CompletableFuture.failedFuture(completedResponseWriteFailure());
-            }
-            writeFuture = responseFuture.thenRunAsync(() -> {
-                taskStarted.set(true);
+            if (completionRequested) return CompletableFuture.failedFuture(completedResponseWriteFailure());
+            write = responseFuture.thenRunAsync(() -> {
                 try {
                     copyBufferToResponseOutput(data);
-                } catch (Throwable e) {
-                    complete(e);
-                    throw e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException("Error while writing body", e);
+                } catch (IOException e) {
+                    throw new CompletionException(e);
                 }
-            }, asyncExecutor).thenApply(ignored -> null);
-            responseFuture = writeFuture;
+            }, ioExecutor).thenApply(ignored -> null);
+            responseFuture = write;
         } finally {
             lock.unlock();
         }
-        writeFuture.whenComplete((ignored, failure) -> {
-            if (failure != null && !taskStarted.get()) {
-                complete(completionCause(failure));
-            }
+        write.whenComplete((ignored, failure) -> {
+            if (failure != null) complete(completionCause(failure));
         });
-        return writeFuture;
-    }
-
-    private static void invokeWriteCallback(DoneCallback callback, Throwable failure) {
-        try {
-            callback.onComplete(failure);
-        } catch (Throwable callbackFailure) {
-            addSuppressedIfDifferent(failure, callbackFailure);
-        }
+        return write;
     }
 
     private static IllegalStateException completedResponseWriteFailure() {

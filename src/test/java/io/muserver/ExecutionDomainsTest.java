@@ -80,8 +80,7 @@ class ExecutionDomainsTest {
         });
         assertThat(blockerStarted.await(5, TimeUnit.SECONDS), is(true));
 
-        server = httpServer()
-            .withConnectionExecutor(connectionExecutor)
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, null, null, null)
             .withHandlerExecutor(handlerExecutor)
             .addHandler((request, response) -> {
                 handledRequests.incrementAndGet();
@@ -120,8 +119,7 @@ class ExecutionDomainsTest {
                 () -> connectionExecutor.getQueue().size(),
                 equalTo(0)
             );
-            connectionExecutor.submit(() -> {
-            }).get(5, TimeUnit.SECONDS);
+            assertThat(connectionExecutor.isShutdown(), is(true));
 
             assertThat(handledRequests.get(), equalTo(0));
         } finally {
@@ -203,11 +201,9 @@ class ExecutionDomainsTest {
             }
         });
 
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, null, null, null)
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .withHandlerExecutor(handlerExecutor)
-            .withAsyncExecutor(asyncExecutor)
-            .withConnectionExecutor(connectionExecutor)
             .addRequestRejectListener(info -> {
                 rejectionThread.complete(Thread.currentThread().getName());
                 rejectedRequest.complete(info);
@@ -259,13 +255,8 @@ class ExecutionDomainsTest {
                 is(true)
             );
 
-            var rejection = rejectedRequest.get(5, TimeUnit.SECONDS);
-            assertThat(rejection.status(), equalTo(503));
-            assertThat(rejection.reason(), equalTo("503 Service Unavailable"));
-            assertThat(rejection.method(), equalTo(Optional.of("GET")));
-            assertThat(rejection.uri().orElseThrow().getPath(), equalTo("/hello"));
-            assertThat(rejection.connection().protocol(), equalTo("HTTP/2"));
-            assertThat(rejectionThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
+            assertThat(rejectedRequest.isDone(), is(false));
+            assertThat(rejectionThread.isDone(), is(false));
 
             byte[] secondPing = {7, 6, 5, 4, 3, 2, 1, 0};
             con.writeFrame(RFCTestUtils.utf8DataFrame(1, true, "discarded"))
@@ -305,65 +296,13 @@ class ExecutionDomainsTest {
     }
 
     @Test
-    void rejectedAsyncExecutorFallsBackWithoutBlockingTheHttp2Reader() throws Exception {
-        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("rejected-async-")));
-        asyncExecutor.shutdown();
-        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
-        var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
-        var releaseListener = new CountDownLatch(1);
-        var rejectionThread = new CompletableFuture<String>();
-        server = httpServer()
-            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
-            .withMaxHeadersSize(1024)
-            .withAsyncExecutor(asyncExecutor)
-            .withHandlerExecutor(handlerExecutor)
-            .withConnectionExecutor(connectionExecutor)
-            .addRequestRejectListener(info -> {
-                rejectionThread.complete(Thread.currentThread().getName());
-                try {
-                    releaseListener.await();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            })
-            .start();
-
-        try (var client = new H2Client();
-             var con = client.connectClearText(server)) {
-            con.handshake();
-            con.socket().setSoTimeout(1000);
-            FieldBlock headers = RFCTestUtils.getHelloHeaders("http", server.uri().getPort());
-            headers.add("x-big", "a".repeat(2000));
-            con.writeFrame(new Http2HeadersFrame(1, true, headers)).flush();
-
-            Http2HeadersFrame response =
-                RFCTestUtils.readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
-            assertThat(response.headers().get(":status"), equalTo("431"));
-            assertThat(
-                RFCTestUtils.readIgnoringWindowUpdates(con, Http2DataFrame.class).endStream(),
-                is(true)
-            );
-            assertThat(rejectionThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
-
-            byte[] pingData = {0, 1, 2, 3, 4, 5, 6, 7};
-            con.writeFrame(new Http2Ping(false, pingData)).flush();
-            assertThat(
-                RFCTestUtils.readIgnoringWindowUpdates(con, Http2Ping.class),
-                equalTo(new Http2Ping(true, pingData))
-            );
-        } finally {
-            releaseListener.countDown();
-        }
-    }
-
-    @Test
     void requestRejectionListenerFailureDoesNotSkipLaterListeners() throws Exception {
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
         var firstListenerCalls = new AtomicInteger();
         var laterListenerThread = new CompletableFuture<String>();
         server = httpServer()
             .withMaxHeadersSize(1024)
-            .withAsyncExecutor(asyncExecutor)
+            .withHandlerExecutor(asyncExecutor)
             .addRequestRejectListener(info -> {
                 firstListenerCalls.incrementAndGet();
                 throw new AssertionError("deliberate request rejection listener failure");
@@ -386,7 +325,7 @@ class ExecutionDomainsTest {
     }
 
     @Test
-    void http1RejectionResponsePrecedesFallbackListenerDelivery() throws Exception {
+    void http1RejectionStillReachesTheWireWhenNotificationDispatchRejects() throws Exception {
         var rejectedAsyncExecutor =
             track(Executors.newSingleThreadExecutor(namedThreads("rejected-async-")));
         rejectedAsyncExecutor.shutdown();
@@ -395,7 +334,7 @@ class ExecutionDomainsTest {
         var releaseListener = new CountDownLatch(1);
         server = httpServer()
             .withMaxHeadersSize(1024)
-            .withAsyncExecutor(rejectedAsyncExecutor)
+            .withHandlerExecutor(rejectedAsyncExecutor)
             .addRequestRejectListener(info -> {
                 listenerEntered.countDown();
                 try {
@@ -410,9 +349,9 @@ class ExecutionDomainsTest {
             client.writeRequestLine(Method.GET, "/")
                 .writeHeader("x-big", "a".repeat(2000))
                 .flushHeaders();
-            assertThat(listenerEntered.await(5, TimeUnit.SECONDS), is(true));
             Future<String> responseLine = clientExecutor.submit(client::readLine);
             assertThat(responseLine.get(2, TimeUnit.SECONDS), startsWith("HTTP/1.1 431"));
+            assertThat(listenerEntered.getCount(), is(1L));
         } finally {
             releaseListener.countDown();
         }
@@ -423,10 +362,8 @@ class ExecutionDomainsTest {
         var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
         var writerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("h2-writer-")));
 
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, writerExecutor, null, null)
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
-            .withConnectionExecutor(connectionExecutor)
-            .withHttp2WriterExecutor(writerExecutor)
             .start();
 
         try (var client = new H2Client();
@@ -448,10 +385,9 @@ class ExecutionDomainsTest {
         var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
         var listenerEntered = new CountDownLatch(1);
         var releaseListener = new CountDownLatch(1);
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, null, null, null)
             .withMaxHeadersSize(1024)
-            .withAsyncExecutor(asyncExecutor)
-            .withConnectionExecutor(connectionExecutor)
+            .withHandlerExecutor(asyncExecutor)
             .addRequestRejectListener(info -> {
                 listenerEntered.countDown();
                 try {
@@ -553,7 +489,7 @@ class ExecutionDomainsTest {
         var secondCallbackRan = new CountDownLatch(1);
         server = httpServer()
             .withMaxHeadersSize(1024)
-            .withAsyncExecutor(asyncExecutor)
+            .withHandlerExecutor(asyncExecutor)
             .addRequestRejectListener(info -> {
                 if (callbackNumber.incrementAndGet() == 1) {
                     try {
@@ -599,7 +535,7 @@ class ExecutionDomainsTest {
         var releaseCallback = new CountDownLatch(1);
         server = httpServer()
             .withMaxHeadersSize(1024)
-            .withAsyncExecutor(asyncExecutor)
+            .withHandlerExecutor(asyncExecutor)
             .addRequestRejectListener(info -> {
                 try {
                     localStopResult.complete(
@@ -645,9 +581,8 @@ class ExecutionDomainsTest {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
         var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, null, null, null)
             .withHandlerExecutor(handlerExecutor)
-            .withConnectionExecutor(connectionExecutor)
             .addHandler(Method.GET, "/", (request, response, pathParams) ->
                 response.write(Thread.currentThread().getName()))
             .start();
@@ -671,9 +606,8 @@ class ExecutionDomainsTest {
     void aSharedConnectionAndHandlerExecutorDoesNotSubmitBackToItself() throws Exception {
         var sharedExecutor = track(Executors.newSingleThreadExecutor(namedThreads("shared-")));
         var completionThread = new CompletableFuture<String>();
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), null, null, null, null)
             .withHandlerExecutor(sharedExecutor)
-            .withConnectionExecutor(sharedExecutor)
             .addResponseCompleteListener(info ->
                 completionThread.complete(Thread.currentThread().getName())
             )
@@ -695,9 +629,8 @@ class ExecutionDomainsTest {
         var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
         var responseCompletionThread = new CompletableFuture<String>();
         var serverCompletionThread = new CompletableFuture<String>();
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, null, null, null)
             .withHandlerExecutor(handlerExecutor)
-            .withConnectionExecutor(connectionExecutor)
             .addResponseCompleteListener(info ->
                 serverCompletionThread.complete(Thread.currentThread().getName())
             )
@@ -729,9 +662,8 @@ class ExecutionDomainsTest {
         var firstListenerThread = new CompletableFuture<String>();
         var lateListenerThread = new CompletableFuture<String>();
         var serverListenerFinished = new CompletableFuture<Void>();
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, null, null, null)
             .withHandlerExecutor(handlerExecutor)
-            .withConnectionExecutor(connectionExecutor)
             .addResponseCompleteListener(info -> serverListenerFinished.complete(null))
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.addCompletionListener(info -> {
@@ -782,9 +714,8 @@ class ExecutionDomainsTest {
         var responseRef = new CompletableFuture<MuResponse>();
         var events = new CopyOnWriteArrayList<String>();
         var serverListenersFinished = new CompletableFuture<Void>();
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, null, null, null)
             .withHandlerExecutor(handlerExecutor)
-            .withConnectionExecutor(connectionExecutor)
             .addResponseCompleteListener(info -> {
                 events.add("server-failing");
                 throw new AssertionError("deliberate server listener failure");
@@ -838,9 +769,8 @@ class ExecutionDomainsTest {
         var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
         var firstCompletionStarted = new CountDownLatch(1);
         var releaseFirstCompletion = new CountDownLatch(1);
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, null, null, null)
             .withHandlerExecutor(handlerExecutor)
-            .withConnectionExecutor(connectionExecutor)
             .addResponseCompleteListener(info -> {
                 if (info.request().relativePath().equals("/first")) {
                     firstCompletionStarted.countDown();
@@ -882,9 +812,8 @@ class ExecutionDomainsTest {
         var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
         var completionStarted = new CountDownLatch(1);
         var releaseCompletion = new CountDownLatch(1);
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, null, null, null)
             .withHandlerExecutor(handlerExecutor)
-            .withConnectionExecutor(connectionExecutor)
             .addResponseCompleteListener(info -> {
                 completionStarted.countDown();
                 try {
@@ -920,33 +849,6 @@ class ExecutionDomainsTest {
     }
 
     @Test
-    void rejectedHandlerDispatchFallsBackWithoutRunningCompletionListenersOnTheHttp1Reader() throws Exception {
-        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
-        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
-        var connectionExecutor = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
-        var completionThread = new CompletableFuture<String>();
-        server = httpServer()
-            .withHandlerExecutor(handlerExecutor)
-            .withAsyncExecutor(asyncExecutor)
-            .withConnectionExecutor(connectionExecutor)
-            .addResponseCompleteListener(info ->
-                completionThread.complete(Thread.currentThread().getName())
-            )
-            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
-                response.write("done");
-                handlerExecutor.shutdown();
-            })
-            .start();
-
-        try (var client = Http1Client.connect(server)) {
-            client.writeRequestLine(Method.GET, "/").flushHeaders();
-            assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
-            assertThat(client.readBody(client.readHeaders()), equalTo("done"));
-        }
-        assertThat(completionThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
-    }
-
-    @Test
     void asyncCompletionIsATerminalGateForLaterWrites() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
@@ -960,9 +862,9 @@ class ExecutionDomainsTest {
         assertThat(blockerStarted.await(5, TimeUnit.SECONDS), is(true));
 
         var suspendedHandle = new CompletableFuture<AsyncHandle>();
-        server = httpServer()
+        server = TestExecutionResources.configure(httpServer(),
+            track(Executors.newCachedThreadPool()), null, asyncExecutor, null)
             .withHandlerExecutor(handlerExecutor)
-            .withAsyncExecutor(asyncExecutor)
             .addHandler((request, response) -> {
                 suspendedHandle.complete(request.handleAsync());
                 return true;
@@ -986,7 +888,6 @@ class ExecutionDomainsTest {
             });
 
             assertThat(acceptedWrite.isDone(), is(false));
-            assertThat(callbackFailure.isDone(), is(false));
             ExecutionException failedWrite = assertThrows(
                 ExecutionException.class,
                 () -> lateWrite.get(5, TimeUnit.SECONDS)
@@ -997,7 +898,7 @@ class ExecutionDomainsTest {
             blocker.get(5, TimeUnit.SECONDS);
             acceptedWrite.get(5, TimeUnit.SECONDS);
             assertThat(callbackFailure.get(5, TimeUnit.SECONDS), instanceOf(IllegalStateException.class));
-            assertThat(callbackThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
+            assertThat(callbackThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
             assertThat(client.readLine(), equalTo("HTTP/1.1 200 OK"));
             assertThat(
                 client.readHeaders().contains(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED, true),
@@ -1024,7 +925,7 @@ class ExecutionDomainsTest {
             payload[i] = (byte) ('a' + (i % 26));
         }
         server = httpServer()
-            .withAsyncExecutor(asyncExecutor)
+            .withHandlerExecutor(asyncExecutor)
             .addHandler(Method.POST, "/", (request, response, pathParams) -> {
                 AsyncHandle handle = request.handleAsync();
                 handle.setReadListener(new RequestBodyListener() {
@@ -1084,8 +985,8 @@ class ExecutionDomainsTest {
         assertThat(blockerStarted.await(5, TimeUnit.SECONDS), is(true));
 
         var competingReadFailure = new CompletableFuture<Throwable>();
-        server = httpServer()
-            .withAsyncExecutor(asyncExecutor)
+        server = TestExecutionResources.configure(httpServer(),
+            track(Executors.newCachedThreadPool()), null, asyncExecutor, null)
             .addHandler(Method.POST, "/", (request, response, pathParams) -> {
                 AsyncHandle handle = request.handleAsync();
                 handle.setReadListener(new RequestBodyListener() {
@@ -1138,7 +1039,7 @@ class ExecutionDomainsTest {
         var completed = new AtomicBoolean();
         var listenerFailure = new IllegalStateException("deliberate request-body listener failure");
         server = httpServer()
-            .withAsyncExecutor(asyncExecutor)
+            .withHandlerExecutor(asyncExecutor)
             .addHandler(Method.POST, "/", (request, response, pathParams) -> {
                 AsyncHandle handle = request.handleAsync();
                 handle.setReadListener(new RequestBodyListener() {
@@ -1200,7 +1101,6 @@ class ExecutionDomainsTest {
         }
         server = httpServer()
             .withHandlerExecutor(applicationExecutor)
-            .withAsyncExecutor(applicationExecutor)
             .addHandler(Method.POST, "/", (request, response, pathParams) -> {
                 AsyncHandle handle = request.handleAsync();
                 handle.setReadListener(new RequestBodyListener() {
@@ -1248,56 +1148,6 @@ class ExecutionDomainsTest {
     }
 
     @Test
-    void rejectedAsyncWritesFailTheRequestAndInvokeTheCallback() throws Exception {
-        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
-        asyncExecutor.shutdown();
-        var callbackFailure = new CompletableFuture<Throwable>();
-        server = httpServer()
-            .withAsyncExecutor(asyncExecutor)
-            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
-                AsyncHandle handle = request.handleAsync();
-                handle.write(ByteBuffer.wrap(new byte[]{1}), error -> {
-                    if (error != null) {
-                        callbackFailure.complete(error);
-                    }
-                });
-            })
-            .start();
-
-        try (Response response = call(request(server.uri()))) {
-            assertThat(response.code(), is(500));
-        }
-        assertThat(callbackFailure.get(5, TimeUnit.SECONDS), instanceOf(RejectedExecutionException.class));
-    }
-
-    @Test
-    void rejectedAsyncExecutorDoesNotDropALateWriteCallback() throws Exception {
-        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
-        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
-        asyncExecutor.shutdown();
-        var callbackFailure = new CompletableFuture<Throwable>();
-        var callbackThread = new CompletableFuture<String>();
-        server = httpServer()
-            .withHandlerExecutor(handlerExecutor)
-            .withAsyncExecutor(asyncExecutor)
-            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
-                AsyncHandle handle = request.handleAsync();
-                handle.complete();
-                handle.write(ByteBuffer.wrap(new byte[]{1}), failure -> {
-                    callbackThread.complete(Thread.currentThread().getName());
-                    callbackFailure.complete(failure);
-                });
-            })
-            .start();
-
-        try (Response response = call(request(server.uri()))) {
-            assertThat(response.code(), is(200));
-        }
-        assertThat(callbackFailure.get(5, TimeUnit.SECONDS), instanceOf(IllegalStateException.class));
-        assertThat(callbackThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
-    }
-
-    @Test
     void aSuspendedHttp1ExchangeDoesNotRetainAHandlerWorker() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
         var clientExecutor = track(Executors.newSingleThreadExecutor(namedThreads("client-")));
@@ -1337,38 +1187,6 @@ class ExecutionDomainsTest {
             assertThat(first.readLine(), equalTo("HTTP/1.1 200 OK"));
             assertThat(first.readBody(first.readHeaders()), equalTo(""));
             assertThat(completionThread.get(5, TimeUnit.SECONDS), startsWith("handler-"));
-        }
-    }
-
-    @Test
-    void rejectedHandlerDispatchesHttp1AsyncFailureHandlingToTheAsyncExecutor() throws Exception {
-        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
-        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
-        var suspendedHandle = new CompletableFuture<AsyncHandle>();
-        var exceptionThread = new CompletableFuture<String>();
-        server = httpServer()
-            .withHandlerExecutor(handlerExecutor)
-            .withAsyncExecutor(asyncExecutor)
-            .withExceptionHandler((request, response, exception) -> {
-                exceptionThread.complete(Thread.currentThread().getName());
-                response.status(500);
-                response.write("handled");
-                return true;
-            })
-            .addHandler((request, response) -> {
-                suspendedHandle.complete(request.handleAsync());
-                handlerExecutor.shutdown();
-                return true;
-            })
-            .start();
-
-        try (var client = Http1Client.connect(server)) {
-            client.writeRequestLine(Method.GET, "/").flushHeaders();
-            suspendedHandle.get(5, TimeUnit.SECONDS).complete(new IOException("async failure"));
-
-            assertThat(client.readLine(), equalTo("HTTP/1.1 500 Internal Server Error"));
-            assertThat(client.readBody(client.readHeaders()), equalTo("handled"));
-            assertThat(exceptionThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
         }
     }
 
@@ -1438,7 +1256,6 @@ class ExecutionDomainsTest {
         server = httpServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .withHandlerExecutor(applicationExecutor)
-            .withAsyncExecutor(applicationExecutor)
             .addResponseCompleteListener(info ->
                 completionThread.complete(Thread.currentThread().getName())
             )
@@ -1472,163 +1289,12 @@ class ExecutionDomainsTest {
     }
 
     @Test
-    void http2CompletionOnTheAsyncWorkerDoesNotResubmitWhenHandlersAreSaturated() throws Exception {
-        var handlerExecutor = track(new ThreadPoolExecutor(
-            1,
-            1,
-            0,
-            TimeUnit.MILLISECONDS,
-            new ArrayBlockingQueue<>(1),
-            namedThreads("handler-")
-        ));
-        var asyncExecutor = track(new ThreadPoolExecutor(
-            1,
-            1,
-            0,
-            TimeUnit.MILLISECONDS,
-            new SynchronousQueue<>(),
-            namedThreads("async-")
-        ));
-        var writeCallbackEntered = new CountDownLatch(1);
-        var releaseWriteCallback = new CountDownLatch(1);
-        var blockerStarted = new CountDownLatch(1);
-        var releaseBlockers = new CountDownLatch(1);
-        var completionThread = new CompletableFuture<String>();
-        server = httpServer()
-            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
-            .withHandlerExecutor(handlerExecutor)
-            .withAsyncExecutor(asyncExecutor)
-            .addResponseCompleteListener(info ->
-                completionThread.complete(Thread.currentThread().getName())
-            )
-            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
-                AsyncHandle handle = request.handleAsync();
-                handle.write(ByteBuffer.wrap(new byte[]{1}), error -> {
-                    if (error != null) {
-                        handle.complete(error);
-                        return;
-                    }
-                    writeCallbackEntered.countDown();
-                    releaseWriteCallback.await();
-                    handle.complete();
-                });
-            })
-            .start();
-
-        Future<?> blocker = null;
-        Future<?> queuedBlocker = null;
-        try (var h2Client = new H2Client();
-             var connection = h2Client.connectClearText(server)) {
-            connection.handshake();
-            connection.socket().setSoTimeout(2000);
-            connection.writeFrame(new Http2HeadersFrame(
-                1,
-                true,
-                RFCTestUtils.getHelloHeaders("http", server.uri().getPort())
-            )).flush();
-
-            assertThat(writeCallbackEntered.await(5, TimeUnit.SECONDS), is(true));
-            blocker = handlerExecutor.submit(() -> {
-                blockerStarted.countDown();
-                try {
-                    releaseBlockers.await();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            });
-            assertThat(blockerStarted.await(5, TimeUnit.SECONDS), is(true));
-            queuedBlocker = handlerExecutor.submit(() -> {
-                try {
-                    releaseBlockers.await();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            });
-            releaseWriteCallback.countDown();
-
-            Http2HeadersFrame responseHeaders =
-                RFCTestUtils.readIgnoringWindowUpdates(connection, Http2HeadersFrame.class);
-            assertThat(responseHeaders.headers().get(":status"), equalTo("200"));
-            Http2DataFrame responseData =
-                RFCTestUtils.readIgnoringWindowUpdates(connection, Http2DataFrame.class);
-            assertThat(responseData.payloadLength(), is(1));
-            assertThat(
-                RFCTestUtils.readIgnoringWindowUpdates(connection, Http2DataFrame.class).endStream(),
-                is(true)
-            );
-            assertThat(completionThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
-        } finally {
-            releaseWriteCallback.countDown();
-            releaseBlockers.countDown();
-            if (blocker != null) {
-                blocker.get(5, TimeUnit.SECONDS);
-            }
-            if (queuedBlocker != null) {
-                queuedBlocker.get(5, TimeUnit.SECONDS);
-            }
-        }
-    }
-
-    @Test
-    void rejectedHandlerDispatchesHttp2AsyncCompletionToTheAsyncExecutor() throws Exception {
-        var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));
-        var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
-        var suspendedHandle = new CompletableFuture<AsyncHandle>();
-        var exceptionThread = new CompletableFuture<String>();
-        var completionThread = new CompletableFuture<String>();
-        server = httpServer()
-            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
-            .withHandlerExecutor(handlerExecutor)
-            .withAsyncExecutor(asyncExecutor)
-            .withExceptionHandler((request, response, exception) -> {
-                exceptionThread.complete(Thread.currentThread().getName());
-                response.status(500);
-                response.write("handled");
-                return true;
-            })
-            .addHandler((request, response) -> {
-                AsyncHandle handle = request.handleAsync();
-                handle.addResponseCompleteHandler(info ->
-                    completionThread.complete(Thread.currentThread().getName())
-                );
-                handlerExecutor.shutdown();
-                suspendedHandle.complete(handle);
-                return true;
-            })
-            .start();
-
-        try (var h2Client = new H2Client();
-             var connection = h2Client.connectClearText(server)) {
-            connection.handshake();
-            connection.socket().setSoTimeout(2000);
-            connection.writeFrame(new Http2HeadersFrame(
-                1,
-                true,
-                RFCTestUtils.getHelloHeaders("http", server.uri().getPort())
-            )).flush();
-            AsyncHandle handle = suspendedHandle.get(5, TimeUnit.SECONDS);
-            assertThat(handlerExecutor.awaitTermination(5, TimeUnit.SECONDS), equalTo(true));
-            handle.complete(new IOException("async failure"));
-
-            Http2HeadersFrame responseHeaders =
-                RFCTestUtils.readIgnoringWindowUpdates(connection, Http2HeadersFrame.class);
-            assertThat(responseHeaders.headers().get(":status"), equalTo("500"));
-            Http2DataFrame responseData =
-                RFCTestUtils.readIgnoringWindowUpdates(connection, Http2DataFrame.class);
-            assertThat(responseData.toUTF8(), equalTo("handled"));
-            assertThat(exceptionThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
-            assertThat(completionThread.get(5, TimeUnit.SECONDS), startsWith("async-"));
-        }
-    }
-
-    @Test
     void rejectedApplicationExecutorsAbortAnAcceptedHttp2AsyncStream() throws Exception {
         var sharedExecutor = track(Executors.newSingleThreadExecutor(namedThreads("application-")));
         var suspendedHandle = new CompletableFuture<AsyncHandle>();
         server = httpServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .withHandlerExecutor(sharedExecutor)
-            .withAsyncExecutor(sharedExecutor)
             .addHandler((request, response) -> {
                 suspendedHandle.complete(request.handleAsync());
                 sharedExecutor.shutdown();
@@ -1659,12 +1325,12 @@ class ExecutionDomainsTest {
 
     @SuppressWarnings("deprecation")
     @Test
-    void deprecatedWebSocketAdaptersUseTheAsyncExecutorWithoutSelfDeadlock() throws Exception {
+    void deprecatedWebSocketAdaptersUseOneApplicationWorkerWithoutSelfDeadlock() throws Exception {
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
         var callbackThreads = new CopyOnWriteArrayList<String>();
         var clientMessage = new CompletableFuture<String>();
         server = httpServer()
-            .withAsyncExecutor(asyncExecutor)
+            .withHandlerExecutor(asyncExecutor)
             .addHandler(webSocketHandler((request, responseHeaders) -> new BaseWebSocket() {
                 @Override
                 public void onText(String message, boolean isLast, DoneCallback onComplete) {
@@ -1690,7 +1356,7 @@ class ExecutionDomainsTest {
         webSocket.send("hello");
         assertThat(clientMessage.get(5, TimeUnit.SECONDS), equalTo("hello"));
         webSocket.close(1000, "Done");
-        assertThat(callbackThreads.size(), is(2));
+        assertEventually(callbackThreads::size, is(2));
         for (String callbackThread : callbackThreads) {
             assertThat(callbackThread, startsWith("async-"));
         }
@@ -1703,9 +1369,8 @@ class ExecutionDomainsTest {
         var connectedThread = new CompletableFuture<String>();
         var messageThread = new CompletableFuture<String>();
         var errorThread = new CompletableFuture<String>();
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, null, null, null)
             .withHandlerExecutor(handlerExecutor)
-            .withConnectionExecutor(connectionExecutor)
             .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
                 @Override
                 public void onConnect(MuWebSocketSession session) throws Exception {
@@ -1755,10 +1420,8 @@ class ExecutionDomainsTest {
         var releaseText = new CountDownLatch(1);
         var timeoutThread = new CompletableFuture<String>();
         var clientDisconnected = new CompletableFuture<Void>();
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, null, maintenanceExecutor, null)
             .withHandlerExecutor(handlerExecutor)
-            .withConnectionExecutor(connectionExecutor)
-            .withConnectionMaintenanceExecutor(maintenanceExecutor)
             .withIdleTimeout(100, TimeUnit.MILLISECONDS)
             .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
                 @Override
@@ -1814,9 +1477,8 @@ class ExecutionDomainsTest {
         var connectionExecutor = track(Executors.newCachedThreadPool(namedThreads("connection-")));
         var connected = new CountDownLatch(1);
         var shutdownThread = new CompletableFuture<String>();
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, null, null, null)
             .withHandlerExecutor(handlerExecutor)
-            .withConnectionExecutor(connectionExecutor)
             .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
                 @Override
                 public void onConnect(MuWebSocketSession session) throws Exception {
@@ -1864,9 +1526,8 @@ class ExecutionDomainsTest {
         var connected = new CountDownLatch(1);
         var shutdownEntered = new CountDownLatch(1);
         var releaseShutdown = new CountDownLatch(1);
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, null, null, null)
             .withHandlerExecutor(handlerExecutor)
-            .withConnectionExecutor(connectionExecutor)
             .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
                 @Override
                 public void onConnect(MuWebSocketSession session) throws Exception {
@@ -1958,9 +1619,8 @@ class ExecutionDomainsTest {
         var shutdownCalled = new CompletableFuture<@Nullable Void>();
         var callbackActive = new AtomicBoolean();
         var callbacksOverlapped = new AtomicBoolean();
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), null, null, null, null)
             .withHandlerExecutor(sharedExecutor)
-            .withConnectionExecutor(sharedExecutor)
             .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
                 @Override
                 public void onText(String message) throws Exception {
@@ -1978,9 +1638,10 @@ class ExecutionDomainsTest {
                 }
 
                 @Override
-                public void onServerShuttingDown() {
+                public void onServerShuttingDown() throws Exception {
                     callbacksOverlapped.set(callbackActive.get());
                     shutdownCalled.complete(null);
+                    super.onServerShuttingDown();
                 }
             }))
             .start();
@@ -1989,6 +1650,9 @@ class ExecutionDomainsTest {
         WebSocket webSocket = client.newWebSocket(
             request().url(websocketUrl).build(),
             new WebSocketListener() {
+                @Override public void onClosing(WebSocket socket, int code, String reason) {
+                    socket.close(code, reason);
+                }
             }
         );
         try {
@@ -2019,9 +1683,8 @@ class ExecutionDomainsTest {
         var attemptWrite = new CountDownLatch(1);
         var writeFailure = new CompletableFuture<IOException>();
         var errorCallback = new CompletableFuture<Throwable>();
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), null, null, null, null)
             .withHandlerExecutor(sharedExecutor)
-            .withConnectionExecutor(sharedExecutor)
             .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
                 @Override
                 public void onText(String message) throws Exception {
@@ -2076,9 +1739,8 @@ class ExecutionDomainsTest {
         var sharedExecutor = track(Executors.newSingleThreadExecutor(namedThreads("shared-")));
         var callbackThread = new CompletableFuture<String>();
         var clientMessage = new CompletableFuture<String>();
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), null, null, null, null)
             .withHandlerExecutor(sharedExecutor)
-            .withConnectionExecutor(sharedExecutor)
             .addHandler(webSocketHandler((request, responseHeaders) -> new SimpleWebSocket() {
                 @Override
                 public void onText(String message) throws IOException {
@@ -2116,10 +1778,8 @@ class ExecutionDomainsTest {
         var connectionExecutor = track(Executors.newFixedThreadPool(2, namedThreads("connection-")));
         var writerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("h2-writer-")));
 
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, writerExecutor, null, null)
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
-            .withConnectionExecutor(connectionExecutor)
-            .withHttp2WriterExecutor(writerExecutor)
             .start();
 
         try (var client = new H2Client();
@@ -2146,11 +1806,8 @@ class ExecutionDomainsTest {
         var writerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("h2-writer-")));
         var maintenanceExecutor = track(Executors.newSingleThreadExecutor(namedThreads("maintenance-")));
 
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, writerExecutor, maintenanceExecutor, null)
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
-            .withConnectionExecutor(connectionExecutor)
-            .withHttp2WriterExecutor(writerExecutor)
-            .withConnectionMaintenanceExecutor(maintenanceExecutor)
             .withIdleTimeout(100, TimeUnit.MILLISECONDS)
             .start();
 
@@ -2172,20 +1829,10 @@ class ExecutionDomainsTest {
         var maintenanceExecutor = track(Executors.newCachedThreadPool(namedThreads("maintenance-")));
         var timerExecutor = track(Executors.newSingleThreadScheduledExecutor(namedThreads("timer-")));
 
-        var builder = httpServer()
+        var builder = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, writerExecutor, maintenanceExecutor, timerExecutor)
             .withHandlerExecutor(handlerExecutor)
-            .withAsyncExecutor(asyncExecutor)
-            .withConnectionExecutor(connectionExecutor)
-            .withHttp2WriterExecutor(writerExecutor)
-            .withConnectionMaintenanceExecutor(maintenanceExecutor)
-            .withTimerExecutor(timerExecutor)
             .addHandler(Method.GET, "/", (request, response, pathParams) ->
                 response.write(Thread.currentThread().getName()));
-        assertThat(builder.connectionExecutor(), is(connectionExecutor));
-        assertThat(builder.asyncExecutor(), is(asyncExecutor));
-        assertThat(builder.http2WriterExecutor(), is(writerExecutor));
-        assertThat(builder.connectionMaintenanceExecutor(), is(maintenanceExecutor));
-        assertThat(builder.timerExecutor(), is(timerExecutor));
 
         server = builder.start();
         try (Response response = call(request(server.uri()))) {
@@ -2195,26 +1842,26 @@ class ExecutionDomainsTest {
 
         server.stop();
         server = null;
-        assertThat(connectionExecutor.isShutdown(), is(false));
-        assertThat(writerExecutor.isShutdown(), is(false));
-        assertThat(maintenanceExecutor.isShutdown(), is(false));
+        assertThat(connectionExecutor.isShutdown(), is(true));
+        assertThat(writerExecutor.isShutdown(), is(true));
+        assertThat(maintenanceExecutor.isShutdown(), is(true));
         assertThat(handlerExecutor.isShutdown(), is(false));
         assertThat(asyncExecutor.isShutdown(), is(false));
-        assertThat(timerExecutor.isShutdown(), is(false));
+        assertThat(timerExecutor.isShutdown(), is(true));
     }
 
     @Test
     void serverOwnedExecutorsAreShutDownWithTheServer() throws Exception {
-        server = httpServer().start();
-        var serverImpl = (Mu3ServerImpl) server;
-        List<ExecutorService> serverOwnedExecutors = List.of(
-            getField(serverImpl, "handlerExecutor", ExecutorService.class),
-            getField(serverImpl, "asyncExecutor", ExecutorService.class),
-            getField(serverImpl, "connectionExecutor", ExecutorService.class),
-            getField(serverImpl, "http2WriterExecutor", ExecutorService.class),
-            getField(serverImpl, "connectionMaintenanceExecutor", ExecutorService.class),
-            getField(serverImpl, "timerExecutor", ExecutorService.class)
-        );
+        var builder = httpServer();
+        var created = new java.util.concurrent.atomic.AtomicReference<ExecutionResources>();
+        builder.executionResourcesFactory = application -> {
+            ExecutionResources resources = ExecutionResources.create(application);
+            created.set(resources);
+            return resources;
+        };
+        server = builder.start();
+        ExecutionResources resources = created.get();
+        List<ExecutorService> serverOwnedExecutors = List.of(resources.application, resources.internal, resources.timer);
 
         server.stop();
         server = null;
@@ -2235,21 +1882,16 @@ class ExecutionDomainsTest {
         timerExecutor.shutdown();
         int port = availablePort();
 
-        assertThrows(RejectedExecutionException.class, () -> httpServer()
+        assertThrows(RejectedExecutionException.class, () -> io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, writerExecutor, maintenanceExecutor, timerExecutor)
             .withHttpPort(port)
             .withHandlerExecutor(handlerExecutor)
-            .withAsyncExecutor(asyncExecutor)
-            .withConnectionExecutor(connectionExecutor)
-            .withHttp2WriterExecutor(writerExecutor)
-            .withConnectionMaintenanceExecutor(maintenanceExecutor)
-            .withTimerExecutor(timerExecutor)
             .start());
 
         assertThat(handlerExecutor.isShutdown(), is(false));
         assertThat(asyncExecutor.isShutdown(), is(false));
-        assertThat(connectionExecutor.isShutdown(), is(false));
-        assertThat(writerExecutor.isShutdown(), is(false));
-        assertThat(maintenanceExecutor.isShutdown(), is(false));
+        assertThat(connectionExecutor.isShutdown(), is(true));
+        assertThat(writerExecutor.isShutdown(), is(true));
+        assertThat(maintenanceExecutor.isShutdown(), is(true));
         try (var replacementListener = new ServerSocket(port)) {
             assertThat(replacementListener.isBound(), is(true));
         }
@@ -2266,24 +1908,19 @@ class ExecutionDomainsTest {
         int firstPort = availablePort();
 
         try (var occupiedListener = new ServerSocket(0)) {
-            assertThrows(MuException.class, () -> MuServerBuilder.muServer()
+            assertThrows(MuException.class, () -> io.muserver.TestExecutionResources.configure(MuServerBuilder.muServer(), connectionExecutor, writerExecutor, maintenanceExecutor, timerExecutor)
                 .withHttpsPort(firstPort)
                 .withHttpPort(occupiedListener.getLocalPort())
                 .withHandlerExecutor(handlerExecutor)
-                .withAsyncExecutor(asyncExecutor)
-                .withConnectionExecutor(connectionExecutor)
-                .withHttp2WriterExecutor(writerExecutor)
-                .withConnectionMaintenanceExecutor(maintenanceExecutor)
-                .withTimerExecutor(timerExecutor)
                 .start());
         }
 
         assertThat(handlerExecutor.isShutdown(), is(false));
         assertThat(asyncExecutor.isShutdown(), is(false));
-        assertThat(connectionExecutor.isShutdown(), is(false));
-        assertThat(writerExecutor.isShutdown(), is(false));
-        assertThat(maintenanceExecutor.isShutdown(), is(false));
-        assertThat(timerExecutor.isShutdown(), is(false));
+        assertThat(connectionExecutor.isShutdown(), is(true));
+        assertThat(writerExecutor.isShutdown(), is(true));
+        assertThat(maintenanceExecutor.isShutdown(), is(true));
+        assertThat(timerExecutor.isShutdown(), is(true));
         try (var replacementListener = new ServerSocket(firstPort)) {
             assertThat(replacementListener.isBound(), is(true));
         }
@@ -2311,10 +1948,8 @@ class ExecutionDomainsTest {
             }
         };
 
-        server = httpServer()
+        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, null, maintenanceExecutor, null)
             .withHandlerExecutor(handlerExecutor)
-            .withConnectionExecutor(connectionExecutor)
-            .withConnectionMaintenanceExecutor(maintenanceExecutor)
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
                 .withPingInterval(10, TimeUnit.MILLISECONDS))
             .start();
