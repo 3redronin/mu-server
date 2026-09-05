@@ -1,7 +1,5 @@
 package io.muserver;
 
-import com.google.errorprone.annotations.concurrent.GuardedBy;
-
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,17 +34,17 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
     private final CreditAvailableListener onDataReadCallback;
     private final CreditAvailableListener onDataDiscardedCallback;
     private final Lock lock = new ReentrantLock();
-    @GuardedBy("lock")
+    // Guarded by lock.
     private final Queue<Object> frames = new LinkedList<>();
     private final Condition hasData = lock.newCondition();
-    @GuardedBy("lock")
+    // Guarded by lock.
     private boolean requestBodyComplete;
-    @GuardedBy("lock")
+    // Guarded by lock.
     private boolean discarding;
     /** The first terminal failure; independent of the contents of the data queue. */
-    @GuardedBy("lock")
+    // Guarded by lock.
     private @org.jspecify.annotations.Nullable IOException failure;
-    @GuardedBy("lock")
+    // Guarded by lock.
     private @org.jspecify.annotations.Nullable FieldBlock trailers;
 
     private static final class EndOfStreamMarker {
@@ -288,7 +286,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
         }
     }
 
-    @GuardedBy("lock")
+    // Guarded by lock.
     private boolean isErrored() {
         return failure != null;
     }

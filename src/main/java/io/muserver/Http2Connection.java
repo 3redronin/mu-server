@@ -1,9 +1,5 @@
 package io.muserver;
 
-import com.google.errorprone.annotations.concurrent.GuardedBy;
-
-import io.muserver.internal.FatalErrors;
-
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -55,10 +51,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private final CompletableFuture<@Nullable Void> writeLoopEnded = new CompletableFuture<>();
     private volatile @Nullable OutputStream writerOutput;
 
-    private final ShutdownAdmission shutdown = new ShutdownAdmission();
+    private final ConnectionLifecycle lifecycle = new ConnectionLifecycle();
 
     /** Owns GOAWAY timing, terminal input/output states, and new-stream admission under stateLock. */
-    private final class ShutdownAdmission {
+    private final class ConnectionLifecycle {
         /** Published input lifecycle; output can remain active after input stops. */
         private volatile HState readState = HState.ACTIVE;
         /** Published output lifecycle; mutations share the admission lock. */
@@ -70,21 +66,21 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         /** Successive peer GOAWAY frames may only decrease this boundary. */
         private int peerGoAwayLastStreamId = MAX_POSSIBLE_STREAM_ID;
         /** Grace starts after the warning GOAWAY is actually written, not when shutdown is requested. */
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private boolean initialGoAwayWritten;
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private boolean finalGoAwayQueued;
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private long finalGoAwayEarliestNanos;
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private boolean finalGoAwayWakeScheduled;
 
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private void markPeerShutdownInitiatedLocked() {
             readState = HState.SHUTDOWN_INITIATED;
         }
 
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private void markLocalShutdownInitiatedLocked() {
             if (writeState == HState.ACTIVE) {
                 log.info("Graceful shutdown initiated with write state {}", writeState);
@@ -100,33 +96,33 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             }
         }
 
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private void markConnectionErroredLocked() {
             readState = HState.ERRORED;
             writeState = HState.ERRORED;
         }
 
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private boolean isLocalShutdownInitiatedLocked() {
             return writeState == HState.SHUTDOWN_INITIATED;
         }
 
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private boolean isPeerShutdownInitiatedLocked() {
             return readState == HState.SHUTDOWN_INITIATED;
         }
 
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private boolean isReadTerminalLocked() {
             return !readState.canSendFrames;
         }
 
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private boolean isShutdownInitiatedLocked() {
             return isLocalShutdownInitiatedLocked() || isPeerShutdownInitiatedLocked();
         }
 
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private long localGoAwayGracePeriodNanosRemainingLocked(long now) {
             if (!initialGoAwayWritten) {
                 return Long.MAX_VALUE;
@@ -134,13 +130,13 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             return Math.max(0L, finalGoAwayEarliestNanos - now);
         }
 
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private boolean isStillAllowingInFlightStreamCreationLocked(long now) {
             return isLocalShutdownInitiatedLocked()
                 && localGoAwayGracePeriodNanosRemainingLocked(now) > 0L;
         }
 
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private boolean canStartNewStreamsLocked(long now) {
             return readState.canSendFrames
                 && writeState.canSendFrames
@@ -148,7 +144,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 && (!isLocalShutdownInitiatedLocked() || isStillAllowingInFlightStreamCreationLocked(now));
         }
 
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private boolean shouldQueueFinalGoAwayLocked(long now) {
             if (finalGoAwayQueued) {
                 return false;
@@ -161,7 +157,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 && streamRegistry.isEmpty();
         }
 
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private void queueFinalGoAwayLocked() {
             finalGoAwayQueued = true;
             maxAllowedStreamId = lastStreamId;
@@ -169,14 +165,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             writeLocked(new Http2GoAway(maxAllowedStreamId, 0, null));
         }
 
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private boolean isTerminalAndDrainedLocked() {
             return (isReadTerminalLocked() || (isShutdownInitiatedLocked() && finalGoAwayQueued))
                 && streamRegistry.isEmpty()
                 && writeCoordinator.isIdle();
         }
 
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private long nanosUntilNextWriteActionLocked(long now) {
             if (isLocalShutdownInitiatedLocked()
                 && initialGoAwayWritten
@@ -199,7 +195,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             }
         }
 
-        @GuardedBy("Http2Connection.this.stateLock")
+        // Guarded by Http2Connection.this.stateLock.
         private void completeShutdownLocked() {
             log.info("HTTP/2 connection finished with read state {} and write state {}", readState, writeState);
             writeState = readState == HState.ERRORED ? HState.ERRORED : HState.COMPLETED;
@@ -244,7 +240,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         Http2WriteCoordinator coordinator() { return writeCoordinator; }
         Http2InboundFlowControl inbound() { return inboundFlowControl; }
         Lock lifecycleLock() { return stateLock; }
-        String inputState() { return shutdown.readState.toString(); }
+        String inputState() { return lifecycle.readState.toString(); }
         Queue<PendingSettingsAck> pendingSettingsAcks() { return settingsAckQueue; }
     }
 
@@ -298,7 +294,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         if (result.connectionUpdate() > 0 || result.streamUpdate() > 0) {
             stateLock.lock();
             try {
-                if (shutdown.writeState.canSendFrames) {
+                if (lifecycle.writeState.canSendFrames) {
                     if (result.connectionUpdate() > 0) {
                         writeCoordinator.submit(new WriteTask(
                             new Http2WindowUpdate(0, result.connectionUpdate()),
@@ -341,7 +337,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
 
     // The caller holds stateLock, making admission and command publication one transition.
     private void writeLocked(WriteTask writeTask) {
-        if (shutdown.writeState.canSendFrames && canWriteFrame(writeTask.frame())) {
+        if (lifecycle.writeState.canSendFrames && canWriteFrame(writeTask.frame())) {
             LogicalHttp2Frame frame = writeTask.frame();
             boolean retireRejectedStream = frame instanceof Http2ResetStreamFrame
                 && streamRegistry.removeRejectedRequestBody(frame.streamId());
@@ -368,7 +364,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         }
         Http2Stream stream = streamRegistry.applicationStream(streamId);
         return stream == null
-            ? streamId > shutdown.lastStreamId
+            ? streamId > lifecycle.lastStreamId
             : !stream.resetWasInitiated();
     }
 
@@ -383,7 +379,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     ) throws Http2Exception {
         stateLock.lock();
         try {
-            if (shutdown.writeState.canSendFrames) {
+            if (lifecycle.writeState.canSendFrames) {
                 boolean retireRejectedStream =
                     streamRegistry.removeRejectedRequestBody(resetFrame.streamId());
                 inboundFlowControl.closeStream(resetFrame.streamId());
@@ -409,7 +405,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     ) {
         stateLock.lock();
         try {
-            if (shutdown.writeState.canSendFrames) {
+            if (lifecycle.writeState.canSendFrames) {
                 // Rejected headers do not create an application-facing Http2Stream, so queue
                 // their complete protocol exchange directly as one ordered coordinator transaction.
                 if (initialState.canReceiveEndStream()) {
@@ -451,7 +447,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private void finishRejectedRequestBody(int streamId) throws Http2Exception {
         stateLock.lock();
         try {
-            if (shutdown.writeState.canSendFrames) {
+            if (lifecycle.writeState.canSendFrames) {
                 streamRegistry.removeRejectedRequestBody(streamId);
                 inboundFlowControl.closeStream(streamId);
                 writeCoordinator.remoteEndStream(streamId);
@@ -467,7 +463,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     void remoteEndStream(int streamId) throws Http2Exception {
         stateLock.lock();
         try {
-            if (shutdown.writeState.canSendFrames) {
+            if (lifecycle.writeState.canSendFrames) {
                 writeCoordinator.remoteEndStream(streamId);
                 return;
             }
@@ -480,7 +476,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private void applicationExchangeEndedForWrites(int streamId) {
         stateLock.lock();
         try {
-            if (shutdown.writeState.canSendFrames) {
+            if (lifecycle.writeState.canSendFrames) {
                 writeCoordinator.applicationExchangeEnded(streamId);
             }
         } finally {
@@ -491,8 +487,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private void applyConnectionWindowUpdate(int increment) throws Http2Exception {
         stateLock.lock();
         try {
-            if (shutdown.writeState.canSendFrames) {
-                writeCoordinator.applyConnectionWindowUpdate(increment, shutdown.lastStreamId);
+            if (lifecycle.writeState.canSendFrames) {
+                writeCoordinator.applyConnectionWindowUpdate(increment, lifecycle.lastStreamId);
                 return;
             }
             throw Http2Exception.connection(Http2ErrorCode.INTERNAL_ERROR, "HTTP/2 writer closed before WINDOW_UPDATE was processed");
@@ -504,7 +500,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private void applyStreamWindowUpdate(int streamId, int increment) throws Http2Exception {
         stateLock.lock();
         try {
-            if (shutdown.writeState.canSendFrames) {
+            if (lifecycle.writeState.canSendFrames) {
                 writeCoordinator.applyStreamWindowUpdate(streamId, increment);
                 return;
             }
@@ -518,12 +514,12 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         throws Http2Exception {
         stateLock.lock();
         try {
-            if (shutdown.writeState.canSendFrames) {
+            if (lifecycle.writeState.canSendFrames) {
                 writeCoordinator.applyPeerSettingsChange(
                     newSettings.initialWindowSize - oldSettings.initialWindowSize,
                     newSettings.headerTableSize,
                     new WriteTask(Http2Settings.ACK, false),
-                    shutdown.lastStreamId
+                    lifecycle.lastStreamId
                 );
                 return;
             }
@@ -544,7 +540,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private void failConnection(WriteTask goAway, IOException reason) {
         stateLock.lock();
         try {
-            if (shutdown.writeState.canSendFrames) {
+            if (lifecycle.writeState.canSendFrames) {
                 writeCoordinator.failConnection(goAway, reason);
             } else {
                 goAway.fail(new IOException("HTTP/2 writer closed before GOAWAY was processed", reason));
@@ -607,7 +603,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private void setReadStateAndSignal(HState newState) {
         stateLock.lock();
         try {
-            shutdown.readState = newState;
+            lifecycle.readState = newState;
         } finally {
             stateLock.unlock();
         }
@@ -618,9 +614,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         boolean changed;
         stateLock.lock();
         try {
-            changed = shutdown.readState.canSendFrames;
+            changed = lifecycle.readState.canSendFrames;
             if (changed) {
-                shutdown.readState = newState;
+                lifecycle.readState = newState;
             }
         } finally {
             stateLock.unlock();
@@ -633,7 +629,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private void failAfterUnexpectedInputEnd(IOException reason) {
         stateLock.lock();
         try {
-            shutdown.markConnectionErroredLocked();
+            lifecycle.markConnectionErroredLocked();
         } finally {
             stateLock.unlock();
         }
@@ -686,7 +682,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     startSettingsAckTimeout(pendingSettingsAck);
                 }
                 if (GO_AWAY_WARNING.equals(frame)) {
-                    shutdown.recordInitialGoAwayWritten();
+                    lifecycle.recordInitialGoAwayWritten();
                 }
                 candidate.complete();
                 if (protocolError != null && protocolError.errorType() == Http2Level.CONNECTION) {
@@ -719,8 +715,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             // The reader does not wait for flow-control validation. Freeze stream acceptance
             // before materializing GOAWAY so its last-stream ID still describes every request
             // that could have been dispatched while the command was in the mailbox.
-            shutdown.markConnectionErroredLocked();
-            acceptedLastStreamId = shutdown.lastStreamId;
+            lifecycle.markConnectionErroredLocked();
+            acceptedLastStreamId = lifecycle.lastStreamId;
         } finally {
             stateLock.unlock();
         }
@@ -749,7 +745,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             writeEndedFuture = startWriteLoop(clientOut);
 
             // and now just read frames
-            while (shutdown.readState.canSendFrames) {
+            while (lifecycle.readState.canSendFrames) {
                 Http2FrameHeader currentFrameHeader = null;
                 boolean readingFrameHeader = true;
                 try {
@@ -762,9 +758,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     Mutils.readAtLeast(buffer, clientIn, len);
                     log.info("read fh = " + fh);
 
-                    if (fh.streamId() > shutdown.maxAllowedStreamId) {
+                    if (fh.streamId() > lifecycle.maxAllowedStreamId) {
                         // we've told the client we have stopped, but this is a new stream ID
-                        log.info("Discarding " + fh.streamId() + " because we told the client the last stream ID is " + shutdown.lastStreamId);
+                        log.info("Discarding " + fh.streamId() + " because we told the client the last stream ID is " + lifecycle.lastStreamId);
                         discardPayload(buffer, clientIn, len);
                         if (fh.frameType() == Http2FrameType.HEADERS) {
                             write(new Http2ResetStreamFrame(fh.streamId(), Http2ErrorCode.REFUSED_STREAM.code()));
@@ -837,7 +833,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                         setReadStateIfActiveAndSignal(HState.COMPLETED);
                     } else {
                         String frameDetails = readingFrameHeader ? "frame header" : "frame payload for " + currentFrameHeader;
-                        log.warn("EOF while reading {} at read state {} shutdown.writeState={}", frameDetails, shutdown.readState, shutdown.writeState, e);
+                        log.warn("EOF while reading {} at read state {} lifecycle.writeState={}", frameDetails, lifecycle.readState, lifecycle.writeState, e);
                         if (noActiveWork) {
                             setReadStateIfActiveAndSignal(HState.COMPLETED);
                         } else {
@@ -847,10 +843,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 } catch (SocketException e) {
                     boolean noActiveWork = noConnectionWorkIsActive();
                     if (noActiveWork) {
-                        log.info("Socket closed while reading HTTP/2 frames at read state {} shutdown.writeState={}: {}", shutdown.readState, shutdown.writeState, e.getMessage());
+                        log.info("Socket closed while reading HTTP/2 frames at read state {} lifecycle.writeState={}: {}", lifecycle.readState, lifecycle.writeState, e.getMessage());
                         setReadStateIfActiveAndSignal(HState.COMPLETED);
                     } else {
-                        log.warn("Socket exception while reading HTTP/2 frames at read state {} shutdown.writeState={}", shutdown.readState, shutdown.writeState, e);
+                        log.warn("Socket exception while reading HTTP/2 frames at read state {} lifecycle.writeState={}", lifecycle.readState, lifecycle.writeState, e);
                         failAfterUnexpectedInputEnd(new IOException("Socket closed with active HTTP/2 streams", e));
                     }
                 }
@@ -865,7 +861,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             var connectionError = new IOException("Connection error", h2e);
 
             try {
-                Http2GoAway goAway = new Http2GoAway(shutdown.lastStreamId, h2e.errorCode().code(), null);
+                Http2GoAway goAway = new Http2GoAway(lifecycle.lastStreamId, h2e.errorCode().code(), null);
                 if (writeEndedFuture != null) {
                     WriteTask writeTask = new WriteTask(goAway, true);
                     // Order the connection failure before waking body readers. Any response
@@ -898,7 +894,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         int streamId = rstStream.streamId();
         var stream = streamRegistry.applicationStream(streamId);
         log.info("Reset stream " + rstStream + " for " + stream);
-        if (stream == null && (streamId > shutdown.lastStreamId || streamId % 2 == 0)) {
+        if (stream == null && (streamId > lifecycle.lastStreamId || streamId % 2 == 0)) {
             throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID on rst_stream");
         }
 
@@ -931,11 +927,11 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         log.info("Got goaway from client " + Objects.requireNonNullElse(goaway.errorCodeEnum(), goaway.errorCode()) + " with last stream " + goaway.lastStreamId());
         stateLock.lock();
         try {
-            if (goaway.lastStreamId() > shutdown.peerGoAwayLastStreamId) {
+            if (goaway.lastStreamId() > lifecycle.peerGoAwayLastStreamId) {
                 throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "GOAWAY last stream ID cannot increase");
             }
-            shutdown.peerGoAwayLastStreamId = goaway.lastStreamId();
-            shutdown.markPeerShutdownInitiatedLocked();
+            lifecycle.peerGoAwayLastStreamId = goaway.lastStreamId();
+            lifecycle.markPeerShutdownInitiatedLocked();
         } finally {
             stateLock.unlock();
         }
@@ -947,7 +943,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         if (windowUpdate.level() == Http2Level.CONNECTION) {
             applyConnectionWindowUpdate(windowUpdate.windowSizeIncrement());
         } else {
-            if (windowUpdate.streamId() > shutdown.lastStreamId || (windowUpdate.streamId() % 2) == 0) {
+            if (windowUpdate.streamId() > lifecycle.lastStreamId || (windowUpdate.streamId() % 2) == 0) {
                 throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID on window update");
             }
             // The handler may have completed while flow-controlled response DATA remains queued.
@@ -996,7 +992,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         boolean rejectedBody = registered.rejectedRequestBody();
         var stream = registered.applicationStream();
         if (streamId == 0 || (streamId % 2) == 0
-            || (stream == null && !rejectedBody && streamId > shutdown.lastStreamId)) {
+            || (stream == null && !rejectedBody && streamId > lifecycle.lastStreamId)) {
             throw Http2Exception.connection(
                 Http2ErrorCode.PROTOCOL_ERROR,
                 "Invalid stream ID on data frame"
@@ -1100,7 +1096,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 existing.onTrailers(headerFragment);
                 return;
             }
-            if (fh.streamId() <= shutdown.lastStreamId) {
+            if (fh.streamId() <= lifecycle.lastStreamId) {
                 throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID " + fh.streamId());
             }
             if (acceptNewStream(headerFragment.streamId())) {
@@ -1140,7 +1136,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, rejectReason, fh.streamId());
                 }
             }
-            if (fh.streamId() <= shutdown.lastStreamId) {
+            if (fh.streamId() <= lifecycle.lastStreamId) {
                 throw Http2Exception.connection(
                     Http2ErrorCode.PROTOCOL_ERROR,
                     "Invalid stream ID " + fh.streamId()
@@ -1177,7 +1173,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         stateLock.lock();
         try {
             long now = System.nanoTime();
-            if (!shutdown.canStartNewStreamsLocked(now)) {
+            if (!lifecycle.canStartNewStreamsLocked(now)) {
                 log.info("Refusing stream {} because graceful shutdown no longer allows new streams", streamId);
                 writeLocked(new Http2ResetStreamFrame(streamId, Http2ErrorCode.REFUSED_STREAM.code()));
                 return false;
@@ -1192,7 +1188,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             // admitted stream before exposing it to application callbacks or queuing
             // flow-controlled output so subsequent frames and GOAWAY share one boundary.
             log.info("Setting last stream id to " + streamId);
-            shutdown.lastStreamId = streamId;
+            lifecycle.lastStreamId = streamId;
             return true;
         } finally {
             stateLock.unlock();
@@ -1221,7 +1217,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private void runWriteTask() {
         try {
             OutputStream clientOut = Objects.requireNonNull(writerOutput, "HTTP/2 writer output is not initialized");
-            while (shutdown.writeState.canSendFrames) {
+            while (lifecycle.writeState.canSendFrames) {
                 writeCoordinator.processAvailableCommands();
                 if (drainWritableFrames(clientOut)) {
                     continue;
@@ -1231,14 +1227,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 boolean continueWriting = false;
                 stateLock.lock();
                 try {
-                    if (shutdown.shouldQueueFinalGoAwayLocked(now)) {
-                        shutdown.queueFinalGoAwayLocked();
+                    if (lifecycle.shouldQueueFinalGoAwayLocked(now)) {
+                        lifecycle.queueFinalGoAwayLocked();
                         continueWriting = true;
-                    } else if (shutdown.isTerminalAndDrainedLocked()) {
-                        shutdown.completeShutdownLocked();
+                    } else if (lifecycle.isTerminalAndDrainedLocked()) {
+                        lifecycle.completeShutdownLocked();
                     } else {
-                        long waitTime = shutdown.nanosUntilNextWriteActionLocked(now);
-                        if (waitTime > 0L && !shutdown.finalGoAwayWakeScheduled) {
+                        long waitTime = lifecycle.nanosUntilNextWriteActionLocked(now);
+                        if (waitTime > 0L && !lifecycle.finalGoAwayWakeScheduled) {
                             scheduleFinalGoAwayWakeLocked(waitTime);
                         }
                     }
@@ -1249,30 +1245,30 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     break;
                 }
             }
-            if (!shutdown.writeState.canSendFrames) {
+            if (!lifecycle.writeState.canSendFrames) {
                 finishWriteLoop(new IOException("HTTP/2 connection write loop closed"));
             }
         } catch (Exception e) {
-            log.info("Write loop IO Exception with state=" + shutdown.writeState);
+            log.info("Write loop IO Exception with state=" + lifecycle.writeState);
             failWriteLoop(e);
         } finally {
             writerTaskScheduled.set(false);
             if (!writeLoopEnded.isDone()
-                && (writeCoordinator.hasCommands() || !shutdown.writeState.canSendFrames)) {
+                && (writeCoordinator.hasCommands() || !lifecycle.writeState.canSendFrames)) {
                 requestWriteRun();
             }
         }
     }
 
     private void scheduleFinalGoAwayWakeLocked(long delayNanos) {
-        shutdown.finalGoAwayWakeScheduled = true;
+        lifecycle.finalGoAwayWakeScheduled = true;
         try {
             server.scheduleTimerCallback(() -> {
                 boolean wakeWriter;
                 stateLock.lock();
                 try {
-                    shutdown.finalGoAwayWakeScheduled = false;
-                    wakeWriter = shutdown.writeState.canSendFrames;
+                    lifecycle.finalGoAwayWakeScheduled = false;
+                    wakeWriter = lifecycle.writeState.canSendFrames;
                 } finally {
                     stateLock.unlock();
                 }
@@ -1281,7 +1277,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 }
             }, delayNanos, TimeUnit.NANOSECONDS);
         } catch (RuntimeException | Error e) {
-            shutdown.finalGoAwayWakeScheduled = false;
+            lifecycle.finalGoAwayWakeScheduled = false;
             throw e;
         }
     }
@@ -1289,7 +1285,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private void failWriteLoop(Exception reason) {
         stateLock.lock();
         try {
-            shutdown.markConnectionErroredLocked();
+            lifecycle.markConnectionErroredLocked();
         } finally {
             stateLock.unlock();
         }
@@ -1304,7 +1300,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         writeCoordinator.failAll(reason);
         closeSocketQuietly();
         // Don't close the output stream here because that closes the TLS connection in Java.
-        log.info("Connection write loop closing with state=" + shutdown.writeState);
+        log.info("Connection write loop closing with state=" + lifecycle.writeState);
         writeLoopEnded.complete(null);
     }
 
@@ -1313,7 +1309,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         boolean registered;
         stateLock.lock();
         try {
-            registered = shutdown.readState.canSendFrames && shutdown.writeState.canSendFrames;
+            registered = lifecycle.readState.canSendFrames && lifecycle.writeState.canSendFrames;
             if (registered) {
                 Http2StreamState initialState = frame.endStream()
                     ? Http2StreamState.HALF_CLOSED_REMOTE
@@ -1556,7 +1552,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     void initiateGracefulShutdown() {
         stateLock.lock();
         try {
-            shutdown.markLocalShutdownInitiatedLocked();
+            lifecycle.markLocalShutdownInitiatedLocked();
         } finally {
             stateLock.unlock();
         }
@@ -1573,8 +1569,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private void forceShutdown(IOException reason, ResponseState terminalState) {
         stateLock.lock();
         try {
-            if (shutdown.writeState.canSendFrames) {
-                shutdown.markConnectionErroredLocked();
+            if (lifecycle.writeState.canSendFrames) {
+                lifecycle.markConnectionErroredLocked();
             }
         } finally {
             stateLock.unlock();

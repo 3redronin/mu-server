@@ -1,7 +1,5 @@
 package io.muserver;
 
-import com.google.errorprone.annotations.concurrent.GuardedBy;
-
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
@@ -121,9 +119,9 @@ final class Http2InboundFlowControl {
     }
 
     private final Lock lock = new ReentrantLock();
-    @GuardedBy("lock")
+    // Guarded by lock.
     private final Window connectionWindow;
-    @GuardedBy("lock")
+    // Guarded by lock.
     private final Map<Integer, Window> streamWindows = new HashMap<>();
 
     Http2InboundFlowControl(int initialConnectionCredit) {

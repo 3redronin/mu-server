@@ -1,9 +1,5 @@
 package io.muserver;
 
-import com.google.errorprone.annotations.concurrent.GuardedBy;
-
-import io.muserver.internal.FatalErrors;
-
 import org.jspecify.annotations.Nullable;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
@@ -22,19 +18,19 @@ final class AsyncResponseOutput {
     private final Consumer<Boolean> abort;
     private final SerialApplicationTasks callbacks;
     private final ReentrantLock lock = new ReentrantLock();
-    @GuardedBy("lock")
+    // Guarded by lock.
     private final Queue<PendingWrite> pending = new ArrayDeque<>();
     private final CompletableFuture<@Nullable Void> completion = new CompletableFuture<>();
-    @GuardedBy("lock")
+    // Guarded by lock.
     private boolean completionRequested;
-    @GuardedBy("lock")
+    // Guarded by lock.
     private @Nullable Throwable failure;
-    @GuardedBy("lock")
+    // Guarded by lock.
     private @Nullable PendingWrite active;
-    @GuardedBy("lock")
+    // Guarded by lock.
     private boolean draining;
     /** Prevents an empty I/O drain from publishing failure before transport abort has returned. */
-    @GuardedBy("lock")
+    // Guarded by lock.
     private boolean abortFinished;
     private final java.util.concurrent.atomic.AtomicBoolean abortRequested = new java.util.concurrent.atomic.AtomicBoolean();
 

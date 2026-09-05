@@ -1,7 +1,5 @@
 package io.muserver;
 
-import com.google.errorprone.annotations.concurrent.GuardedBy;
-
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -24,12 +22,12 @@ abstract class BaseResponse implements MuResponse {
     protected volatile OutputStream wrappedOut;
 
     private final Object completionListenersLock = new Object();
-    @GuardedBy("completionListenersLock")
+    // Guarded by completionListenersLock.
     private @Nullable Queue<ResponseCompleteListener> completionListeners;
     @Nullable
-    @GuardedBy("completionListenersLock")
+    // Guarded by completionListenersLock.
     private ResponseInfo completionInfo;
-    @GuardedBy("completionListenersLock")
+    // Guarded by completionListenersLock.
     private boolean completionListenersDrained;
 
     private volatile ResponseState state = ResponseState.NOTHING;

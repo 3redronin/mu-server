@@ -1,7 +1,5 @@
 package io.muserver;
 
-import com.google.errorprone.annotations.concurrent.GuardedBy;
-
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,10 +28,11 @@ class Http2Stream implements ResponseInfo {
     // A monotonic published fence used to stop input delivery and to avoid
     // starting new response work after any thread has initiated a reset.
     private volatile boolean resetInitiated;
-    private final Object outputLock = new Object();
-    @GuardedBy("outputLock")
+    // Guarded by this stream's monitor.
+    // Cancellation must find the write whose buffer is still in use.
     private @Nullable WriteTask activeWrite;
-    @GuardedBy("outputLock")
+    // Guarded by this stream's monitor.
+    // A reset can be recorded before output abort has started; these are separate events.
     private boolean outputAborted;
     private volatile boolean applicationExchangeEnded;
     private volatile boolean protocolStateClosed;
@@ -437,7 +436,7 @@ class Http2Stream implements ResponseInfo {
      */
     void blockingWrite(LogicalHttp2Frame frame) throws IOException, InterruptedException {
         WriteTask writeTask = new WriteTask(frame, true);
-        synchronized (outputLock) {
+        synchronized (this) {
             if (resetInitiated) throw new IOException("HTTP/2 stream output is closed");
             activeWrite = writeTask;
         }
@@ -451,14 +450,14 @@ class Http2Stream implements ResponseInfo {
                 throw interrupted;
             }
         } finally {
-            synchronized (outputLock) { activeWrite = null; }
+            synchronized (this) { activeWrite = null; }
         }
     }
 
     void abortOutput(IOException reason) {
         WriteTask writing;
         boolean sendReset;
-        synchronized (outputLock) {
+        synchronized (this) {
             if (outputAborted) return;
             outputAborted = true;
             sendReset = !resetInitiated;

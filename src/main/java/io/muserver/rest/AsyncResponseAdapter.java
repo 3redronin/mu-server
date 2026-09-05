@@ -1,6 +1,5 @@
 package io.muserver.rest;
 
-import io.muserver.internal.FatalErrors;
 import io.muserver.internal.AsyncExecution;
 
 import io.muserver.*;
