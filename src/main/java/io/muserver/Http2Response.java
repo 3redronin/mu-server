@@ -21,6 +21,14 @@ class Http2Response extends BaseResponse {
     }
 
     @Override
+    void abortAsyncOutput(boolean activeWrite) {
+        if (activeWrite || hasStartedSendingData()) {
+            setState(ResponseState.ERRORED);
+            stream.abortOutput(new IOException("Asynchronous HTTP/2 output was cancelled"));
+        }
+    }
+
+    @Override
     protected void cleanup() throws IOException, InterruptedException {
         if (responseState() == ResponseState.NOTHING) {
             // empty response body

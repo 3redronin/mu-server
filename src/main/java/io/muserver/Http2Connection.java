@@ -1,5 +1,7 @@
 package io.muserver;
 
+import io.muserver.internal.FatalErrors;
+
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -430,6 +432,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 TimeUnit.MILLISECONDS
             ));
         } catch (RuntimeException | Error e) {
+            FatalErrors.rethrow(e);
             // The reader can consume and acknowledge this entry as soon as its
             // bytes reach the peer, including before flush() returns. Only fail
             // the connection if this writer still owns the pending entry.
@@ -605,6 +608,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private boolean drainWritableFrames(OutputStream clientOut) throws IOException {
         Http2WriteCoordinator.WritableFrame candidate;
         while ((candidate = writeCoordinator.pollWritable()) != null) {
+            if (!candidate.beginWrite()) continue;
             try {
                 Http2Exception protocolError = candidate.protocolError();
                 LogicalHttp2Frame frame = protocolError == null
@@ -1321,6 +1325,11 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 );
             }
         } catch (Throwable failure) {
+            if (failure instanceof VirtualMachineError || failure instanceof ThreadDeath) {
+                stream.abandonApplicationExchange();
+                onExchangeEnded(stream);
+                FatalErrors.rethrow(failure);
+            }
             if (stream.request.wasRateLimitRejected()) {
                 finishRateLimitedStream(stream, failure);
             } else {
@@ -1390,6 +1399,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             }
             stream.cleanup();
         } catch (Throwable e) {
+            FatalErrors.rethrow(e);
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }

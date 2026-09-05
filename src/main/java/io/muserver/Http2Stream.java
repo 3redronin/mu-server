@@ -28,6 +28,9 @@ class Http2Stream implements ResponseInfo {
     // A monotonic published fence used to stop input delivery and to avoid
     // starting new response work after any thread has initiated a reset.
     private volatile boolean resetInitiated;
+    private final Object outputLock = new Object();
+    private @Nullable WriteTask activeWrite;
+    private boolean outputAborted;
     private volatile boolean applicationExchangeEnded;
     private volatile boolean protocolStateClosed;
     // Writer-published after the complete END_STREAM frame is handed to output
@@ -427,8 +430,41 @@ class Http2Stream implements ResponseInfo {
      */
     void blockingWrite(LogicalHttp2Frame frame) throws IOException, InterruptedException {
         WriteTask writeTask = new WriteTask(frame, true);
-        connection.write(writeTask);
-        writeTask.await(2, TimeUnit.HOURS);
+        synchronized (outputLock) {
+            if (resetInitiated) throw new IOException("HTTP/2 stream output is closed");
+            activeWrite = writeTask;
+        }
+        try {
+            connection.write(writeTask);
+            try {
+                writeTask.await();
+            } catch (InterruptedException interrupted) {
+                abortOutput(new IOException("Interrupted while writing HTTP/2 output", interrupted));
+                writeTask.awaitTermination();
+                throw interrupted;
+            }
+        } finally {
+            synchronized (outputLock) { activeWrite = null; }
+        }
+    }
+
+    void abortOutput(IOException reason) {
+        WriteTask writing;
+        boolean sendReset;
+        synchronized (outputLock) {
+            if (outputAborted) return;
+            outputAborted = true;
+            sendReset = !resetInitiated;
+            resetInitiated = true;
+            writing = activeWrite;
+        }
+        if (writing != null && writing.cancel(reason)) {
+            // A frame cannot be interrupted midway and followed by another frame.
+            connection.forceShutdown();
+        } else if (sendReset) {
+            connection.write(new Http2ResetStreamFrame(id, Http2ErrorCode.CANCEL.code()));
+        }
+        cancel(reason);
     }
 
     @Override

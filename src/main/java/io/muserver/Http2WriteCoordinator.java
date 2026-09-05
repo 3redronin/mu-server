@@ -57,11 +57,20 @@ final class Http2WriteCoordinator {
             }
         }
 
-        void complete() {
-            if (completesTask) {
-                onWriteCompleted(frame);
-                task.complete();
+        boolean beginWrite() {
+            if (task.beginWrite()) return true;
+            // A cancellation can race the credit reservation. No bytes reached the peer.
+            if (frame instanceof Http2DataFrame) {
+                int reserved = frame.flowControlSize();
+                connectionCredit += reserved;
+                streamCredits.computeIfPresent(frame.streamId(), (id, credit) -> credit + reserved);
             }
+            return false;
+        }
+
+        void complete() {
+            if (completesTask) onWriteCompleted(frame);
+            task.finishPart(completesTask);
         }
 
         void fail(Exception reason) {
@@ -384,6 +393,7 @@ final class Http2WriteCoordinator {
         for (Iterator<PendingWrite> iterator = pendingWrites.iterator(); iterator.hasNext(); ) {
             PendingWrite pending = iterator.next();
             WriteTask task = pending.task;
+            if (task.isCancelled()) { iterator.remove(); continue; }
             int streamId = task.frame().streamId();
             LogicalHttp2Frame frame = task.frame();
             if (connectionErrorPendingGoAway && !(frame instanceof Http2GoAway)) {

@@ -666,7 +666,7 @@ public class AsynchronousProcessingTest {
         }
     }
 
-    private static final class QueuedAsyncHandle implements AsyncHandle {
+    private static final class QueuedAsyncHandle implements AsyncHandle, io.muserver.internal.AsyncExecution {
         private final Queue<Runnable> applicationTasks = new ConcurrentLinkedQueue<>();
         private final Queue<Runnable> delayedTasks = new ConcurrentLinkedQueue<>();
         private final AtomicReference<ResponseCompleteListener> responseCompleteListener = new AtomicReference<>();

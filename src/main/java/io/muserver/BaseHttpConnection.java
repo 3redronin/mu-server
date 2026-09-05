@@ -136,7 +136,7 @@ abstract class BaseHttpConnection implements HttpConnection {
     }
 
     protected void handleExchangeException(Mu3Request muRequest, BaseResponse muResponse, Exception failure) throws Throwable {
-        if (muResponse.hasStartedSendingData()) {
+        if (muResponse.hasStartedSendingData() || muResponse.responseState().endState()) {
             // can't write a custom error at this point
             throw failure;
         } else {

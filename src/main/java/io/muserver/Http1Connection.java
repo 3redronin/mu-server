@@ -1,5 +1,7 @@
 package io.muserver;
 
+import io.muserver.internal.FatalErrors;
+
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -184,6 +186,7 @@ class Http1Connection extends BaseHttpConnection {
                             closeConnection = rejectRequestDueToHandlerOverload(muRequest, outputStream);
                         }
                     } catch (Throwable e) {
+            FatalErrors.rethrow(e);
                         closeConnection = true;
                         log.warn("Unrecoverable error for " + muRequest, e);
                         muResponse.setState(ResponseState.ERRORED);
@@ -225,6 +228,7 @@ class Http1Connection extends BaseHttpConnection {
                     completion.complete(handleExchange(request, response));
                 } catch (Throwable t) {
                     completion.completeExceptionally(t);
+                    FatalErrors.rethrow(t);
                 }
             }));
         } catch (RejectedExecutionException rejected) {
@@ -259,6 +263,7 @@ class Http1Connection extends BaseHttpConnection {
                 handled.complete(null);
             } catch (Throwable t) {
                 handled.completeExceptionally(t);
+                FatalErrors.rethrow(t);
             }
         };
         RejectedExecutionException rejected = server.tryExecuteHandlerTask(task);

@@ -34,6 +34,14 @@ abstract class BaseResponse implements MuResponse {
         this.headers = headers;
     }
 
+    /** Cancels output that has reached the transport; safe to call from an I/O failure path. */
+    void abortAsyncOutput(boolean activeWrite) {
+        if (activeWrite || hasStartedSendingData()) {
+            setState(ResponseState.ERRORED);
+            ((BaseHttpConnection) request.connection()).forceShutdown();
+        }
+    }
+
     /**
      * Publishes a state transition. The first terminal state wins so that
      * concurrent cleanup cannot turn a failed exchange into a successful one.
