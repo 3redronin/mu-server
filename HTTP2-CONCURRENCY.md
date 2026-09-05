@@ -1,8 +1,7 @@
 # Mu concurrency and ownership
 
 This is the concurrency contract for HTTP/1, HTTP/2, WebSocket, asynchronous
-request handling and shutdown. The disposition of the review notes is recorded
-in [CONCURRENCY-REVIEW.md](CONCURRENCY-REVIEW.md).
+request handling and shutdown.
 
 ## Execution resources
 
