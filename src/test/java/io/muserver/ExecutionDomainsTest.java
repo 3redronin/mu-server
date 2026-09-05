@@ -1558,6 +1558,70 @@ class ExecutionDomainsTest {
         } finally { socket.cancel(); }
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void rejectedWebSocketWriteCallbackReleasesTheConnection(boolean receiveReturned) throws Exception {
+        var rejectNext = new AtomicBoolean();
+        var rejected = new CompletableFuture<Void>();
+        var callbackInvoked = new AtomicBoolean();
+        var receiveCompletion = new CompletableFuture<DoneCallback>();
+        var send = new CompletableFuture<Runnable>();
+        var releaseReceive = new CountDownLatch(1);
+        var disconnected = new CompletableFuture<Void>();
+        var application = track(new ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
+            new java.util.concurrent.LinkedBlockingQueue<>(), namedThreads("application-")) {
+            @Override public void execute(Runnable task) {
+                if (rejectNext.compareAndSet(true, false)) {
+                    rejected.complete(null);
+                    throw new RejectedExecutionException("deliberate WebSocket callback rejection");
+                }
+                super.execute(task);
+            }
+        });
+        var connection = track(Executors.newSingleThreadExecutor(namedThreads("connection-")));
+        server = TestExecutionResources.configure(httpServer(), connection, null, null, null)
+            .withHandlerExecutor(application)
+            .addHandler(webSocketHandler((request, headers) -> new BaseWebSocket() {
+                @Override public void onBinary(ByteBuffer buffer, boolean isLast, DoneCallback done) throws Exception {
+                    receiveCompletion.complete(done);
+                    send.complete(() -> session().sendBinary(buffer, failure -> {
+                        callbackInvoked.set(true);
+                        done.onComplete(failure);
+                    }));
+                    if (!receiveReturned) releaseReceive.await();
+                }
+            }).withPingInterval(0, TimeUnit.MILLISECONDS)).start();
+        WebSocket socket = client.newWebSocket(request().url("ws" + server.uri().toString().substring(4)).build(),
+            new WebSocketListener() {
+                @Override public void onFailure(WebSocket socket, Throwable failure, @Nullable Response response) {
+                    disconnected.complete(null);
+                }
+            });
+        try {
+            socket.send(okio.ByteString.encodeUtf8("echo"));
+            Runnable echo = send.get(5, TimeUnit.SECONDS);
+            if (receiveReturned) {
+                // The event runner has installed the deferred completion and released its worker.
+                application.submit(() -> { }).get(5, TimeUnit.SECONDS);
+            }
+            rejectNext.set(true);
+            echo.run();
+            rejected.get(5, TimeUnit.SECONDS);
+            disconnected.get(5, TimeUnit.SECONDS);
+            releaseReceive.countDown();
+            // Closing the socket alone cannot release a reader waiting on receive completion.
+            connection.submit(() -> { }).get(2, TimeUnit.SECONDS);
+            assertThat(server.activeConnections().size(), is(0));
+            assertThat(callbackInvoked.get(), is(false));
+            assertThat(server.stop(1, TimeUnit.SECONDS), is(true));
+        } finally {
+            releaseReceive.countDown();
+            // Also lets the unfixed implementation clean up after the regression fails.
+            if (receiveCompletion.isDone()) receiveCompletion.get().onComplete(null);
+            socket.cancel();
+        }
+    }
+
     @Test
     void webSocketEventsUseTheHandlerExecutor() throws Exception {
         var handlerExecutor = track(Executors.newSingleThreadExecutor(namedThreads("handler-")));

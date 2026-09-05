@@ -38,7 +38,9 @@ class WebsocketConnection implements MuWebSocketSession {
     private final Mu3ServerImpl server;
     private final SerialApplicationTasks writeCallbacks;
     private final MuWebSocket webSocket;
+    // The head remains queued while running or awaiting asynchronous receive completion.
     private final Queue<ApplicationEventTask> applicationEvents = new ConcurrentLinkedQueue<>();
+    private volatile @Nullable RejectedExecutionException applicationEventRejection;
     private final AtomicBoolean applicationEventRunnerScheduled = new AtomicBoolean();
     private final AtomicBoolean errorEventQueued = new AtomicBoolean();
     private final AtomicBoolean serverShutdownRequested = new AtomicBoolean();
@@ -93,7 +95,7 @@ class WebsocketConnection implements MuWebSocketSession {
         writeCallbacks.submit(() -> {
             try { callback.onComplete(failure); }
             catch (Exception callbackFailure) { log.warn("WebSocket write callback failed", callbackFailure); }
-        }, rejected -> httpConnection.forceShutdown());
+        }, this::failApplicationEvents);
     }
 
     ExecutorService asyncExecutor() {
@@ -451,12 +453,22 @@ class WebsocketConnection implements MuWebSocketSession {
     @SuppressWarnings("ReferenceEquality") // Connection-task ownership belongs to the exact thread instance.
     private CompletableFuture<@Nullable Void> enqueueApplicationEvent(ApplicationEvent event) {
         var task = new ApplicationEventTask(event);
+        RejectedExecutionException rejection = applicationEventRejection;
+        if (rejection != null) {
+            task.completion.completeExceptionally(rejection);
+            return task.completion;
+        }
         applicationEvents.add(task);
         scheduleApplicationEventRunner();
         return task.completion;
     }
 
     private void scheduleApplicationEventRunner() {
+        RejectedExecutionException rejection = applicationEventRejection;
+        if (rejection != null) {
+            failApplicationEvents(rejection);
+            return;
+        }
         if (!applicationEventRunnerScheduled.compareAndSet(false, true)) {
             return;
         }
@@ -467,7 +479,12 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     private void failApplicationEvents(RejectedExecutionException failure) {
-        applicationEventRunnerScheduled.set(false);
+        // Rejection is terminal: closing the socket alone cannot wake a reader awaiting
+        // a receive-completion callback that the application executor will never deliver.
+        // Publish before draining so racing submissions also fail instead of being stranded.
+        applicationEventRejection = failure;
+        lifecycle.terminateWith(WebsocketSessionState.ERRORED);
+        httpConnection.forceShutdown();
         ApplicationEventTask task;
         while ((task = applicationEvents.poll()) != null) {
             task.completion.completeExceptionally(failure);
@@ -476,7 +493,8 @@ class WebsocketConnection implements MuWebSocketSession {
 
     private void runApplicationEvents() {
         for (;;) {
-            ApplicationEventTask task = applicationEvents.poll();
+            if (applicationEventRejection != null) return;
+            ApplicationEventTask task = applicationEvents.peek();
             if (task == null) {
                 applicationEventRunnerScheduled.set(false);
                 if (applicationEvents.isEmpty()
@@ -487,6 +505,7 @@ class WebsocketConnection implements MuWebSocketSession {
                 CompletableFuture<@Nullable Void> deferred = callApplicationEvent(task.event);
                 if (deferred != null && !deferred.isDone()) {
                     deferred.whenComplete((ignored, failure) -> {
+                        applicationEvents.remove(task);
                         if (failure == null) task.completion.complete(null);
                         else task.completion.completeExceptionally(failure);
                         applicationEventRunnerScheduled.set(false);
@@ -495,8 +514,10 @@ class WebsocketConnection implements MuWebSocketSession {
                     return;
                 }
                 if (deferred != null) deferred.join();
+                applicationEvents.remove(task);
                 task.completion.complete(null);
             } catch (Throwable failure) {
+                applicationEvents.remove(task);
                 task.completion.completeExceptionally(failure);
                 if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
                 FatalErrors.rethrow(failure);
