@@ -262,6 +262,7 @@ Only server-based filters and interceptors are being implemented as there is no 
 
 - [x] Reader interceptors can be added to a `RestHandlerBuilder`.
 - [x] Writer interceptors can be added to a `RestHandlerBuilder`.
+- [x] Writer `proceed()` wraps serialization, propagates writer failures, and permits stream finalization after writing; omitting it stops the chain.
 
 ### 6.4 Lifecycle 
 

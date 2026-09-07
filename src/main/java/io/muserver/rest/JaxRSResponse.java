@@ -42,6 +42,8 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
     private @Nullable JaxRSRequest requestContext;
     private @Nullable List<WriterInterceptor> writerInterceptors;
+    private @Nullable EntityWriter entityWriter;
+    private boolean writerInterceptorInvoked;
     private int nextWriter = 0;
 
     private boolean isClosed = false;
@@ -431,10 +433,39 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
 
     // Start interceptor specific things
 
-    void executeInterceptors(List<WriterInterceptor> writerInterceptors) throws IOException {
+    @FunctionalInterface
+    interface EntityWriter {
+        void write() throws Exception;
+    }
+
+    void executeInterceptors(List<WriterInterceptor> writerInterceptors, EntityWriter entityWriter) throws Exception {
         this.nextWriter = 0;
         this.writerInterceptors = writerInterceptors;
-        proceed();
+        this.entityWriter = entityWriter;
+        this.writerInterceptorInvoked = false;
+        try {
+            proceed();
+        } catch (CheckedEntityException e) {
+            throw e.exception;
+        } finally {
+            this.writerInterceptors = null;
+            this.entityWriter = null;
+        }
+    }
+
+    boolean writerInterceptorInvoked() {
+        return writerInterceptorInvoked;
+    }
+
+    // Mu also accepts checked exceptions as response entities. Preserve their mapper identity
+    // across proceed(), whose API only permits IOException and unchecked exceptions.
+    private static class CheckedEntityException extends RuntimeException {
+        final Exception exception;
+
+        CheckedEntityException(Exception exception) {
+            super(exception);
+            this.exception = exception;
+        }
     }
 
     @Override
@@ -445,9 +476,17 @@ class JaxRSResponse extends Response implements ContainerResponseContext, Writer
             WriterInterceptor nextInterceptor = interceptors.get(nextWriter - 1);
             List<Class<? extends Annotation>> filterBindings = ResourceClass.getNameBindingAnnotations(nextInterceptor.getClass());
             if (requiredRequestContext().methodHasAnnotations(filterBindings)) {
+                writerInterceptorInvoked = true;
                 nextInterceptor.aroundWriteTo(this);
                 return;
             }
+        }
+        try {
+            Objects.requireNonNull(entityWriter, "Entity writer has not been initialized").write();
+        } catch (IOException | RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new CheckedEntityException(e);
         }
     }
 

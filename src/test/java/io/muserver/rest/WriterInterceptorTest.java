@@ -87,7 +87,7 @@ public class WriterInterceptorTest {
     }
 
     @Test
-    public void interceptorsCanChangeTheResponseEntityAndWrapEachOtherInOrderRegistered() throws Exception {
+    public void entityChangesAfterProceedDoNotRewriteTheSerializedBody() throws Exception {
         @Path("/greetings")
         class GreetingResource {
             @GET
@@ -101,7 +101,7 @@ public class WriterInterceptorTest {
                 .addWriterInterceptor(context -> {
                     context.setEntity("prefix-" + context.getEntity()); // should be uppercased by wrapped interceptor
                     context.proceed();
-                    context.setEntity(context.getEntity() + "-suffix"); // should run after the uppercaser so should remain lowercase
+                    context.setEntity(context.getEntity() + "-suffix"); // serialization has already finished
                 })
                 .addWriterInterceptor(context -> {
                     String body = (String) context.getEntity();
@@ -114,7 +114,7 @@ public class WriterInterceptorTest {
         try (Response resp = call(request(server.uri().resolve("/greetings")))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("content-type"), is("text/plain;charset=utf-8"));
-            assertThat(resp.body().string(), equalTo("PREFIX-HELLO-suffix"));
+            assertThat(resp.body().string(), equalTo("PREFIX-HELLO"));
         }
     }
 
@@ -392,6 +392,7 @@ public class WriterInterceptorTest {
                     } else if (context.getEntity().equals("entityException")) {
                         context.setEntity(new ClientErrorException("Entity exception!!", 488));
                     }
+                    context.proceed();
                 })
             )
             .start();
