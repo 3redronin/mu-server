@@ -148,9 +148,9 @@ class HttpExchange implements ResponseInfo, Exchange {
         cancelReadTimeout();
         if (!response.outputState().endState()) {
             response.onCancelled(reason);
+        }
+        if (!request.requestState().endState()) {
             request.onCancelled(reason, new MuException("Cancelled: " + reason.name()));
-        } else {
-            log.warn("Cancelled called after end state was " + response.outputState());
         }
     }
 

@@ -265,14 +265,10 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
                 throw new InvalidHttpRequestException(429, "429 Too Many Requests");
             }
 
-            resp.addChangeListener((exchange, newState) -> {
-                if (newState.endState()) {
-                    nettyHandlerAdapter.onResponseComplete(exchange, server.stats, connectionStats);
-                }
-            });
             exchanges.put(streamId, httpExchange);
             httpExchange.addChangeListener((exchange, newState) -> {
                 if (newState.endState()) {
+                    nettyHandlerAdapter.onResponseComplete(exchange, server.stats, connectionStats);
                     muReq.cleanup();
                     cleanStream(streamId);
                     if (newState == HttpExchangeState.ERRORED) {

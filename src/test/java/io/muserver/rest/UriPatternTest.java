@@ -12,6 +12,21 @@ import static org.hamcrest.Matchers.*;
 public class UriPatternTest {
 
     @Test
+    public void emptyTemplatesLeaveTheWholePathForMethodMatching() {
+        for (String template : new String[]{"", "/"}) {
+            UriPattern pattern = uriTemplateToRegex(template);
+            assertThat(pattern.matcher("/").fullyMatches(), is(true));
+            assertThat(pattern.matcher("").fullyMatches(), is(true));
+            for (String path : new String[]{"children/a", "/children/a"}) {
+                PathMatch match = pattern.matcher(path);
+                assertThat(match.prefixMatches(), is(true));
+                assertThat(match.fullyMatches(), is(false));
+                assertThat(match.lastGroup(), is("/children/a"));
+            }
+        }
+    }
+
+    @Test
     public void leadingAndTrailingSlashesAreIgnored() {
         assertThat(pattern("/fruit"), equalTo(pattern("fruit")));
         assertThat(pattern("/fruit"), equalTo(pattern("fruit/")));

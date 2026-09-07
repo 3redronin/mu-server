@@ -102,11 +102,10 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
                     if (currentCallback != null) {
                         // just discard it
                         try {
-                            currentCallback.onComplete(null);
+                            completeCurrent(null);
                         } catch (Exception e2) {
                             throw new IOException("Exception raising error", e2);
                         }
-                        currentBuf = null;
                     }
                 }
             }
@@ -126,12 +125,21 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
 
     @Override
     public void cleanup() {
-        if (currentCallback != null) {
+        synchronized (lock) {
             try {
-                currentCallback.onComplete(new MuException("Request did not complete"));
+                completeCurrent(new MuException("Request did not complete"));
             } catch (Exception ignored) {
             }
-            currentCallback = null;
+        }
+    }
+
+    private void completeCurrent(@Nullable Throwable error) throws Exception {
+        DoneCallback callback = currentCallback;
+        currentCallback = null;
+        currentBuf = null;
+        // Completion can synchronously clean up this reader or deliver the next chunk.
+        if (callback != null) {
+            callback.onComplete(error);
         }
     }
 
@@ -181,16 +189,13 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
     private void afterConsumed() throws IOException {
         ByteBuf buffer = requireNonNull(currentBuf);
         if (buffer.readableBytes() == 0) {
-            currentBuf = null;
+            if (receivedLast) {
+                finished = true;
+            }
             try {
-                requireNonNull(currentCallback).onComplete(null);
-                currentCallback = null;
+                completeCurrent(null);
             } catch (Exception e) {
                 throw new IOException("Error completing done callback", e);
-            } finally {
-                if (receivedLast) {
-                    finished = true;
-                }
             }
         }
     }
@@ -210,7 +215,7 @@ class RequestBodyReaderInputStreamAdapter extends RequestBodyReader {
             DoneCallback cb = this.currentCallback;
             if (cb != null) {
                 try {
-                    cb.onComplete(e);
+                    completeCurrent(e);
                 } catch (Exception ignored) { }
             }
             throw new InterruptedIOException("Timed out waiting for data");

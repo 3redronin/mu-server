@@ -34,6 +34,34 @@ public class RequestBodyReaderInputStreamAdapterTest {
     private MuServer server;
 
     @Test
+    public void closingThenCleaningUpCompletesPendingContentOnlyOnce() throws Exception {
+        RequestBodyReaderInputStreamAdapter reader = new RequestBodyReaderInputStreamAdapter(100);
+        AtomicLong calls = new AtomicLong();
+        reader.onRequestBodyRead(io.netty.buffer.Unpooled.wrappedBuffer(new byte[]{1, 2}), true, error -> {
+            calls.incrementAndGet();
+            assertThat(error, is(nullValue()));
+        });
+        assertThat(reader.inputStream().read(), is(1));
+        reader.inputStream().close();
+        reader.cleanup();
+        assertThat(calls.get(), is(1L));
+    }
+
+    @Test
+    public void consumingContentAllowsCleanupFromItsCompletionCallback() throws Exception {
+        RequestBodyReaderInputStreamAdapter reader = new RequestBodyReaderInputStreamAdapter(100);
+        AtomicLong calls = new AtomicLong();
+        reader.onRequestBodyRead(io.netty.buffer.Unpooled.wrappedBuffer(new byte[]{1}), true, error -> {
+            if (calls.incrementAndGet() == 1) {
+                reader.cleanup();
+            }
+        });
+        assertThat(reader.inputStream().read(), is(1));
+        assertThat(reader.inputStream().read(), is(-1));
+        assertThat(calls.get(), is(1L));
+    }
+
+    @Test
     public void largeBodiesCanBeStreamed() throws IOException {
         int chunkSize = 10000;
         int loops = 640; // want this to be larger, but GitHub Actions runs this too slow

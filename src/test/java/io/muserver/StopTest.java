@@ -10,6 +10,7 @@ import java.io.UncheckedIOException;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -61,8 +62,13 @@ public class StopTest {
         while (System.nanoTime() < deadline) {
             try (Socket socket = new Socket()) {
                 socket.connect(address, 200);
-            } catch (ConnectException expected) {
-                return;
+            } catch (SocketException expected) {
+                if (expected instanceof ConnectException || "Connection reset".equals(expected.getMessage())
+                    || "Connection reset by peer".equals(expected.getMessage())
+                    || "Connection reset by peer (connect failed)".equals(expected.getMessage())) {
+                    return;
+                }
+                throw expected;
             }
             Thread.sleep(10);
         }
