@@ -8,6 +8,7 @@ import jakarta.ws.rs.ServerErrorException;
 import jakarta.ws.rs.core.MultivaluedHashMap;
 import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.MessageBodyWriter;
+import jakarta.ws.rs.ext.Providers;
 import jakarta.ws.rs.sse.OutboundSseEvent;
 import jakarta.ws.rs.sse.SseEventSink;
 import org.jspecify.annotations.Nullable;
@@ -31,14 +32,14 @@ class JaxSseEventSinkImpl implements SseEventSink {
 
     private final AsyncSsePublisher ssePublisher;
     private final MuResponse response;
-    private final EntityProviders entityProviders;
+    private final Providers providers;
     private volatile @Nullable MultivaluedMap<String, Object> writerHeadersSnapshot;
     private final List<ResponseCompleteListener> responseCompleteListeners = new CopyOnWriteArrayList<>();
 
-    public JaxSseEventSinkImpl(AsyncSsePublisher ssePublisher, MuResponse response, EntityProviders entityProviders) {
+    public JaxSseEventSinkImpl(AsyncSsePublisher ssePublisher, MuResponse response, Providers providers) {
         this.ssePublisher = ssePublisher;
         this.response = response;
-        this.entityProviders = entityProviders;
+        this.providers = providers;
         ssePublisher.setResponseCompleteHandler(info -> {
             for (ResponseCompleteListener listener : responseCompleteListeners) {
                 try {
@@ -84,7 +85,7 @@ class JaxSseEventSinkImpl implements SseEventSink {
                 if (genericDataType == null) {
                     genericDataType = dataType;
                 }
-                MessageBodyWriter messageBodyWriter = entityProviders.selectWriter(dataType, genericDataType,
+                MessageBodyWriter messageBodyWriter = JaxRSProviders.requireMessageBodyWriter(providers, dataType, genericDataType,
                     JaxRSResponse.Builder.EMPTY_ANNOTATIONS, event.getMediaType());
                 String dataString;
                 if (data instanceof String && messageBodyWriter instanceof StringEntityProviders.StringMessageReaderWriter) {

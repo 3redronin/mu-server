@@ -517,7 +517,7 @@ public class SseBroadcasterImplTest {
         CountDownLatch allowRegistrationToComplete = new CountDownLatch(1);
         class BlockingSink extends JaxSseEventSinkImpl {
             private BlockingSink() {
-                super(unusedPublisher(), unusedResponse(), unusedEntityProviders());
+                super(unusedPublisher(), unusedResponse(), unusedProviders());
             }
 
             @Override
@@ -876,7 +876,7 @@ public class SseBroadcasterImplTest {
                 }
                 throw new UnsupportedOperationException(method.getName());
             });
-        JaxSseEventSinkImpl sink = new JaxSseEventSinkImpl(publisher, unusedResponse(), unusedEntityProviders());
+        JaxSseEventSinkImpl sink = new JaxSseEventSinkImpl(publisher, unusedResponse(), unusedProviders());
         AtomicInteger handlerCalls = new AtomicInteger();
         Runnable removeHandler = sink.addResponseCompleteHandler(info -> handlerCalls.incrementAndGet());
 
@@ -898,7 +898,7 @@ public class SseBroadcasterImplTest {
             private ResponseCompleteListener responseCompleteListener;
 
             private CapturingSink() {
-                super(unusedPublisher(), unusedResponse(), unusedEntityProviders());
+                super(unusedPublisher(), unusedResponse(), unusedProviders());
             }
 
             @Override
@@ -998,8 +998,8 @@ public class SseBroadcasterImplTest {
             });
     }
 
-    private static EntityProviders unusedEntityProviders() {
-        return new EntityProviders(List.of(), List.of());
+    private static JaxRSProviders unusedProviders() {
+        return JaxRSProviders.builtInReadersOnly();
     }
 
     @AfterEach

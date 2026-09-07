@@ -3,6 +3,7 @@ package io.muserver.rest;
 import io.muserver.MuServer;
 import io.muserver.Mutils;
 import io.muserver.ResponseInfo;
+import jakarta.annotation.Priority;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.GenericEntity;
 import jakarta.ws.rs.core.MultivaluedMap;
@@ -413,16 +414,106 @@ public class EntityProvidersTest {
 
     @Test
     public void broadApplicationReaderOverridesMoreSpecificBuiltInReader() {
-        ObjectReader applicationReader = new ObjectReader();
+        @Priority(Integer.MAX_VALUE)
+        class LowestPriorityObjectReader extends ObjectReader {
+        }
+        ObjectReader applicationReader = new LowestPriorityObjectReader();
         EntityProviders providers = new EntityProviders(
-            asList(applicationReader, StringEntityProviders.stringEntityReaders.get(0)),
-            Collections.emptyList());
+            Collections.singletonList(StringEntityProviders.stringEntityReaders.get(0)),
+            Collections.singletonList(applicationReader),
+            Collections.emptyList(), Collections.emptyList());
 
-        assertThat(providers.selectReader(
+        assertThat(providers.findReader(
             String.class,
             String.class,
             new Annotation[0],
             jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE), Matchers.sameInstance(applicationReader));
+    }
+
+    @Test
+    public void lowerPriorityValueWinsForOtherwiseEquivalentReadersAndWriters() {
+        @Priority(200)
+        class LaterReaderWriter extends MyStringReaderWriter {
+        }
+        @Priority(100)
+        class EarlierReaderWriter extends MyStringReaderWriter {
+        }
+        MyStringReaderWriter later = new LaterReaderWriter();
+        MyStringReaderWriter earlier = new EarlierReaderWriter();
+        EntityProviders providers = new EntityProviders(
+            asList(later, earlier), asList(later, earlier));
+
+        assertThat(providers.findReader(String.class, String.class, new Annotation[0],
+            jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE), Matchers.sameInstance(earlier));
+        assertThat(providers.findWriter(String.class, String.class, new Annotation[0],
+            jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE), Matchers.sameInstance(earlier));
+    }
+
+    @Test
+    public void mediaTypeSpecificityWinsBeforePriority() {
+        @Priority(1)
+        @Consumes("*/*")
+        class HighPriorityWildcardReader extends MyStringReaderWriter.WithoutConsumes {
+        }
+        @Priority(5000)
+        @Consumes("application/json")
+        class LowPriorityJsonReader extends MyStringReaderWriter.WithoutConsumes {
+        }
+        MessageBodyReader<String> wildcard = new HighPriorityWildcardReader();
+        MessageBodyReader<String> json = new LowPriorityJsonReader();
+        EntityProviders providers = new EntityProviders(asList(wildcard, json), Collections.emptyList());
+
+        assertThat(providers.findReader(String.class, String.class, new Annotation[0],
+            jakarta.ws.rs.core.MediaType.APPLICATION_JSON_TYPE), Matchers.sameInstance(json));
+    }
+
+    @Test
+    public void readerPriorityWinsBeforeTypeSpecificity() {
+        @Priority(1)
+        class HighPriorityObjectReader extends ObjectReader {
+        }
+        @Priority(5000)
+        class LowPriorityStringReader extends MyStringReaderWriter {
+        }
+        MessageBodyReader<Object> objectReader = new HighPriorityObjectReader();
+        MessageBodyReader<String> stringReader = new LowPriorityStringReader();
+        EntityProviders providers = new EntityProviders(
+            asList(objectReader, stringReader), Collections.emptyList());
+
+        assertThat(providers.findReader(String.class, String.class, new Annotation[0],
+            jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE), Matchers.sameInstance(objectReader));
+    }
+
+    @Test
+    public void writerSpecificityOnlyConsidersCompatibleMediaTypes() {
+        class StringWriter implements MessageBodyWriter<String> {
+            @Override
+            public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations,
+                                       jakarta.ws.rs.core.MediaType mediaType) {
+                return type.equals(String.class);
+            }
+
+            @Override
+            public void writeTo(String value, Class<?> type, Type genericType, Annotation[] annotations,
+                                jakarta.ws.rs.core.MediaType mediaType, MultivaluedMap<String, Object> httpHeaders,
+                                OutputStream entityStream) {
+            }
+        }
+        @Priority(1)
+        @Produces({"application/json", "*/*"})
+        class HighPriorityWildcardWriter extends StringWriter {
+        }
+        @Priority(5000)
+        @Produces("text/plain")
+        class LowPriorityTextWriter extends StringWriter {
+        }
+        MessageBodyWriter<String> wildcard = new HighPriorityWildcardWriter();
+        MessageBodyWriter<String> text = new LowPriorityTextWriter();
+        EntityProviders providers = new EntityProviders(
+            Collections.emptyList(), asList(wildcard, text));
+
+        assertThat(providers.findWriter(String.class, String.class, new Annotation[0],
+            jakarta.ws.rs.core.MediaType.TEXT_PLAIN_TYPE), Matchers.sameInstance(text));
     }
 
     @Test
@@ -501,6 +592,7 @@ public class EntityProvidersTest {
                 return new Dog();
             }
         }
+        @Priority(5000)
         class AnimalWriter implements MessageBodyWriter<Animal> {
             @Override
             public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
@@ -512,6 +604,7 @@ public class EntityProvidersTest {
                 entityStream.write("animal".getBytes(StandardCharsets.UTF_8));
             }
         }
+        @Priority(1)
         class ObjectWriter implements MessageBodyWriter<Object> {
             @Override
             public boolean isWriteable(Class<?> type, Type genericType, Annotation[] annotations, jakarta.ws.rs.core.MediaType mediaType) {
@@ -879,14 +972,14 @@ public class EntityProvidersTest {
 
         EntityProviders firstReadable = new EntityProviders(
             asList(new WildcardReader(), new ExactReader(true)), Collections.emptyList());
-        assertThat(firstReadable.selectReader(String.class, String.class, new Annotation[0], mediaType),
+        assertThat(firstReadable.findReader(String.class, String.class, new Annotation[0], mediaType),
             Matchers.instanceOf(ExactReader.class));
         assertThat(calls, Matchers.contains("exact"));
 
         calls.clear();
         EntityProviders fallback = new EntityProviders(
             asList(new WildcardReader(), new ExactReader(false)), Collections.emptyList());
-        assertThat(fallback.selectReader(String.class, String.class, new Annotation[0], mediaType),
+        assertThat(fallback.findReader(String.class, String.class, new Annotation[0], mediaType),
             Matchers.instanceOf(WildcardReader.class));
         assertThat(calls, Matchers.contains("exact", "wildcard"));
     }

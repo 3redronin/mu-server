@@ -11,7 +11,6 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.PathSegment;
 import org.jspecify.annotations.Nullable;
 
-import java.net.URI;
 import java.util.*;
 import java.util.function.Function;
 
@@ -49,8 +48,10 @@ class RequestMatcher {
 
     Set<MatchedMethod> getMatchedMethodsForPath(String path, Function<MatchedMethod, ResourceClass> subResourceLocator) throws NotMatchedException {
         StepOneOutput stepOneOutput = stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(path);
-        @Nullable URI methodURI = stepOneOutput.unmatchedGroup == null ? null : URI.create(UriPattern.trimSlashes(stepOneOutput.unmatchedGroup));
-        return stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(methodURI, stepOneOutput.candidates, subResourceLocator);
+        // This is an unmatched path, not a URI reference. Parsing values such as "foo:bar" as a URI would treat
+        // "foo" as a scheme, even though ':' is valid data in an absolute-path segment.
+        @Nullable String methodPath = stepOneOutput.unmatchedGroup == null ? null : UriPattern.trimSlashes(stepOneOutput.unmatchedGroup);
+        return stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(methodPath, stepOneOutput.candidates, subResourceLocator);
     }
 
     StepOneOutput stepOneIdentifyASetOfCandidateRootResourceClassesMatchingTheRequest(String uri) throws NotMatchedException {
@@ -93,8 +94,8 @@ class RequestMatcher {
         return new StepOneOutput(u, c0);
     }
 
-    private Set<MatchedMethod> stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(@Nullable URI relativeUri, List<MatchedClass> candidateClasses, Function<MatchedMethod, ResourceClass> subResourceLocator) throws NotMatchedException {
-        if (relativeUri == null) {
+    private Set<MatchedMethod> stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(@Nullable String relativePath, List<MatchedClass> candidateClasses, Function<MatchedMethod, ResourceClass> subResourceLocator) throws NotMatchedException {
+        if (relativePath == null) {
             // handle section 3.7.2 - 2(a)
             Set<MatchedMethod> candidates = getNonLocatorMethods(candidateClasses, false);
             if (!candidates.isEmpty()) {
@@ -107,8 +108,8 @@ class RequestMatcher {
         for (MatchedClass candidateClass : candidateClasses) {
             for (ResourceMethod resourceMethod : candidateClass.resourceClass.resourceMethods) {
                 if (resourceMethod.isSubResource() || resourceMethod.isSubResourceLocator()) {
-                    if (relativeUri != null) {
-                        PathMatch matcher = resourceMethod.requiredPathPattern().matcher(relativeUri);
+                    if (relativePath != null) {
+                        PathMatch matcher = resourceMethod.requiredPathPattern().matcher(relativePath);
                         // 2(c) add and 2(d) filter out
                         if (matcher.fullyMatches() || (resourceMethod.isSubResourceLocator() && matcher.prefixMatches())) {
                             Map<String, PathSegment> combinedParams = new HashMap<>(candidateClass.pathMatch.segments());
@@ -176,7 +177,7 @@ class RequestMatcher {
             //Set U to be the value of the final capturing group of R(TL) when matched against U, and set C0 to be the
             //singleton set containing only the class that defines L.
             return stepTwoObtainASetOfCandidateResourceMethodsForTheRequest(
-                remainingUrl == null ? null : URI.create(remainingUrl), Collections.singletonList(mc), subResourceLocator
+                remainingUrl, Collections.singletonList(mc), subResourceLocator
             );
         }
 

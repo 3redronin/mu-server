@@ -6,6 +6,7 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.SeBootstrap;
 import jakarta.ws.rs.core.Application;
+import jakarta.ws.rs.core.Context;
 import okhttp3.OkHttpClient;
 import okhttp3.Response;
 import org.junit.jupiter.api.BeforeAll;
@@ -25,6 +26,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static jakarta.ws.rs.SeBootstrap.Configuration.SSLClientAuthentication.MANDATORY;
 import static jakarta.ws.rs.SeBootstrap.Configuration.SSLClientAuthentication.NONE;
@@ -36,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.hamcrest.Matchers.sameInstance;
 import static scaffolding.ClientCertificateTestUtils.clientForcingCertificate;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
@@ -113,6 +116,41 @@ public class MuSeBootstrapTest {
                 assertThat(response.code(), is(200));
                 assertThat(response.body().string(), is("booted"));
             }
+        } finally {
+            instance.stop().toCompletableFuture().get(10, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    public void suppliedApplicationIsAvailableAsContext() throws Exception {
+        AtomicReference<Application> injected = new AtomicReference<>();
+        @Path("application-context")
+        class Resource {
+            @GET
+            public String get(@Context Application application) {
+                injected.set(application);
+                return "injected";
+            }
+        }
+        Application application = new Application() {
+            @Override
+            public Set<Object> getSingletons() {
+                return Set.of(new Resource());
+            }
+        };
+        SeBootstrap.Configuration configuration = SeBootstrap.Configuration.builder()
+            .port(SeBootstrap.Configuration.FREE_PORT)
+            .build();
+
+        SeBootstrap.Instance instance = SeBootstrap.start(application, configuration)
+            .toCompletableFuture().get(10, TimeUnit.SECONDS);
+        try {
+            try (Response response = call(request(instance.configuration().baseUriBuilder()
+                .path("application-context").build()))) {
+                assertThat(response.code(), is(200));
+                assertThat(response.body().string(), is("injected"));
+            }
+            assertThat(injected.get(), sameInstance(application));
         } finally {
             instance.stop().toCompletableFuture().get(10, TimeUnit.SECONDS);
         }
