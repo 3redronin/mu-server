@@ -64,7 +64,7 @@ class MuUriBuilder extends UriBuilder {
     public UriBuilder uri(URI uri) {
         Mutils.notNull("uri", uri);
         scheme(uri.getScheme());
-        userInfo(uri.getUserInfo());
+        userInfo(uri.getRawUserInfo());
         host(uri.getHost());
         port(uri.getPort());
         replacePath(uri.getRawPath());
@@ -130,7 +130,7 @@ class MuUriBuilder extends UriBuilder {
     public UriBuilder path(String path) {
         Mutils.notNull("path", path);
         setSlashes(path);
-        this.pathSegments.addAll(MuUriInfo.pathStringToSegments(Objects.requireNonNull(decode(path)), false).collect(toList()));
+        this.pathSegments.addAll(MuUriInfo.pathStringToSegments(path, false, Jaxutils::leniantUrlDecode).collect(toList()));
         return this;
     }
 
@@ -252,8 +252,7 @@ class MuUriBuilder extends UriBuilder {
             query = new MultivaluedHashMap<>();
             QueryStringDecoder decoder = new QueryStringDecoder(qs, false);
             for (Map.Entry<String, List<String>> entry : decoder.parameters().entrySet()) {
-                List<String> values = entry.getValue();
-                queryParam(entry.getKey(), values.toArray(new Object[values.size()]));
+                query.addAll(entry.getKey(), entry.getValue());
             }
         }
         return this;

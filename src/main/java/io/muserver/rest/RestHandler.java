@@ -23,7 +23,9 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.net.URI;
 import java.util.*;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Function;
 
 import static io.muserver.rest.CORSConfig.getAllowedMethods;
@@ -153,15 +155,23 @@ public class RestHandler implements MuHandler {
 
             if (!muRequest.isAsync()) {
                 if (result instanceof CompletionStage) {
-                    AsyncHandle asyncHandle1 = muRequest.handleAsync();
-                    CompletionStage cs = (CompletionStage) result;
-                    cs.thenAccept(o -> {
+                    AsyncHandle asyncHandle = muRequest.handleAsync();
+                    CompletionStage<?> cs = (CompletionStage<?>) result;
+                    cs.whenComplete((value, failure) -> {
+                        @Nullable Throwable completionFailure = null;
                         try {
-                            sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, o,
-                                completionStageResultType(methodReturnType));
-                            asyncHandle1.complete();
-                        } catch (Exception e) {
-                            asyncHandle1.complete(e);
+                            if (failure == null) {
+                                sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, value,
+                                    completionStageResultType(methodReturnType));
+                            } else {
+                                dealWithUnhandledException(0, requestContext, muResponse, unwrapCompletionFailure(failure),
+                                    acceptHeaders, produces, directlyProduces);
+                            }
+                        } catch (Throwable e) {
+                            // CompletionStage captures callback failures in a dependent future that we do not return.
+                            completionFailure = e;
+                        } finally {
+                            completeAsyncResponse(asyncHandle, requestContext, completionFailure);
                         }
                     });
                 } else {
@@ -174,7 +184,11 @@ public class RestHandler implements MuHandler {
         } catch (Exception ex) {
             if (producesRef == null) producesRef = emptyList();
             if (directlyProducesRef == null) directlyProducesRef = emptyList();
-            dealWithUnhandledException(0, requestContext, muResponse, ex, acceptHeadersForException, producesRef, directlyProducesRef);
+            try {
+                dealWithUnhandledException(0, requestContext, muResponse, ex, acceptHeadersForException, producesRef, directlyProducesRef);
+            } finally {
+                closeRequestEntityStream(requestContext);
+            }
             if (muRequest.isAsync()) {
                 muRequest.handleAsync().complete();
             }
@@ -184,6 +198,31 @@ public class RestHandler implements MuHandler {
 
     private static @Nullable Type completionStageResultType(@Nullable Type returnType) {
         return GenericTypeResolver.resolveTypeArgument(returnType, CompletionStage.class, 0);
+    }
+
+    private static Throwable unwrapCompletionFailure(Throwable failure) {
+        while (failure instanceof CompletionException || failure instanceof ExecutionException) {
+            Throwable cause = failure.getCause();
+            if (cause == null) break;
+            failure = cause;
+        }
+        return failure;
+    }
+
+    // Throwable forbids suppressing itself, regardless of any application-defined equals implementation.
+    @SuppressWarnings("ReferenceEquality")
+    private static void completeAsyncResponse(AsyncHandle asyncHandle, JaxRSRequest requestContext, @Nullable Throwable failure) {
+        try {
+            closeRequestEntityStream(requestContext);
+        } catch (Throwable cleanupFailure) {
+            if (failure == null) {
+                failure = cleanupFailure;
+            } else if (failure != cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+            }
+        } finally {
+            asyncHandle.complete(failure);
+        }
     }
 
     static @Nullable Object invokeResourceMethod(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, Function<ResourceMethod, @Nullable Object> suspendedParamCallback, Application application, JaxRSProviders providers, CollectionParameterStrategy collectionParameterStrategy) throws Exception {
@@ -206,7 +245,7 @@ public class RestHandler implements MuHandler {
         return rm.invoke(params);
     }
 
-    private void dealWithUnhandledException(int nestingLevel, JaxRSRequest request, MuResponse muResponse, Exception ex, List<MediaType> acceptHeaders, List<MediaType> producesRef, List<MediaType> directlyProducesRef) throws Exception {
+    private <T extends Throwable> void dealWithUnhandledException(int nestingLevel, JaxRSRequest request, MuResponse muResponse, T ex, List<MediaType> acceptHeaders, List<MediaType> producesRef, List<MediaType> directlyProducesRef) throws Exception, T {
         if (nestingLevel >= 2) {
             if (muResponse.hasStartedSendingData()) {
                 log.warn("An unhandled exception " + ex + " was thrown for " + request.muRequest + ", however a 500 response cannot be sent as some data was already sent.");
@@ -242,9 +281,6 @@ public class RestHandler implements MuHandler {
 
     private void sendResponse(int nestingLevel, JaxRSRequest requestContext, MuResponse muResponse, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces, Annotation[] annotations, @Nullable Object result, @Nullable Type resourceMethodReturnType) throws Exception {
         try {
-            if (requestContext.hasEntity()) {
-                requestContext.getEntityStream().close();
-            }
             if (!muResponse.hasStartedSendingData()) {
                 ObjWithType obj = ObjWithType.objType(result, resourceMethodReturnType);
 
@@ -360,6 +396,18 @@ public class RestHandler implements MuHandler {
             }
         } catch (Exception ex) {
             dealWithUnhandledException(nestingLevel + 1, requestContext, muResponse, ex, acceptHeaders, produces, directlyProduces);
+        } finally {
+            // Response entities (including Source and Reader) may still depend on the request input.
+            closeRequestEntityStream(requestContext);
+        }
+    }
+
+    private static void closeRequestEntityStream(JaxRSRequest requestContext) {
+        try {
+            requestContext.closeEntityStream();
+        } catch (Exception e) {
+            // Serialization or exception mapping has already finished; do not replace its outcome.
+            log.warn("Could not close the REST request entity stream", e);
         }
     }
 

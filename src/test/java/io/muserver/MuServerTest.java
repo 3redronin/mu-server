@@ -201,7 +201,7 @@ public class MuServerTest {
         String randomText = UUID.randomUUID().toString();
 
         server = ServerUtils.httpsServerForTest()
-            .withHttpPort(12809)
+            .withHttpPort(0)
             .addHandler((request, response) -> {
                 handlersHit.add("Logger");
                 request.attribute("random", randomText);
@@ -219,7 +219,7 @@ public class MuServerTest {
             })
             .start();
 
-        try (Response resp = call(request().url("http://localhost:12809/blah"))) {
+        try (Response resp = call(request(server.httpUri().resolve("/blah")))) {
             assertThat(resp.code(), is(202));
             assertThat(resp.body().string(), equalTo("This is a test and this is the state: "
                 + randomText + " and this does not exist: null"));

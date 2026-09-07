@@ -196,7 +196,7 @@ public class HeadersTest {
     public void ifXForwardedHeadersAreSpecifiedThenRequestUriUsesThem() {
         URI[] actual = new URI[2];
         server = ServerUtils.httpsServerForTest()
-            .withHttpPort(12752)
+            .withHttpPort(0)
             .addHandler((request, response) -> {
                 actual[0] = request.uri();
                 actual[1] = request.serverURI();
@@ -208,7 +208,7 @@ public class HeadersTest {
             .header("X-Forwarded-Host", "www.example.org")
             .header("X-Forwarded-Port", "443")
         ).close();
-        assertThat(actual[1].toString(), equalTo("http://localhost:12752/blah?query=value"));
+        assertThat(actual[1], equalTo(server.httpUri().resolve("/blah?query=value")));
         assertThat(actual[0].toString(), equalTo("https://www.example.org/blah?query=value"));
     }
 
@@ -217,7 +217,7 @@ public class HeadersTest {
         AtomicReference<List<ForwardedHeader>> forwardedHeaders = new AtomicReference<>();
         URI[] actual = new URI[2];
         server = ServerUtils.httpsServerForTest()
-            .withHttpPort(12753)
+            .withHttpPort(0)
             .addHandler((request, response) -> {
                 actual[0] = request.uri();
                 actual[1] = request.serverURI();
@@ -231,7 +231,7 @@ public class HeadersTest {
             .header("X-Forwarded-Host", "www.example.org:12000, second.example.org")
             .addHeader("X-Forwarded-Host", "localhost:8192")
         ).close();
-        assertThat(actual[1].toString(), equalTo("http://localhost:12753/blah?query=value"));
+        assertThat(actual[1], equalTo(server.httpUri().resolve("/blah?query=value")));
         assertThat(actual[0].toString(), equalTo("https://www.example.org:12000/blah?query=value"));
         assertThat(forwardedHeaders.get(), Matchers.contains(
             ForwardedHeader.fromString("host=\"www.example.org:12000\";proto=https").get(0),

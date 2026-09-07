@@ -351,6 +351,7 @@ N/A
 
 - [x] Return a `CompletionStage` to indicate async processing.
 - [x] The correct entity provider is used.
+- [x] Exceptional completion and cancellation use exception mapping and complete the response.
 
 ### 8.3 EJB Resource Classes 
 

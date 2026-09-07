@@ -26,6 +26,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     final MuRequest muRequest;
     private final MuResponse muResponse;
     private InputStream inputStream;
+    private boolean entityStreamClosed;
     private final String relativePath;
     private final JaxRsHttpHeadersAdapter jaxHeaders;
     private UriInfo uriInfo;
@@ -70,7 +71,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         return matchedMethod.resourceMethod.hasAll(toCheck);
     }
 
-    @Nullable Response mapExceptionOnce(CustomExceptionMapper exceptionMapper, Exception exception) {
+    @Nullable Response mapExceptionOnce(CustomExceptionMapper exceptionMapper, Throwable exception) {
         if (exceptionMapperUsed) {
             return null;
         }
@@ -456,6 +457,13 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     @Override
     public InputStream getEntityStream() {
         return inputStream;
+    }
+
+    synchronized void closeEntityStream() throws IOException {
+        if (!entityStreamClosed) {
+            entityStreamClosed = true;
+            inputStream.close();
+        }
     }
 
     @Override
