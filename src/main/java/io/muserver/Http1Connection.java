@@ -324,6 +324,7 @@ class Http1Connection extends BaseHttpConnection {
         try {
             muResponse.cleanup();
         } catch (Exception e) {
+            muResponse.setState(ResponseState.ERRORED);
             reallyClose = true;
         }
         return reallyClose;
