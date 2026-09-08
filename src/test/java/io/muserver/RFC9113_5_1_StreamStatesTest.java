@@ -433,8 +433,9 @@ class RFC9113_5_1_StreamStatesTest {
             var earlyResponse = con.readLogicalFrame(Http2HeadersFrame.class);
             assertThat(earlyResponse.streamId(), equalTo(1));
             assertThat(earlyResponse.headers().get(":status"), equalTo("204"));
-            assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
-            assertThat(server.stats().activeRequests().size(), equalTo(0));
+            assertApplicationEnded(1);
+            assertThat(exchangeCompleted.getCount(), equalTo(1L));
+            assertThat(server.stats().activeRequests().size(), equalTo(1));
 
             con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders()))
                 .flush();
@@ -448,6 +449,8 @@ class RFC9113_5_1_StreamStatesTest {
                 .writeFrame(new Http2Ping(false, opaqueData))
                 .flush();
             assertThat(con.readLogicalFrame(Http2Ping.class), equalTo(new Http2Ping(true, opaqueData)));
+            assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
+            assertThat(server.stats().activeRequests().size(), equalTo(0));
 
             con.writeFrame(new Http2HeadersFrame(5, true, getHelloHeaders()))
                 .flush();
@@ -500,7 +503,8 @@ class RFC9113_5_1_StreamStatesTest {
             var earlyResponse = con.readLogicalFrame(Http2HeadersFrame.class);
             assertThat(earlyResponse.streamId(), equalTo(1));
             assertThat(earlyResponse.headers().get(":status"), equalTo("204"));
-            assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
+            assertApplicationEnded(1);
+            assertThat(exchangeCompleted.getCount(), equalTo(1L));
 
             var connection = (Http2Connection) server.activeConnections().iterator().next();
             Http2StreamRegistry streamRegistry =
@@ -647,10 +651,18 @@ class RFC9113_5_1_StreamStatesTest {
 
             var response = con.readLogicalFrame(Http2HeadersFrame.class);
             assertThat(response.headers().get(":status"), equalTo("204"));
-            assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
+            assertApplicationEnded(1);
+            assertThat(exchangeCompleted.getCount(), equalTo(1L));
         }
 
+        assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
         assertEventually(() -> server.activeConnections(), empty());
+    }
+
+    private void assertApplicationEnded(int streamId) {
+        var connection = (Http2Connection) server.activeConnections().iterator().next();
+        var stream = Objects.requireNonNull(connection.testProbe().streams().applicationStream(streamId));
+        assertEventually(stream::applicationExchangeEnded, equalTo(true));
     }
 
     private @NonNull FieldBlock getHelloHeaders() {

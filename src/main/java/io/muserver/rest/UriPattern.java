@@ -89,7 +89,11 @@ public class UriPattern {
      * and otherwise <code>false</code>.
      */
     public PathMatch matcher(String rawPath) {
-        if (rawPath.startsWith("/")) {
+        // An empty template consumes no path segments. Its remainder group needs the leading slash.
+        boolean emptyTemplate = numberOfLiterals == 0 && capturedParameterNames.isEmpty();
+        if (emptyTemplate && !rawPath.isEmpty() && !rawPath.startsWith("/")) {
+            rawPath = "/" + rawPath;
+        } else if (!emptyTemplate && rawPath.startsWith("/")) {
             rawPath = rawPath.substring(1);
         }
         Matcher matcher = pattern.matcher(rawPath);

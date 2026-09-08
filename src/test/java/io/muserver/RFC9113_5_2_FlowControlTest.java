@@ -98,7 +98,9 @@ class RFC9113_5_2_FlowControlTest {
 
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
-            .addResponseCompleteListener(info -> exchangeCompleted.countDown())
+            .addResponseCompleteListener(info -> {
+                if (info.request().relativePath().equals("/early")) exchangeCompleted.countDown();
+            })
             .addHandler(Method.POST, "/early", (request, response, pathParams) -> {
                 response.status(204);
             })
@@ -127,7 +129,10 @@ class RFC9113_5_2_FlowControlTest {
             var earlyResponse = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
             assertThat(earlyResponse.streamId(), equalTo(1));
             assertThat(earlyResponse.headers().get(":status"), equalTo("204"));
-            assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
+            var connection = (Http2Connection) server.activeConnections().iterator().next();
+            var stream = java.util.Objects.requireNonNull(connection.testProbe().streams().applicationStream(1));
+            scaffolding.MuAssert.assertEventually(stream::applicationExchangeEnded, equalTo(true));
+            assertThat(exchangeCompleted.getCount(), equalTo(1L));
 
             con.writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
                 .writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
@@ -151,6 +156,7 @@ class RFC9113_5_2_FlowControlTest {
             assertThat(data.streamId(), equalTo(3));
             assertThat(data.toUTF8(), equalTo("x"));
             assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class), equalTo(Http2DataFrame.eos(3)));
+            assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
         }
     }
 
@@ -159,7 +165,9 @@ class RFC9113_5_2_FlowControlTest {
         var exchangeCompleted = new CountDownLatch(1);
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
-            .addResponseCompleteListener(info -> exchangeCompleted.countDown())
+            .addResponseCompleteListener(info -> {
+                if (info.request().relativePath().equals("/early")) exchangeCompleted.countDown();
+            })
             .addHandler(Method.POST, "/early", (request, response, pathParams) -> {
                 response.status(204);
             })
@@ -184,7 +192,10 @@ class RFC9113_5_2_FlowControlTest {
                 con.readLogicalFrame(Http2HeadersFrame.class).headers().get(":status"),
                 equalTo("204")
             );
-            assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
+            var connection = (Http2Connection) server.activeConnections().iterator().next();
+            var stream = java.util.Objects.requireNonNull(connection.testProbe().streams().applicationStream(1));
+            scaffolding.MuAssert.assertEventually(stream::applicationExchangeEnded, equalTo(true));
+            assertThat(exchangeCompleted.getCount(), equalTo(1L));
 
             byte[] sixteenKb = repeated('a', 16_384);
             con.writeFrame(new Http2DataFrame(1, false, sixteenKb, 0, sixteenKb.length))
@@ -218,6 +229,7 @@ class RFC9113_5_2_FlowControlTest {
                 readIgnoringWindowUpdates(con, Http2DataFrame.class),
                 equalTo(Http2DataFrame.eos(3))
             );
+            assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
         }
     }
 

@@ -419,6 +419,11 @@ class Http1Connection extends BaseHttpConnection {
     @Override
     void forceShutdown() {
         state.set(HttpConnectionState.CLOSED);
+        try {
+            // A forced TLS close must not wait for an unfinished upload or the peer's close_notify.
+            clientSocket.shutdownInput();
+        } catch (IOException ignored) {
+        }
         closeTransportQuietly();
     }
 

@@ -20,6 +20,8 @@ import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Closeable;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
@@ -158,31 +160,31 @@ public class RestHandler implements MuHandler {
             if (!muRequest.isAsync()) {
                 if (result instanceof CompletionStage) {
                     AsyncHandle asyncHandle = muRequest.handleAsync();
-                    CompletionStage cs = (CompletionStage) result;
-                    cs.whenComplete((value, stageFailure) -> {
+                    CompletionStage<?> cs = (CompletionStage<?>) result;
+                    cs.whenComplete((value, failure) -> {
                         Runnable continuation = () -> {
-                            @Nullable Throwable failure = stageFailure == null
-                                ? null
-                                : completionCause((Throwable) stageFailure);
-                            if (failure != null && !(failure instanceof Exception)) {
-                                asyncHandle.complete(failure);
-                                FatalErrors.rethrow(failure);
-                                return;
-                            }
-                            @Nullable Object response = failure == null ? value : failure;
+                            @Nullable Throwable completionFailure = null;
                             try {
-                                sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, response,
-                                    completionStageResultType(methodReturnType));
-                                asyncHandle.complete();
-                            } catch (Throwable responseFailure) {
-                                asyncHandle.complete(responseFailure);
-                                FatalErrors.rethrow(responseFailure);
+                                if (failure == null) {
+                                    sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, value,
+                                        completionStageResultType(methodReturnType));
+                                } else {
+                                    Throwable cause = unwrapCompletionFailure(failure);
+                                    FatalErrors.rethrow(cause);
+                                    dealWithUnhandledException(0, requestContext, muResponse, cause,
+                                        acceptHeaders, produces, directlyProduces);
+                                }
+                            } catch (Throwable e) {
+                                completionFailure = e;
+                                FatalErrors.rethrow(e);
+                            } finally {
+                                completeAsyncResponse(asyncHandle, requestContext, completionFailure);
                             }
                         };
                         try {
                             AsyncExecution.forHandle(asyncHandle).executeApplicationTask(continuation);
                         } catch (Throwable dispatchFailure) {
-                            asyncHandle.complete(dispatchFailure);
+                            completeAsyncResponse(asyncHandle, requestContext, dispatchFailure);
                             FatalErrors.rethrow(dispatchFailure);
                         }
                     });
@@ -196,7 +198,11 @@ public class RestHandler implements MuHandler {
         } catch (Exception ex) {
             if (producesRef == null) producesRef = emptyList();
             if (directlyProducesRef == null) directlyProducesRef = emptyList();
-            dealWithUnhandledException(0, requestContext, muResponse, ex, acceptHeadersForException, producesRef, directlyProducesRef);
+            try {
+                dealWithUnhandledException(0, requestContext, muResponse, ex, acceptHeadersForException, producesRef, directlyProducesRef);
+            } finally {
+                closeRequestEntityStream(requestContext);
+            }
             if (muRequest.isAsync()) {
                 muRequest.handleAsync().complete();
             }
@@ -208,13 +214,33 @@ public class RestHandler implements MuHandler {
         return GenericTypeResolver.resolveTypeArgument(returnType, CompletionStage.class, 0);
     }
 
-    private static Throwable completionCause(Throwable failure) {
-        Throwable cause = failure;
-        while ((cause instanceof CompletionException || cause instanceof ExecutionException)
-            && cause.getCause() != null) {
-            cause = cause.getCause();
+    private static Throwable unwrapCompletionFailure(Throwable failure) {
+        while (failure instanceof CompletionException || failure instanceof ExecutionException) {
+            Throwable cause = failure.getCause();
+            if (cause == null) break;
+            failure = cause;
         }
-        return cause;
+        return failure;
+    }
+
+    // Throwable forbids suppressing itself, regardless of any application-defined equals implementation.
+    @SuppressWarnings("ReferenceEquality")
+    private static void completeAsyncResponse(AsyncHandle asyncHandle, JaxRSRequest requestContext, @Nullable Throwable failure) {
+        try {
+            closeRequestEntityStream(requestContext);
+        } catch (Throwable cleanupFailure) {
+            if (failure == null) {
+                failure = cleanupFailure;
+            } else if (failure != cleanupFailure) {
+                failure.addSuppressed(cleanupFailure);
+            }
+        } finally {
+            // Mu4's transport fallback accepts Exception; preserve nonfatal Error causes after REST mapping.
+            Throwable transportFailure = failure != null && !(failure instanceof Exception)
+                && !(failure instanceof VirtualMachineError) && !(failure instanceof ThreadDeath)
+                ? new MuException("Asynchronous REST response failed", failure) : failure;
+            asyncHandle.complete(transportFailure);
+        }
     }
 
     static @Nullable Object invokeResourceMethod(JaxRSRequest requestContext, MuResponse muResponse, RequestMatcher.MatchedMethod mm, Function<ResourceMethod, @Nullable Object> suspendedParamCallback, Application application, JaxRSProviders providers, CollectionParameterStrategy collectionParameterStrategy) throws Exception {
@@ -237,7 +263,7 @@ public class RestHandler implements MuHandler {
         return rm.invoke(params);
     }
 
-    private void dealWithUnhandledException(int nestingLevel, JaxRSRequest request, MuResponse muResponse, Exception ex, List<MediaType> acceptHeaders, List<MediaType> producesRef, List<MediaType> directlyProducesRef) throws Exception {
+    private <T extends Throwable> void dealWithUnhandledException(int nestingLevel, JaxRSRequest request, MuResponse muResponse, T ex, List<MediaType> acceptHeaders, List<MediaType> producesRef, List<MediaType> directlyProducesRef) throws Exception, T {
         if (nestingLevel >= 2) {
             if (muResponse.hasStartedSendingData()) {
                 log.warn("An unhandled exception " + ex + " was thrown for " + request.muRequest + ", however a 500 response cannot be sent as some data was already sent.");
@@ -273,9 +299,6 @@ public class RestHandler implements MuHandler {
 
     private void sendResponse(int nestingLevel, JaxRSRequest requestContext, MuResponse muResponse, List<MediaType> acceptHeaders, List<MediaType> produces, List<MediaType> directlyProduces, Annotation[] annotations, @Nullable Object result, @Nullable Type resourceMethodReturnType) throws Exception {
         try {
-            if (requestContext.hasEntity()) {
-                requestContext.getEntityStream().close();
-            }
             if (!muResponse.hasStartedSendingData()) {
                 ObjWithType obj = ObjWithType.objType(result, resourceMethodReturnType);
 
@@ -316,81 +339,84 @@ public class RestHandler implements MuHandler {
                         jaxRSResponse.setMediaType(responseMediaType);
                     }
 
-                    filterManagerThing.onBeforeSendResponse(requestContext, jaxRSResponse);
-                    if (!muResponse.hasStartedSendingData()) {
-                        muResponse.status(jaxRSResponse.getStatus());
-                    }
-
-                    if (jaxRSResponse.hasEntity()) {
-                        jaxRSResponse.executeInterceptors(writerInterceptors); // run the interceptors
-                    }
-                    // Interceptors replace a stream by installing a different instance.
-                    @SuppressWarnings("ReferenceEquality")
-                    boolean entityStreamReplaced = jaxRSResponse.getOutputStream() != originalEntityStream;
-                    writerAnnontations = jaxRSResponse.getAnnotations();
-                    Object entity = jaxRSResponse.getEntity();
-                    if (entity instanceof Exception) {
-                        throw (Exception) entity;
-                    }
-
-                    int status = jaxRSResponse.getStatus();
-                    if (!muResponse.hasStartedSendingData()) {
-                        muResponse.status(status);
-                    }
-
-                    if (entity == null) {
-                        OutputStream responseEntityStream = jaxRSResponse.getOutputStream();
-                        if (entityStreamReplaced) {
-                            responseEntityStream.close();
-                        }
-                        if (!muResponse.hasStartedSendingData()) {
-                            if (status != 204 && status != 304 && status != 205) {
-                                jaxRSResponse.getHeaders().putSingle("content-length", "0");
-                            }
-                            MuRuntimeDelegate.writeResponseHeaders(requestContext.getUriInfo().getBaseUri(), jaxRSResponse, muResponse, isHttp1);
-                        }
-                    } else {
-
-                        MediaType responseMediaType = Objects.requireNonNull(jaxRSResponse.getMediaType(),
-                            "A response entity must have a media type");
-
-                        Class entityType = Objects.requireNonNull(jaxRSResponse.getEntityClass(),
-                            "A response entity must have a raw type");
-                        Type entityGenericType = Objects.requireNonNull(jaxRSResponse.getEntityType(),
-                            "A response entity must have a generic type");
-                        MessageBodyWriter messageBodyWriter = JaxRSProviders.requireMessageBodyWriter(
-                            providers, entityType, entityGenericType, writerAnnontations, responseMediaType);
-
-                        if (!entityStreamReplaced && !muResponse.hasStartedSendingData() && providers.isBuiltInWriter(messageBodyWriter)) {
-                            long size = messageBodyWriter.getSize(jaxRSResponse.getEntity(), entityType, entityGenericType, writerAnnontations, responseMediaType);
-                            if (size >= 0) {
-                                jaxRSResponse.getHeaders().putSingle("content-length", Long.toString(size));
-                            }
-                        }
-
-                        applyDefaultCharset(jaxRSResponse);
-
-                        try {
-                            OutputStream responseEntityStream = jaxRSResponse.getOutputStream();
-                            try (OutputStream replacementStream = entityStreamReplaced ? responseEntityStream : null) {
-                                messageBodyWriter.writeTo(jaxRSResponse.getEntity(), entityType, entityGenericType, writerAnnontations,
-                                    responseMediaType, jaxRSResponse.getHeaders(), responseEntityStream);
-                                out.prepare();
-                            }
-                        } catch (Exception e) {
-                            // remove the added headers before rewriting
+                    try {
+                        // Resolve the final stream after interceptors have finished or restored their wrappers.
+                        try (Closeable replacementStream = () -> closeReplacementStream(responseToWrite, originalEntityStream)) {
+                            filterManagerThing.onBeforeSendResponse(requestContext, responseToWrite);
                             if (!muResponse.hasStartedSendingData()) {
-                                for (String added : jaxRSResponse.getHeaders().keySet()) {
-                                    muResponse.headers().remove(added);
-                                }
+                                muResponse.status(responseToWrite.getStatus());
                             }
-                            throw e;
+                            if (responseToWrite.hasEntity()) {
+                                responseToWrite.executeInterceptors(writerInterceptors,
+                                    () -> writeResponseEntity(responseToWrite, muResponse, originalEntityStream));
+                            }
                         }
+                        if (!responseToWrite.hasEntity() && !muResponse.hasStartedSendingData()) {
+                            int status = responseToWrite.getStatus();
+                            if (status != 204 && status != 304 && status != 205) {
+                                responseToWrite.getHeaders().putSingle("content-length", "0");
+                            }
+                        }
+                        out.prepare();
+                    } catch (Exception e) {
+                        // Interceptor and writer failures must unwind before mapping a replacement response.
+                        if (!muResponse.hasStartedSendingData()) {
+                            for (String added : responseToWrite.getHeaders().keySet()) {
+                                muResponse.headers().remove(added);
+                            }
+                        }
+                        throw e;
                     }
                 }
             }
         } catch (Exception ex) {
             dealWithUnhandledException(nestingLevel + 1, requestContext, muResponse, ex, acceptHeaders, produces, directlyProduces);
+        } finally {
+            // Response entities (including Source and Reader) may still depend on the request input.
+            closeRequestEntityStream(requestContext);
+        }
+    }
+
+    // Stream replacement is defined by instance identity, not application-defined equality.
+    @SuppressWarnings("ReferenceEquality")
+    private static void closeReplacementStream(JaxRSResponse response, OutputStream originalStream) throws IOException {
+        OutputStream finalStream = response.getOutputStream();
+        if (finalStream != originalStream) {
+            finalStream.close();
+        }
+    }
+
+    @SuppressWarnings("ReferenceEquality")
+    private void writeResponseEntity(JaxRSResponse response, MuResponse muResponse, OutputStream originalStream) throws Exception {
+        Object entity = response.getEntity();
+        if (entity instanceof Exception) {
+            throw (Exception) entity;
+        }
+        if (entity == null) return;
+
+        Annotation[] annotations = response.getAnnotations();
+        MediaType mediaType = Objects.requireNonNull(response.getMediaType(), "A response entity must have a media type");
+        Class entityType = Objects.requireNonNull(response.getEntityClass(), "A response entity must have a raw type");
+        Type genericType = Objects.requireNonNull(response.getEntityType(), "A response entity must have a generic type");
+        MessageBodyWriter writer = JaxRSProviders.requireMessageBodyWriter(providers, entityType, genericType, annotations, mediaType);
+        OutputStream entityStream = response.getOutputStream();
+
+        // An interceptor may append bytes after proceed(), even without replacing the stream.
+        if (!response.writerInterceptorInvoked() && entityStream == originalStream
+            && !muResponse.hasStartedSendingData() && providers.isBuiltInWriter(writer)) {
+            long size = writer.getSize(entity, entityType, genericType, annotations, mediaType);
+            if (size >= 0) response.getHeaders().putSingle("content-length", Long.toString(size));
+        }
+        applyDefaultCharset(response);
+        writer.writeTo(entity, entityType, genericType, annotations, mediaType, response.getHeaders(), entityStream);
+    }
+
+    private static void closeRequestEntityStream(JaxRSRequest requestContext) {
+        try {
+            requestContext.closeEntityStream();
+        } catch (Exception e) {
+            // Serialization or exception mapping has already finished; do not replace its outcome.
+            log.warn("Could not close the REST request entity stream", e);
         }
     }
 

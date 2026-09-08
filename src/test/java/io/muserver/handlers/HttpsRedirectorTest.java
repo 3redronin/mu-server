@@ -25,11 +25,12 @@ public class HttpsRedirectorTest {
     public void setup() {
         server = muServer()
             .withHttpPort(0)
-            .withHttpsPort(12443)
-            .addHandler(
-                HttpsRedirectorBuilder.toHttpsPort(12443)
+            .withHttpsPort(0)
+            .addHandler((request, response) ->
+                HttpsRedirectorBuilder.toHttpsPort(server.httpsUri().getPort())
                     .withHSTSExpireTime(365, TimeUnit.DAYS)
                     .includeSubDomains(true)
+                    .build().handle(request, response)
             )
             .addHandler((request, response) -> {
                 response.write("Uri is " + request.uri());
@@ -44,10 +45,11 @@ public class HttpsRedirectorTest {
         try (Response resp = call(request().url(server.httpUri().toString()))) {
             assertThat(resp.code(), is(301));
             newLocation = resp.header("Location");
+            assertThat(newLocation, equalTo(server.httpsUri().resolve("/").toString()));
         }
         try (Response resp = call(request().url(newLocation))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo("Uri is https://localhost:12443/"));
+            assertThat(resp.body().string(), equalTo("Uri is " + server.httpsUri().resolve("/")));
             assertThat(resp.header("Strict-Transport-Security"), equalTo("max-age=31536000; includeSubDomains"));
         }
 

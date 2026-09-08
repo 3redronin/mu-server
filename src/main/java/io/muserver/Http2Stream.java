@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
 
 class Http2Stream implements ResponseInfo {
 
@@ -23,7 +24,8 @@ class Http2Stream implements ResponseInfo {
     // Reader-owned monotonic fences. They prevent frames following END_STREAM or
     // RST_STREAM on the wire from reaching the body before the coordinator applies
     // the corresponding command.
-    private boolean remoteEndStreamRead;
+    private volatile boolean remoteEndStreamRead;
+    private final CompletableFuture<Void> requestEnded = new CompletableFuture<>();
     private boolean peerResetRead;
     // A monotonic published fence used to stop input delivery and to avoid
     // starting new response work after any thread has initiated a reset.
@@ -52,6 +54,7 @@ class Http2Stream implements ResponseInfo {
         this.id = id;
         this.connection = connection;
         this.remoteEndStreamRead = !state.canReceiveEndStream();
+        if (remoteEndStreamRead) requestEnded.complete(null);
         this.request = request;
         this.bodyInputStream = bodyInputStream;
         this.declaredRequestBodyLength = declaredRequestBodyLength;
@@ -72,7 +75,9 @@ class Http2Stream implements ResponseInfo {
 
     @Override
     public boolean completedSuccessfully() {
-        return request.completedSuccessfully() && requiredResponse().responseState().completedSuccessfully();
+        // A fully sent response does not make a cancelled or disconnected upload successful.
+        return remoteEndStreamRead && request.completedSuccessfully()
+            && requiredResponse().responseState().completedSuccessfully();
     }
 
     void recordPeerResetFromReader() {
@@ -152,6 +157,7 @@ class Http2Stream implements ResponseInfo {
         // This only completes the private future that the handler task is waiting on.
         // Completion listeners remain on that application task.
         request.onClientCancelled();
+        requestEnded.complete(null);
     }
 
     void cancel(IOException reason) {
@@ -163,6 +169,7 @@ class Http2Stream implements ResponseInfo {
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).cancel(reason, refundUnreadData);
         }
+        requestEnded.complete(null);
     }
 
     void onConnectionTerminated(IOException reason, ResponseState terminalState) {
@@ -172,6 +179,7 @@ class Http2Stream implements ResponseInfo {
         // Complete the private async-exchange future. Its continuation is
         // dispatched to the handler executor before application cleanup runs.
         request.onClientCancelled();
+        requestEnded.complete(null);
     }
 
     boolean canReceiveData() {
@@ -226,6 +234,15 @@ class Http2Stream implements ResponseInfo {
 
     private void recordRemoteEndStreamFromReader() {
         remoteEndStreamRead = true;
+        requestEnded.complete(null);
+    }
+
+    CompletableFuture<Void> requestEnded() {
+        return requestEnded;
+    }
+
+    void recordCompletionTime() {
+        endNanos = System.nanoTime();
     }
 
     private void validateRequestBodyLengthAtEnd() throws Http2Exception {

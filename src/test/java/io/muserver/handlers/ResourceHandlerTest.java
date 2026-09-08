@@ -42,6 +42,37 @@ public class ResourceHandlerTest {
     private MuServer server;
 
     @Test
+    public void literalPlusInAResourcePathSelectsThePlusFilename() throws IOException {
+        assertEncodedResourceContent("a+b.txt", "File with a plus sign.\n");
+    }
+
+    @Test
+    public void encodedPlusInAResourcePathSelectsThePlusFilename() throws IOException {
+        assertEncodedResourceContent("a%2Bb.txt", "File with a plus sign.\n");
+    }
+
+    @Test
+    public void encodedSpaceInAResourcePathSelectsTheSpaceFilename() throws IOException {
+        assertEncodedResourceContent("a%20b.txt", "File with a space.\n");
+    }
+
+    private void assertEncodedResourceContent(String encodedFilename, String expectedContent) throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .withGzipEnabled(false)
+            .addHandler(context("/file").addHandler(fileHandler("src/test/resources/resource-path-encoding")))
+            .addHandler(context("/classpath").addHandler(classpathHandler("/resource-path-encoding")))
+            .start();
+
+        for (String source : new String[]{"file", "classpath"}) {
+            String path = "/" + source + "/" + encodedFilename;
+            try (Response response = call(request(server.uri().resolve(path)))) {
+                assertThat(path, response.code(), equalTo(200));
+                assertThat(path, response.body().string(), equalTo(expectedContent));
+            }
+        }
+    }
+
+    @Test
     public void canServeFromRootOfServer() throws Exception {
         server = ServerUtils.httpsServerForTest()
             .withGzipEnabled(false)

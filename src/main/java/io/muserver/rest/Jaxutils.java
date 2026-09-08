@@ -12,20 +12,19 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 
 class Jaxutils {
 
-    private static final Pattern encoded = Pattern.compile(".*(?<octet>%[0-9A-F][0-9A-F]).*");
+    private static final Pattern encoded = Pattern.compile("(?:%[0-9A-Fa-f]{2})+");
 
     static String leniantUrlDecode(String value) {
         if (!value.contains("%")) {
             return value;
         }
-        while (true) {
-            Matcher matcher = encoded.matcher(value);
-            if (!matcher.matches()) {
-                return value;
-            }
-            String octet = matcher.group("octet");
-            value = value.replace(octet, uriDecode(octet));
+        Matcher matcher = encoded.matcher(value);
+        StringBuilder decoded = new StringBuilder(value.length());
+        while (matcher.find()) {
+            // Decode whole UTF-8 sequences, without decoding the resulting percent signs again.
+            matcher.appendReplacement(decoded, Matcher.quoteReplacement(uriDecode(matcher.group())));
         }
+        return matcher.appendTail(decoded).toString();
     }
 
     static String uriDecode(String value) {

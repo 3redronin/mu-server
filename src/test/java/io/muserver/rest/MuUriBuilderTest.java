@@ -272,19 +272,19 @@ public class MuUriBuilderTest {
         assertThat(UriBuilder.fromResource(FruitResource.class).build().toString(), equalTo("v1/fruits"));
         assertThat(UriBuilder.fromMethod(FruitResource.class, "getOne").build("some thing").toString(), equalTo("v1/fruits/some%20thing"));
 
-        MuServer server = ServerUtils.httpsServerForTest().withHttpsPort(15647).withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost())
+        MuServer server = ServerUtils.httpsServerForTest().withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost())
             .addHandler(ContextHandlerBuilder.context("api")
                 .addHandler(RestHandlerBuilder.restHandler(new FruitResource(), new DogResource()).build()))
             .start();
         try {
             try (Response resp = call(request().url(server.uri().resolve("/api/v1/dogs/getResourceClass").toString()))) {
-                assertThat(resp.body().string(), equalTo("https://localhost:15647/api/v1/fruits"));
+                assertThat(resp.body().string(), equalTo(server.httpsUri().resolve("/api/v1/fruits").toString()));
             }
             try (Response resp = call(request().url(server.uri().resolve("/api/v1/dogs/getResourceMethodByName").toString()))) {
-                assertThat(resp.body().string(), equalTo("https://localhost:15647/api/v1/fruits/some-id"));
+                assertThat(resp.body().string(), equalTo(server.httpsUri().resolve("/api/v1/fruits/some-id").toString()));
             }
             try (Response resp = call(request().url(server.uri().resolve("/api/v1/dogs/getResourceMethod").toString()))) {
-                assertThat(resp.body().string(), equalTo("https://localhost:15647/api/v1/fruits/some-id"));
+                assertThat(resp.body().string(), equalTo(server.httpsUri().resolve("/api/v1/fruits/some-id").toString()));
             }
         } finally {
             server.stop();
