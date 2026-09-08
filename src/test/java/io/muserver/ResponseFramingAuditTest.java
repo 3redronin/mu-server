@@ -5,7 +5,6 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.ServerUtils;
 
-import java.net.HttpURLConnection;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 
@@ -110,15 +109,19 @@ class ResponseFramingAuditTest {
         try (var server = ServerUtils.httpsServerForTest("http")
             .addHandler(Method.GET, "/", (request, response, params) -> {
                 response.headers().set("content-length", "5");
-            }).start()) {
-            HttpURLConnection connection = (HttpURLConnection) server.uri().toURL().openConnection();
-            connection.setReadTimeout(2000);
-            try {
-                assertEquals(200, connection.getResponseCode());
-                assertEquals(-1, connection.getInputStream().read());
-            } finally {
-                connection.disconnect();
-            }
+            }).start();
+             var socket = new Socket("localhost", server.uri().getPort())) {
+            socket.setSoTimeout(2000);
+            socket.getOutputStream().write("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n"
+                .getBytes(StandardCharsets.US_ASCII));
+            // Read through transport EOF: HTTP clients differ in how they expose
+            // a closed response that contains fewer bytes than Content-Length.
+            String wire = new String(socket.getInputStream().readAllBytes(), StandardCharsets.US_ASCII);
+            assertTrue(wire.startsWith("HTTP/1.1 200"), wire);
+            int headerEnd = wire.indexOf("\r\n\r\n");
+            assertTrue(headerEnd > 0, wire);
+            assertTrue(wire.substring(0, headerEnd).contains("content-length: 5"), wire);
+            assertEquals("", wire.substring(headerEnd + 4), wire);
         }
     }
 }
