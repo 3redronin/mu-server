@@ -7,6 +7,7 @@ import scaffolding.ClientUtils;
 import scaffolding.ServerUtils;
 
 import java.io.IOException;
+import java.net.HttpURLConnection;
 
 import static org.hamcrest.CoreMatchers.*;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -29,6 +30,23 @@ public class EmptyResponseTest {
             assertThat(resp.header("hello"), equalTo("world"));
             assertThat(resp.header("Content-Length"), is("0"));
             assertThat(resp.body().bytes().length, is(0));
+        }
+    }
+
+    @Test
+    public void a205CompletesWithoutWaitingForConnectionClose() throws IOException {
+        server = ServerUtils.httpsServerForTest("http")
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> response.status(205))
+            .start();
+
+        HttpURLConnection connection = (HttpURLConnection) server.uri().toURL().openConnection();
+        connection.setReadTimeout(2000);
+        try {
+            assertThat(connection.getResponseCode(), is(205));
+            assertThat(connection.getInputStream().read(), is(-1));
+            assertThat(connection.getHeaderField("Content-Length"), is("0"));
+        } finally {
+            connection.disconnect();
         }
     }
 

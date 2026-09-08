@@ -95,10 +95,10 @@ public class HttpStatus {
     }
 
     boolean noContentLengthHeader() {
-        return isInformational() || code == 204 || code == 304 || code == 205;
+        return isInformational() || code == 204;
     }
     boolean canHaveContent() {
-        return !noContentLengthHeader();
+        return !noContentLengthHeader() && code != 304 && code != 205;
     }
 
     /**

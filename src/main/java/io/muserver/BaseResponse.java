@@ -165,6 +165,22 @@ abstract class BaseResponse implements MuResponse {
         return null;
     }
 
+    protected final boolean suppressContent() {
+        return request.method().isHead() || !status().canHaveContent();
+    }
+
+    protected final void prepareBodylessResponseHeaders() {
+        if (status().canHaveContent()) return;
+        headers.remove(HeaderNames.TRANSFER_ENCODING);
+        if (status().noContentLengthHeader()) {
+            headers.remove(HeaderNames.CONTENT_LENGTH);
+        } else if (status().code() == 205) {
+            // Unlike 204/304, an empty HTTP/1 205 still needs explicit framing.
+            headers.set(HeaderNames.CONTENT_LENGTH, 0L);
+        }
+        // A 304 may retain the length of the selected representation.
+    }
+
 
     @Override
     public PrintWriter writer() {

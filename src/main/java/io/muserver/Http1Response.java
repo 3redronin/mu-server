@@ -24,6 +24,7 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
         if (responseState() != ResponseState.NOTHING) {
             throw new IllegalStateException("Cannot write headers multiple times");
         }
+        prepareBodylessResponseHeaders();
         setState(ResponseState.WRITING_HEADERS);
 
         socketOut.write(status().http11ResponseLine());
@@ -53,12 +54,21 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
     @Override
     public OutputStream outputStream(int bufferSize) {
         if (wrappedOut == null) {
-            ContentEncoder responseEncoder = contentEncoder();
+            // A 304 still negotiates metadata for the selected representation.
+            ContentEncoder responseEncoder = status().canHaveContent() || status().code() == 304
+                ? contentEncoder() : null;
 
             long fixedLen = headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), -1);
-            OutputStream rawOut = request.method().isHead() ? DiscardingOutputStream.INSTANCE : socketOut;
+            OutputStream rawOut = socketOut;
 
-            if (fixedLen == -1L) {
+            if (suppressContent()) {
+                if (request.method().isHead() && status().canHaveContent()
+                    && fixedLen == -1L && request.httpVersion() == HttpVersion.HTTP_1_1) {
+                    headers().set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
+                }
+                // Representation lengths on HEAD/304 do not describe bytes to write.
+                wrappedOut = DiscardingOutputStream.INSTANCE;
+            } else if (fixedLen == -1L) {
                 if (request.httpVersion() == HttpVersion.HTTP_1_1) {
                     headers().set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
                     wrappedOut = new ChunkedOutputStream(rawOut);
@@ -75,6 +85,9 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
 
             try {
                 writeStatusAndHeaders();
+                if (suppressContent()) {
+                    socketOut.flush();
+                }
                 if (responseEncoder != null) {
                     wrappedOut = responseEncoder.wrapStream(request, this, wrappedOut);
                 }
@@ -91,11 +104,16 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
     void cleanup() throws IOException {
         if (responseState() == ResponseState.NOTHING) {
             // empty response body
-            if (!request.method().isHead() && status().canHaveContent() && !headers().contains(HeaderNames.CONTENT_LENGTH)) {
+            if (!suppressContent()
+                && !headers().contains(HeaderNames.CONTENT_LENGTH)) {
                 headers().set(HeaderNames.CONTENT_LENGTH, 0L);
             }
             writeStatusAndHeaders();
             socketOut.flush();
+            if (!request.method().isHead() && status().canHaveContent()
+                && headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), 0L) > 0L) {
+                throw new IOException("Response completed without writing its declared body");
+            }
         } else {
             closeWriter();
             OutputStream out = wrappedOut;

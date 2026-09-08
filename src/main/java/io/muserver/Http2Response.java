@@ -46,6 +46,7 @@ class Http2Response extends BaseResponse {
         if (responseState() != ResponseState.NOTHING) {
             throw new IllegalStateException("Cannot write headers multiple times");
         }
+        prepareBodylessResponseHeaders();
         setState(ResponseState.WRITING_HEADERS);
         fields.add(0, new FieldLine(HeaderNames.PSEUDO_STATUS, HeaderString.valueOf(Integer.toString(status().code()), HeaderString.Type.VALUE)));
 
@@ -80,18 +81,21 @@ class Http2Response extends BaseResponse {
     @Override
     public OutputStream outputStream(int bufferSize) {
         if (wrappedOut == null) {
-            ContentEncoder responseEncoder = contentEncoder();
+            // A 304 still negotiates metadata for the selected representation.
+            ContentEncoder responseEncoder = status().canHaveContent() || status().code() == 304
+                ? contentEncoder() : null;
             // TODO don't do this here...
             try {
                 if (responseState() == ResponseState.NOTHING) {
-                    writeStatusAndHeaders(false);
+                    writeStatusAndHeaders(suppressContent());
                 }
             } catch (InterruptedException e) {
                 throw new RuntimeException("Interrupted while writing status headers", e);
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
-            BufferedOutputStream os = new BufferedOutputStream(new Http2DataFrameOutputStream(stream), bufferSize);
+            OutputStream os = suppressContent() ? DiscardingOutputStream.INSTANCE
+                : new BufferedOutputStream(new Http2DataFrameOutputStream(stream), bufferSize);
             try {
                 wrappedOut = responseEncoder == null ? os : responseEncoder.wrapStream(request, this, os);
             } catch (IOException e) {
