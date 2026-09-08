@@ -92,11 +92,8 @@ class Http2Response extends BaseResponse {
             } catch (IOException e) {
                 throw new UncheckedIOException(e);
             }
-            if (suppressContent()) {
-                wrappedOut = DiscardingOutputStream.INSTANCE;
-                return wrappedOut;
-            }
-            BufferedOutputStream os = new BufferedOutputStream(new Http2DataFrameOutputStream(stream), bufferSize);
+            OutputStream os = suppressContent() ? DiscardingOutputStream.INSTANCE
+                : new BufferedOutputStream(new Http2DataFrameOutputStream(stream), bufferSize);
             try {
                 wrappedOut = responseEncoder == null ? os : responseEncoder.wrapStream(request, this, os);
             } catch (IOException e) {

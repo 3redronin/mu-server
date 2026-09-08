@@ -85,7 +85,8 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
                 writeStatusAndHeaders();
                 if (suppressContent()) {
                     socketOut.flush();
-                } else if (responseEncoder != null) {
+                }
+                if (responseEncoder != null) {
                     wrappedOut = responseEncoder.wrapStream(request, this, wrappedOut);
                 }
             } catch (IOException e) {
