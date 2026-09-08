@@ -81,7 +81,9 @@ class Http2Response extends BaseResponse {
     @Override
     public OutputStream outputStream(int bufferSize) {
         if (wrappedOut == null) {
-            ContentEncoder responseEncoder = status().canHaveContent() ? contentEncoder() : null;
+            // A 304 still negotiates metadata for the selected representation.
+            ContentEncoder responseEncoder = status().canHaveContent() || status().code() == 304
+                ? contentEncoder() : null;
             // TODO don't do this here...
             try {
                 if (responseState() == ResponseState.NOTHING) {

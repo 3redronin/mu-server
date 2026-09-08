@@ -54,7 +54,9 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
     @Override
     public OutputStream outputStream(int bufferSize) {
         if (wrappedOut == null) {
-            ContentEncoder responseEncoder = status().canHaveContent() ? contentEncoder() : null;
+            // A 304 still negotiates metadata for the selected representation.
+            ContentEncoder responseEncoder = status().canHaveContent() || status().code() == 304
+                ? contentEncoder() : null;
 
             long fixedLen = headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), -1);
             OutputStream rawOut = socketOut;
