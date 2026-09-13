@@ -481,17 +481,24 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         }
     }
 
-    private void applicationExchangeEndedForWrites(int streamId) {
+    private void applicationExchangeEndedForWrites(Http2Stream stream) {
         stateLock.lock();
         try {
             if (lifecycle.writeState.canSendFrames) {
-                writeCoordinator.applicationExchangeEnded(streamId);
+                writeCoordinator.applicationExchangeEnded(stream.id);
             } else {
-                writeLoopEnded.thenRun(() -> writeCoordinator.retireAfterWriterStopped(streamId));
+                retireStoppedStreamAfterRequestEnd(stream);
             }
         } finally {
             stateLock.unlock();
         }
+    }
+
+    private void retireStoppedStreamAfterRequestEnd(Http2Stream stream) {
+        // The reader may still need to find this stream to terminate a disconnected
+        // upload. Retire only after that termination and the writer's ownership ends.
+        CompletableFuture.allOf(writeLoopEnded, stream.requestEnded())
+            .thenRun(() -> writeCoordinator.retireAfterWriterStopped(stream.id));
     }
 
     private void applyConnectionWindowUpdate(int increment) throws Http2Exception {
@@ -1315,7 +1322,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         // while an unfinished upload still prevented normal protocol retirement.
         for (Http2Stream stream : streamRegistry.applicationStreams()) {
             if (stream.applicationExchangeEnded()) {
-                writeCoordinator.retireAfterWriterStopped(stream.id);
+                retireStoppedStreamAfterRequestEnd(stream);
             }
         }
         closeSocketQuietly();
@@ -1636,7 +1643,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
 
     private void onExchangeEnded(Http2Stream stream) {
         stream.onApplicationExchangeEnded();
-        applicationExchangeEndedForWrites(stream.id);
+        applicationExchangeEndedForWrites(stream);
         signalWriteLoop();
         // Application cleanup can finish while the peer is still uploading. Completion listeners
         // observe the entire exchange, and must stay off the protocol reader that ends the request.
@@ -1650,7 +1657,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private void onRejectedApplicationExchangeEnded(Http2Stream stream) {
         server.onRequestSubmissionRejected(stream.request);
         stream.onApplicationExchangeEnded();
-        applicationExchangeEndedForWrites(stream.id);
+        applicationExchangeEndedForWrites(stream);
         signalWriteLoop();
     }
 
