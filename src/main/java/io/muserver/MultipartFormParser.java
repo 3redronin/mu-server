@@ -243,6 +243,9 @@ class MultipartFormParser {
                     colon = indexOf(bb, (byte)':');
                 }
                 int start = bb.arrayOffset() + bb.position();
+                if (colon == start) {
+                    throw HttpException.badRequest("Empty multipart header name");
+                }
                 var headerName = new String(bb.array(), start, colon - start, StandardCharsets.US_ASCII).toLowerCase(Locale.ROOT);
                 bb.position(colon + 1);
 
@@ -364,4 +367,3 @@ class MultipartFormParser {
     }
 
 }
-

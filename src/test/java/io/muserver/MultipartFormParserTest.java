@@ -22,6 +22,35 @@ class MultipartFormParserTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"one-by-one", "full"})
+    void emptyPartHeaderNamesAreBadRequests(String type) throws IOException {
+        checkEmptyPartHeader(type, "");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"one-by-one", "full"})
+    void earlierUploadsAreCleanedUpWhenAHeaderNameIsEmpty(String type) throws IOException {
+        checkEmptyPartHeader(type, "--boundary\r\n"
+            + "Content-Disposition: form-data; name=\"file\"; filename=\"hello.txt\"\r\n"
+            + "Content-Type: text/plain\r\n\r\nhello\r\n");
+    }
+
+    private void checkEmptyPartHeader(String type, String earlierPart) throws IOException {
+        var input = getInput(type, earlierPart + "--boundary\r\n: value\r\n\r\nignored\r\n--boundary--\r\n");
+        var directory = Files.createTempDirectory("multipart-empty-name-test");
+        try {
+            var parser = new MultipartFormParser(directory, "boundary", input, 8192, StandardCharsets.UTF_8);
+            var failure = assertThrows(HttpException.class, parser::parseFully);
+            assertThat(failure.status(), equalTo(HttpStatus.BAD_REQUEST_400));
+            try (var files = Files.list(directory)) {
+                assertThat(files.count(), equalTo(0L));
+            }
+        } finally {
+            Files.delete(directory);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"one-by-one", "full"})
     public void emptyBodiesSupported(String type) throws IOException {
         var inputStream = getInput(type,
             "-----------------------------40328356438088973481959884063--\r\n");
