@@ -1303,11 +1303,23 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     }
 
     private void failWriteLoop(Exception reason) {
+        boolean terminateStreams;
         stateLock.lock();
         try {
+            terminateStreams = lifecycle.writeState.canSendFrames;
             lifecycle.markConnectionErroredLocked();
         } finally {
             stateLock.unlock();
+        }
+        if (terminateStreams) {
+            // The reader may finish its current frame and exit without another read.
+            // The thread initiating failure must terminate uploads before retirement;
+            // an earlier timeout/abort retains ownership of its own response outcome.
+            IOException inputFailure = reason instanceof IOException ? (IOException) reason
+                : new IOException("HTTP/2 writer failed", reason);
+            for (Http2Stream stream : streamRegistry.applicationStreams()) {
+                stream.onPeerInputClosed(inputFailure);
+            }
         }
         finishWriteLoop(reason);
     }
