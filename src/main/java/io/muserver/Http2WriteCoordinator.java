@@ -66,7 +66,13 @@ final class Http2WriteCoordinator {
         }
 
         boolean beginWrite() {
-            if (task.beginWrite()) return true;
+            if (task.beginWrite()) {
+                if (frame.endStream()) {
+                    Http2Stream stream = applicationStreams.get(frame.streamId());
+                    if (stream != null) stream.onLocalEndStreamWriting();
+                }
+                return true;
+            }
             // A cancellation can race the credit reservation. No bytes reached the peer.
             if (frame instanceof Http2DataFrame) {
                 int reserved = frame.flowControlSize();
@@ -82,6 +88,10 @@ final class Http2WriteCoordinator {
         }
 
         void fail(Exception reason) {
+            if (frame.endStream()) {
+                Http2Stream stream = applicationStreams.get(frame.streamId());
+                if (stream != null) stream.onLocalEndStreamWriteFailed();
+            }
             task.fail(reason);
         }
     }
@@ -478,6 +488,12 @@ final class Http2WriteCoordinator {
         }
     }
 
+    // After the writer has stopped, application tasks own retirement. Serialize those
+    // tasks with each other; no writer-owned operation may run concurrently with this.
+    synchronized void retireAfterWriterStopped(int streamId) {
+        removeStream(streamId);
+    }
+
     private void apply(Command command) {
         if (command instanceof QueueWrite) {
             QueueWrite write = (QueueWrite) command;
@@ -770,6 +786,7 @@ final class Http2WriteCoordinator {
             Http2Stream stream = applicationStreams.get(streamId);
             if (stream != null) {
                 stream.onLocalEndStreamPublished();
+                stream.onLocalEndStreamWritten();
             }
         }
         if (frame instanceof Http2ResetStreamFrame

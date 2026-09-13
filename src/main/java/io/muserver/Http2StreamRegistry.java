@@ -190,8 +190,9 @@ final class Http2StreamRegistry {
             for (Lookup entry : entries.values()) {
                 Http2Stream stream = entry.applicationStream();
                 if (stream == null
-                    || stream.countsTowardsMaxConcurrentStreams()
-                    || stream.applicationExchangeNeedsTermination()) {
+                    || (!stream.canFinishAfterPeerClose()
+                        && (stream.countsTowardsMaxConcurrentStreams()
+                            || stream.applicationExchangeNeedsTermination()))) {
                     return true;
                 }
             }
