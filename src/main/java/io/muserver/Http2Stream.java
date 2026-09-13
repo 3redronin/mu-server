@@ -41,6 +41,13 @@ class Http2Stream implements ResponseInfo {
     // Writer-published after the complete END_STREAM frame is handed to output
     // and before flush, matching the stream-admission publication boundary.
     private volatile boolean localEndStreamPublished;
+    // Unlike publication for stream admission, successful delivery requires flush to finish.
+    private volatile boolean localEndStreamWritten;
+    // Guarded by this stream's monitor. A peer can read END_STREAM before write/flush returns.
+    private boolean localEndStreamWriting;
+    // ResponseState can already be terminal when application cleanup or the request fails.
+    private volatile boolean exchangeFailed;
+    private volatile @Nullable Boolean completionOutcome;
     @Nullable
     private Long endNanos;
     private final InputStream bodyInputStream;
@@ -75,20 +82,25 @@ class Http2Stream implements ResponseInfo {
 
     @Override
     public boolean completedSuccessfully() {
+        Boolean completed = completionOutcome;
+        if (completed != null) return completed;
         // A fully sent response does not make a cancelled or disconnected upload successful.
-        return remoteEndStreamRead && request.completedSuccessfully()
+        return applicationExchangeEnded && !exchangeFailed && remoteEndStreamRead
+            && localEndStreamWritten && request.completedSuccessfully()
             && requiredResponse().responseState().completedSuccessfully();
     }
 
     void recordPeerResetFromReader() {
         // A queued handler can finish as soon as it sees resetInitiated.
         // Publish the response outcome first so its completion listeners see cancellation.
+        exchangeFailed = true;
         requiredResponse().setState(ResponseState.CLIENT_CANCELLED);
         peerResetRead = true;
         resetInitiated = true;
     }
 
     void recordLocalResetFromReader() {
+        exchangeFailed = true;
         resetInitiated = true;
     }
 
@@ -97,6 +109,7 @@ class Http2Stream implements ResponseInfo {
     }
 
     void onProtocolResetApplied() {
+        exchangeFailed = true;
         resetInitiated = true;
     }
 
@@ -126,6 +139,40 @@ class Http2Stream implements ResponseInfo {
 
     void onLocalEndStreamPublished() {
         localEndStreamPublished = true;
+    }
+
+    synchronized void onLocalEndStreamWriting() {
+        localEndStreamWriting = true;
+    }
+
+    synchronized void onLocalEndStreamWritten() {
+        localEndStreamWritten = true;
+        localEndStreamWriting = false;
+    }
+
+    synchronized void onLocalEndStreamWriteFailed() {
+        exchangeFailed = true;
+        localEndStreamWriting = false;
+    }
+
+    synchronized boolean canFinishAfterPeerClose() {
+        return !resetInitiated && remoteEndStreamRead
+            && (localEndStreamWritten || localEndStreamWriting);
+    }
+
+    void onApplicationFailure() {
+        exchangeFailed = true;
+    }
+
+    void onPeerInputClosed(IOException reason) {
+        synchronized (this) {
+            // An in-progress final write publishes its own failure before waking its caller.
+            // No application completion is implied by allowing that write to settle.
+            if (canFinishAfterPeerClose()) return;
+            exchangeFailed = true;
+            resetInitiated = true;
+        }
+        onConnectionTerminated(reason, ResponseState.CLIENT_DISCONNECTED);
     }
 
     boolean protocolStateClosed() {
@@ -165,6 +212,7 @@ class Http2Stream implements ResponseInfo {
     }
 
     void cancel(IOException reason, UnreadDataCredit refundUnreadData) {
+        exchangeFailed = true;
         resetInitiated = true;
         if (bodyInputStream instanceof Http2BodyInputStream) {
             ((Http2BodyInputStream) bodyInputStream).cancel(reason, refundUnreadData);
@@ -242,6 +290,8 @@ class Http2Stream implements ResponseInfo {
     }
 
     void recordCompletionTime() {
+        // A teardown snapshot can retain this stream after completion was published.
+        completionOutcome = completedSuccessfully();
         endNanos = System.nanoTime();
     }
 

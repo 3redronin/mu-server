@@ -56,6 +56,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private final Http2WriteCoordinator writeCoordinator;
     private final AtomicBoolean writerTaskScheduled = new AtomicBoolean();
     private final CompletableFuture<@Nullable Void> writeLoopEnded = new CompletableFuture<>();
+    private final CompletableFuture<@Nullable Void> retainedApplicationsEnded = new CompletableFuture<>();
     private volatile @Nullable OutputStream writerOutput;
 
     private final ConnectionLifecycle lifecycle = new ConnectionLifecycle();
@@ -480,15 +481,24 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         }
     }
 
-    private void applicationExchangeEndedForWrites(int streamId) {
+    private void applicationExchangeEndedForWrites(Http2Stream stream) {
         stateLock.lock();
         try {
             if (lifecycle.writeState.canSendFrames) {
-                writeCoordinator.applicationExchangeEnded(streamId);
+                writeCoordinator.applicationExchangeEnded(stream.id);
+            } else {
+                retireStoppedStreamAfterRequestEnd(stream);
             }
         } finally {
             stateLock.unlock();
         }
+    }
+
+    private void retireStoppedStreamAfterRequestEnd(Http2Stream stream) {
+        // The reader may still need to find this stream to terminate a disconnected
+        // upload. Retire only after that termination and the writer's ownership ends.
+        CompletableFuture.allOf(writeLoopEnded, stream.requestEnded())
+            .thenRun(() -> writeCoordinator.retireAfterWriterStopped(stream.id));
     }
 
     private void applyConnectionWindowUpdate(int increment) throws Http2Exception {
@@ -641,14 +651,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             stateLock.unlock();
         }
         for (Http2Stream stream : streamRegistry.applicationStreams()) {
-            stream.onConnectionTerminated(reason, ResponseState.CLIENT_DISCONNECTED);
+            stream.onPeerInputClosed(reason);
         }
         signalWriteLoop();
     }
 
     private boolean drainWritableFrames(OutputStream clientOut) throws IOException {
         Http2WriteCoordinator.WritableFrame candidate;
-        while ((candidate = writeCoordinator.pollWritable()) != null) {
+        while (lifecycle.writeState.canSendFrames && (candidate = writeCoordinator.pollWritable()) != null) {
             if (!candidate.beginWrite()) continue;
             try {
                 Http2Exception protocolError = candidate.protocolError();
@@ -861,6 +871,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
 
             writeEndedFuture.get();
             log.info("write loop ended");
+            // A peer close can leave fully delivered responses awaiting application
+            // work. Keep them visible to idle timeouts and server shutdown until cleanup.
+            retainedApplicationsEnded.get();
 
         } catch (Http2Exception h2e) {
             log.debug("HTTP2 error", h2e);
@@ -1290,11 +1303,23 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     }
 
     private void failWriteLoop(Exception reason) {
+        boolean terminateStreams;
         stateLock.lock();
         try {
+            terminateStreams = lifecycle.writeState.canSendFrames;
             lifecycle.markConnectionErroredLocked();
         } finally {
             stateLock.unlock();
+        }
+        if (terminateStreams) {
+            // The reader may finish its current frame and exit without another read.
+            // The thread initiating failure must terminate uploads before retirement;
+            // an earlier timeout/abort retains ownership of its own response outcome.
+            IOException inputFailure = reason instanceof IOException ? (IOException) reason
+                : new IOException("HTTP/2 writer failed", reason);
+            for (Http2Stream stream : streamRegistry.applicationStreams()) {
+                stream.onPeerInputClosed(inputFailure);
+            }
         }
         finishWriteLoop(reason);
     }
@@ -1305,10 +1330,18 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         }
         cancelPendingSettingsAckTimeouts();
         writeCoordinator.failAll(reason);
+        // Application completion may have been queued before the connection failed,
+        // while an unfinished upload still prevented normal protocol retirement.
+        for (Http2Stream stream : streamRegistry.applicationStreams()) {
+            if (stream.applicationExchangeEnded()) {
+                retireStoppedStreamAfterRequestEnd(stream);
+            }
+        }
         closeSocketQuietly();
         // Don't close the output stream here because that closes the TLS connection in Java.
         log.info("Connection write loop closing with state=" + lifecycle.writeState);
         writeLoopEnded.complete(null);
+        signalRetainedApplicationsEnded();
     }
 
     private void startRequest(Http2HeadersFrame frame) throws Http2Exception {
@@ -1372,6 +1405,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             }
         } catch (Throwable failure) {
             if (failure instanceof VirtualMachineError || failure instanceof ThreadDeath) {
+                stream.onApplicationFailure();
                 stream.abandonApplicationExchange();
                 onExchangeEnded(stream);
                 FatalErrors.rethrow(failure);
@@ -1401,6 +1435,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         RejectedExecutionException dispatchFailure
     ) {
         log.warn("Aborting accepted HTTP/2 stream because its application executors rejected completion", dispatchFailure);
+        stream.onApplicationFailure();
         try {
             BaseResponse response = stream.response();
             if (!stream.resetWasInitiated()
@@ -1445,6 +1480,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             }
             stream.cleanup();
         } catch (Throwable e) {
+            stream.onApplicationFailure();
             FatalErrors.rethrow(e);
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
@@ -1619,7 +1655,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
 
     private void onExchangeEnded(Http2Stream stream) {
         stream.onApplicationExchangeEnded();
-        applicationExchangeEndedForWrites(stream.id);
+        applicationExchangeEndedForWrites(stream);
         signalWriteLoop();
         // Application cleanup can finish while the peer is still uploading. Completion listeners
         // observe the entire exchange, and must stay off the protocol reader that ends the request.
@@ -1633,13 +1669,20 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private void onRejectedApplicationExchangeEnded(Http2Stream stream) {
         server.onRequestSubmissionRejected(stream.request);
         stream.onApplicationExchangeEnded();
-        applicationExchangeEndedForWrites(stream.id);
+        applicationExchangeEndedForWrites(stream);
         signalWriteLoop();
     }
 
     void removeProtocolStream(Http2Stream stream) {
         inboundFlowControl.closeStream(stream.id);
         streamRegistry.removeApplicationStream(stream);
+        signalRetainedApplicationsEnded();
+    }
+
+    private void signalRetainedApplicationsEnded() {
+        if (writeLoopEnded.isDone() && streamRegistry.applicationStreams().isEmpty()) {
+            retainedApplicationsEnded.complete(null);
+        }
     }
 }
 

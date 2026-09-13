@@ -21,6 +21,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static scaffolding.MuAssert.assertEventually;
 
 @DisplayName("RFC 9113 5.4.3 Connection Termination")
 class RFC9113_5_4_3_ConnectionTerminationTest {
@@ -79,15 +80,16 @@ class RFC9113_5_4_3_ConnectionTerminationTest {
     }
 
     @Test
-    void disconnectCompletesAnAsyncExchangeAfterItsWireStreamClosed()
+    void disconnectWaitsForApplicationCompletionAfterItsWireStreamClosed()
         throws Exception {
         var responsePublished = new CountDownLatch(1);
         var completed = new CompletableFuture<ResponseInfo>();
+        var async = new CompletableFuture<AsyncHandle>();
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .addResponseCompleteListener(completed::complete)
             .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
-                request.handleAsync();
+                async.complete(request.handleAsync());
                 response.write("done");
                 responsePublished.countDown();
             })
@@ -107,8 +109,13 @@ class RFC9113_5_4_3_ConnectionTerminationTest {
                 equalTo(true)
             );
             assertThat(server.stats().activeRequests().size(), equalTo(1));
+            var connection = (Http2Connection) server.activeConnections().iterator().next();
 
             con.close();
+            assertEventually(() -> connection.testProbe().inputState(), equalTo("COMPLETED"));
+            assertThat(completed.isDone(), equalTo(false));
+            assertThat(server.stats().activeRequests().size(), equalTo(1));
+            async.get(5, TimeUnit.SECONDS).complete();
 
             ResponseInfo responseInfo = completed.get(5, TimeUnit.SECONDS);
             assertThat(responseInfo.completedSuccessfully(), equalTo(true));
