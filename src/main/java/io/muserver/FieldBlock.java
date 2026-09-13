@@ -33,10 +33,13 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
     @Override
     public List<String> getAll(CharSequence name) {
         var header = HeaderString.valueOf(name, HeaderString.Type.HEADER);
-        return lines.stream()
-            .filter(l -> l.name().equals(header))
-            .map(l -> l.value().toString())
-            .collect(Collectors.toList());
+        List<String> values = new ArrayList<>();
+        for (FieldLine line : lines) {
+            if (line.name().equals(header)) {
+                values.add(line.value().toString());
+            }
+        }
+        return values;
     }
 
     public Iterable<FieldLine> lineIterator() {
