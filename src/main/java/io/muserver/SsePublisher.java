@@ -153,7 +153,9 @@ class SsePublisherImpl implements SsePublisher {
     }
 
     private void sendChunk(String text) throws IOException {
-        response.outputStream().write(text.getBytes(StandardCharsets.UTF_8));
+        var out = response.outputStream();
+        out.write(text.getBytes(StandardCharsets.UTF_8));
+        out.flush();
     }
 
     private static void ensureNoLineBreaks(String value, String thing) {

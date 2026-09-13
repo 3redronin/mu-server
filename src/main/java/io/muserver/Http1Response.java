@@ -2,6 +2,8 @@ package io.muserver;
 
 import org.jspecify.annotations.Nullable;
 
+import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
@@ -20,31 +22,35 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
         this.socketOut = socketOut;
     }
 
-    private void writeStatusAndHeaders() throws IOException {
+    private byte[] statusAndHeaders() throws IOException {
         if (responseState() != ResponseState.NOTHING) {
             throw new IllegalStateException("Cannot write headers multiple times");
         }
         prepareBodylessResponseHeaders();
         setState(ResponseState.WRITING_HEADERS);
 
-        socketOut.write(status().http11ResponseLine());
+        ByteArrayOutputStream headerBytes = new ByteArrayOutputStream(256);
+        headerBytes.write(status().http11ResponseLine());
         if (!headers().contains(HeaderNames.DATE)) {
             headers().set("date", Mutils.toHttpDate(new Date()));
         }
-        headers.writeAsHttp1(socketOut);
-        socketOut.write(ParseUtils.CRLF, 0, 2);
+        headers.writeAsHttp1(headerBytes);
+        headerBytes.write(ParseUtils.CRLF, 0, 2);
+        return headerBytes.toByteArray();
     }
 
     @Override
     public void sendInformationalResponse(HttpStatus status, @Nullable Headers headers) {
         validateInformationalResponse(status);
         try {
-            socketOut.write(status.http11ResponseLine());
+            var headerBytes = new ByteArrayOutputStream(256);
+            headerBytes.write(status.http11ResponseLine());
             var responseHeaders = copyHeaders(headers);
             if (!responseHeaders.isEmpty()) {
-                responseHeaders.writeAsHttp1(socketOut);
+                responseHeaders.writeAsHttp1(headerBytes);
             }
-            socketOut.write(ParseUtils.CRLF, 0, 2);
+            headerBytes.write(ParseUtils.CRLF, 0, 2);
+            socketOut.write(headerBytes.toByteArray());
             socketOut.flush();
         } catch (IOException e) {
             throw new UncheckedIOException("Error writing information response", e);
@@ -53,40 +59,56 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
 
     @Override
     public OutputStream outputStream(int bufferSize) {
+        if (bufferSize < 0) {
+            throw new IllegalArgumentException("Response buffer size cannot be negative");
+        }
         if (wrappedOut == null) {
             // A 304 still negotiates metadata for the selected representation.
             ContentEncoder responseEncoder = status().canHaveContent() || status().code() == 304
                 ? contentEncoder() : null;
 
             long fixedLen = headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), -1);
-            OutputStream rawOut = socketOut;
-
             if (suppressContent()) {
                 if (request.method().isHead() && status().canHaveContent()
                     && fixedLen == -1L && request.httpVersion() == HttpVersion.HTTP_1_1) {
                     headers().set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
                 }
-                // Representation lengths on HEAD/304 do not describe bytes to write.
-                wrappedOut = DiscardingOutputStream.INSTANCE;
             } else if (fixedLen == -1L) {
                 if (request.httpVersion() == HttpVersion.HTTP_1_1) {
                     headers().set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
-                    wrappedOut = new ChunkedOutputStream(rawOut);
                 } else {
-                    wrappedOut = new CloseDelimitedOutputStream(rawOut);
                     if (!request.method().isHead() && status().canHaveContent()) {
                         shouldCloseConnectionAfterResponse = true;
                         headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
                     }
                 }
-            } else {
-                wrappedOut = new FixedSizeOutputStream(fixedLen, rawOut);
             }
 
             try {
-                writeStatusAndHeaders();
+                byte[] headerBytes = statusAndHeaders();
+                OutputStream rawOut = socketOut;
+                if (!suppressContent() && bufferSize > 0) {
+                    // A small fixed response needs room only for its headers and body.
+                    // Avoid allocating the full default buffer for every tiny response.
+                    int capacity = bufferSize;
+                    if (fixedLen >= 0 && fixedLen < bufferSize) {
+                        capacity = (int) Math.min(bufferSize, headerBytes.length + fixedLen);
+                    }
+                    rawOut = capacity == 8192
+                        ? new BufferedOutputStream(socketOut)
+                        : new BufferedOutputStream(socketOut, capacity);
+                }
+                rawOut.write(headerBytes);
                 if (suppressContent()) {
+                    // Representation lengths on HEAD/304 do not describe bytes to write.
+                    wrappedOut = DiscardingOutputStream.INSTANCE;
                     socketOut.flush();
+                } else if (fixedLen != -1L) {
+                    wrappedOut = new FixedSizeOutputStream(fixedLen, rawOut);
+                } else if (request.httpVersion() == HttpVersion.HTTP_1_1) {
+                    wrappedOut = new ChunkedOutputStream(rawOut);
+                } else {
+                    wrappedOut = new CloseDelimitedOutputStream(rawOut);
                 }
                 if (responseEncoder != null) {
                     wrappedOut = responseEncoder.wrapStream(request, this, wrappedOut);
@@ -108,7 +130,7 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
                 && !headers().contains(HeaderNames.CONTENT_LENGTH)) {
                 headers().set(HeaderNames.CONTENT_LENGTH, 0L);
             }
-            writeStatusAndHeaders();
+            socketOut.write(statusAndHeaders());
             socketOut.flush();
             if (!request.method().isHead() && status().canHaveContent()
                 && headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), 0L) > 0L) {

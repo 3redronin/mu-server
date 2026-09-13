@@ -45,10 +45,11 @@ class FixedSizeOutputStream extends OutputStream {
     public void close() throws IOException {
         if (isClosed.compareAndSet(false, true)) {
             // don't actually close the underlying as it is a reusable connection
+            // Deliver buffered headers and partial content before reporting an incomplete body.
+            out.flush();
             if (bytesWritten != declaredLen) {
                 throw new HttpException(HttpStatus.INTERNAL_SERVER_ERROR_500, "Fixed size body expected $declaredLen bytes but had $bytesWritten written");
             }
-            out.flush();
         }
     }
 
@@ -58,4 +59,3 @@ class FixedSizeOutputStream extends OutputStream {
         }
     }
 }
-
