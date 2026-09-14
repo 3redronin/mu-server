@@ -76,7 +76,8 @@ class Headtils {
             String hostHeader = h.get(HeaderNames.HOST);
             List<ForwardedHeader> forwarded = getForwardedHeaders(h);
             if (forwarded.isEmpty()) {
-                if (Mutils.nullOrEmpty(hostHeader) || defaultValue.getHost().equals(hostHeader)) {
+                if (Mutils.nullOrEmpty(hostHeader) || defaultValue.getHost().equals(hostHeader)
+                    || defaultValue.getRawAuthority().equals(hostHeader)) {
                     return defaultValue;
                 }
                 return URI.create(defaultValue.getScheme() + "://" + hostHeader).resolve(requestUri);
