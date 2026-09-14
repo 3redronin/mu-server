@@ -118,6 +118,10 @@ class Http1Connection extends BaseHttpConnection {
                     break;
                 }
                 var request = (HttpRequestTemp)msg;
+                // The shared parser queues requests for response parsing. The server writes
+                // responses directly, so consume the entry when we take ownership of the
+                // request; otherwise every completed request lives as long as the connection.
+                requestPipeline.remove();
 
                 var rejectException = request.getRejectRequest();
                 String relativeUrl;
