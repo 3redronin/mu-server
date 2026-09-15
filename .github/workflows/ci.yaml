@@ -29,3 +29,12 @@ jobs:
       - name: Build with Maven on JDK ${{ matrix.java }}
         if: matrix.java != 21
         run: mvn --batch-mode --update-snapshots verify
+
+  conformance-runner-tests:
+    runs-on: ubuntu-latest
+    name: Conformance report integrity
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test independent conformance reporting
+        working-directory: validation
+        run: python3 -m unittest discover -s tests -p test_independent.py
