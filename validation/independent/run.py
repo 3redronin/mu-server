@@ -31,6 +31,7 @@ def main():
               'autobahn_patterns':a.autobahn_cases.split(','),'exclusions':EXCLUSIONS,'fixture_profile':'independent',
               'limits':{'websocket_frame_bytes':16777216,'websocket_message_bytes_mu4':16777216,'websocket_idle_seconds':60},
               'harness_sources':{str(x.relative_to(process.ROOT)):sha256(x) for folder in ('independent','muvalidate','fixture') for x in (process.ROOT/folder).rglob('*') if x.suffix in ('.py','.java')}}
+    metadata['runtime_versions']={str(v):subprocess.check_output([str(jdk_path(v)/'bin/java'),'-version'],stderr=subprocess.STDOUT,text=True) for v in versions}
     for relative in metadata['harness_sources']:
         snapshot=output/'harness'/relative;snapshot.parent.mkdir(parents=True,exist_ok=True)
         shutil.copyfile(process.ROOT/relative,snapshot)
