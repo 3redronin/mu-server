@@ -52,11 +52,7 @@ class WebsocketConnection implements MuWebSocketSession {
     private volatile @Nullable ScheduledFuture<?> pingFuture;
 
     private enum ReadState {
-        NONE, TEXT, BINARY,
-        /**
-         * We are reading a fragmented message of a type we don't recognise, which is fine. We ignore it.
-         */
-        UNKNOWN
+        NONE, TEXT, BINARY
     }
 
     @FunctionalInterface
@@ -152,6 +148,9 @@ class WebsocketConnection implements MuWebSocketSession {
                 }
 
                 int opcode = firstByte & 0x0F;
+                if (opcode > 0x2 && opcode != 0x8 && opcode != 0x9 && opcode != 0xA) {
+                    throw frameError(1002, "Unsupported websocket opcode: " + opcode);
+                }
 
                 int secondByte = buffer.get() & 0xFF;
                 boolean masked = (secondByte & 0x80) != 0;
@@ -205,7 +204,7 @@ class WebsocketConnection implements MuWebSocketSession {
                         invokeApplicationEvent(() -> webSocket.onTextFragment(slice, fin));
                     } else if (readState == ReadState.BINARY) {
                         invokeApplicationEvent(() -> webSocket.onBinaryFragment(slice, fin));
-                    } else if (readState != ReadState.UNKNOWN) {
+                    } else {
                         throw frameError(1002, "Continuation frame received unexpectedly");
                     }
                     if (fin) {
@@ -262,9 +261,6 @@ class WebsocketConnection implements MuWebSocketSession {
                     invokeApplicationEvent(() -> webSocket.onPing(slice));
                 } else if (opcode == 0xA) {
                     invokeApplicationEvent(() -> webSocket.onPong(slice));
-                } else if (!fin) {
-                    // ignore unknown types, but do allow continuation frames for them
-                    readState = ReadState.UNKNOWN;
                 }
 
             }
