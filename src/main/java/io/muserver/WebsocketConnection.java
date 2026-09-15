@@ -339,7 +339,7 @@ class WebsocketConnection implements MuWebSocketSession {
             if (readBuffer.capacity() - readBuffer.limit() < minBytes) {
                 readBuffer.compact().flip();
             }
-            int read = input.read(readBuffer.array(), readBuffer.arrayOffset() + readBuffer.position(),
+            int read = input.read(readBuffer.array(), readBuffer.arrayOffset() + readBuffer.limit(),
                 readBuffer.capacity() - readBuffer.limit());
             if (read == -1) {
                 throw new ClientDisconnectedException();
