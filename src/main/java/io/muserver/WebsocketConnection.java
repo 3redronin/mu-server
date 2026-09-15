@@ -11,6 +11,7 @@ import java.net.InetSocketAddress;
 import java.net.ProtocolException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.Queue;
 import java.util.Objects;
@@ -52,11 +53,7 @@ class WebsocketConnection implements MuWebSocketSession {
     private volatile @Nullable ScheduledFuture<?> pingFuture;
 
     private enum ReadState {
-        NONE, TEXT, BINARY,
-        /**
-         * We are reading a fragmented message of a type we don't recognise, which is fine. We ignore it.
-         */
-        UNKNOWN
+        NONE, TEXT, BINARY
     }
 
     @FunctionalInterface
@@ -138,6 +135,7 @@ class WebsocketConnection implements MuWebSocketSession {
             }
 
             long messageLength = 0;
+            var utf8 = new WebsocketUtf8Validator();
             while (!closeReceived) {
 
                 // make sure we at least have the minimum sized buffer
@@ -152,6 +150,9 @@ class WebsocketConnection implements MuWebSocketSession {
                 }
 
                 int opcode = firstByte & 0x0F;
+                if (opcode > 0x2 && opcode != 0x8 && opcode != 0x9 && opcode != 0xA) {
+                    throw frameError(1002, "Unsupported websocket opcode: " + opcode);
+                }
 
                 int secondByte = buffer.get() & 0xFF;
                 boolean masked = (secondByte & 0x80) != 0;
@@ -187,13 +188,28 @@ class WebsocketConnection implements MuWebSocketSession {
                     throw frameError(1009, "Max message length of " + settings.maxMessageLength + " exceeded");
                 }
 
+                if (opcode == 0x0 && readState == ReadState.NONE) {
+                    throw frameError(1002, "Continuation frame received unexpectedly");
+                }
+                if (opcode == 0x1 && readState != ReadState.NONE) {
+                    throw frameError(1002, "New text message sent while expecting continuation frame");
+                }
+                if (opcode == 0x2 && readState != ReadState.NONE) {
+                    throw frameError(1002, "New binary message received while expecting continuation frame");
+                }
+                boolean textPayload = opcode == 0x1 || (opcode == 0x0 && readState == ReadState.TEXT);
+                if (opcode == 0x1) utf8.reset();
+
                 byte[] maskingKey = new byte[4];
                 readAtLeast(4);
                 buffer.get(maskingKey, 0, 4);
 
                 // in practice, the max length is an int so fits in a byte array
                 int payloadLen = (int) payloadLength;
-                var slice = readAndUnmaskPayload(payloadLen, maskingKey);
+                var slice = readAndUnmaskPayload(payloadLen, maskingKey, 0, textPayload ? utf8 : null);
+                if (textPayload && fin && !utf8.isComplete()) {
+                    throw frameError(1007, "Non UTF-8 data in text frame");
+                }
 
 
                 if (closeReceived) {
@@ -205,7 +221,7 @@ class WebsocketConnection implements MuWebSocketSession {
                         invokeApplicationEvent(() -> webSocket.onTextFragment(slice, fin));
                     } else if (readState == ReadState.BINARY) {
                         invokeApplicationEvent(() -> webSocket.onBinaryFragment(slice, fin));
-                    } else if (readState != ReadState.UNKNOWN) {
+                    } else {
                         throw frameError(1002, "Continuation frame received unexpectedly");
                     }
                     if (fin) {
@@ -214,9 +230,6 @@ class WebsocketConnection implements MuWebSocketSession {
                     }
                 } else if (opcode == 0x1) {
                     // text frame
-                    if (readState != ReadState.NONE) {
-                        throw frameError(1002, "New text message sent while expecting continuation frame");
-                    }
                     messageLength = payloadLength;
                     if (fin) {
                         var text = StandardCharsets.UTF_8.newDecoder().decode(slice).toString();
@@ -227,9 +240,6 @@ class WebsocketConnection implements MuWebSocketSession {
                     }
                 } else if (opcode == 0x2) {
                     // binary frame
-                    if (readState != ReadState.NONE) {
-                        throw frameError(1002, "New binary message received while expecting continuation frame");
-                    }
                     messageLength = payloadLength;
                     if (fin) {
                         invokeApplicationEvent(() -> webSocket.onBinary(slice));
@@ -241,19 +251,30 @@ class WebsocketConnection implements MuWebSocketSession {
                     if (payloadLen == 1) {
                         throw frameError(1002, "Close frame payload of 1 byte is invalid");
                     }
-                    lifecycle.onClientCloseStarted();
-                    closeReceived = true;
-                    // close frame
-                    short closeCode;
+                    // Validate the entire close payload before publishing a peer close.
+                    int closeCode;
                     String reason = "";
                     if (payloadLen >= 2) {
-                        closeCode = slice.getShort();
+                        closeCode = slice.getShort() & 0xFFFF;
+                        // RFC 6455 section 7.4 and the registered 1012-1014 codes.
+                        // 1004-1006 and 1015 are reserved; no extension defines 1016-2999 here.
+                        if (closeCode < 1000 || closeCode >= 5000
+                            || (closeCode >= 1004 && closeCode <= 1006)
+                            || (closeCode >= 1015 && closeCode < 3000)) {
+                            throw frameError(1002, "Invalid websocket close code: " + closeCode);
+                        }
                         if (slice.hasRemaining()) {
-                            reason = StandardCharsets.UTF_8.decode(slice).toString();
+                            try {
+                                reason = StandardCharsets.UTF_8.newDecoder().decode(slice).toString();
+                            } catch (CharacterCodingException invalidReason) {
+                                throw frameError(1007, "Non UTF-8 data in close reason");
+                            }
                         }
                     } else {
                         closeCode = 1005;
                     }
+                    lifecycle.onClientCloseStarted();
+                    closeReceived = true;
                     log.info("Client close: " + closeCode + " " + reason);
                     String closeReason = reason;
                     invokeApplicationEvent(() -> webSocket.onClientClosed(closeCode, closeReason));
@@ -262,9 +283,6 @@ class WebsocketConnection implements MuWebSocketSession {
                     invokeApplicationEvent(() -> webSocket.onPing(slice));
                 } else if (opcode == 0xA) {
                     invokeApplicationEvent(() -> webSocket.onPong(slice));
-                } else if (!fin) {
-                    // ignore unknown types, but do allow continuation frames for them
-                    readState = ReadState.UNKNOWN;
                 }
 
             }
@@ -296,22 +314,32 @@ class WebsocketConnection implements MuWebSocketSession {
         }
     }
 
-    private void unmask(ByteBuffer buffer, byte[] maskingKey, int payloadLength) {
-        var offset = buffer.position();
-        for (int i = 0; i < payloadLength; i++) {
-            byte mask = maskingKey[i % 4];
+    private void unmask(ByteBuffer buffer, byte[] maskingKey, int start, int length, int maskOffset,
+                        @Nullable WebsocketUtf8Validator utf8) throws IOException {
+        int offset = buffer.position() + start;
+        for (int i = 0; i < length; i++) {
             int pos = offset + i;
-            byte maskedB = buffer.get(pos);
-            byte unmaskedB = (byte)(maskedB ^ mask);
-            buffer.put(pos, unmaskedB);
+            byte unmasked = (byte) (buffer.get(pos) ^ maskingKey[(maskOffset + i) & 3]);
+            buffer.put(pos, unmasked);
+            if (utf8 != null && !utf8.accept(unmasked & 0xFF)) {
+                throw frameError(1007, "Non UTF-8 data in text frame");
+            }
         }
     }
 
-    private ByteBuffer readAndUnmaskPayload(int len, byte[] maskingKey) throws IOException {
+    private ByteBuffer readAndUnmaskPayload(int len, byte[] maskingKey, int maskOffset,
+                                           @Nullable WebsocketUtf8Validator utf8) throws IOException {
         ByteBuffer readBuffer = java.util.Objects.requireNonNull(buffer);
         if (len <= readBuffer.capacity()) {
-            readAtLeast(len);
-            unmask(readBuffer, maskingKey, len);
+            int processed = 0;
+            while (processed < len) {
+                // Text must be validated after each read, before waiting for the rest of a frame.
+                // Preserve the buffer slice and whole-frame callback behavior for applications.
+                readAtLeast(utf8 == null ? len : processed + 1);
+                int available = Math.min(len, readBuffer.remaining()) - processed;
+                unmask(readBuffer, maskingKey, processed, available, maskOffset + processed, utf8);
+                processed += available;
+            }
             var tempLimit = readBuffer.limit();
             readBuffer.limit(readBuffer.position() + len);
             var slice = readBuffer.slice();
@@ -323,7 +351,7 @@ class WebsocketConnection implements MuWebSocketSession {
             var toRead = len;
             while (toRead > 0) {
                 int nextLen = Math.min(toRead, readBuffer.capacity());
-                var slice = readAndUnmaskPayload(nextLen, maskingKey);
+                var slice = readAndUnmaskPayload(nextLen, maskingKey, maskOffset + len - toRead, utf8);
                 full.put(slice);
                 toRead = toRead - nextLen;
             }
@@ -334,12 +362,19 @@ class WebsocketConnection implements MuWebSocketSession {
     private void readAtLeast(int minBytes) throws IOException {
         ByteBuffer readBuffer = java.util.Objects.requireNonNull(buffer);
         InputStream input = java.util.Objects.requireNonNull(inputStream);
+        readAtLeast(readBuffer, input, minBytes);
+    }
+
+    static void readAtLeast(ByteBuffer readBuffer, InputStream input, int minBytes) throws IOException {
         if (minBytes > readBuffer.capacity()) throw new IllegalArgumentException("This buffer is not big enough");
         while (readBuffer.remaining() < minBytes) {
-            if (readBuffer.capacity() - readBuffer.limit() < minBytes) {
+            // Only make room for bytes still missing. Comparing with the total minimum
+            // repeatedly compacts a growing, already-buffered text prefix on short reads.
+            int missing = minBytes - readBuffer.remaining();
+            if (readBuffer.capacity() - readBuffer.limit() < missing) {
                 readBuffer.compact().flip();
             }
-            int read = input.read(readBuffer.array(), readBuffer.arrayOffset() + readBuffer.position(),
+            int read = input.read(readBuffer.array(), readBuffer.arrayOffset() + readBuffer.limit(),
                 readBuffer.capacity() - readBuffer.limit());
             if (read == -1) {
                 throw new ClientDisconnectedException();
@@ -348,7 +383,7 @@ class WebsocketConnection implements MuWebSocketSession {
         }
     }
 
-    private Exception frameError(int code, String reason) throws IOException {
+    private ProtocolException frameError(int code, String reason) throws IOException {
         close(code, reason);
         return new ProtocolException(reason);
     }
