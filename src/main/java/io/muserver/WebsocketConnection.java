@@ -11,6 +11,7 @@ import java.net.InetSocketAddress;
 import java.net.ProtocolException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.Queue;
 import java.util.Objects;
@@ -240,19 +241,30 @@ class WebsocketConnection implements MuWebSocketSession {
                     if (payloadLen == 1) {
                         throw frameError(1002, "Close frame payload of 1 byte is invalid");
                     }
-                    lifecycle.onClientCloseStarted();
-                    closeReceived = true;
-                    // close frame
-                    short closeCode;
+                    // Validate the entire close payload before publishing a peer close.
+                    int closeCode;
                     String reason = "";
                     if (payloadLen >= 2) {
-                        closeCode = slice.getShort();
+                        closeCode = slice.getShort() & 0xFFFF;
+                        // RFC 6455 section 7.4 and the registered 1012-1014 codes.
+                        // 1004-1006 and 1015 are reserved; no extension defines 1016-2999 here.
+                        if (closeCode < 1000 || closeCode >= 5000
+                            || (closeCode >= 1004 && closeCode <= 1006)
+                            || (closeCode >= 1015 && closeCode < 3000)) {
+                            throw frameError(1002, "Invalid websocket close code: " + closeCode);
+                        }
                         if (slice.hasRemaining()) {
-                            reason = StandardCharsets.UTF_8.decode(slice).toString();
+                            try {
+                                reason = StandardCharsets.UTF_8.newDecoder().decode(slice).toString();
+                            } catch (CharacterCodingException invalidReason) {
+                                throw frameError(1007, "Non UTF-8 data in close reason");
+                            }
                         }
                     } else {
                         closeCode = 1005;
                     }
+                    lifecycle.onClientCloseStarted();
+                    closeReceived = true;
                     log.info("Client close: " + closeCode + " " + reason);
                     String closeReason = reason;
                     invokeApplicationEvent(() -> webSocket.onClientClosed(closeCode, closeReason));
