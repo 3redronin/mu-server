@@ -6,6 +6,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.Arguments;
 
+import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -50,7 +51,12 @@ class WebsocketOpcodeTest {
             client.output.flush();
             byte[] close = client.readFrame(8);
             assertEquals(1002, ((close[0] & 255) << 8) | (close[1] & 255));
-            assertEquals(-1, client.input.read(), "Connection must terminate after the protocol error");
+            try {
+                assertEquals(-1, client.input.read(), "Connection must terminate after the protocol error");
+            } catch (SocketException reset) {
+                // Closing with unread client frames can terminate TCP with RST instead of FIN.
+                // The complete 1002 WebSocket close frame was verified above in either case.
+            }
             assertEquals(0, delivered.get());
         }
     }
