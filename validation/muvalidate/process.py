@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import queue
+import re
 import shutil
 import signal
 import subprocess
@@ -38,10 +39,15 @@ def identity(checkout):
 
 def jdk_path(version):
     override = os.environ.get(f"MU_JAVA_{version}")
-    if override: return Path(override).resolve()
-    path = Path.home() / ".local/share/mise/installs/java" / f"temurin-{version}"
-    if path.exists(): return path.resolve()
-    raise RuntimeError(f"Set MU_JAVA_{version} to a JDK {version} installation")
+    path = (Path(override) if override else Path.home() / ".local/share/mise/installs/java" / f"temurin-{version}").resolve()
+    if not (path / "bin/java").is_file():
+        raise RuntimeError(f"Set MU_JAVA_{version} to a JDK {version} installation")
+    output = subprocess.check_output([str(path / "bin/java"), "-version"], stderr=subprocess.STDOUT, text=True, timeout=15)
+    match = re.search(r'version "(?:1\.)?(\d+)', output)
+    if not match or int(match.group(1)) != version:
+        observed = match.group(1) if match else "unrecognized version"
+        raise RuntimeError(f"Expected JDK {version}, found {observed} at {path}: {output.strip()}")
+    return path
 
 def environment(jdk):
     env = os.environ.copy()
@@ -63,7 +69,7 @@ def build(name, checkout, jdk, verify=False):
     directory = TARGET / "build" / name
     directory.mkdir(parents=True, exist_ok=True)
     classpath = Path(checkout) / "target/validation-classpath.txt"
-    command = ["mvn", "--batch-mode", "--no-transfer-progress"]
+    command = ["mvn", "--batch-mode", "--no-transfer-progress", "clean"]
     if name != "mu4": command += ["-Pnetty-4.1"]
     if verify:
         if "21" in str(jdk): command += ["-Pnullaway"]
@@ -74,7 +80,9 @@ def build(name, checkout, jdk, verify=False):
     print(f"Building {name} ({jdk.name})", flush=True)
     run_logged(command, directory / "maven.log", cwd=checkout, env=environment(jdk), timeout=900)
     cp = str(Path(checkout).resolve() / "target/classes") + os.pathsep + classpath.read_text().strip()
-    classes = directory / "classes"; classes.mkdir(exist_ok=True)
+    classes = directory / "classes"
+    if classes.exists(): shutil.rmtree(classes)
+    classes.mkdir()
     adapter = ROOT / "fixture" / ("mu4" if name == "mu4" else "legacy") / "EchoSocket.java"
     run_logged([jdk / "bin/javac", "--release", "11", "-cp", cp, "-d", classes,
                 ROOT / "fixture/Fixture.java", ROOT / "fixture/IndependentClient.java", adapter], directory / "javac.log")

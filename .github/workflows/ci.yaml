@@ -35,6 +35,11 @@ jobs:
     name: Conformance report integrity
     steps:
       - uses: actions/checkout@v4
-      - name: Test independent conformance reporting
+      - uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: temurin
+          cache: maven
+      - name: Test independent conformance reporting and build identity
         working-directory: validation
-        run: python3 -m unittest discover -s tests -p test_independent.py
+        run: MU_JAVA_21="$JAVA_HOME" MU_CONFORMANCE_TEST_CHECKOUT="$GITHUB_WORKSPACE" python3 -m unittest discover -s tests -p 'test_independent*.py'

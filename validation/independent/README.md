@@ -16,7 +16,7 @@ python3 validation/independent/run.py \
   --output /absolute/path/to/new-conformance-results
 ```
 
-Use clean isolated checkouts at explicit commits. `--build` compiles the shared public-API fixture against each server using Java 21 and `--release 11`; Mu3 uses its Netty 4.1 profile. Maven repository verification remains a separate release check. Server sources, fixture sources, class files and dependencies are hashed; stale builds are rejected. Build artifacts default to `validation/target/independent-build`; override with `--build-dir` in both build and replay commands. Do not rebuild fixtures during a campaign.
+Use clean isolated checkouts at explicit commits. `--build` compiles the shared public-API fixture against each server using Java 21 and `--release 11`; Mu3 uses its Netty 4.1 profile. Maven repository verification remains a separate release check. Each build runs Maven clean and clears the fixture output directory, removing artifacts from deleted/renamed sources. Server sources, fixture sources, class files and dependencies are hashed; stale builds are rejected. Configured JDKs are checked against their actual runtime major before labeling results, and complete version strings are recorded. Build artifacts default to `validation/target/independent-build`; override with `--build-dir` in both build and replay commands. Do not rebuild fixtures during a campaign.
 
 Tool setup is the only step that downloads external conformance binaries. h2spec's archive and executable have embedded SHA-256 pins. Autobahn uses the official image `crossbario/autobahn-testsuite@sha256:519915fb568b04c9383f70a1c405ae3ff44ab9e35835b085239c258b6fac3074`. The manifest, configuration and each layer are verified. Installation retains the image metadata and runtime file inventory. The runner verifies the inventory before starting Autobahn.
 
@@ -60,3 +60,12 @@ Run the runner's report-integrity tests from `validation/`:
 ```sh
 python3 -m unittest discover -s tests -p test_independent.py
 ```
+
+The build/runtime identity regressions use a real JDK and Maven rebuild. Run them against an isolated Mu4 checkout (they deliberately seed obsolete generated artifacts and then clean the build):
+
+```sh
+MU_CONFORMANCE_TEST_CHECKOUT=/absolute/path/to/isolated-mu4 \
+  python3 -m unittest discover -s tests -p 'test_independent*.py'
+```
+
+CI runs all nine report/build/runtime regressions. Without `MU_CONFORMANCE_TEST_CHECKOUT`, the destructive-to-generated-output rebuild regression is skipped; the runtime-major test still requires JDK 21.
