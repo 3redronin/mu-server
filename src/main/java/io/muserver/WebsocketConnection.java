@@ -362,9 +362,16 @@ class WebsocketConnection implements MuWebSocketSession {
     private void readAtLeast(int minBytes) throws IOException {
         ByteBuffer readBuffer = java.util.Objects.requireNonNull(buffer);
         InputStream input = java.util.Objects.requireNonNull(inputStream);
+        readAtLeast(readBuffer, input, minBytes);
+    }
+
+    static void readAtLeast(ByteBuffer readBuffer, InputStream input, int minBytes) throws IOException {
         if (minBytes > readBuffer.capacity()) throw new IllegalArgumentException("This buffer is not big enough");
         while (readBuffer.remaining() < minBytes) {
-            if (readBuffer.capacity() - readBuffer.limit() < minBytes) {
+            // Only make room for bytes still missing. Comparing with the total minimum
+            // repeatedly compacts a growing, already-buffered text prefix on short reads.
+            int missing = minBytes - readBuffer.remaining();
+            if (readBuffer.capacity() - readBuffer.limit() < missing) {
                 readBuffer.compact().flip();
             }
             int read = input.read(readBuffer.array(), readBuffer.arrayOffset() + readBuffer.limit(),
