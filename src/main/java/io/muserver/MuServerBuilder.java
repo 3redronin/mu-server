@@ -140,10 +140,10 @@ public class MuServerBuilder {
     /**
      * Sets the HTTPS config. Defaults to {@link HttpsConfigBuilder#unsignedLocalhost()}}
      *
-     * @param httpsConfig An HTTPS Config builder.
+     * @param httpsConfig An HTTPS Config builder, or null to use the default.
      * @return The current Mu Server Builder
      */
-    public MuServerBuilder withHttpsConfig(HttpsConfigBuilder httpsConfig) {
+    public MuServerBuilder withHttpsConfig(@Nullable HttpsConfigBuilder httpsConfig) {
         this.sslContextBuilder = httpsConfig;
         return this;
     }
@@ -164,11 +164,11 @@ public class MuServerBuilder {
     /**
      * Sets the configuration for HTTP2
      *
-     * @param http2Config A config
+     * @param http2Config A config, or null to disable HTTP/2.
      * @return The current Mu Server builder
      * @see Http2ConfigBuilder
      */
-    public MuServerBuilder withHttp2Config(Http2Config http2Config) {
+    public MuServerBuilder withHttp2Config(@Nullable Http2Config http2Config) {
         this.http2Config = http2Config;
         return this;
     }
@@ -188,10 +188,10 @@ public class MuServerBuilder {
      * Sets the thread executor service to run requests on. By default {@link Executors#newCachedThreadPool()}
      * is used.
      *
-     * @param executor The executor service to use to handle requests
+     * @param executor The executor service to use to handle requests, or null to use the default.
      * @return The current Mu Server builder
      */
-    public MuServerBuilder withHandlerExecutor(ExecutorService executor) {
+    public MuServerBuilder withHandlerExecutor(@Nullable ExecutorService executor) {
         this.executor = executor;
         return this;
     }
@@ -403,10 +403,13 @@ public class MuServerBuilder {
      * For example, you may allow 100 requests per second based on IP address and
      * also a limit based on a cookie, request path, or other value.</p>
      *
-     * @param selector A function that returns a string based on the request, or null to not have a limit applied
+     * @param selector A function that selects a rate limit based on the request, or null to add nothing.
      * @return This builder
      */
-    public MuServerBuilder withRateLimiter(RateLimitSelector selector) {
+    public MuServerBuilder withRateLimiter(@Nullable RateLimitSelector selector) {
+        if (selector == null) {
+            return this;
+        }
         if (wheelTimer == null) {
             wheelTimer = new HashedWheelTimer(new DefaultThreadFactory("mu-limit-timer"));
             wheelTimer.start();
@@ -437,10 +440,11 @@ public class MuServerBuilder {
      * })
      * </code></pre>
      *
-     * @param exceptionHandler The handler to be called when an unhandled exception is encountered
+     * @param exceptionHandler The handler to be called when an unhandled exception is encountered,
+     *                         or null to use the default handling.
      * @return This builder
      */
-    public MuServerBuilder withExceptionHandler(UnhandledExceptionHandler exceptionHandler) {
+    public MuServerBuilder withExceptionHandler(@Nullable UnhandledExceptionHandler exceptionHandler) {
         this.unhandledExceptionHandler = exceptionHandler;
         return this;
     }

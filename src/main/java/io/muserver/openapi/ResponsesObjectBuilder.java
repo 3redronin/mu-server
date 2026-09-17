@@ -35,7 +35,8 @@ public class ResponsesObjectBuilder {
     }
 
     /**
-     * @param httpStatusCodes To define a range of response codes, this field MAY contain the uppercase wildcard character
+     * @param httpStatusCodes The response codes, or null to clear them. To define a range of response codes,
+     *                        this field MAY contain the uppercase wildcard character
      *                        <code>X</code>. For example, <code>2XX</code> represents all response codes between
      *                        <code>[200-299]</code>. The following range definitions are allowed: <code>1XX</code>,
      *                        <code>2XX</code>, <code>3XX</code>, <code>4XX</code>, and <code>5XX</code>. If a response
@@ -43,7 +44,7 @@ public class ResponsesObjectBuilder {
      *                        the range definition for that code.
      * @return The current builder
      */
-    public ResponsesObjectBuilder withHttpStatusCodes(Map<String, ResponseObject> httpStatusCodes) {
+    public ResponsesObjectBuilder withHttpStatusCodes(@Nullable Map<String, ResponseObject> httpStatusCodes) {
         this.httpStatusCodes = httpStatusCodes;
         return this;
     }
@@ -67,7 +68,7 @@ public class ResponsesObjectBuilder {
     /**
      * Creates a new build by merging two exising responses
      * @param primary A responses object to use. This is the dominant response who's values will
-     *                 be preferred when values cannot be merged (such as {@link ResponseObject#description}
+     *                 be preferred when values cannot be merged (such as {@link ResponseObject#description()}
      * @param secondary The other responses object
      * @return A builder that is the merged value of the two given ones
      */

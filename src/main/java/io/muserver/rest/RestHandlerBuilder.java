@@ -224,10 +224,10 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * <p>The primary use of this is to allow querystring parameters such as <code>/path?value=one,two,three</code> to be interpreted
      * as a list of three values rather than a single string. This only applies to parameters that are collections.</p>
      * <p>The default is {@link CollectionParameterStrategy#NO_TRANSFORM} which is the JAX-RS standard.</p>
-     * @param collectionParameterStrategy The strategy to use
+     * @param collectionParameterStrategy The strategy to use, or null to use the default.
      * @return This builder
      */
-    public RestHandlerBuilder withCollectionParameterStrategy(CollectionParameterStrategy collectionParameterStrategy) {
+    public RestHandlerBuilder withCollectionParameterStrategy(@Nullable CollectionParameterStrategy collectionParameterStrategy) {
         this.collectionParameterStrategy = collectionParameterStrategy;
         return this;
     }
@@ -273,13 +273,14 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * the Open API specification of your rest service at <code>/openapi.json</code> or view the HTML at
      * <code>/api.html</code></p>
      *
-     * @param openAPIObject An API Object builder with the {@link OpenAPIObjectBuilder#withInfo(InfoObject)} set.
+     * @param openAPIObject An API Object builder with the {@link OpenAPIObjectBuilder#withInfo(InfoObject)} set,
+     *                      or null to use a default object.
      * @return The current Rest Handler Builder
      * @see OpenAPIObjectBuilder#openAPIObject()
      * @see #withOpenApiJsonUrl(String)
      * @see #withOpenApiHtmlUrl(String)
      */
-    public RestHandlerBuilder withOpenApiDocument(OpenAPIObjectBuilder openAPIObject) {
+    public RestHandlerBuilder withOpenApiDocument(@Nullable OpenAPIObjectBuilder openAPIObject) {
         this.openAPIObject = openAPIObject;
         return this;
     }

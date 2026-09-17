@@ -50,10 +50,11 @@ public class RateLimitBuilder {
 
     /**
      * Sets the bucket that the limit applies to.
-     * @param name The bucket, for example when limiting by IP address this would be an IP address.
+     * @param name The bucket, for example when limiting by IP address this would be an IP address,
+     *             or null to not apply this rate limit.
      * @return This builder.
      */
-    public RateLimitBuilder withBucket(String name) {
+    public RateLimitBuilder withBucket(@Nullable String name) {
         this.bucket = name;
         return this;
     }
