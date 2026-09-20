@@ -176,7 +176,7 @@ public class MuServerBuilder {
     /**
      * Sets the HTTP/2 configuration for this server.
      *
-     * @param http2Config The HTTP/2 configuration to use.
+     * @param http2Config The HTTP/2 configuration to use, or null to disable HTTP/2.
      * @return The current Mu Server builder
      * @see Http2ConfigBuilder
      */
@@ -455,10 +455,13 @@ public class MuServerBuilder {
      * For example, you may allow 100 requests per second based on IP address and
      * also a limit based on a cookie, request path, or other value.</p>
      *
-     * @param selector A function that returns a string based on the request, or null to not have a limit applied
+     * @param selector A function that selects a rate limit based on the request, or null to add nothing.
      * @return This builder
      */
-    public MuServerBuilder withRateLimiter(RateLimitSelector selector) {
+    public MuServerBuilder withRateLimiter(@Nullable RateLimitSelector selector) {
+        if (selector == null) {
+            return this;
+        }
         if (rateLimiters == null) {
             rateLimiters = new ArrayList<>();
         }
@@ -480,7 +483,8 @@ public class MuServerBuilder {
      *     return true;
      * })
      * </code></pre>
-     * @param exceptionHandler The handler to be called when an unhandled exception is encountered
+     * @param exceptionHandler The handler to be called when an unhandled exception is encountered,
+     *                         or null to use the default handling.
      * @return This builder
      */
     public MuServerBuilder withExceptionHandler(@Nullable UnhandledExceptionHandler exceptionHandler) {

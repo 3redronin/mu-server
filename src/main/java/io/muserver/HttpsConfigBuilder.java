@@ -100,10 +100,10 @@ public class HttpsConfigBuilder {
 
     /**
      * The pre-built SSL Context to use.
-     * @param sslContext an SSL context
+     * @param sslContext An SSL context, or null to clear a previously configured context.
      * @return This builder
      */
-    public HttpsConfigBuilder withSSLContext(SSLContext sslContext) {
+    public HttpsConfigBuilder withSSLContext(@Nullable SSLContext sslContext) {
         keyManagerFactory = null;
         this.sslContext = sslContext;
         return this;
