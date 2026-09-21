@@ -26,7 +26,8 @@ class Http2CancellationIsolationTest {
         AtomicInteger callbacks = new AtomicInteger();
         AtomicInteger completions = new AtomicInteger();
         try (MuServer server = httpsServerForTest(tls ? "h2" : "http")
-            .withInterface("127.0.0.1")
+            // Match H2Client's loopback hostname under either IPv4 or IPv6 preference.
+            .withInterface("localhost")
             .withHttp2Config(Http2ConfigBuilder.http2Enabled().withMaxConcurrentStreams(2))
             .withGzipEnabled(false)
             .addResponseCompleteListener(info -> {
