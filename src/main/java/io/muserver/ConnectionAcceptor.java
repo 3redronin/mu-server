@@ -81,12 +81,29 @@ class ConnectionAcceptor {
         }
     }
 
+    /**
+     * Counts TCP sockets accepted by this listener that are still tracked for connection setup.
+     * Includes sockets waiting for an executor, reading a PROXY preamble, negotiating TLS,
+     * or identifying the HTTP protocol. A socket leaves this count when it is promoted to
+     * an active HTTP connection or retired after rejection, failure, timeout or shutdown.
+     * Does not include sockets still in the operating system's accept backlog.
+     *
+     * @return the current number of tracked setup sockets, read under the lifecycle lock
+     */
     int pendingAcceptedSocketCount() {
         lifecycleLock.lock();
         try { return acceptedSockets.size(); }
         finally { lifecycleLock.unlock(); }
     }
 
+    /**
+     * Counts accepted sockets whose required PROXY preamble has not yet been accepted or rejected.
+     * Includes queued work as well as reads in progress. This is a subset of the pending
+     * accepted sockets; successful preamble completion removes it before TLS/HTTP setup continues.
+     * Rejection, timeout and shutdown also remove it. Always zero when PROXY is disabled.
+     *
+     * @return the current number of pending PROXY preambles, read under the lifecycle lock
+     */
     int pendingPreambleCount() {
         lifecycleLock.lock();
         try { return pendingPreambles.size(); }

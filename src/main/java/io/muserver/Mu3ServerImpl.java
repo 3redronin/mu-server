@@ -290,12 +290,30 @@ class Mu3ServerImpl implements MuServer {
         return statsImpl;
     }
 
+    /**
+     * Counts accepted TCP sockets still awaiting connection setup across all server listeners.
+     * Includes queued work, PROXY reads, TLS handshakes and HTTP protocol detection, but excludes
+     * active HTTP connections and sockets not yet accepted from the operating system.
+     * Each listener is sampled under its own lock; the sum is not an atomic server-wide snapshot.
+     *
+     * @return the sum of {@link ConnectionAcceptor#pendingAcceptedSocketCount()} across listeners
+     */
     int pendingAcceptedSocketCount() {
         int count = 0;
         for (ConnectionAcceptor acceptor : acceptors) count += acceptor.pendingAcceptedSocketCount();
         return count;
     }
 
+    /**
+     * Counts accepted sockets awaiting a required PROXY preamble across all server listeners.
+     * Includes queued and in-progress preambles, but excludes completed or rejected preambles
+     * and subsequent TLS/HTTP setup. These sockets are also included in the pending accepted
+     * socket count. Each listener is sampled under its own lock, so separately obtained counts
+     * need not describe the same instant.
+     *
+     * @return the sum of {@link ConnectionAcceptor#pendingPreambleCount()} across listeners;
+     *         zero when PROXY is disabled
+     */
     int pendingPreambleCount() {
         int count = 0;
         for (ConnectionAcceptor acceptor : acceptors) count += acceptor.pendingPreambleCount();
