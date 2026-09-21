@@ -9,9 +9,7 @@ import javax.net.ssl.SSLSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.nio.charset.StandardCharsets;
-import java.util.Collection;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.RejectedExecutionException;
@@ -20,7 +18,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.*;
@@ -130,20 +127,9 @@ class ConnectionRejectionTest {
         }
     }
 
-    static void assertNoPendingSockets(MuServer server) throws Exception {
-        var acceptors = Mu3ServerImpl.class.getDeclaredField("acceptors");
-        acceptors.setAccessible(true);
-        for (Object acceptor : (List<?>) acceptors.get(server)) {
-            var lockField = ConnectionAcceptor.class.getDeclaredField("lifecycleLock");
-            var acceptedField = ConnectionAcceptor.class.getDeclaredField("acceptedSockets");
-            var pendingField = ConnectionAcceptor.class.getDeclaredField("pendingPreambles");
-            lockField.setAccessible(true); acceptedField.setAccessible(true); pendingField.setAccessible(true);
-            ReentrantLock lock = (ReentrantLock) lockField.get(acceptor);
-            lock.lock();
-            try {
-                assertTrue(((Collection<?>) acceptedField.get(acceptor)).isEmpty());
-                assertTrue(((Map<?, ?>) pendingField.get(acceptor)).isEmpty());
-            } finally { lock.unlock(); }
-        }
+    static void assertNoPendingSockets(MuServer server) {
+        Mu3ServerImpl implementation = (Mu3ServerImpl) server;
+        assertEquals(0, implementation.pendingAcceptedSocketCount());
+        assertEquals(0, implementation.pendingPreambleCount());
     }
 }

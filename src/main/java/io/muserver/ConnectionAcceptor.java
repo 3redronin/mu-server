@@ -81,6 +81,18 @@ class ConnectionAcceptor {
         }
     }
 
+    int pendingAcceptedSocketCount() {
+        lifecycleLock.lock();
+        try { return acceptedSockets.size(); }
+        finally { lifecycleLock.unlock(); }
+    }
+
+    int pendingPreambleCount() {
+        lifecycleLock.lock();
+        try { return pendingPreambles.size(); }
+        finally { lifecycleLock.unlock(); }
+    }
+
     private volatile State state = State.NOT_STARTED;
     private static final long FALLBACK_SHUTDOWN_TIMEOUT_MILLIS = 20_000;
     private volatile long gracefulShutdownDeadlineNanos = Long.MAX_VALUE;

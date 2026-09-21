@@ -290,6 +290,18 @@ class Mu3ServerImpl implements MuServer {
         return statsImpl;
     }
 
+    int pendingAcceptedSocketCount() {
+        int count = 0;
+        for (ConnectionAcceptor acceptor : acceptors) count += acceptor.pendingAcceptedSocketCount();
+        return count;
+    }
+
+    int pendingPreambleCount() {
+        int count = 0;
+        for (ConnectionAcceptor acceptor : acceptors) count += acceptor.pendingPreambleCount();
+        return count;
+    }
+
     @Override
     public Set<HttpConnection> activeConnections() {
 
