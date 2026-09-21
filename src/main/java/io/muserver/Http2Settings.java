@@ -94,11 +94,11 @@ class Http2Settings implements LogicalHttp2Frame {
                 // header
                 0, 0, 5 * 6, 4, 0, 0, 0, 0, 0,
                 // setting list: 2 byte identifier followed by 4 byte unsigned int value
-                0, 1, (byte)((headerTableSize >> 16) & 0xFF), (byte)((headerTableSize >> 24) & 0xFF), (byte)((headerTableSize >> 8) & 0xFF), (byte)(headerTableSize & 0xFF),
-                0, 3, (byte)((maxConcurrentStreams >> 16) & 0xFF), (byte)((maxConcurrentStreams >> 24) & 0xFF), (byte)((maxConcurrentStreams >> 8) & 0xFF), (byte)(maxConcurrentStreams & 0xFF),
-                0, 4, (byte)((initialWindowSize >> 16) & 0xFF), (byte)((initialWindowSize >> 24) & 0xFF), (byte)((initialWindowSize >> 8) & 0xFF), (byte)(initialWindowSize & 0xFF),
-                0, 5, (byte)((maxFrameSize >> 16) & 0xFF), (byte)((maxFrameSize >> 24) & 0xFF), (byte)((maxFrameSize >> 8) & 0xFF), (byte)(maxFrameSize & 0xFF),
-                0, 6, (byte)((maxHeaderListSize >> 16) & 0xFF), (byte)((maxHeaderListSize >> 24) & 0xFF), (byte)((maxHeaderListSize >> 8) & 0xFF), (byte)(maxHeaderListSize & 0xFF)
+                0, 1, (byte)((headerTableSize >> 24) & 0xFF), (byte)((headerTableSize >> 16) & 0xFF), (byte)((headerTableSize >> 8) & 0xFF), (byte)(headerTableSize & 0xFF),
+                0, 3, (byte)((maxConcurrentStreams >> 24) & 0xFF), (byte)((maxConcurrentStreams >> 16) & 0xFF), (byte)((maxConcurrentStreams >> 8) & 0xFF), (byte)(maxConcurrentStreams & 0xFF),
+                0, 4, (byte)((initialWindowSize >> 24) & 0xFF), (byte)((initialWindowSize >> 16) & 0xFF), (byte)((initialWindowSize >> 8) & 0xFF), (byte)(initialWindowSize & 0xFF),
+                0, 5, (byte)((maxFrameSize >> 24) & 0xFF), (byte)((maxFrameSize >> 16) & 0xFF), (byte)((maxFrameSize >> 8) & 0xFF), (byte)(maxFrameSize & 0xFF),
+                0, 6, (byte)((maxHeaderListSize >> 24) & 0xFF), (byte)((maxHeaderListSize >> 16) & 0xFF), (byte)((maxHeaderListSize >> 8) & 0xFF), (byte)(maxHeaderListSize & 0xFF)
             });
 
         }
