@@ -4,8 +4,7 @@ Mu4 accepts HAProxy PROXY protocol v1 and v2 when explicitly enabled:
 
 ```java
 MuServer server = MuServerBuilder.httpsServer()
-    .withHAProxyProtocolEnabled(true)
-    .withHAProxyProtocolTimeout(10, TimeUnit.SECONDS)
+    .withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config())
     .addHandler((request, response) -> {
         ProxiedConnectionInfo info = request.connection().proxyInfo().orElseThrow();
         response.write(String.valueOf(info.sourceAddress()));
@@ -19,6 +18,30 @@ provide a proxy allowlist. Every connection to an enabled listener must carry on
 preamble, before TLS or HTTP. Health checks must send one too. Enable HAProxy's
 `send-proxy` or `send-proxy-v2` on the backend server line. TLS passthrough leaves
 the TLS handshake after that preamble. The feature is disabled by default.
+
+A server builder defaults to a null PROXY configuration (disabled). A new
+`HAProxyProtocolConfigBuilder.config()` is enabled with V1 and V2, a ten-second
+overall timeout and a 65,535-byte v2 payload limit. To customize it:
+
+```java
+.withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config()
+    .withSupportedVersions(List.of(HAProxyProtocolVersion.V2))
+    .withTimeout(5, TimeUnit.SECONDS)
+    .withMaxV2PayloadSize(4096))
+```
+
+The v2 limit counts addresses and TLVs, excluding the fixed 16-byte header, and
+applies to LOCAL and UNSPEC too. A limit from 0 through 65,535 is allowed;
+oversized payloads are rejected immediately after reading the fixed header.
+Version collections must be nonempty and contain no nulls. Configs are immutable;
+`toBuilder()` creates an independent builder. `withEnabled(false)` disables
+processing. Passing a null config or null config builder clears the setting and
+disables processing; cast a literal null to the desired overload's type.
+
+The legacy `withHAProxyProtocolEnabled(boolean)` and `haProxyProtocolEnabled()`
+are deprecated. Passing true replaces any custom config with the defaults above;
+false clears it. Move timeout configuration to the config builder's
+`withTimeout(long, TimeUnit)`; its getter is `timeoutMillis()`.
 
 `HttpConnection.proxyInfo()` describes the entire connection. All keep-alive
 requests, pipelined requests, HTTP/2 streams and a WebSocket upgrade share this

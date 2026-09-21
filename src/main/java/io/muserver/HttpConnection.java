@@ -142,7 +142,7 @@ public interface HttpConnection {
 
     /**
      * Gets the endpoint metadata supplied by a trusted proxy.
-     * @return metadata when {@link MuServerBuilder#withHAProxyProtocolEnabled(boolean)} is enabled,
+     * @return metadata when {@link MuServerBuilder#withHAProxyProtocolConfig(HAProxyProtocolConfig)} is enabled,
      * or an empty optional otherwise
      */
     default Optional<ProxiedConnectionInfo> proxyInfo() { return Optional.empty(); }

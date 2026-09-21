@@ -32,6 +32,7 @@ class ConnectionAcceptor {
     private static final int ACCEPT_BACKLOG = 50;
 
     private final Mu3ServerImpl server;
+    private final @Nullable HAProxyProtocolConfig proxyConfig;
     private final ServerSocket socketServer;
     private final InetSocketAddress address;
     private final URI uri;
@@ -97,6 +98,8 @@ class ConnectionAcceptor {
                        ExecutorService http2WriterExecutor,
                        List<ContentEncoder> contentEncoders) {
         this.server = server;
+        HAProxyProtocolConfig config = server.haProxyProtocolConfig;
+        this.proxyConfig = config != null && config.enabled() ? config : null;
         this.socketServer = socketServer;
         this.address = address;
         this.uri = uri;
@@ -117,7 +120,7 @@ class ConnectionAcceptor {
         while (state == State.STARTED) {
             try {
                 Socket clientSocket = socketServer.accept();
-                long proxyDeadline = MonotonicTime.deadlineAfterMillis(server.haProxyProtocolTimeoutMillis);
+                long proxyDeadline = MonotonicTime.deadlineAfterMillis(proxyConfig == null ? 0 : proxyConfig.timeoutMillis());
                 clientSocket.setTcpNoDelay(true);
                 if (!registerAcceptedSocket(clientSocket, proxyDeadline)) {
                     closeQuietly(clientSocket);
@@ -168,7 +171,7 @@ class ConnectionAcceptor {
                 return false;
             }
             acceptedSockets.add(socket);
-            if (server.haProxyProtocolEnabled) pendingPreambles.put(socket, proxyDeadline);
+            if (proxyConfig != null) pendingPreambles.put(socket, proxyDeadline);
             return true;
         } finally {
             lifecycleLock.unlock();
@@ -335,14 +338,14 @@ class ConnectionAcceptor {
         HttpVersion httpVersion = HttpVersion.HTTP_1_1;
 
         ProxiedConnectionInfo proxyInfo = null;
-        if (server.haProxyProtocolEnabled) {
+        if (proxyConfig != null) {
             try {
                 Long deadline;
                 lifecycleLock.lock();
                 try { deadline = pendingPreambles.get(socket); }
                 finally { lifecycleLock.unlock(); }
                 if (deadline == null) return;
-                proxyInfo = ProxyProtocol.read(socket, deadline);
+                proxyInfo = ProxyProtocol.read(socket, deadline, proxyConfig);
                 lifecycleLock.lock();
                 try {
                     if (pendingPreambles.remove(socket) == null) return;
@@ -559,7 +562,7 @@ class ConnectionAcceptor {
         }
         acceptorThread.setDaemon(false);
         try {
-            if (server.haProxyProtocolEnabled) {
+            if (proxyConfig != null) {
                 preambleTimeoutTask = server.schedulePreambleExpiry(this::expirePreambles);
             }
             if (server.idleTimeoutMillis() > 0) {

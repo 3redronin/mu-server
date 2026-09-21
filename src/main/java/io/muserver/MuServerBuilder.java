@@ -47,8 +47,7 @@ public class MuServerBuilder {
     @Nullable List<RateLimiterImpl> rateLimiters;
     private @Nullable UnhandledExceptionHandler unhandledExceptionHandler;
     private boolean autoHandleExpectContinue = true;
-    private boolean haProxyProtocolEnabled;
-    private long haProxyProtocolTimeoutMillis = 10_000;
+    private @Nullable HAProxyProtocolConfig haProxyProtocolConfig;
     private @Nullable List<ContentEncoder> contentEncoders = null;
     private @Nullable Path tempDirectory;
 
@@ -59,44 +58,53 @@ public class MuServerBuilder {
     }
 
     /**
-     * Requires a PROXY protocol v1 or v2 header before HTTP or TLS on every connection.
-     * Enable this only on listeners reachable exclusively by trusted proxies.
-     * @param enabled whether to require the PROXY preamble; defaults to false
+     * Sets PROXY protocol listener settings. The default is null (disabled).
+     * Enable only on listeners restricted to trusted proxies.
+     * @param config the configuration, or null to disable PROXY protocol
      * @return this builder
      */
-    public MuServerBuilder withHAProxyProtocolEnabled(boolean enabled) {
-        haProxyProtocolEnabled = enabled;
+    public MuServerBuilder withHAProxyProtocolConfig(@Nullable HAProxyProtocolConfig config) {
+        this.haProxyProtocolConfig = config;
         return this;
     }
-
-    /** Gets whether PROXY protocol is required.
-     * @return whether connections require a PROXY protocol preamble */
-    public boolean haProxyProtocolEnabled() { return haProxyProtocolEnabled; }
 
     /**
-     * Sets the overall PROXY preamble timeout, measured from socket acceptance,
-     * including executor queue time. Independent of HTTP idle timeouts.
-     * @param duration a positive duration of at least one millisecond
-     * @param unit the duration unit
+     * Sets PROXY protocol settings from a builder. The server default is null (disabled);
+     * a new config builder enables both versions with a ten-second timeout and a 65,535-byte v2 payload limit.
+     * @param config the builder, or null to clear the configuration and disable PROXY protocol
      * @return this builder
-     * @throws IllegalArgumentException if below one millisecond or overflowing nanoseconds
      */
-    public MuServerBuilder withHAProxyProtocolTimeout(long duration, TimeUnit unit) {
-        java.util.Objects.requireNonNull(unit, "unit");
-        long millis = unit.toMillis(duration);
-        java.math.BigInteger nanos = java.math.BigInteger.valueOf(duration)
-            .multiply(java.math.BigInteger.valueOf(unit.toNanos(1)));
-        if (duration <= 0 || millis < 1 || nanos.compareTo(java.math.BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
-            throw new IllegalArgumentException("PROXY timeout must be at least one millisecond and fit in nanoseconds");
-        }
-        haProxyProtocolTimeoutMillis = millis;
-        return this;
+    public MuServerBuilder withHAProxyProtocolConfig(@Nullable HAProxyProtocolConfigBuilder config) {
+        return withHAProxyProtocolConfig(config == null ? null : config.build());
     }
 
-    /** Gets the overall PROXY preamble timeout.
-     * @return the timeout in milliseconds (default 10000) */
-    public long haProxyProtocolTimeoutMillis() { return haProxyProtocolTimeoutMillis; }
+    /**
+     * Gets the configured PROXY protocol settings.
+     * @return the PROXY configuration, or null (the default) when not configured
+     */
+    public @Nullable HAProxyProtocolConfig haProxyProtocolConfig() { return haProxyProtocolConfig; }
 
+    /**
+     * Enables PROXY with default settings or clears the configuration.
+     * @param enabled true to replace any existing settings with enabled V1/V2, a ten-second timeout
+     *                and a 65,535-byte v2 payload limit; false to clear the config (the server default)
+     * @return this builder
+     * @deprecated Use {@link #withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder)}.
+     */
+    @Deprecated
+    public MuServerBuilder withHAProxyProtocolEnabled(boolean enabled) {
+        return withHAProxyProtocolConfig(enabled ? HAProxyProtocolConfigBuilder.config().build() : null);
+    }
+
+    /**
+     * Gets whether PROXY processing is enabled.
+     * @return whether the configured PROXY protocol is enabled; default false
+     * @deprecated Use {@link #haProxyProtocolConfig()} and {@link HAProxyProtocolConfig#enabled()}.
+     */
+    @Deprecated
+    public boolean haProxyProtocolEnabled() {
+        return haProxyProtocolConfig != null && haProxyProtocolConfig.enabled();
+    }
 
     /**
      * Sets the HTTP port to listen on.

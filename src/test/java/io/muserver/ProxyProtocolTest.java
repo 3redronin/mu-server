@@ -97,8 +97,7 @@ class ProxyProtocolTest {
                 };
             }
         };
-        long timeout = MuServerBuilder.httpServer()
-            .withHAProxyProtocolTimeout(30, TimeUnit.DAYS).haProxyProtocolTimeoutMillis();
+        long timeout = HAProxyProtocolConfigBuilder.config().withTimeout(30, TimeUnit.DAYS).timeoutMillis();
         assertEquals("192.0.2.1", ProxyProtocol.read(socket, MonotonicTime.deadlineAfterMillis(timeout)).sourceAddress());
         assertEquals(2, timeouts[0]);
         assertEquals(713, socket.getSoTimeout());
@@ -172,14 +171,14 @@ class ProxyProtocolTest {
     }
 
     @Test void timeoutConfigurationIsIndependentAndBounded() {
-        MuServerBuilder builder = MuServerBuilder.httpServer();
-        assertFalse(builder.haProxyProtocolEnabled());
-        assertEquals(10000, builder.haProxyProtocolTimeoutMillis());
+        HAProxyProtocolConfigBuilder builder = HAProxyProtocolConfigBuilder.config();
+        assertTrue(builder.enabled());
+        assertEquals(10000, builder.timeoutMillis());
         for (long value : new long[]{-1, 0, Long.MAX_VALUE}) {
-            assertThrows(IllegalArgumentException.class, () -> builder.withHAProxyProtocolTimeout(value, TimeUnit.SECONDS));
+            assertThrows(IllegalArgumentException.class, () -> builder.withTimeout(value, TimeUnit.SECONDS));
         }
-        assertThrows(IllegalArgumentException.class, () -> builder.withHAProxyProtocolTimeout(999, TimeUnit.MICROSECONDS));
-        assertEquals(1, builder.withHAProxyProtocolTimeout(1000, TimeUnit.MICROSECONDS).haProxyProtocolTimeoutMillis());
+        assertThrows(IllegalArgumentException.class, () -> builder.withTimeout(999, TimeUnit.MICROSECONDS));
+        assertEquals(1, builder.withTimeout(1000, TimeUnit.MICROSECONDS).timeoutMillis());
     }
 
     @Test void queuedPreambleExpiresEvenWhenInternalExecutorAndHttpTimeoutsAreDisabled() throws Exception {
@@ -190,7 +189,7 @@ class ProxyProtocolTest {
         assertTrue(running.await(3, TimeUnit.SECONDS));
         try (MuServer server = TestExecutionResources.configure(MuServerBuilder.httpServer(), null, null, executor, null)
             .withIdleTimeout(0, TimeUnit.SECONDS).withRequestTimeout(0, TimeUnit.SECONDS)
-            .withHAProxyProtocolEnabled(true).withHAProxyProtocolTimeout(100, TimeUnit.MILLISECONDS).start();
+            .withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config().withTimeout(100, TimeUnit.MILLISECONDS)).start();
              Socket socket = new Socket("localhost", server.uri().getPort())) {
             socket.setSoTimeout(3000);
             assertEquals(-1, socket.getInputStream().read());
@@ -202,7 +201,7 @@ class ProxyProtocolTest {
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newSingleThreadExecutor();
         executor.shutdown();
         try (MuServer server = TestExecutionResources.configure(MuServerBuilder.httpServer(), executor, null, null, null)
-            .withHAProxyProtocolEnabled(true).start()) {
+            .withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config()).start()) {
             for (int i = 0; i < 3; i++) {
                 try (Socket socket = new Socket("localhost", server.uri().getPort())) {
                     socket.setSoTimeout(1000);
@@ -314,7 +313,7 @@ class ProxyProtocolTest {
     void h2StreamsShareConnectionMetadata(int version, boolean tls) throws Exception {
         MuServerBuilder builder = tls ? MuServerBuilder.httpsServer() : MuServerBuilder.httpServer();
         java.util.concurrent.atomic.AtomicReference<ProxiedConnectionInfo> seen = new java.util.concurrent.atomic.AtomicReference<>();
-        try (MuServer server = builder.withHAProxyProtocolEnabled(true)
+        try (MuServer server = builder.withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config())
             .withHttp2Config(Http2ConfigBuilder.http2EnabledIfAvailable())
             .addHandler((req, resp) -> {
                 ProxiedConnectionInfo info = req.connection().proxyInfo().orElseThrow();
@@ -350,7 +349,7 @@ class ProxyProtocolTest {
     }
 
     @Test void clientCertificateComesFromTlsAfterPreamble() throws Exception {
-        try (MuServer server = MuServerBuilder.httpsServer().withHAProxyProtocolEnabled(true)
+        try (MuServer server = MuServerBuilder.httpsServer().withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config())
             .withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost()
                 .withClientCertificateTrustManager(veryTrustingTrustManager)
                 .withClientCertificateAuthentication(ClientCertificateAuthentication.MANDATORY))
@@ -372,7 +371,7 @@ class ProxyProtocolTest {
     }
 
     @Test void webSocketUpgradeReceivesMetadata() throws Exception {
-        try (MuServer server = MuServerBuilder.httpServer().withHAProxyProtocolEnabled(true)
+        try (MuServer server = MuServerBuilder.httpServer().withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config())
             .addHandler(WebSocketHandlerBuilder.webSocketHandler().withWebSocketFactory((req, headers) -> {
                 headers.set("Proxy-Source", req.connection().proxyInfo().orElseThrow().sourceAddress());
                 return new BaseWebSocket() {};
@@ -392,7 +391,7 @@ class ProxyProtocolTest {
 
     @Test void metadataIsIsolatedBetweenConnectionsAndDisabledByDefault() throws Exception {
         for (boolean enabled : new boolean[]{false, true}) {
-            try (MuServer server = MuServerBuilder.httpServer().withHAProxyProtocolEnabled(enabled)
+            try (MuServer server = MuServerBuilder.httpServer().withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config().withEnabled(enabled))
                 .addHandler((req, resp) -> { resp.write(req.connection().proxyInfo().map(ProxiedConnectionInfo::sourceAddress).orElse("none")); return true; }).start()) {
                 for (int i = 1; i <= 2; i++) {
                     try (Socket socket = new Socket("localhost", server.uri().getPort())) {
@@ -420,8 +419,7 @@ class ProxyProtocolTest {
             }
         };
         try (MuServer server = TestExecutionResources.configure(MuServerBuilder.httpServer(), null, null, null, timer)
-            .withIdleTimeout(0, TimeUnit.SECONDS).withHAProxyProtocolEnabled(true)
-            .withHAProxyProtocolTimeout(200, TimeUnit.MILLISECONDS)
+            .withIdleTimeout(0, TimeUnit.SECONDS).withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config().withTimeout(200, TimeUnit.MILLISECONDS))
             .addHandler((req, resp) -> { resp.write("ok"); return true; }).start();
              Socket socket = new Socket("localhost", server.uri().getPort())) {
             socket.setSoTimeout(3000); socket.getOutputStream().write(preamble(1));
@@ -467,7 +465,7 @@ class ProxyProtocolTest {
     @ParameterizedTest @CsvSource({"1,false", "2,false", "1,true", "2,true"})
     void preamblePrecedesHttpOrTlsAndMetadataSurvivesReuse(int version, boolean tls) throws Exception {
         MuServerBuilder builder = tls ? MuServerBuilder.httpsServer() : MuServerBuilder.httpServer();
-        try (MuServer server = builder.withHAProxyProtocolEnabled(true)
+        try (MuServer server = builder.withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config())
             .addHandler((req, resp) -> {
                 ProxiedConnectionInfo info = req.connection().proxyInfo().orElseThrow();
                 assertEquals("192.0.2.1", info.sourceAddress());
@@ -542,7 +540,7 @@ class ProxyProtocolTest {
 
     @Test void enabledListenerRejectsOrdinaryHttpBeforeDispatch() throws Exception {
         java.util.concurrent.atomic.AtomicBoolean handled = new java.util.concurrent.atomic.AtomicBoolean();
-        try (MuServer server = MuServerBuilder.httpServer().withHAProxyProtocolEnabled(true)
+        try (MuServer server = MuServerBuilder.httpServer().withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config())
             .addHandler((req, resp) -> { handled.set(true); return true; }).start();
              Socket socket = new Socket("localhost", server.uri().getPort())) {
             socket.setSoTimeout(3000);
@@ -553,7 +551,7 @@ class ProxyProtocolTest {
     }
 
     @Test void shutdownClosesPendingPreambleReads() throws Exception {
-        MuServer server = MuServerBuilder.httpServer().withHAProxyProtocolEnabled(true).start();
+        MuServer server = MuServerBuilder.httpServer().withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config()).start();
         try (Socket socket = new Socket("localhost", server.uri().getPort())) {
             socket.setSoTimeout(3000); socket.getOutputStream().write('P');
             server.stop(1, TimeUnit.SECONDS);

@@ -15,9 +15,14 @@ import java.util.concurrent.TimeUnit;
 /** Bounded, unbuffered pre-TLS parser. Never reads beyond the PROXY preamble. */
 final class ProxyProtocol {
     private static final byte[] SIGNATURE = "\r\n\r\n\0\r\nQUIT\n".getBytes(StandardCharsets.US_ASCII);
+    private static final HAProxyProtocolConfig DEFAULT_CONFIG = HAProxyProtocolConfigBuilder.config().build();
     private ProxyProtocol() {}
 
     static ProxiedConnectionInfo read(Socket socket, long deadlineNanos) throws IOException {
+        return read(socket, deadlineNanos, DEFAULT_CONFIG);
+    }
+
+    static ProxiedConnectionInfo read(Socket socket, long deadlineNanos, HAProxyProtocolConfig config) throws IOException {
         int oldTimeout = socket.getSoTimeout();
         InputStream source = socket.getInputStream();
         InputStream bounded = new InputStream() {
@@ -48,15 +53,20 @@ final class ProxyProtocol {
             }
         };
         try {
-            ProxiedConnectionInfo info = parse(bounded);
+            ProxiedConnectionInfo info = parse(bounded, config);
             if (MonotonicTime.nanosUntil(deadlineNanos) <= 0) throw new SocketTimeoutException("PROXY header timeout");
             return info;
         } finally { socket.setSoTimeout(oldTimeout); }
     }
 
     static ProxiedConnectionInfo parse(InputStream source) throws IOException {
+        return parse(source, DEFAULT_CONFIG);
+    }
+
+    static ProxiedConnectionInfo parse(InputStream source, HAProxyProtocolConfig config) throws IOException {
         int first = source.read();
         if (first == 'P') {
+            if (!config.supportedVersions().contains(HAProxyProtocolVersion.V1)) throw invalid();
             byte[] line = new byte[107];
             line[0] = (byte) first;
             // The shortest valid v1 line is "PROXY UNKNOWN\r\n" (15 bytes).
@@ -75,7 +85,7 @@ final class ProxyProtocol {
                 line[size++] = (byte) value;
             }
         }
-        if (first != SIGNATURE[0]) throw invalid();
+        if (first != SIGNATURE[0] || !config.supportedVersions().contains(HAProxyProtocolVersion.V2)) throw invalid();
         // All v2 headers have 16 fixed bytes, including the payload length.
         byte[] header = new byte[16];
         header[0] = (byte) first;
@@ -84,6 +94,7 @@ final class ProxyProtocol {
         int command = header[12] & 255;
         if (command != 0x20 && command != 0x21) throw invalid();
         int length = ((header[14] & 255) << 8) | (header[15] & 255);
+        if (length > config.maxV2PayloadSize()) throw new IOException("PROXY v2 payload exceeds configured limit");
         Payload payload = new Payload(source, length);
         if (command == 0x20) {
             payload.discard(length);

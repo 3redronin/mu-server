@@ -43,7 +43,7 @@ class ConnectionRejectionTest {
         };
         MuServerBuilder builder = tls ? MuServerBuilder.httpsServer() : MuServerBuilder.httpServer();
         try (MuServer server = TestExecutionResources.configure(builder, executor, null, null, null)
-            .withHAProxyProtocolEnabled(proxy)
+            .withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config().withEnabled(proxy))
             .addHandler((req, resp) -> { handled.incrementAndGet(); resp.write("ok"); return true; }).start()) {
             for (int i = 1; i <= 3; i++) {
                 try (Socket socket = new Socket("localhost", server.uri().getPort())) {
@@ -78,7 +78,7 @@ class ConnectionRejectionTest {
             assertTrue(started.await(5, TimeUnit.SECONDS));
             var queued = handlers.submit(() -> {});
             try (MuServer server = MuServerBuilder.httpServer().withHandlerExecutor(handlers)
-                .withHAProxyProtocolEnabled(proxy).withHttp2Config(Http2ConfigBuilder.http2Enabled())
+                .withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config().withEnabled(proxy)).withHttp2Config(Http2ConfigBuilder.http2Enabled())
                 .addHandler((req, resp) -> { handled.incrementAndGet(); resp.write("ok"); return true; }).start()) {
                 assertEquals(503, exchange(server, proxy, false, h2));
                 assertEquals(0, handled.get());
@@ -130,7 +130,7 @@ class ConnectionRejectionTest {
         }
     }
 
-    private static void assertNoPendingSockets(MuServer server) throws Exception {
+    static void assertNoPendingSockets(MuServer server) throws Exception {
         var acceptors = Mu3ServerImpl.class.getDeclaredField("acceptors");
         acceptors.setAccessible(true);
         for (Object acceptor : (List<?>) acceptors.get(server)) {
