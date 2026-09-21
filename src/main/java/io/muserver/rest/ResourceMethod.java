@@ -158,6 +158,7 @@ class ResourceMethod {
             httpStatusCodes.merge(apiResponse.code, response, (left, right) -> ResponseObjectBuilder.mergeResponses(left, right).build());
         }
 
+        addSseResponses(httpStatusCodes, customSchemas);
         RequestBodyObject requestBody = null;
         for (ResourceMethodParam param : params) {
             if (!(param instanceof ResourceMethodParam.MessageBodyParam)) continue;
@@ -277,6 +278,88 @@ class ResourceMethod {
         return SchemaReference.infer(registrations, type, genericType);
     }
 
+    private boolean isSse() {
+        return effectiveProduces.stream().anyMatch(m -> "text".equals(m.getType()) && "event-stream".equals(m.getSubtype()))
+            || params.stream().anyMatch(p -> jakarta.ws.rs.sse.SseEventSink.class.isAssignableFrom(p.type())
+                || jakarta.ws.rs.sse.Sse.class.isAssignableFrom(p.type())) || !sseDeclarations().isEmpty();
+    }
+
+    private Map<String, ApiSseEvent> sseDeclarations() {
+        Map<String, ApiSseEvent> result = new LinkedHashMap<>();
+        List<Class<?>> hierarchy = new ArrayList<>();
+        for (Class<?> c = resourceClass.resourceClass; c != null && c != Object.class; c = c.getSuperclass()) hierarchy.add(c);
+        Collections.reverse(hierarchy);
+        for (Class<?> c : hierarchy) mergeSseDeclarations(result, c.getDeclaredAnnotationsByType(ApiSseEvent.class));
+        List<ApiSseEvent> method = new ArrayList<>();
+        for (Annotation annotation : methodAnnotations) {
+            if (annotation instanceof ApiSseEvent) method.add((ApiSseEvent) annotation);
+            if (annotation instanceof ApiSseEvents) Collections.addAll(method, ((ApiSseEvents) annotation).value());
+        }
+        mergeSseDeclarations(result, method.toArray(new ApiSseEvent[0]));
+        return result;
+    }
+
+    private static void mergeSseDeclarations(Map<String, ApiSseEvent> result, ApiSseEvent[] declarations) {
+        Set<String> level = new HashSet<>();
+        for (ApiSseEvent declaration : declarations) {
+            String key = declaration.code() + "\0" + declaration.name();
+            if (!level.add(key)) throw new IllegalArgumentException("Duplicate SSE declaration for " + declaration.code() + "/" + declaration.name());
+            if (!declaration.code().matches("[1-5][0-9]{2}|[1-5]XX|default")) throw new IllegalArgumentException("Invalid SSE response code");
+            MediaType.valueOf(declaration.mediaType());
+            result.put(key, declaration);
+        }
+    }
+
+    private void addSseResponses(Map<String, ResponseObject> responses, List<SchemaReference> registrations) {
+        Map<String, ApiSseEvent> declarations = sseDeclarations();
+        if (!isSse() || requiredHttpMethod() == Method.HEAD) return;
+        Map<String, List<SchemaObject>> items = new LinkedHashMap<>();
+        if (declarations.isEmpty()) items.put("200", Collections.singletonList(sseItem(null, registrations)));
+        for (ApiSseEvent event : declarations.values()) items.computeIfAbsent(event.code(), key -> new ArrayList<>()).add(sseItem(event, registrations));
+        for (Map.Entry<String, List<SchemaObject>> entry : items.entrySet()) {
+            String code = entry.getKey();
+            if (code.matches("1(?:[0-9]{2}|XX)|204|205|304")) continue;
+            // An explicit response annotation owns the entire response contract for its status.
+            boolean explicit = false;
+            for (Annotation annotation : methodAnnotations) {
+                if (annotation instanceof ApiResponse) explicit |= ((ApiResponse) annotation).code().equals(code);
+                if (annotation instanceof ApiResponses) explicit |= Arrays.stream(((ApiResponses) annotation).value()).anyMatch(a -> a.code().equals(code));
+            }
+            for (Class<?> c = resourceClass.resourceClass; c != null && c != Object.class; c = c.getSuperclass()) {
+                explicit |= Arrays.stream(c.getDeclaredAnnotationsByType(ApiResponse.class)).anyMatch(a -> a.code().equals(code));
+            }
+            if (explicit) continue;
+            boolean distinctNames = declarations.values().stream().filter(e -> e.code().equals(code)).allMatch(e -> !e.name().isEmpty());
+            SchemaObject item = entry.getValue().size() == 1 ? entry.getValue().get(0)
+                : (distinctNames ? schemaObject().withOneOf(entry.getValue()) : schemaObject().withAnyOf(entry.getValue())).build();
+            ResponseObject existing = responses.get(code);
+            Map<String, MediaTypeObject> content = new LinkedHashMap<>();
+            if (existing != null && existing.content() != null) content.putAll(existing.content());
+            content.put("text/event-stream", mediaTypeObject().withItemSchema(item).build());
+            responses.put(code, (existing == null ? responseObject().withDescription("Event stream") : existing.toBuilder()).withContent(content).build());
+        }
+    }
+
+    private SchemaObject sseItem(@Nullable ApiSseEvent event, List<SchemaReference> registrations) {
+        Class<?> payload = event == null ? String.class : event.data();
+        MediaType payloadMedia = MediaType.valueOf(event == null ? "text/plain" : event.mediaType());
+        SchemaObjectBuilder data = schemaObject().withType("string");
+        if (event != null) data.withContentMediaType(payloadMedia.toString()).withContentSchema(SchemaReference.infer(registrations, payload, payload).build());
+        Map<String, SchemaObject> properties = new LinkedHashMap<>();
+        properties.put("data", data.build());
+        SchemaObjectBuilder name = schemaObject().withType("string");
+        if (event != null && !event.name().isEmpty()) name.withConstValue(event.name());
+        properties.put("event", name.build());
+        properties.put("id", schemaObject().withType("string").build());
+        properties.put("retry", schemaObject().withType("integer").withMinimum(0.0).build());
+        SchemaObjectBuilder item = schemaObject().withType("object").withProperties(properties)
+            .withRequired(event != null && !event.name().isEmpty() ? Arrays.asList("data", "event") : Collections.singletonList("data"));
+        if (event != null && !event.description().isEmpty()) item.withDescription(event.description());
+        return schemaObjectCustomizer.customize(item, new SchemaObjectCustomizerContext(SchemaObjectCustomizerTarget.RESPONSE_ITEM,
+            Map.class, null, resourceClass.resourceInstance, methodHandle(), null, MediaType.valueOf("text/event-stream"), null,
+            event == null ? null : event.name(), event == null ? null : payload, event == null ? null : payloadMedia)).build();
+    }
+
     private static Type unwrap(Type type) {
         for (int depth = 0; depth < 10; depth++) {
             Class<?> raw = SchemaReference.rawClass(type);
@@ -324,7 +407,7 @@ class ResourceMethod {
             boolean suspended = params.stream().anyMatch(p -> p.source() == ResourceMethodParam.ValueSource.SUSPENDED);
             if (suspended) type = Object.class;
             Class<?> raw = SchemaReference.rawClass(unwrap(type));
-            String code = raw == void.class || raw == Void.class ? "204" : "200";
+            String code = (raw == void.class || raw == Void.class) && !isSse() ? "204" : "200";
             result.add(new ApiResponseObj(code, "Success", new ResponseHeader[0], raw == null ? Object.class : raw, type, new String[0], null));
         }
         return result;

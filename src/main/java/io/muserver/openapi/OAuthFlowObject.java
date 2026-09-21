@@ -14,6 +14,7 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see OAuthFlowObjectBuilder
  */
 public class OAuthFlowObject implements JsonWriter {
+    private final java.net.@Nullable URI deviceAuthorizationUrl;
     private final Map<String, Object> extensions;
 
     private final @Nullable URI authorizationUrl;
@@ -21,7 +22,8 @@ public class OAuthFlowObject implements JsonWriter {
     private final @Nullable URI refreshUrl;
     private final Map<String, String> scopes;
 
-    OAuthFlowObject(@Nullable URI authorizationUrl, @Nullable URI tokenUrl, @Nullable URI refreshUrl, @Nullable Map<String, String> scopes, @Nullable Map<String, Object> extensions) {
+    OAuthFlowObject(@Nullable URI authorizationUrl, @Nullable URI tokenUrl, @Nullable URI refreshUrl, @Nullable Map<String, String> scopes, java.net.@Nullable URI deviceAuthorizationUrl, @Nullable Map<String, Object> extensions) {
+        this.deviceAuthorizationUrl = deviceAuthorizationUrl;
         this.extensions = Extensions.copy(extensions);
         this.authorizationUrl = authorizationUrl;
         this.tokenUrl = tokenUrl;
@@ -38,6 +40,7 @@ public class OAuthFlowObject implements JsonWriter {
         isFirst = append(writer, "tokenUrl", tokenUrl, isFirst);
         isFirst = append(writer, "refreshUrl", refreshUrl, isFirst);
         isFirst = append(writer, "scopes", scopes, isFirst);
+        isFirst = Jsonizer.append(writer, "deviceAuthorizationUrl", deviceAuthorizationUrl, isFirst);
         isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
@@ -74,6 +77,8 @@ public class OAuthFlowObject implements JsonWriter {
     /** @return a builder preserving all fields and extensions */
     public OAuthFlowObjectBuilder toBuilder() {
         return new OAuthFlowObjectBuilder()
-            .withExtensions(extensions).withAuthorizationUrl(authorizationUrl).withTokenUrl(tokenUrl).withRefreshUrl(refreshUrl).withScopes(scopes);
+            .withDeviceAuthorizationUrl(deviceAuthorizationUrl).withExtensions(extensions).withAuthorizationUrl(authorizationUrl).withTokenUrl(tokenUrl).withRefreshUrl(refreshUrl).withScopes(scopes);
     }
+    /** @return the OpenAPI 3.2 deviceAuthorizationUrl value */
+    public java.net.@Nullable URI deviceAuthorizationUrl() { return deviceAuthorizationUrl; }
 }

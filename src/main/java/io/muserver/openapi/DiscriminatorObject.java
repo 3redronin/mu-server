@@ -13,11 +13,13 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see DiscriminatorObjectBuilder
  */
 public class DiscriminatorObject implements JsonWriter {
+    private final @Nullable String defaultMapping;
     private final Map<String, Object> extensions;
     private final String propertyName;
     private final @Nullable Map<String, String> mapping;
 
-    DiscriminatorObject(@Nullable String propertyName, @Nullable Map<String, String> mapping, @Nullable Map<String, Object> extensions) {
+    DiscriminatorObject(@Nullable String propertyName, @Nullable Map<String, String> mapping, @Nullable String defaultMapping, @Nullable Map<String, Object> extensions) {
+        this.defaultMapping = defaultMapping;
         this.extensions = Extensions.copy(extensions);
         notNull("propertyName", propertyName);
         this.propertyName = java.util.Objects.requireNonNull(propertyName);
@@ -30,6 +32,7 @@ public class DiscriminatorObject implements JsonWriter {
         boolean isFirst = true;
         isFirst = append(writer, "propertyName", propertyName, isFirst);
         isFirst = append(writer, "mapping", mapping, isFirst);
+        isFirst = Jsonizer.append(writer, "defaultMapping", defaultMapping, isFirst);
         isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
@@ -52,6 +55,8 @@ public class DiscriminatorObject implements JsonWriter {
     /** @return a builder preserving all fields and extensions */
     public DiscriminatorObjectBuilder toBuilder() {
         return new DiscriminatorObjectBuilder()
-            .withExtensions(extensions).withPropertyName(propertyName).withMapping(mapping);
+            .withDefaultMapping(defaultMapping).withExtensions(extensions).withPropertyName(propertyName).withMapping(mapping);
     }
+    /** @return the OpenAPI 3.2 defaultMapping value */
+    public @Nullable String defaultMapping() { return defaultMapping; }
 }

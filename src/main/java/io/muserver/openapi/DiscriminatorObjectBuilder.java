@@ -13,6 +13,7 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * <p>When using the discriminator, <em>inline</em> schemas will not be considered.</p>
  */
 public class DiscriminatorObjectBuilder {
+    private @Nullable String defaultMapping;
     private @Nullable Map<String, Object> extensions;
     private @Nullable String propertyName;
     private @Nullable Map<String, String> mapping;
@@ -43,7 +44,7 @@ public class DiscriminatorObjectBuilder {
      * @return A new object
      */
     public DiscriminatorObject build() {
-        return new DiscriminatorObject(propertyName, immutable(mapping), extensions);
+        return new DiscriminatorObject(propertyName, immutable(mapping), defaultMapping, extensions);
     }
 
     /**
@@ -69,4 +70,9 @@ public class DiscriminatorObjectBuilder {
         extensions = copy;
         return this;
     }
+    /**
+     * @param value the OpenAPI 3.2 defaultMapping value
+     * @return this builder
+     */
+    public DiscriminatorObjectBuilder withDefaultMapping(@Nullable String value) { this.defaultMapping = value; return this; }
 }

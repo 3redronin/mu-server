@@ -22,5 +22,8 @@ public enum SchemaObjectCustomizerTarget {
     FORM_PARAM,
 
     /** A query, path, matrix, header or cookie parameter. */
-    PARAMETER
+    PARAMETER,
+
+    /** A complete parsed streaming response item. */
+    RESPONSE_ITEM
 }

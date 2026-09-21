@@ -18,9 +18,10 @@ import static io.muserver.openapi.Jsonizer.append;
 public class OpenAPIObject implements JsonWriter {
     private final @Nullable String jsonSchemaDialect;
     private final @Nullable Map<String, ReferenceOr<PathItemObject>> webhooks;
+    private final @Nullable String self;
     private final Map<String, Object> extensions;
 
-    private final String openapi = "3.1.2";
+    private final String openapi = "3.2.1";
     private final InfoObject info;
     private final @Nullable List<ServerObject> servers;
     private final @Nullable PathsObject paths;
@@ -29,12 +30,27 @@ public class OpenAPIObject implements JsonWriter {
     private final @Nullable List<TagObject> tags;
     private final @Nullable ExternalDocumentationObject externalDocs;
 
-    OpenAPIObject(@Nullable InfoObject info, @Nullable List<ServerObject> servers, @Nullable PathsObject paths, @Nullable ComponentsObject components, @Nullable List<SecurityRequirementObject> security, @Nullable List<TagObject> tags, @Nullable ExternalDocumentationObject externalDocs, @Nullable String jsonSchemaDialect, @Nullable Map<String, ReferenceOr<PathItemObject>> webhooks, @Nullable Map<String, Object> extensions) {
+    OpenAPIObject(@Nullable InfoObject info, @Nullable List<ServerObject> servers, @Nullable PathsObject paths, @Nullable ComponentsObject components, @Nullable List<SecurityRequirementObject> security, @Nullable List<TagObject> tags, @Nullable ExternalDocumentationObject externalDocs, @Nullable String jsonSchemaDialect, @Nullable Map<String, ReferenceOr<PathItemObject>> webhooks, @Nullable String self, @Nullable Map<String, Object> extensions) {
         this.jsonSchemaDialect = jsonSchemaDialect;
         this.webhooks = OpenApiUtils.immutable(webhooks);
+        this.self = self;
         this.extensions = Extensions.copy(extensions);
         if (tags != null && tags.size() != tags.stream().map(t -> t.name()).collect(Collectors.toSet()).size()) {
             throw new IllegalArgumentException("Tags must have unique names");
+        }
+        if (tags != null) {
+            Map<String, TagObject> byName = new java.util.LinkedHashMap<>();
+            for (TagObject tag : tags) byName.put(tag.name(), tag);
+            for (TagObject tag : tags) {
+                java.util.Set<String> visited = new java.util.HashSet<>();
+                TagObject current = tag;
+                while (current.parent() != null) {
+                    if (!visited.add(current.name())) throw new IllegalArgumentException("Cyclic tag hierarchy at " + tag.name());
+                    TagObject parent = byName.get(current.parent());
+                    if (parent == null) throw new IllegalArgumentException("Unknown parent tag " + current.parent());
+                    current = parent;
+                }
+            }
         }
         notNull("info", info);
         this.info = java.util.Objects.requireNonNull(info);
@@ -63,6 +79,7 @@ public class OpenAPIObject implements JsonWriter {
         isFirst = append(writer, "externalDocs", externalDocs, isFirst);
         isFirst = Jsonizer.append(writer, "jsonSchemaDialect", jsonSchemaDialect, isFirst);
         isFirst = Jsonizer.append(writer, "webhooks", webhooks, isFirst);
+        isFirst = Jsonizer.append(writer, "$self", self, isFirst);
         isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
@@ -133,6 +150,8 @@ public class OpenAPIObject implements JsonWriter {
     /** @return a builder preserving all fields and extensions */
     public OpenAPIObjectBuilder toBuilder() {
         return new OpenAPIObjectBuilder()
-            .withJsonSchemaDialect(jsonSchemaDialect).withWebhooksOrReferences(webhooks).withExtensions(extensions).withInfo(info).withServers(servers).withPaths(paths).withComponents(components).withSecurity(security).withTags(tags).withExternalDocs(externalDocs);
+            .withJsonSchemaDialect(jsonSchemaDialect).withWebhooksOrReferences(webhooks).withSelf(self).withExtensions(extensions).withInfo(info).withServers(servers).withPaths(paths).withComponents(components).withSecurity(security).withTags(tags).withExternalDocs(externalDocs);
     }
+    /** @return the OpenAPI 3.2 $self value */
+    public @Nullable String self() { return self; }
 }

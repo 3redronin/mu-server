@@ -11,12 +11,13 @@ import java.net.URI;
  * inferred (for singular/plural forms) and the name property SHOULD be used to add that information.
  */
 public class XmlObjectBuilder {
+    private @Nullable String nodeType;
     private @Nullable Map<String, Object> extensions;
     private @Nullable String name;
     private @Nullable URI namespace;
     private @Nullable String prefix;
-    private boolean attribute = false;
-    private boolean wrapped = false;
+    private @Nullable Boolean attribute;
+    private @Nullable Boolean wrapped;
 
     /**
      *
@@ -57,7 +58,7 @@ public class XmlObjectBuilder {
      *
      * @return The current builder
      */
-    public XmlObjectBuilder withAttribute(boolean attribute) {
+    public XmlObjectBuilder withAttribute(@Nullable Boolean attribute) {
         this.attribute = attribute;
         return this;
     }
@@ -71,7 +72,7 @@ public class XmlObjectBuilder {
      *
      * @return The current builder
      */
-    public XmlObjectBuilder withWrapped(boolean wrapped) {
+    public XmlObjectBuilder withWrapped(@Nullable Boolean wrapped) {
         this.wrapped = wrapped;
         return this;
     }
@@ -80,7 +81,7 @@ public class XmlObjectBuilder {
      * @return A new object
      */
     public XmlObject build() {
-        return new XmlObject(name, namespace, prefix, attribute, wrapped, extensions);
+        return new XmlObject(name, namespace, prefix, attribute, wrapped, nodeType, extensions);
     }
 
     /**
@@ -105,4 +106,15 @@ public class XmlObjectBuilder {
         extensions = copy;
         return this;
     }
+    /**
+     * @param value the OpenAPI 3.2 nodeType value
+     * @return this builder
+     */
+    public XmlObjectBuilder withNodeType(@Nullable String value) { this.nodeType = value; return this; }
+    /** @param value legacy attribute setting; use withNodeType for new documents
+     * @return this builder */
+    public XmlObjectBuilder withAttribute(boolean value) { return withAttribute(Boolean.valueOf(value)); }
+    /** @param value legacy wrapping setting; use withNodeType for new documents
+     * @return this builder */
+    public XmlObjectBuilder withWrapped(boolean value) { return withWrapped(Boolean.valueOf(value)); }
 }

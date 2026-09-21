@@ -44,6 +44,11 @@ public class OpenApi31FieldCoverageTest {
             if (keyword.equals("flows")) call(builder, "withType", "oauth2");
             if (keyword.equals("openIdConnectUrl")) call(builder, "withType", "openIdConnect");
         }
+        if (model.equals("SecuritySchemeObject") && keyword.equals("oauth2MetadataUrl")) {
+            call(builder, "withScheme", null); call(builder, "withType", "oauth2");
+            call(builder, "withFlows", OAuthFlowsObjectBuilder.oAuthFlowsObject().build());
+        }
+        if (model.equals("OAuthFlowObject") && keyword.equals("deviceAuthorizationUrl")) call(builder, "withAuthorizationUrl", null);
         method.invoke(builder, value);
         Object built = builder.getClass().getMethod("build").invoke(builder);
         assertNotNull(type.getMethod(getter).invoke(built));
@@ -79,11 +84,12 @@ public class OpenApi31FieldCoverageTest {
             if (generic.getRawType() == ReferenceOr.class) return ReferenceOr.inline(sample(generic.getActualTypeArguments()[0], field, model));
         }
         if (type == String.class) {
+            if (field.equals("nodeType")) return "element";
             if (field.equals("type")) return model.equals("SecuritySchemeObject") ? "http" : "string";
             if (field.equals("in")) return "query";
             if (field.equals("style")) return model.equals("HeaderObject") ? "simple" : "pipeDelimited";
             if (field.equals("email")) return "a@example.test";
-            if (field.equals("$schema") || field.equals("jsonSchemaDialect")) return "https://spec.openapis.org/oas/3.1/dialect/2024-11-10";
+            if (field.equals("$schema") || field.equals("jsonSchemaDialect")) return "https://spec.openapis.org/oas/3.2/dialect/2026-02-26";
             if (field.equals("$ref")) return "#/components/schemas/Value";
             if (field.equals("operationRef")) return "#/paths/~1item/get";
             if (field.equals("scheme")) return "bearer";
@@ -99,6 +105,7 @@ public class OpenApi31FieldCoverageTest {
         Object fixture = fixture((Class<?>) type);
         if (type == OAuthFlowObject.class) {
             OAuthFlowObjectBuilder flow = ((OAuthFlowObject) fixture).toBuilder();
+            if (field.equals("deviceAuthorization")) flow.withAuthorizationUrl(null).withDeviceAuthorizationUrl(URI.create("https://example.test/device"));
             if (field.equals("implicit")) flow.withTokenUrl(null);
             if (field.equals("password") || field.equals("clientCredentials")) flow.withAuthorizationUrl(null);
             return flow.build();

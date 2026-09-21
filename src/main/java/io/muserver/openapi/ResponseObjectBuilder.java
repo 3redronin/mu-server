@@ -12,10 +12,11 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * based on the response.</p>
  */
 public class ResponseObjectBuilder {
+    private @Nullable String summary;
     private @Nullable Map<String, Object> extensions;
     private @Nullable String description;
     private @Nullable Map<String, ReferenceOr<HeaderObject>> headers;
-    private @Nullable Map<String, MediaTypeObject> content;
+    private @Nullable Map<String, ReferenceOr<MediaTypeObject>> content;
     private @Nullable Map<String, ReferenceOr<LinkObject>> links;
 
     /**
@@ -25,7 +26,7 @@ public class ResponseObjectBuilder {
      *
      * @return The current builder
      */
-    public ResponseObjectBuilder withDescription(String description) {
+    public ResponseObjectBuilder withDescription(@Nullable String description) {
         this.description = description;
         return this;
     }
@@ -53,7 +54,7 @@ public class ResponseObjectBuilder {
      * @return The current builder
      */
     public ResponseObjectBuilder withContent(@Nullable Map<String, MediaTypeObject> content) {
-        this.content = content;
+        this.content = ReferenceValues.inline(content);
         return this;
     }
 
@@ -72,7 +73,7 @@ public class ResponseObjectBuilder {
      * @return A new object
      */
     public ResponseObject build() {
-        return new ResponseObject(description, immutable(headers), immutable(content), immutable(links), extensions);
+        return new ResponseObject(description, immutable(headers), immutable(content), immutable(links), summary, extensions);
     }
 
     /**
@@ -105,9 +106,10 @@ public class ResponseObjectBuilder {
         Map<String, ReferenceOr<LinkObject>> links = new java.util.TreeMap<>();
         if (secondary.linksOrReferences() != null) links.putAll(secondary.linksOrReferences());
         if (primary.linksOrReferences() != null) links.putAll(primary.linksOrReferences());
-        Map<String, MediaTypeObject> content = mergeContent(primary.content(), secondary.content());
+        Map<String, ReferenceOr<MediaTypeObject>> content = mergeContentOrReferences(primary.contentOrReferences(), secondary.contentOrReferences());
         return primary.toBuilder().withHeadersOrReferences(headers.isEmpty() ? null : headers)
-            .withLinksOrReferences(links.isEmpty() ? null : links).withContent(content.isEmpty() ? null : content);
+            .withLinksOrReferences(links.isEmpty() ? null : links).withContentOrReferences(content.isEmpty() ? null : content)
+            .withSummary(primary.summary() == null ? secondary.summary() : primary.summary());
     }
 
     /** Combines all media types and payload alternatives.
@@ -148,4 +150,27 @@ public class ResponseObjectBuilder {
      * @param value inline values and references for links
      * @return this builder */
     public ResponseObjectBuilder withLinksOrReferences(@Nullable Map<String, ReferenceOr<LinkObject>> value) { this.links = value; return this; }
+    /**
+     * @param value the OpenAPI 3.2 summary value
+     * @return this builder
+     */
+    public ResponseObjectBuilder withSummary(@Nullable String value) { this.summary = value; return this; }
+    /** @param value inline media types and references
+     * @return this builder */
+    public ResponseObjectBuilder withContentOrReferences(@Nullable Map<String, ReferenceOr<MediaTypeObject>> value) { this.content = value; return this; }
+    /** Combines inline alternatives and preserves references. Conflicting references cannot be merged without resolution.
+     * @param primary preferred content
+     * @param secondary additional content
+     * @return merged content */
+    public static Map<String, ReferenceOr<MediaTypeObject>> mergeContentOrReferences(
+        @Nullable Map<String, ReferenceOr<MediaTypeObject>> primary, @Nullable Map<String, ReferenceOr<MediaTypeObject>> secondary) {
+        Map<String, ReferenceOr<MediaTypeObject>> merged = new java.util.TreeMap<>();
+        if (primary != null) merged.putAll(primary);
+        if (secondary != null) secondary.forEach((key, value) -> merged.merge(key, value, (a, b) -> {
+            if (!a.isReference() && !b.isReference()) return ReferenceOr.inline(MediaTypeObjectBuilder.mergeMediaTypes(a.value(), b.value()).build());
+            if (a.isReference() && b.isReference() && java.util.Objects.requireNonNull(a.reference()).ref().equals(java.util.Objects.requireNonNull(b.reference()).ref())) return a;
+            throw new IllegalArgumentException("Cannot merge distinct referenced media types for " + key + " without resolving them");
+        }));
+        return merged;
+    }
 }

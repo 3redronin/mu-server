@@ -10,6 +10,10 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * Each Media Type Object provides schema and examples for the media type identified by its key.
  */
 public class MediaTypeObjectBuilder {
+    private @Nullable String description;
+    private @Nullable SchemaObject itemSchema;
+    private java.util.@Nullable List<EncodingObject> prefixEncoding;
+    private @Nullable EncodingObject itemEncoding;
     private @Nullable Map<String, Object> extensions;
     private @Nullable SchemaObject schema;
     private @Nullable Object example;
@@ -68,7 +72,7 @@ public class MediaTypeObjectBuilder {
      * @return A new object
      */
     public MediaTypeObject build() {
-        return new MediaTypeObject(schema, example, immutable(examples), immutable(encoding), extensions);
+        return new MediaTypeObject(schema, example, immutable(examples), immutable(encoding), description, itemSchema, prefixEncoding, itemEncoding, extensions);
     }
 
     /**
@@ -118,6 +122,30 @@ public class MediaTypeObjectBuilder {
             }
             combined = alternatives.size() == 1 ? a : SchemaObjectBuilder.schemaObject().withAnyOf(new java.util.ArrayList<>(alternatives.values())).build();
         }
-        return primary.toBuilder().withSchema(combined);
+        SchemaObject itemA = primary.itemSchema();
+        SchemaObject itemB = secondary.itemSchema();
+        SchemaObject item = itemA == null ? itemB : itemB == null || itemA.toString().equals(itemB.toString()) ? itemA
+            : SchemaObjectBuilder.schemaObject().withAnyOf(java.util.Arrays.asList(itemA, itemB)).build();
+        return primary.toBuilder().withSchema(combined).withItemSchema(item);
     }
+    /**
+     * @param value the OpenAPI 3.2 description value
+     * @return this builder
+     */
+    public MediaTypeObjectBuilder withDescription(@Nullable String value) { this.description = value; return this; }
+    /**
+     * @param value the OpenAPI 3.2 itemSchema value
+     * @return this builder
+     */
+    public MediaTypeObjectBuilder withItemSchema(@Nullable SchemaObject value) { this.itemSchema = value; return this; }
+    /**
+     * @param value the OpenAPI 3.2 prefixEncoding value
+     * @return this builder
+     */
+    public MediaTypeObjectBuilder withPrefixEncoding(java.util.@Nullable List<EncodingObject> value) { this.prefixEncoding = value; return this; }
+    /**
+     * @param value the OpenAPI 3.2 itemEncoding value
+     * @return this builder
+     */
+    public MediaTypeObjectBuilder withItemEncoding(@Nullable EncodingObject value) { this.itemEncoding = value; return this; }
 }

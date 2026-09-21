@@ -8,6 +8,7 @@ import org.jspecify.annotations.Nullable;
  * Allows configuration of the supported OAuth Flows.
  */
 public class OAuthFlowsObjectBuilder {
+    private @Nullable OAuthFlowObject deviceAuthorization;
     private @Nullable Map<String, Object> extensions;
     private @Nullable OAuthFlowObject implicit;
     private @Nullable OAuthFlowObject password;
@@ -62,7 +63,7 @@ public class OAuthFlowsObjectBuilder {
      * @return A new object
      */
     public OAuthFlowsObject build() {
-        return new OAuthFlowsObject(implicit, password, clientCredentials, authorizationCode, extensions);
+        return new OAuthFlowsObject(implicit, password, clientCredentials, authorizationCode, deviceAuthorization, extensions);
     }
 
     /**
@@ -88,4 +89,9 @@ public class OAuthFlowsObjectBuilder {
         extensions = copy;
         return this;
     }
+    /**
+     * @param value the OpenAPI 3.2 deviceAuthorization value
+     * @return this builder
+     */
+    public OAuthFlowsObjectBuilder withDeviceAuthorization(@Nullable OAuthFlowObject value) { this.deviceAuthorization = value; return this; }
 }

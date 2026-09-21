@@ -44,14 +44,14 @@ public class OpenApi31DocumentTest {
             .withPathItemsOrReferences(Map.of("Items", ReferenceOr.inline(path), "Alias", ReferenceOr.reference("#/components/pathItems/Items"))).build();
         OpenAPIObject api = OpenAPIObjectBuilder.openAPIObject().withInfo(InfoObjectBuilder.infoObject().withSummary("Example")
             .withLicense(LicenseObjectBuilder.licenseObject().withName("MIT").withIdentifier("MIT").build()).build())
-            .withComponents(components).withJsonSchemaDialect("https://spec.openapis.org/oas/3.1/dialect/2024-11-10")
+            .withComponents(components).withJsonSchemaDialect("https://spec.openapis.org/oas/3.2/dialect/2026-02-26")
             .withPaths(PathsObjectBuilder.pathsObject().withPathItemObjects(Collections.singletonMap("/items", path)).build())
             .withWebhooksOrReferences(Collections.singletonMap("created", ReferenceOr.reference("#/components/pathItems/Items")))
             .withExtension("x-test", Map.of("nested", Arrays.asList(false, JsonNull.INSTANCE))).build();
         document(api);
         document(api.toBuilder().build());
         assertEquals(json(api), json(api.toBuilder().build()));
-        assertEquals("3.1.2", api.openApi());
+        assertEquals("3.2.1", api.openApi());
         assertTrue(json(api).at("/paths/~1items/post/security").isEmpty());
         assertThrows(IllegalStateException.class, components::responses);
         assertThrows(IllegalStateException.class, operation::requestBody);

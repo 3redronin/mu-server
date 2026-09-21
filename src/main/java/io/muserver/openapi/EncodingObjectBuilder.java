@@ -10,6 +10,9 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * A single encoding definition applied to a single schema property.
  */
 public class EncodingObjectBuilder {
+    private @Nullable Map<String, EncodingObject> encoding;
+    private java.util.@Nullable List<EncodingObject> prefixEncoding;
+    private @Nullable EncodingObject itemEncoding;
     private @Nullable Map<String, Object> extensions;
     private @Nullable String contentType;
     private @Nullable Map<String, ReferenceOr<HeaderObject>> headers;
@@ -93,7 +96,7 @@ public class EncodingObjectBuilder {
      * @return A new object
      */
     public EncodingObject build() {
-        return new EncodingObject(contentType, immutable(headers), style, explode, allowReserved, extensions);
+        return new EncodingObject(contentType, immutable(headers), style, explode, allowReserved, encoding, prefixEncoding, itemEncoding, extensions);
     }
 
     /**
@@ -123,4 +126,19 @@ public class EncodingObjectBuilder {
      * @param value inline values and references for headers
      * @return this builder */
     public EncodingObjectBuilder withHeadersOrReferences(@Nullable Map<String, ReferenceOr<HeaderObject>> value) { this.headers = value; return this; }
+    /**
+     * @param value the OpenAPI 3.2 encoding value
+     * @return this builder
+     */
+    public EncodingObjectBuilder withEncoding(@Nullable Map<String, EncodingObject> value) { this.encoding = value; return this; }
+    /**
+     * @param value the OpenAPI 3.2 prefixEncoding value
+     * @return this builder
+     */
+    public EncodingObjectBuilder withPrefixEncoding(java.util.@Nullable List<EncodingObject> value) { this.prefixEncoding = value; return this; }
+    /**
+     * @param value the OpenAPI 3.2 itemEncoding value
+     * @return this builder
+     */
+    public EncodingObjectBuilder withItemEncoding(@Nullable EncodingObject value) { this.itemEncoding = value; return this; }
 }

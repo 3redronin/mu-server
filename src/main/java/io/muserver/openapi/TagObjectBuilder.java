@@ -9,6 +9,9 @@ import org.jspecify.annotations.Nullable;
  * per tag defined in the Operation Object instances.
  */
 public class TagObjectBuilder {
+    private @Nullable String summary;
+    private @Nullable String parent;
+    private @Nullable String kind;
     private @Nullable Map<String, Object> extensions;
     private @Nullable String name;
     private @Nullable String description;
@@ -51,7 +54,7 @@ public class TagObjectBuilder {
      * @return A new object
      */
     public TagObject build() {
-        return new TagObject(name, description, externalDocs, extensions);
+        return new TagObject(name, description, externalDocs, summary, parent, kind, extensions);
     }
 
     /**
@@ -76,4 +79,19 @@ public class TagObjectBuilder {
         extensions = copy;
         return this;
     }
+    /**
+     * @param value the OpenAPI 3.2 summary value
+     * @return this builder
+     */
+    public TagObjectBuilder withSummary(@Nullable String value) { this.summary = value; return this; }
+    /**
+     * @param value the OpenAPI 3.2 parent value
+     * @return this builder
+     */
+    public TagObjectBuilder withParent(@Nullable String value) { this.parent = value; return this; }
+    /**
+     * @param value the OpenAPI 3.2 kind value
+     * @return this builder
+     */
+    public TagObjectBuilder withKind(@Nullable String value) { this.kind = value; return this; }
 }

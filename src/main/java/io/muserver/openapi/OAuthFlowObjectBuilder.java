@@ -11,6 +11,7 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * Configuration details for a supported OAuth Flow
  */
 public class OAuthFlowObjectBuilder {
+    private java.net.@Nullable URI deviceAuthorizationUrl;
     private @Nullable Map<String, Object> extensions;
     private @Nullable URI authorizationUrl;
     private @Nullable URI tokenUrl;
@@ -65,7 +66,7 @@ public class OAuthFlowObjectBuilder {
      * @return A new object
      */
     public OAuthFlowObject build() {
-        return new OAuthFlowObject(authorizationUrl, tokenUrl, refreshUrl, immutable(scopes), extensions);
+        return new OAuthFlowObject(authorizationUrl, tokenUrl, refreshUrl, immutable(scopes), deviceAuthorizationUrl, extensions);
     }
 
     /**
@@ -91,4 +92,9 @@ public class OAuthFlowObjectBuilder {
         extensions = copy;
         return this;
     }
+    /**
+     * @param value the OpenAPI 3.2 deviceAuthorizationUrl value
+     * @return this builder
+     */
+    public OAuthFlowObjectBuilder withDeviceAuthorizationUrl(java.net.@Nullable URI value) { this.deviceAuthorizationUrl = value; return this; }
 }

@@ -39,7 +39,7 @@ public class OpenAPIObjectTest {
 
         try (StringWriter writer = new StringWriter()) {
             doc.writeJson(writer);
-            assertThat(writer.toString(), equalTo("{\"openapi\":\"3.1.2\",\"info\":{\"title\":\"The Title\",\"description\":\"The description\",\"termsOfService\":\"http://example.org/terms\",\"contact\":{\"name\":\"My name\",\"url\":\"http://muserver.io\",\"email\":\"support@muserver.io\"},\"license\":{\"name\":\"Apache 2.0\",\"url\":\"https://www.apache.org/licenses/LICENSE-2.0.html\"},\"version\":\"1.0\"},\"servers\":[{\"url\":\"http://muserver.io/api\",\"description\":\"Production\"},{\"url\":\"http://muserver.io/api{version}\",\"description\":\"Production\",\"variables\":{\"version\":{\"enum\":[\"1.0\",\"2.0\"],\"default\":\"2.0\",\"description\":\"API Version\"}}}],\"paths\":{}}"));
+            assertThat(writer.toString(), equalTo("{\"openapi\":\"3.2.1\",\"info\":{\"title\":\"The Title\",\"description\":\"The description\",\"termsOfService\":\"http://example.org/terms\",\"contact\":{\"name\":\"My name\",\"url\":\"http://muserver.io\",\"email\":\"support@muserver.io\"},\"license\":{\"name\":\"Apache 2.0\",\"url\":\"https://www.apache.org/licenses/LICENSE-2.0.html\"},\"version\":\"1.0\"},\"servers\":[{\"url\":\"http://muserver.io/api\",\"description\":\"Production\"},{\"url\":\"http://muserver.io/api{version}\",\"description\":\"Production\",\"variables\":{\"version\":{\"enum\":[\"1.0\",\"2.0\"],\"default\":\"2.0\",\"description\":\"API Version\"}}}],\"paths\":{}}"));
         }
     }
 
@@ -55,7 +55,7 @@ public class OpenAPIObjectTest {
             .build();
         try (StringWriter writer = new StringWriter()) {
             doc.writeJson(writer);
-            assertThat(writer.toString(), equalTo("{\"openapi\":\"3.1.2\",\"info\":{\"title\":\"test\",\"version\":\"1.0\"},\"paths\":{},\"tags\":[{\"name\":\"something\"},{\"name\":\"something else\"}]}"));
+            assertThat(writer.toString(), equalTo("{\"openapi\":\"3.2.1\",\"info\":{\"title\":\"test\",\"version\":\"1.0\"},\"paths\":{},\"tags\":[{\"name\":\"something\"},{\"name\":\"something else\"}]}"));
         }
     }
 

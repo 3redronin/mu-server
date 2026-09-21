@@ -13,6 +13,8 @@ import java.net.URI;
  * <a href="https://tools.ietf.org/html/draft-ietf-oauth-discovery-06">OpenID Connect Discovery</a>.</p>
  */
 public class SecuritySchemeObjectBuilder {
+    private java.net.@Nullable URI oauth2MetadataUrl;
+    private @Nullable Boolean deprecated;
     private @Nullable Map<String, Object> extensions;
     private @Nullable String type;
     private @Nullable String description;
@@ -121,7 +123,7 @@ public class SecuritySchemeObjectBuilder {
      * @return A new object
      */
     public SecuritySchemeObject build() {
-        return new SecuritySchemeObject(type, description, name, in, scheme, bearerFormat, flows, openIdConnectUrl, extensions);
+        return new SecuritySchemeObject(type, description, name, in, scheme, bearerFormat, flows, openIdConnectUrl, oauth2MetadataUrl, deprecated, extensions);
     }
 
     /**
@@ -147,4 +149,14 @@ public class SecuritySchemeObjectBuilder {
         extensions = copy;
         return this;
     }
+    /**
+     * @param value the OpenAPI 3.2 oauth2MetadataUrl value
+     * @return this builder
+     */
+    public SecuritySchemeObjectBuilder withOauth2MetadataUrl(java.net.@Nullable URI value) { this.oauth2MetadataUrl = value; return this; }
+    /**
+     * @param value the OpenAPI 3.2 deprecated value
+     * @return this builder
+     */
+    public SecuritySchemeObjectBuilder withDeprecated(@Nullable Boolean value) { this.deprecated = value; return this; }
 }

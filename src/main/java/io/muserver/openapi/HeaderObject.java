@@ -24,11 +24,11 @@ public class HeaderObject implements JsonWriter {
     private final @Nullable SchemaObject schema;
     private final @Nullable Object example;
     private final @Nullable Map<String, ReferenceOr<ExampleObject>> examples;
-    private final @Nullable Map<String, MediaTypeObject> content;
+    private final @Nullable Map<String, ReferenceOr<MediaTypeObject>> content;
 
     HeaderObject(@Nullable String description, @Nullable Boolean required, @Nullable Boolean deprecated,
                     @Nullable String style, @Nullable Boolean explode, @Nullable SchemaObject schema, @Nullable Object example,
-                    @Nullable Map<String, ReferenceOr<ExampleObject>> examples, @Nullable Map<String, MediaTypeObject> content, @Nullable Map<String, Object> extensions) {
+                    @Nullable Map<String, ReferenceOr<ExampleObject>> examples, @Nullable Map<String, ReferenceOr<MediaTypeObject>> content, @Nullable Map<String, Object> extensions) {
         this.extensions = Extensions.copy(extensions);
 
         if (style != null && !"simple".equals(style)) {
@@ -46,7 +46,7 @@ public class HeaderObject implements JsonWriter {
         this.deprecated = deprecated;
         this.style = style;
         this.explode = explode;
-        if (content != null && (style != null || explode != null || example != null || examples != null)) {
+        if (content != null && (style != null || explode != null)) {
             throw new IllegalArgumentException("Style, explode and examples belong to schema-based parameters");
         }
         this.schema = schema;
@@ -132,7 +132,7 @@ public class HeaderObject implements JsonWriter {
      * @return the value described by {@link HeaderObjectBuilder#withContent}
      */
     public @Nullable Map<String, MediaTypeObject> content() {
-        return content;
+        return ReferenceValues.values(content);
     }
     /** @return the extensions value */
     public Map<String, Object> extensions() { return extensions; }
@@ -141,6 +141,8 @@ public class HeaderObject implements JsonWriter {
     /** @return a builder preserving all fields and extensions */
     public HeaderObjectBuilder toBuilder() {
         return new HeaderObjectBuilder()
-            .withExtensions(extensions).withDescription(description).withRequired(required).withDeprecated(deprecated).withStyle(style).withExplode(explode).withSchema(schema).withExample(example).withExamplesOrReferences(examples).withContent(content);
+            .withExtensions(extensions).withDescription(description).withRequired(required).withDeprecated(deprecated).withStyle(style).withExplode(explode).withSchema(schema).withExample(example).withExamplesOrReferences(examples).withContentOrReferences(content);
     }
+    /** @return inline media types and references */
+    public @Nullable Map<String, ReferenceOr<MediaTypeObject>> contentOrReferences() { return content; }
 }

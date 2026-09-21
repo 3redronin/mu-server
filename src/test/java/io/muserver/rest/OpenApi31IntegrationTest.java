@@ -91,7 +91,7 @@ public class OpenApi31IntegrationTest {
     @Test public void exactGenericRegistrationAndManualRootContentSurvive() throws Exception {
         Type generic = Registered.class.getMethod("post", List.class).getGenericReturnType();
         OperationObject manual = OperationObjectBuilder.operationObject().withSummary("Manual operation").build();
-        OpenAPIObjectBuilder root = OpenAPIObjectBuilder.openAPIObject().withJsonSchemaDialect("https://spec.openapis.org/oas/3.1/dialect/2024-11-10")
+        OpenAPIObjectBuilder root = OpenAPIObjectBuilder.openAPIObject().withJsonSchemaDialect("https://spec.openapis.org/oas/3.2/dialect/2026-02-26")
             .withInfo(InfoObjectBuilder.infoObject().withSummary("Root summary").build())
             .withExtension("x-owner", "test")
             .withComponents(ComponentsObjectBuilder.componentsObject().withSchemas(Collections.singletonMap("Existing", booleanSchema(true).build())).build())

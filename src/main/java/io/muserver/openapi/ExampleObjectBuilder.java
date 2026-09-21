@@ -10,6 +10,8 @@ import java.net.URI;
  * A builder for {@link ExampleObject} objects
  */
 public class ExampleObjectBuilder {
+    private @Nullable Object dataValue;
+    private @Nullable String serializedValue;
     private @Nullable Map<String, Object> extensions;
     private @Nullable String summary;
     private @Nullable String description;
@@ -69,7 +71,7 @@ public class ExampleObjectBuilder {
      * @return A new object
      */
     public ExampleObject build() {
-        return new ExampleObject(summary, description, value, externalValue, extensions);
+        return new ExampleObject(summary, description, value, externalValue, dataValue, serializedValue, extensions);
     }
 
     /**
@@ -95,4 +97,14 @@ public class ExampleObjectBuilder {
         extensions = copy;
         return this;
     }
+    /**
+     * @param value the OpenAPI 3.2 dataValue value
+     * @return this builder
+     */
+    public ExampleObjectBuilder withDataValue(@Nullable Object value) { this.dataValue = value; return this; }
+    /**
+     * @param value the OpenAPI 3.2 serializedValue value
+     * @return this builder
+     */
+    public ExampleObjectBuilder withSerializedValue(@Nullable String value) { this.serializedValue = value; return this; }
 }

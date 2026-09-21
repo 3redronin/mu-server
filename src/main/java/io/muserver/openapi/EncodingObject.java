@@ -13,6 +13,9 @@ import static io.muserver.openapi.ParameterObject.allowedStyles;
  * @see EncodingObjectBuilder
  */
 public class EncodingObject implements JsonWriter {
+    private final @Nullable Map<String, EncodingObject> encoding;
+    private final java.util.@Nullable List<EncodingObject> prefixEncoding;
+    private final @Nullable EncodingObject itemEncoding;
     private final Map<String, Object> extensions;
 
     private final @Nullable String contentType;
@@ -21,7 +24,11 @@ public class EncodingObject implements JsonWriter {
     private final @Nullable Boolean explode;
     private final @Nullable Boolean allowReserved;
 
-    EncodingObject(@Nullable String contentType, @Nullable Map<String, ReferenceOr<HeaderObject>> headers, @Nullable String style, @Nullable Boolean explode, @Nullable Boolean allowReserved, @Nullable Map<String, Object> extensions) {
+    EncodingObject(@Nullable String contentType, @Nullable Map<String, ReferenceOr<HeaderObject>> headers, @Nullable String style, @Nullable Boolean explode, @Nullable Boolean allowReserved, @Nullable Map<String, EncodingObject> encoding, java.util.@Nullable List<EncodingObject> prefixEncoding, @Nullable EncodingObject itemEncoding, @Nullable Map<String, Object> extensions) {
+        this.encoding = OpenApiUtils.immutable(encoding);
+        this.prefixEncoding = OpenApiUtils.immutable(prefixEncoding);
+        this.itemEncoding = itemEncoding;
+        if (encoding != null && (prefixEncoding != null || itemEncoding != null)) throw new IllegalArgumentException("encoding cannot be combined with prefixEncoding or itemEncoding");
         this.extensions = Extensions.copy(extensions);
         if (style != null && !ParameterObject.validStyle("query", style)) {
             throw new IllegalArgumentException("'style' must be one of " + allowedStyles() + " but was " + style);
@@ -42,6 +49,9 @@ public class EncodingObject implements JsonWriter {
         isFirst = Jsonizer.append(writer, "style", style, isFirst);
         isFirst = Jsonizer.append(writer, "explode", explode, isFirst);
         isFirst = Jsonizer.append(writer, "allowReserved", allowReserved, isFirst);
+        isFirst = Jsonizer.append(writer, "encoding", encoding, isFirst);
+        isFirst = Jsonizer.append(writer, "prefixEncoding", prefixEncoding, isFirst);
+        isFirst = Jsonizer.append(writer, "itemEncoding", itemEncoding, isFirst);
         isFirst = Extensions.write(writer, extensions, isFirst);
         writer.append('}');
     }
@@ -87,6 +97,12 @@ public class EncodingObject implements JsonWriter {
     /** @return a builder preserving all fields and extensions */
     public EncodingObjectBuilder toBuilder() {
         return new EncodingObjectBuilder()
-            .withExtensions(extensions).withContentType(contentType).withHeadersOrReferences(headers).withStyle(style).withExplode(explode).withAllowReserved(allowReserved);
+            .withEncoding(encoding).withPrefixEncoding(prefixEncoding).withItemEncoding(itemEncoding).withExtensions(extensions).withContentType(contentType).withHeadersOrReferences(headers).withStyle(style).withExplode(explode).withAllowReserved(allowReserved);
     }
+    /** @return the OpenAPI 3.2 encoding value */
+    public @Nullable Map<String, EncodingObject> encoding() { return encoding; }
+    /** @return the OpenAPI 3.2 prefixEncoding value */
+    public java.util.@Nullable List<EncodingObject> prefixEncoding() { return prefixEncoding; }
+    /** @return the OpenAPI 3.2 itemEncoding value */
+    public @Nullable EncodingObject itemEncoding() { return itemEncoding; }
 }

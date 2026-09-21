@@ -14,6 +14,7 @@ import static io.muserver.openapi.Jsonizer.append;
  */
 public class ComponentsObject implements JsonWriter {
     private final @Nullable Map<String, ReferenceOr<PathItemObject>> pathItems;
+    private final @Nullable Map<String, ReferenceOr<MediaTypeObject>> mediaTypes;
     private final Map<String, Object> extensions;
 
     private final @Nullable Map<String, SchemaObject> schemas;
@@ -26,8 +27,9 @@ public class ComponentsObject implements JsonWriter {
     private final @Nullable Map<String, ReferenceOr<LinkObject>> links;
     private final @Nullable Map<String, ReferenceOr<CallbackObject>> callbacks;
 
-    ComponentsObject(@Nullable Map<String, SchemaObject> schemas, @Nullable Map<String, ReferenceOr<ResponseObject>> responses, @Nullable Map<String, ReferenceOr<ParameterObject>> parameters, @Nullable Map<String, ReferenceOr<ExampleObject>> examples, @Nullable Map<String, ReferenceOr<RequestBodyObject>> requestBodies, @Nullable Map<String, ReferenceOr<HeaderObject>> headers, @Nullable Map<String, ReferenceOr<SecuritySchemeObject>> securitySchemes, @Nullable Map<String, ReferenceOr<LinkObject>> links, @Nullable Map<String, ReferenceOr<CallbackObject>> callbacks, @Nullable Map<String, ReferenceOr<PathItemObject>> pathItems, @Nullable Map<String, Object> extensions) {
+    ComponentsObject(@Nullable Map<String, SchemaObject> schemas, @Nullable Map<String, ReferenceOr<ResponseObject>> responses, @Nullable Map<String, ReferenceOr<ParameterObject>> parameters, @Nullable Map<String, ReferenceOr<ExampleObject>> examples, @Nullable Map<String, ReferenceOr<RequestBodyObject>> requestBodies, @Nullable Map<String, ReferenceOr<HeaderObject>> headers, @Nullable Map<String, ReferenceOr<SecuritySchemeObject>> securitySchemes, @Nullable Map<String, ReferenceOr<LinkObject>> links, @Nullable Map<String, ReferenceOr<CallbackObject>> callbacks, @Nullable Map<String, ReferenceOr<PathItemObject>> pathItems, @Nullable Map<String, ReferenceOr<MediaTypeObject>> mediaTypes, @Nullable Map<String, Object> extensions) {
         this.pathItems = OpenApiUtils.immutable(pathItems);
+        this.mediaTypes = OpenApiUtils.immutable(mediaTypes);
         this.extensions = Extensions.copy(extensions);
         checkKey(schemas, responses, parameters, examples, requestBodies, headers, securitySchemes, links, callbacks, pathItems);
         this.schemas = schemas;
@@ -69,6 +71,7 @@ public class ComponentsObject implements JsonWriter {
         isFirst = append(writer, "links", links, isFirst);
         isFirst = append(writer, "callbacks", callbacks, isFirst);
         isFirst = Jsonizer.append(writer, "pathItems", pathItems, isFirst);
+        isFirst = Jsonizer.append(writer, "mediaTypes", mediaTypes, isFirst);
         isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
@@ -160,6 +163,10 @@ public class ComponentsObject implements JsonWriter {
     /** @return a builder preserving all fields and extensions */
     public ComponentsObjectBuilder toBuilder() {
         return new ComponentsObjectBuilder()
-            .withPathItemsOrReferences(pathItems).withExtensions(extensions).withSchemas(schemas).withResponsesOrReferences(responses).withParametersOrReferences(parameters).withExamplesOrReferences(examples).withRequestBodiesOrReferences(requestBodies).withHeadersOrReferences(headers).withSecuritySchemesOrReferences(securitySchemes).withLinksOrReferences(links).withCallbacksOrReferences(callbacks);
+            .withPathItemsOrReferences(pathItems).withMediaTypesOrReferences(mediaTypes).withExtensions(extensions).withSchemas(schemas).withResponsesOrReferences(responses).withParametersOrReferences(parameters).withExamplesOrReferences(examples).withRequestBodiesOrReferences(requestBodies).withHeadersOrReferences(headers).withSecuritySchemesOrReferences(securitySchemes).withLinksOrReferences(links).withCallbacksOrReferences(callbacks);
     }
+    /** @return the OpenAPI 3.2 mediaTypes value */
+    public @Nullable Map<String, ReferenceOr<MediaTypeObject>> mediaTypesOrReferences() { return mediaTypes; }
+    /** @return inline media types; throws if a reference is present */
+    public @Nullable Map<String, MediaTypeObject> mediaTypes() { return ReferenceValues.values(mediaTypes); }
 }

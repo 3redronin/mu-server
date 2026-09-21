@@ -10,7 +10,7 @@ final class OpenApiDefaults {
         if (value == null) return null;
         String effectiveStyle = style == null ? ParameterObject.defaultStyle(in) : style;
         if ("style".equals(keyword) && value.equals(ParameterObject.defaultStyle(in))) return null;
-        if ("explode".equals(keyword) && value.equals("form".equals(effectiveStyle))) return null;
+        if ("explode".equals(keyword) && value.equals("form".equals(effectiveStyle) || "cookie".equals(effectiveStyle))) return null;
         if (("deprecated".equals(keyword) || "allowReserved".equals(keyword) || "allowEmptyValue".equals(keyword)) && Boolean.FALSE.equals(value)) return null;
         return value;
     }

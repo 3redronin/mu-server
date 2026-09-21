@@ -13,6 +13,7 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see OAuthFlowsObjectBuilder
  */
 public class OAuthFlowsObject implements JsonWriter {
+    private final @Nullable OAuthFlowObject deviceAuthorization;
     private final Map<String, Object> extensions;
 
     private final @Nullable OAuthFlowObject implicit;
@@ -20,8 +21,11 @@ public class OAuthFlowsObject implements JsonWriter {
     private final @Nullable OAuthFlowObject clientCredentials;
     private final @Nullable OAuthFlowObject authorizationCode;
 
-    OAuthFlowsObject(@Nullable OAuthFlowObject implicit, @Nullable OAuthFlowObject password, @Nullable OAuthFlowObject clientCredentials, @Nullable OAuthFlowObject authorizationCode, @Nullable Map<String, Object> extensions) {
+    OAuthFlowsObject(@Nullable OAuthFlowObject implicit, @Nullable OAuthFlowObject password, @Nullable OAuthFlowObject clientCredentials, @Nullable OAuthFlowObject authorizationCode, @Nullable OAuthFlowObject deviceAuthorization, @Nullable Map<String, Object> extensions) {
+        this.deviceAuthorization = deviceAuthorization;
         this.extensions = Extensions.copy(extensions);
+        check(deviceAuthorization, false, true);
+        if (deviceAuthorization != null && deviceAuthorization.deviceAuthorizationUrl() == null) throw new IllegalArgumentException("Device authorization flow requires deviceAuthorizationUrl");
         check(implicit, true, false);
         check(password, false, true);
         check(clientCredentials, false, true);
@@ -40,6 +44,7 @@ public class OAuthFlowsObject implements JsonWriter {
         isFirst = append(writer, "password", password, isFirst);
         isFirst = append(writer, "clientCredentials", clientCredentials, isFirst);
         isFirst = append(writer, "authorizationCode", authorizationCode, isFirst);
+        isFirst = Jsonizer.append(writer, "deviceAuthorization", deviceAuthorization, isFirst);
         isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
 
@@ -77,7 +82,7 @@ public class OAuthFlowsObject implements JsonWriter {
     /** @return a builder preserving all fields and extensions */
     public OAuthFlowsObjectBuilder toBuilder() {
         return new OAuthFlowsObjectBuilder()
-            .withExtensions(extensions).withImplicit(implicit).withPassword(password).withClientCredentials(clientCredentials).withAuthorizationCode(authorizationCode);
+            .withDeviceAuthorization(deviceAuthorization).withExtensions(extensions).withImplicit(implicit).withPassword(password).withClientCredentials(clientCredentials).withAuthorizationCode(authorizationCode);
     }
     private static void check(@Nullable OAuthFlowObject flow, boolean authorization, boolean token) {
         if (flow == null) return;
@@ -85,4 +90,6 @@ public class OAuthFlowsObject implements JsonWriter {
             throw new IllegalArgumentException("OAuth flow is missing a required URL");
         }
     }
+    /** @return the OpenAPI 3.2 deviceAuthorization value */
+    public @Nullable OAuthFlowObject deviceAuthorization() { return deviceAuthorization; }
 }

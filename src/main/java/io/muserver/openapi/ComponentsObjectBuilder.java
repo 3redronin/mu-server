@@ -12,6 +12,7 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  */
 public class ComponentsObjectBuilder {
     private @Nullable Map<String, ReferenceOr<PathItemObject>> pathItems;
+    private @Nullable Map<String, ReferenceOr<MediaTypeObject>> mediaTypes;
     private @Nullable Map<String, Object> extensions;
     @Nullable Map<String, SchemaObject> schemas;
     private @Nullable Map<String, ReferenceOr<ResponseObject>> responses;
@@ -127,7 +128,7 @@ public class ComponentsObjectBuilder {
      */
     public ComponentsObject build() {
         return new ComponentsObject(immutable(schemas), immutable(responses), immutable(parameters), immutable(examples),
-            immutable(requestBodies), immutable(headers), immutable(securitySchemes), immutable(links), immutable(callbacks), pathItems, extensions);
+            immutable(requestBodies), immutable(headers), immutable(securitySchemes), immutable(links), immutable(callbacks), pathItems, mediaTypes, extensions);
     }
 
     /**
@@ -204,4 +205,12 @@ public class ComponentsObjectBuilder {
      * @param value inline path items
      * @return this builder */
     public ComponentsObjectBuilder withPathItems(@Nullable Map<String, PathItemObject> value) { this.pathItems = ReferenceValues.inline(value); return this; }
+    /**
+     * @param value the OpenAPI 3.2 mediaTypes value
+     * @return this builder
+     */
+    public ComponentsObjectBuilder withMediaTypesOrReferences(@Nullable Map<String, ReferenceOr<MediaTypeObject>> value) { this.mediaTypes = value; return this; }
+    /** @param value reusable inline media types
+     * @return this builder */
+    public ComponentsObjectBuilder withMediaTypes(@Nullable Map<String, MediaTypeObject> value) { this.mediaTypes = ReferenceValues.inline(value); return this; }
 }

@@ -107,7 +107,7 @@ class HtmlDocumentor {
         }
         for (TagObject tag : tags) {
             El li = new El("li").open();
-            new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(tag.name()))).content(tag.name()).close();
+            new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(tag.name()))).content(tag.summary() == null ? tag.name() : tag.summary()).close();
 
             El subNav = new El("ul").open(singletonMap("class", "subNav"));
             for (Map.Entry<String, PathItemObject> entry : pathItems().entrySet()) {
@@ -137,7 +137,7 @@ class HtmlDocumentor {
 
         for (TagObject tag : tags) {
             El tagContainer = new El("div").open(singletonMap("class", "tagContainer"));
-            new El("h2").open(singletonMap("id", Mutils.htmlEncode(tag.name()))).content(tag.name()).close();
+            new El("h2").open(singletonMap("id", Mutils.htmlEncode(tag.name()))).content(tag.summary() == null ? tag.name() : tag.summary()).close();
             renderIfValue("p", tag.description());
             renderExternalLinksParagraph(tag.externalDocs());
 
@@ -246,7 +246,7 @@ class HtmlDocumentor {
 
                             renderIfValue("p", requestBody.description());
 
-                            for (Map.Entry<String, MediaTypeObject> bodyEntry : requestBody.content().entrySet()) {
+                            for (Map.Entry<String, MediaTypeObject> bodyEntry : resolvedContent(requestBody.contentOrReferences()).entrySet()) {
                                 String mediaType = bodyEntry.getKey();
                                 MediaTypeObject original = bodyEntry.getValue();
                                 MediaTypeObject value = original.toBuilder().withSchema(resolvedSchema(original.schema())).build();
@@ -323,6 +323,7 @@ class HtmlDocumentor {
                         }
 
                         String curlAccept = "";
+                        boolean streaming = false;
                         Map<String, ResponseObject> responses = new LinkedHashMap<>();
                         if (operation.responses() != null) {
                             Map<String, ReferenceOr<ResponseObject>> values = new LinkedHashMap<>(operation.responses().httpStatusCodesOrReferences());
@@ -355,9 +356,22 @@ class HtmlDocumentor {
                                 String code = respEntry.getKey();
                                 ResponseObject resp = respEntry.getValue();
                                 render("td", code);
-                                String contentTypes = resp.content() == null ? "" : String.join("\n", resp.content().keySet());
+                                String contentTypes = resp.contentOrReferences() == null ? "" : String.join("\n", resp.contentOrReferences().keySet());
                                 render("td", contentTypes);
-                                render("td", resp.description());
+                                El details = new El("td").open();
+                                render("p", resp.summary());
+                                render("p", resp.description());
+                                for (Map.Entry<String, MediaTypeObject> contentEntry : resolvedContent(resp.contentOrReferences()).entrySet()) {
+                                    MediaTypeObject media = contentEntry.getValue();
+                                    render("p", media.description());
+                                    if (media.itemSchema() != null) {
+                                        streaming = true;
+                                        render("p", "Parsed stream item (" + contentEntry.getKey() + ")");
+                                        render("pre", String.valueOf(resolvedSchema(media.itemSchema())));
+                                    }
+                                    renderExamples(media.example(), resolvedExamples(media.examplesOrReferences()), null);
+                                }
+                                details.close();
                                 if (curlAccept.isEmpty() && !contentTypes.isEmpty()) {
                                     curlAccept = " -H 'accept: " + contentTypes.split("\n", 2)[0] + "'";
                                 }
@@ -373,7 +387,7 @@ class HtmlDocumentor {
                         render("h4", "Curl");
                         String sampleUrl = urlWithContext.replace("{", "(").replace("}", ")")
                             + queryString;
-                        render("code", "curl -is -X " + method.toUpperCase(Locale.ROOT) + curlHeaders + curlAccept +
+                        render("code", "curl " + (streaming ? "-N " : "") + "-is -X " + method.toUpperCase(Locale.ROOT) + curlHeaders + curlAccept +
                             curlBody + " '" + requestUri.resolve(sampleUrl) + "'");
 
 
@@ -399,8 +413,10 @@ class HtmlDocumentor {
     }
 
     private static Map<String, OperationObject> operations(PathItemObject item) {
-        Map<String, OperationObject> operations = item.operations();
-        return operations == null ? Collections.emptyMap() : operations;
+        Map<String, OperationObject> operations = new LinkedHashMap<>();
+        if (item.operations() != null) operations.putAll(item.operations());
+        if (item.additionalOperations() != null) operations.putAll(item.additionalOperations());
+        return operations;
     }
 
     private static List<String> operationTags(OperationObject operation) {
@@ -440,6 +456,16 @@ class HtmlDocumentor {
     private static void appendQueryValue(StringBuilder query, String name, @Nullable Object value) {
         query.append(query.length() == 0 ? '?' : '&').append(urlEncode(name)).append('=')
             .append(urlEncode(value == null ? "" : value.toString()));
+    }
+
+    private Map<String, MediaTypeObject> resolvedContent(@Nullable Map<String, ReferenceOr<MediaTypeObject>> content) throws IOException {
+        Map<String, MediaTypeObject> result = new LinkedHashMap<>();
+        if (content != null) for (Map.Entry<String, ReferenceOr<MediaTypeObject>> entry : content.entrySet()) {
+            renderReference(entry.getValue());
+            MediaTypeObject value = references.resolve(entry.getValue(), MediaTypeObject.class);
+            if (value != null) result.put(entry.getKey(), value);
+        }
+        return result;
     }
 
     private @Nullable SchemaObject resolvedSchema(@Nullable SchemaObject schema) {
@@ -510,6 +536,8 @@ class HtmlDocumentor {
                 new El("code").open().content(exampleEntry.getKey()).close();
                 ExampleObject ex = exampleEntry.getValue();
                 new El("span").open().content(" ", ex.summary(), " ", ex.description()).close();
+                if (ex.dataValue() != null) { render("p", "Parsed value"); render("pre", String.valueOf(ex.dataValue())); }
+                if (ex.serializedValue() != null) { render("p", "Serialized value"); render("pre", ex.serializedValue()); }
                 new El("pre").open().content(ex.value()).close();
 
                 div.close();

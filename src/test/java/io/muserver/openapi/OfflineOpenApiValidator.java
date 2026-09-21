@@ -13,7 +13,7 @@ import static org.junit.Assert.*;
 public final class OfflineOpenApiValidator {
     public static final ObjectMapper JSON = new ObjectMapper().enable(com.fasterxml.jackson.databind.DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
     private static final JsonSchemaFactory FACTORY = factory();
-    private static final String BASE = "https://spec.openapis.org/oas/3.1/schema-base/2025-09-15";
+    private static final String BASE = "https://spec.openapis.org/oas/3.2/schema-base/2026-08-30";
 
     private static JsonSchemaFactory factory() {
         try {
@@ -38,7 +38,7 @@ public final class OfflineOpenApiValidator {
     }
 
     private static byte[] resource(String name) throws IOException {
-        try (InputStream in = OfflineOpenApiValidator.class.getResourceAsStream("/openapi-3.1/" + name)) {
+        try (InputStream in = OfflineOpenApiValidator.class.getResourceAsStream("/openapi-3.2/" + name)) {
             if (in == null) throw new FileNotFoundException(name);
             return in.readAllBytes();
         }
@@ -58,14 +58,14 @@ public final class OfflineOpenApiValidator {
     public static void object(String model, JsonNode value) {
         String location;
         if (model.equals("OpenAPIObject")) { document(value); return; }
-        if (model.equals("SchemaObject")) location = "https://spec.openapis.org/oas/3.1/dialect/2024-11-10";
-        else if (model.equals("DiscriminatorObject") || model.equals("XmlObject")) location = "https://spec.openapis.org/oas/3.1/meta/2024-11-10#/$defs/" + (model.equals("XmlObject") ? "xml" : "discriminator");
-        else if (model.equals("OAuthFlowObject")) location = "https://spec.openapis.org/oas/3.1/schema/2025-09-15#/$defs/oauth-flows/$defs/authorization-code";
+        if (model.equals("SchemaObject")) location = "https://spec.openapis.org/oas/3.2/dialect/2026-02-26";
+        else if (model.equals("DiscriminatorObject") || model.equals("XmlObject")) location = "https://spec.openapis.org/oas/3.2/meta/2026-02-26#/$defs/" + (model.equals("XmlObject") ? "xml" : "discriminator");
+        else if (model.equals("OAuthFlowObject")) location = "https://spec.openapis.org/oas/3.2/schema/2026-08-30#/$defs/oauth-flows/$defs/" + (value.has("deviceAuthorizationUrl") ? "device-authorization" : "authorization-code");
         else {
             String name = model.substring(0, model.length() - "Object".length()).replaceAll("([a-z])([A-Z])", "$1-$2").toLowerCase(Locale.ROOT);
             if (model.equals("OAuthFlowsObject")) name = "oauth-flows";
             if (model.equals("CallbackObject")) name = "callbacks";
-            location = "https://spec.openapis.org/oas/3.1/schema/2025-09-15#/$defs/" + name;
+            location = "https://spec.openapis.org/oas/3.2/schema/2026-08-30#/$defs/" + name;
         }
         Set<ValidationMessage> errors = FACTORY.getSchema(SchemaLocation.of(location)).validate(value);
         assertTrue(model + " " + value + ": " + errors, errors.isEmpty());
