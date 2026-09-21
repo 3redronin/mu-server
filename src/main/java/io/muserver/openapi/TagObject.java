@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import java.util.Map;
+
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -13,12 +15,14 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see TagObjectBuilder
  */
 public class TagObject implements JsonWriter {
+    private final Map<String, Object> extensions;
 
     private final String name;
     private final @Nullable String description;
     private final @Nullable ExternalDocumentationObject externalDocs;
 
-    TagObject(@Nullable String name, @Nullable String description, @Nullable ExternalDocumentationObject externalDocs) {
+    TagObject(@Nullable String name, @Nullable String description, @Nullable ExternalDocumentationObject externalDocs, @Nullable Map<String, Object> extensions) {
+        this.extensions = Extensions.copy(extensions);
         notNull("name", name);
         this.name = java.util.Objects.requireNonNull(name);
         this.description = description;
@@ -32,6 +36,7 @@ public class TagObject implements JsonWriter {
         isFirst = append(writer, "name", name, isFirst);
         isFirst = append(writer, "description", description, isFirst);
         isFirst = append(writer, "externalDocs", externalDocs, isFirst);
+        isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
 
@@ -67,5 +72,12 @@ public class TagObject implements JsonWriter {
      */
     public @Nullable ExternalDocumentationObject externalDocs() {
         return externalDocs;
+    }
+    /** @return the extensions value */
+    public Map<String, Object> extensions() { return extensions; }
+    /** @return a builder preserving all fields and extensions */
+    public TagObjectBuilder toBuilder() {
+        return new TagObjectBuilder()
+            .withExtensions(extensions).withName(name).withDescription(description).withExternalDocs(externalDocs);
     }
 }

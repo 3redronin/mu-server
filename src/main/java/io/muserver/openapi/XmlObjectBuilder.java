@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import java.util.Map;
+
 import org.jspecify.annotations.Nullable;
 
 import java.net.URI;
@@ -9,6 +11,7 @@ import java.net.URI;
  * inferred (for singular/plural forms) and the name property SHOULD be used to add that information.
  */
 public class XmlObjectBuilder {
+    private @Nullable Map<String, Object> extensions;
     private @Nullable String name;
     private @Nullable URI namespace;
     private @Nullable String prefix;
@@ -16,7 +19,9 @@ public class XmlObjectBuilder {
     private boolean wrapped = false;
 
     /**
+     *
      * @param name Replaces the name of the element/attribute used for the described schema property. When defined within <code>items</code>, it will affect the name of the individual XML elements within the list. When defined alongside <code>type</code> being <code>array</code> (outside the <code>items</code>), it will affect the wrapping element and only if <code>wrapped</code> is <code>true</code>. If <code>wrapped</code> is <code>false</code>, it will be ignored.
+     *
      * @return The current builder
      */
     public XmlObjectBuilder withName(@Nullable String name) {
@@ -25,7 +30,9 @@ public class XmlObjectBuilder {
     }
 
     /**
+     *
      * @param namespace The URI of the namespace definition. Value MUST be in the form of an absolute URI.
+     *
      * @return The current builder
      */
     public XmlObjectBuilder withNamespace(@Nullable URI namespace) {
@@ -34,7 +41,9 @@ public class XmlObjectBuilder {
     }
 
     /**
+     *
      * @param prefix The prefix to be used for the name.
+     *
      * @return The current builder
      */
     public XmlObjectBuilder withPrefix(@Nullable String prefix) {
@@ -43,7 +52,9 @@ public class XmlObjectBuilder {
     }
 
     /**
+     *
      * @param attribute Declares whether the property definition translates to an attribute instead of an element. Default value is false.
+     *
      * @return The current builder
      */
     public XmlObjectBuilder withAttribute(boolean attribute) {
@@ -52,10 +63,12 @@ public class XmlObjectBuilder {
     }
 
     /**
+     *
      * @param wrapped MAY be used only for an array definition. Signifies whether the array is wrapped (for example,
      *                <code>&lt;books&gt;&lt;book/&gt;&lt;book/&gt;&lt;/books&gt;</code>) or unwrapped
      *                (<code>&lt;book/&gt;&lt;book/&gt;</code>). Default value is <code>false</code>. The definition takes
      *                effect only when defined alongside <code>type</code> being <code>array</code> (outside the <code>items</code>).
+     *
      * @return The current builder
      */
     public XmlObjectBuilder withWrapped(boolean wrapped) {
@@ -67,7 +80,7 @@ public class XmlObjectBuilder {
      * @return A new object
      */
     public XmlObject build() {
-        return new XmlObject(name, namespace, prefix, attribute, wrapped);
+        return new XmlObject(name, namespace, prefix, attribute, wrapped, extensions);
     }
 
     /**
@@ -76,5 +89,20 @@ public class XmlObjectBuilder {
      */
     public static XmlObjectBuilder xmlObject() {
         return new XmlObjectBuilder();
+    }
+    /**
+     * @param value the extensions value
+     * @return this builder */
+    public XmlObjectBuilder withExtensions(@Nullable Map<String, Object> value) { this.extensions = value; return this; }
+    /**
+     * @param name an x- extension name
+     * @param value its JSON value
+     * @return this builder */
+    public XmlObjectBuilder withExtension(String name, @Nullable Object value) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>();
+        if (extensions != null) copy.putAll(extensions);
+        Extensions.put(copy, name, value);
+        extensions = copy;
+        return this;
     }
 }

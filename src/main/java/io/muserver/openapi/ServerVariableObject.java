@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import java.util.Map;
+
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -13,11 +15,16 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see ServerVariableObjectBuilder
  */
 public class ServerVariableObject implements JsonWriter {
+    private final Map<String, Object> extensions;
     private final @Nullable List<String> enumValues;
     private final String defaultValue;
     private final @Nullable String description;
 
-    ServerVariableObject(@Nullable List<String> enumValues, @Nullable String defaultValue, @Nullable String description) {
+    ServerVariableObject(@Nullable List<String> enumValues, @Nullable String defaultValue, @Nullable String description, @Nullable Map<String, Object> extensions) {
+        this.extensions = Extensions.copy(extensions);
+        if (enumValues != null && (enumValues.isEmpty() || !enumValues.contains(defaultValue))) {
+            throw new IllegalArgumentException("Server variable enum must be nonempty and contain the default");
+        }
         this.enumValues = enumValues;
         notNull("defaultValue", defaultValue);
         this.defaultValue = java.util.Objects.requireNonNull(defaultValue);
@@ -31,6 +38,7 @@ public class ServerVariableObject implements JsonWriter {
         isFirst = append(writer, "enum", enumValues, isFirst);
         isFirst = append(writer, "default", defaultValue, isFirst);
         isFirst = append(writer, "description", description, isFirst);
+        isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write("}");
     }
 
@@ -53,5 +61,12 @@ public class ServerVariableObject implements JsonWriter {
      */
     public @Nullable String description() {
         return description;
+    }
+    /** @return the extensions value */
+    public Map<String, Object> extensions() { return extensions; }
+    /** @return a builder preserving all fields and extensions */
+    public ServerVariableObjectBuilder toBuilder() {
+        return new ServerVariableObjectBuilder()
+            .withExtensions(extensions).withEnumValues(enumValues).withDefaultValue(defaultValue).withDescription(description);
     }
 }

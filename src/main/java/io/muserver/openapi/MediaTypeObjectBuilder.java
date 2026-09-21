@@ -10,13 +10,16 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * Each Media Type Object provides schema and examples for the media type identified by its key.
  */
 public class MediaTypeObjectBuilder {
+    private @Nullable Map<String, Object> extensions;
     private @Nullable SchemaObject schema;
     private @Nullable Object example;
-    private @Nullable Map<String, ExampleObject> examples;
+    private @Nullable Map<String, ReferenceOr<ExampleObject>> examples;
     private @Nullable Map<String, EncodingObject> encoding;
 
     /**
+     *
      * @param schema The schema defining the type used for the request body.
+     *
      * @return The current builder
      */
     public MediaTypeObjectBuilder withSchema(@Nullable SchemaObject schema) {
@@ -25,8 +28,10 @@ public class MediaTypeObjectBuilder {
     }
 
     /**
+     *
      * @param example Example of the media type.  The example object SHOULD be in the correct format as specified by the media type.
      *                The <code>example</code> field is mutually exclusive of the <code>examples</code> field.
+     *
      * @return The current builder
      */
     public MediaTypeObjectBuilder withExample(@Nullable Object example) {
@@ -35,19 +40,23 @@ public class MediaTypeObjectBuilder {
     }
 
     /**
+     *
      * @param examples Examples of the media type.  Each example object SHOULD  match the media type and specified schema if present.
      *                 The <code>examples</code> field is mutually exclusive of the <code>example</code> field.
+     *
      * @return The current builder
      */
     public MediaTypeObjectBuilder withExamples(@Nullable Map<String, ExampleObject> examples) {
-        this.examples = examples;
+        this.examples = ReferenceValues.inline(examples);
         return this;
     }
 
     /**
+     *
      * @param encoding A map between a property name and its encoding information. The key, being the property name, MUST
      *                 exist in the schema as a property. The encoding object SHALL only apply to <code>requestBody</code>
      *                 objects when the media type is <code>multipart</code> or <code>application/x-www-form-urlencoded</code>.
+     *
      * @return The current builder
      */
     public MediaTypeObjectBuilder withEncoding(@Nullable Map<String, EncodingObject> encoding) {
@@ -59,7 +68,7 @@ public class MediaTypeObjectBuilder {
      * @return A new object
      */
     public MediaTypeObject build() {
-        return new MediaTypeObject(schema, example, immutable(examples), immutable(encoding));
+        return new MediaTypeObject(schema, example, immutable(examples), immutable(encoding), extensions);
     }
 
     /**
@@ -69,5 +78,46 @@ public class MediaTypeObjectBuilder {
      */
     public static MediaTypeObjectBuilder mediaTypeObject() {
         return new MediaTypeObjectBuilder();
+    }
+    /**
+     * @param value the extensions value
+     * @return this builder */
+    public MediaTypeObjectBuilder withExtensions(@Nullable Map<String, Object> value) { this.extensions = value; return this; }
+    /**
+     * @param name an x- extension name
+     * @param value its JSON value
+     * @return this builder */
+    public MediaTypeObjectBuilder withExtension(String name, @Nullable Object value) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>();
+        if (extensions != null) copy.putAll(extensions);
+        Extensions.put(copy, name, value);
+        extensions = copy;
+        return this;
+    }
+    /**
+     * @param value inline values and references for examples
+     * @return this builder */
+    public MediaTypeObjectBuilder withExamplesOrReferences(@Nullable Map<String, ReferenceOr<ExampleObject>> value) { this.examples = value; return this; }
+    /** Combines alternative payload schemas, retaining the primary media type's annotations.
+     *
+     * @param primary first alternative
+     *
+     * @param secondary second alternative
+     *
+     * @return a builder for the combined media type */
+    public static MediaTypeObjectBuilder mergeMediaTypes(MediaTypeObject primary, MediaTypeObject secondary) {
+        SchemaObject a = primary.schema();
+        SchemaObject b = secondary.schema();
+        SchemaObject combined = null;
+        if (a != null && b != null) {
+            Map<String, SchemaObject> alternatives = new java.util.LinkedHashMap<>();
+            for (SchemaObject schema : new SchemaObject[]{a, b}) {
+                java.util.List<SchemaObject> choices = schema.keywords().size() == 1 && schema.anyOf() != null
+                    ? java.util.Objects.requireNonNull(schema.anyOf()) : java.util.Collections.singletonList(schema);
+                for (SchemaObject choice : choices) alternatives.putIfAbsent(choice.toString(), choice);
+            }
+            combined = alternatives.size() == 1 ? a : SchemaObjectBuilder.schemaObject().withAnyOf(new java.util.ArrayList<>(alternatives.values())).build();
+        }
+        return primary.toBuilder().withSchema(combined);
     }
 }

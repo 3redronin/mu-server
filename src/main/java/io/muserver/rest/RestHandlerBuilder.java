@@ -493,6 +493,22 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         return this;
     }
 
+    /** Registers an exact generic schema with a stable component name.
+     * @param type the resolved generic type
+     * @param componentName a unique component name
+     * @param schema the schema
+     * @return this builder */
+    public RestHandlerBuilder addCustomSchema(java.lang.reflect.Type type, String componentName, SchemaObject schema) {
+        Class<?> raw = SchemaReference.rawClass(type);
+        if (raw == null) throw new IllegalArgumentException("Cannot determine raw class of " + type);
+        if (!componentName.matches("[a-zA-Z0-9._-]+")) throw new IllegalArgumentException("Invalid component name " + componentName);
+        for (SchemaReference existing : customSchemas) {
+            if (existing.id.equals(componentName) || type.equals(existing.genericType)) throw new IllegalArgumentException("Duplicate schema registration " + componentName);
+        }
+        customSchemas.add(new SchemaReference(componentName, raw, type, schema));
+        return this;
+    }
+
     /**
      * Registers a writer interceptor allowing for inspection and alteration of response bodies.
      * <p>Interceptors are executed in ascending {@link Priority} order, defaulting to {@link Priorities#USER}, and are
@@ -583,7 +599,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      * @return The current value of this property
      */
     public Map<Class<?>, SchemaObject> customSchemas() {
-        return customSchemas.stream().collect(Collectors.toMap(ref -> ref.type, ref -> ref.schema));
+        return customSchemas.stream().filter(ref -> ref.genericType == null).collect(Collectors.toMap(ref -> ref.type, ref -> ref.schema));
     }
 
     /**
@@ -723,8 +739,8 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
             }
             OpenAPIObjectBuilder openAPIObjectToUse = this.openAPIObject == null ? OpenAPIObjectBuilder.openAPIObject() : this.openAPIObject;
-            openAPIObjectToUse.withPaths(pathsObject().build());
-            documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss, corsConfig, new ArrayList<>(customSchemas), schemaObjectCustomizer, paramConverterProviders);
+            if (openAPIObjectToUse.paths() == null) openAPIObjectToUse.withPaths(pathsObject().build());
+            documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss, corsConfig, new ArrayList<>(customSchemas), schemaObjectCustomizer, paramConverterProviders, collectionParameterStrategy());
         }
 
         CustomExceptionMapper customExceptionMapper = new CustomExceptionMapper(providers);

@@ -9,7 +9,9 @@ import java.io.Writer;
 interface JsonWriter {
     /**
      * Writes this object as a JSON Object
+     *
      * @param writer The writer to write to
+     *
      * @throws IOException Thrown if the writer throws this while writing
      */
     void writeJson(Writer writer) throws IOException;

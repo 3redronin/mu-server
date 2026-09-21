@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import java.util.Map;
+
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -15,7 +17,8 @@ import static java.util.Arrays.asList;
  * @see SecuritySchemeObjectBuilder
  */
 public class SecuritySchemeObject implements JsonWriter {
-    private static final List<String> validTypes = asList("apiKey", "http", "oauth2", "openIdConnect");
+    private final Map<String, Object> extensions;
+    private static final List<String> validTypes = asList("apiKey", "http", "oauth2", "openIdConnect", "mutualTLS");
 
     private final String type;
     private final @Nullable String description;
@@ -26,7 +29,8 @@ public class SecuritySchemeObject implements JsonWriter {
     private final @Nullable OAuthFlowsObject flows;
     private final @Nullable URI openIdConnectUrl;
 
-    SecuritySchemeObject(@Nullable String type, @Nullable String description, @Nullable String name, @Nullable String in, @Nullable String scheme, @Nullable String bearerFormat, @Nullable OAuthFlowsObject flows, @Nullable URI openIdConnectUrl) {
+    SecuritySchemeObject(@Nullable String type, @Nullable String description, @Nullable String name, @Nullable String in, @Nullable String scheme, @Nullable String bearerFormat, @Nullable OAuthFlowsObject flows, @Nullable URI openIdConnectUrl, @Nullable Map<String, Object> extensions) {
+        this.extensions = Extensions.copy(extensions);
         notNull("type", type);
         java.util.Objects.requireNonNull(type);
         if (!validTypes.contains(type)) {
@@ -36,6 +40,7 @@ public class SecuritySchemeObject implements JsonWriter {
             case "apiKey":
                 notNull("name", name);
                 notNull("in", in);
+                if (!asList("query", "header", "cookie").contains(in)) throw new IllegalArgumentException("Invalid API key location: " + in);
                 break;
             case "http":
                 notNull("scheme", scheme);
@@ -69,6 +74,7 @@ public class SecuritySchemeObject implements JsonWriter {
         isFirst = append(writer, "bearerFormat", bearerFormat, isFirst);
         isFirst = append(writer, "flows", flows, isFirst);
         isFirst = append(writer, "openIdConnectUrl", openIdConnectUrl, isFirst);
+        isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
 
@@ -135,4 +141,11 @@ public class SecuritySchemeObject implements JsonWriter {
         return validTypes;
     }
 
+    /** @return the extensions value */
+    public Map<String, Object> extensions() { return extensions; }
+    /** @return a builder preserving all fields and extensions */
+    public SecuritySchemeObjectBuilder toBuilder() {
+        return new SecuritySchemeObjectBuilder()
+            .withExtensions(extensions).withType(type).withDescription(description).withName(name).withIn(in).withScheme(scheme).withBearerFormat(bearerFormat).withFlows(flows).withOpenIdConnectUrl(openIdConnectUrl);
+    }
 }

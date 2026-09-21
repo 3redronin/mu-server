@@ -16,11 +16,11 @@ public class EncodingObjectTest {
     @Test
     public void defaultsSetCorrectlyForQuery() throws IOException {
         StringWriter writer = new StringWriter();
-        EncodingObject obj = encodingObject().withStyle("label").build();
+        EncodingObject obj = encodingObject().withStyle("pipeDelimited").build();
         obj.writeJson(writer);
         assertThat(obj.explode(), is(false));
         assertThat(obj.allowReserved(), is(false));
-        assertThat(writer.toString(), equalTo("{\"style\":\"label\"}"));
+        assertThat(writer.toString(), equalTo("{\"style\":\"pipeDelimited\"}"));
     }
 
     @Test

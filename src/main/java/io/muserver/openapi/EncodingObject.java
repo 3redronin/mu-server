@@ -13,15 +13,17 @@ import static io.muserver.openapi.ParameterObject.allowedStyles;
  * @see EncodingObjectBuilder
  */
 public class EncodingObject implements JsonWriter {
+    private final Map<String, Object> extensions;
 
     private final @Nullable String contentType;
-    private final @Nullable Map<String, HeaderObject> headers;
+    private final @Nullable Map<String, ReferenceOr<HeaderObject>> headers;
     private final @Nullable String style;
     private final @Nullable Boolean explode;
     private final @Nullable Boolean allowReserved;
 
-    EncodingObject(@Nullable String contentType, @Nullable Map<String, HeaderObject> headers, @Nullable String style, @Nullable Boolean explode, @Nullable Boolean allowReserved) {
-        if (style != null && !allowedStyles().contains(style)) {
+    EncodingObject(@Nullable String contentType, @Nullable Map<String, ReferenceOr<HeaderObject>> headers, @Nullable String style, @Nullable Boolean explode, @Nullable Boolean allowReserved, @Nullable Map<String, Object> extensions) {
+        this.extensions = Extensions.copy(extensions);
+        if (style != null && !ParameterObject.validStyle("query", style)) {
             throw new IllegalArgumentException("'style' must be one of " + allowedStyles() + " but was " + style);
         }
         this.contentType = contentType;
@@ -40,6 +42,7 @@ public class EncodingObject implements JsonWriter {
         isFirst = Jsonizer.append(writer, "style", style, isFirst);
         isFirst = Jsonizer.append(writer, "explode", explode, isFirst);
         isFirst = Jsonizer.append(writer, "allowReserved", allowReserved, isFirst);
+        isFirst = Extensions.write(writer, extensions, isFirst);
         writer.append('}');
     }
 
@@ -54,7 +57,7 @@ public class EncodingObject implements JsonWriter {
      * @return The value described by {@link EncodingObjectBuilder#withHeaders}
      */
     public @Nullable Map<String, HeaderObject> headers() {
-        return headers;
+        return ReferenceValues.values(headers);
     }
 
     /**
@@ -76,5 +79,14 @@ public class EncodingObject implements JsonWriter {
      */
     public boolean allowReserved() {
         return actualValue(allowReserved, false);
+    }
+    /** @return the extensions value */
+    public Map<String, Object> extensions() { return extensions; }
+    /** @return inline values and references for headers */
+    public @Nullable Map<String, ReferenceOr<HeaderObject>> headersOrReferences() { return headers; }
+    /** @return a builder preserving all fields and extensions */
+    public EncodingObjectBuilder toBuilder() {
+        return new EncodingObjectBuilder()
+            .withExtensions(extensions).withContentType(contentType).withHeadersOrReferences(headers).withStyle(style).withExplode(explode).withAllowReserved(allowReserved);
     }
 }

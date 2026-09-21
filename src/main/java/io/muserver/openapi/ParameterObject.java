@@ -16,6 +16,7 @@ import static java.util.Arrays.asList;
  * @see ParameterObjectBuilder
  */
 public class ParameterObject implements JsonWriter {
+    private final Map<String, Object> extensions;
     private static final List<String> allowedIns = asList("query", "header", "path", "cookie");
     private static final List<String> allowedStyles = asList("matrix", "label", "form", "simple", "spaceDelimited", "pipeDelimited", "deepObject");
 
@@ -30,12 +31,13 @@ public class ParameterObject implements JsonWriter {
     private final @Nullable Boolean allowReserved;
     private final @Nullable SchemaObject schema;
     private final @Nullable Object example;
-    private final @Nullable Map<String, ExampleObject> examples;
+    private final @Nullable Map<String, ReferenceOr<ExampleObject>> examples;
     private final @Nullable Map<String, MediaTypeObject> content;
 
     ParameterObject(@Nullable String name, @Nullable String in, @Nullable String description, Boolean required, @Nullable Boolean deprecated, @Nullable Boolean allowEmptyValue,
                     @Nullable String style, @Nullable Boolean explode, @Nullable Boolean allowReserved, @Nullable SchemaObject schema, @Nullable Object example,
-                    @Nullable Map<String, ExampleObject> examples, @Nullable Map<String, MediaTypeObject> content) {
+                    @Nullable Map<String, ReferenceOr<ExampleObject>> examples, @Nullable Map<String, MediaTypeObject> content, @Nullable Map<String, Object> extensions) {
+        this.extensions = Extensions.copy(extensions);
         notNull("name", name);
         java.util.Objects.requireNonNull(name);
         notNull("in", in);
@@ -43,7 +45,7 @@ public class ParameterObject implements JsonWriter {
         if (!allowedIns.contains(in)) {
             throw new IllegalArgumentException("'in' must be one of " + allowedIns + " but was " + in);
         }
-        if (style != null && !allowedStyles.contains(style)) {
+        if (style != null && !validStyle(in, style)) {
             throw new IllegalArgumentException("'style' must be one of " + allowedStyles + " but was " + style);
         }
         if (content != null && content.size() != 1) {
@@ -55,9 +57,13 @@ public class ParameterObject implements JsonWriter {
         if ("path".equals(in) && !required) {
             throw new IllegalArgumentException("'required' must be true for " + name + " because in is '" + in + "'");
         }
-        if (schema == null && content == null) {
+        if ((schema == null) == (content == null)) {
             throw new IllegalArgumentException("Either a schema or a content value must be specified");
         }
+        if ((allowEmptyValue != null || allowReserved != null) && !"query".equals(in)) {
+            throw new IllegalArgumentException("allowEmptyValue and allowReserved apply only to query parameters");
+        }
+        if (content != null && allowReserved != null) throw new IllegalArgumentException("allowReserved requires schema");
         this.name = name;
         this.in = in;
         this.description = description;
@@ -67,8 +73,11 @@ public class ParameterObject implements JsonWriter {
         this.style = style;
         this.explode = explode;
         this.allowReserved = allowReserved;
+        if (content != null && (style != null || explode != null || example != null || examples != null)) {
+            throw new IllegalArgumentException("Style, explode and examples belong to schema-based parameters");
+        }
         this.schema = schema;
-        this.example = example;
+        this.example = example == null ? null : JsonValues.freeze(example);
         this.examples = examples;
         this.content = content;
     }
@@ -95,15 +104,16 @@ public class ParameterObject implements JsonWriter {
         isFirst = append(writer, "in", in, isFirst);
         isFirst = append(writer, "description", description, isFirst);
         isFirst = append(writer, "required", required, isFirst);
-        isFirst = append(writer, "deprecated", deprecated, isFirst);
-        isFirst = append(writer, "allowEmptyValue", allowEmptyValue, isFirst);
-        isFirst = append(writer, "style", style, isFirst);
-        isFirst = append(writer, "explode", explode, isFirst);
-        isFirst = append(writer, "allowReserved", allowReserved, isFirst);
+        isFirst = append(writer, "deprecated", OpenApiDefaults.parameter("deprecated", deprecated, in, style), isFirst);
+        isFirst = append(writer, "allowEmptyValue", OpenApiDefaults.parameter("allowEmptyValue", allowEmptyValue, in, style), isFirst);
+        isFirst = append(writer, "style", OpenApiDefaults.parameter("style", style, in, style), isFirst);
+        isFirst = append(writer, "explode", OpenApiDefaults.parameter("explode", explode, in, style), isFirst);
+        isFirst = append(writer, "allowReserved", OpenApiDefaults.parameter("allowReserved", allowReserved, in, style), isFirst);
         isFirst = append(writer, "schema", schema, isFirst);
         isFirst = append(writer, "example", example, isFirst);
         isFirst = append(writer, "examples", examples, isFirst);
         isFirst = append(writer, "content", content, isFirst);
+        isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
 
@@ -171,7 +181,7 @@ public class ParameterObject implements JsonWriter {
       @return the value described by {@link ParameterObjectBuilder#withExplode}
      */
     public boolean explode() {
-        return actualValue(explode, style == null || "form".equals(style));
+        return actualValue(explode, "form".equals(style == null ? defaultStyle(in) : style));
     }
 
     /**
@@ -199,7 +209,7 @@ public class ParameterObject implements JsonWriter {
       @return the value described by {@link ParameterObjectBuilder#withExamples}
      */
     public @Nullable Map<String, ExampleObject> examples() {
-        return examples;
+        return ReferenceValues.values(examples);
     }
 
     /**
@@ -211,5 +221,24 @@ public class ParameterObject implements JsonWriter {
 
     static boolean actualValue(@Nullable Boolean value, boolean defaultValue) {
         return value == null ? defaultValue : value;
+    }
+    /** @return the extensions value */
+    public Map<String, Object> extensions() { return extensions; }
+    /** @return inline values and references for examples */
+    public @Nullable Map<String, ReferenceOr<ExampleObject>> examplesOrReferences() { return examples; }
+    /** @return a builder preserving all fields and extensions */
+    public ParameterObjectBuilder toBuilder() {
+        return new ParameterObjectBuilder()
+            .withExtensions(extensions).withName(name).withIn(in).withDescription(description).withRequired(required).withDeprecated(deprecated).withAllowEmptyValue(allowEmptyValue).withStyle(style).withExplode(explode).withAllowReserved(allowReserved).withSchema(schema).withExample(example).withExamplesOrReferences(examples).withContent(content);
+    }
+    static String defaultStyle(String in) { return "query".equals(in) || "cookie".equals(in) ? "form" : "simple"; }
+    static boolean validStyle(String in, String style) {
+        switch (in) {
+            case "path": return asList("matrix", "label", "simple").contains(style);
+            case "query": return asList("form", "spaceDelimited", "pipeDelimited", "deepObject").contains(style);
+            case "cookie": return "form".equals(style);
+            case "header": return "simple".equals(style);
+            default: return false;
+        }
     }
 }

@@ -8,7 +8,7 @@ import org.jspecify.annotations.Nullable;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.net.URI;
-import java.util.Collections;
+import java.util.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -21,12 +21,14 @@ class HtmlDocumentor {
 
     private final BufferedWriter writer;
     private final OpenAPIObject api;
+    private final DocumentationReferences references;
     private final String css;
     private final URI requestUri;
 
     HtmlDocumentor(BufferedWriter writer, OpenAPIObject api, String css, URI requestUri) {
         this.writer = writer;
         this.api = api;
+        this.references = new DocumentationReferences(api);
         this.css = css;
         this.requestUri = requestUri;
     }
@@ -93,8 +95,16 @@ class HtmlDocumentor {
         preamble.close();
 
 
+        for (Map.Entry<String, PathItemObject> entry : pathItems().entrySet()) {
+            if (entry.getValue().ref() != null) render("p", entry.getKey() + " Reference: " + entry.getValue().ref());
+        }
         El nav = new El("ul").open(singletonMap("class", "nav operation"));
-        List<TagObject> tags = api.tags() == null ? Collections.emptyList() : api.tags();
+        List<TagObject> tags = new ArrayList<>(api.tags() == null ? Collections.emptyList() : api.tags());
+        Set<String> tagNames = new HashSet<>();
+        for (TagObject tag : tags) tagNames.add(tag.name());
+        for (PathItemObject item : pathItems().values()) for (OperationObject operation : operations(item).values()) {
+            for (String name : operationTags(operation)) if (tagNames.add(name)) tags.add(TagObjectBuilder.tagObject().withName(name).build());
+        }
         for (TagObject tag : tags) {
             El li = new El("li").open();
             new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(tag.name()))).content(tag.name()).close();
@@ -160,8 +170,14 @@ class HtmlDocumentor {
                         StringBuilder queryString = new StringBuilder();
                         StringBuilder curlHeaders = new StringBuilder();
 
-                        RequestBodyObject requestBody = operation.requestBody();
-                        List<ParameterObject> parameters = operation.parameters() == null ? Collections.emptyList() : operation.parameters();
+                        RequestBodyObject requestBody = references.resolve(operation.requestBodyOrReferences(), RequestBodyObject.class);
+                        renderReference(operation.requestBodyOrReferences());
+                        List<ParameterObject> parameters = new ArrayList<>();
+                        if (operation.parametersOrReferences() != null) for (ReferenceOr<ParameterObject> parameterRef : operation.parametersOrReferences()) {
+                            renderReference(parameterRef);
+                            ParameterObject parameter = references.resolve(parameterRef, ParameterObject.class);
+                            if (parameter != null) parameters.add(parameter);
+                        }
                         if (!parameters.isEmpty()) {
                             render("h4", "Parameters");
                             El table = new El("table").open(singletonMap("class", "parameterTable"));
@@ -182,20 +198,21 @@ class HtmlDocumentor {
                                 render("td", parameter.name());
                                 String type = parameter.in();
 
+                                SchemaObject schema = resolvedSchema(parameter.schema());
+                                Object sample = parameter.example() == null ? schemaExample(schema) : parameter.example();
                                 if ("query".equals(type)) {
-                                    queryString.append(queryString.length() == 0 ? '?' : '&');
-                                    queryString.append(urlEncode(parameter.name())).append('=')
-                                        .append(urlEncode(bashValue(parameter.example())));
+                                    appendQuery(queryString, parameter, sample);
                                 } else if ("header".equals(type)) {
-                                    curlHeaders.append(" -H '").append(parameter.name()).append(": ")
-                                        .append(bashValue(parameter.example())).append('\'');
+                                    curlHeaders.append(" -H '").append(bashValue(parameter.name())).append(": ")
+                                        .append(bashValue(sample instanceof Collection ? joinSample((Collection<?>) sample, ",") : sample)).append('\'');
+                                } else if ("cookie".equals(type)) {
+                                    curlHeaders.append(" -H 'Cookie: ").append(bashValue(parameter.name())).append("=").append(bashValue(sample)).append('\'');
                                 }
 
-                                SchemaObject schema = parameter.schema();
                                 @Nullable Object defaultVal = null;
                                 @Nullable ExternalDocumentationObject externalDocs = null;
                                 if (schema != null) {
-                                    type += " - " + schema.type();
+                                    type += " - " + schemaType(schema);
                                     if (schema.format() != null) {
                                         type += " (" + schema.format() + ")";
                                     }
@@ -212,7 +229,7 @@ class HtmlDocumentor {
                                 }
                                 paramDesc.content(parameter.description());
 
-                                renderExamples(parameter.example(), parameter.examples(), defaultVal);
+                                renderExamples(sample, resolvedExamples(parameter.examplesOrReferences()), defaultVal);
                                 renderExternalLinksParagraph(externalDocs);
 
                                 paramDesc.close();
@@ -231,18 +248,22 @@ class HtmlDocumentor {
 
                             for (Map.Entry<String, MediaTypeObject> bodyEntry : requestBody.content().entrySet()) {
                                 String mediaType = bodyEntry.getKey();
-                                MediaTypeObject value = bodyEntry.getValue();
+                                MediaTypeObject original = bodyEntry.getValue();
+                                MediaTypeObject value = original.toBuilder().withSchema(resolvedSchema(original.schema())).build();
+                                boolean curlAlternative = curlBody.length() == 0;
+                                boolean formEncoding = mediaType.equalsIgnoreCase(MediaType.MULTIPART_FORM_DATA) || mediaType.equalsIgnoreCase(MediaType.APPLICATION_FORM_URLENCODED);
                                 render("h5", mediaType);
 
-                                renderExamples(value.example(), value.examples(), value.schema() == null ? null : value.schema().defaultValue());
+                                renderExamples(value.example() == null ? schemaExample(value.schema()) : value.example(), resolvedExamples(value.examplesOrReferences()), value.schema() == null ? null : value.schema().defaultValue());
+                                renderIfValue("p", value.schema() == null ? null : schemaType(value.schema()));
 
-                                String curlFormParam = (mediaType.equalsIgnoreCase(MediaType.MULTIPART_FORM_DATA)) ? "-F" : "-d";
-                                if (curlBody.length() == 0) {
+                                String curlFormParam = (mediaType.equalsIgnoreCase(MediaType.MULTIPART_FORM_DATA)) ? "-F" : "--data-urlencode";
+                                if (curlAlternative) {
                                     curlBody = new StringBuilder(" -H 'content-type: " + mediaType + "'");
                                 }
 
-                                if (value.schema() == null || value.schema().properties() == null) {
-                                    curlBody.append(" --data '").append(bashValue(value.example())).append("'");
+                                if (!formEncoding || value.schema() == null || value.schema().properties() == null) {
+                                    if (curlAlternative) curlBody.append(" --data-binary '").append(bashValue(value.example() == null ? schemaExample(value.schema()) : value.example())).append("'");
                                     continue;
                                 }
 
@@ -261,11 +282,11 @@ class HtmlDocumentor {
                                 List<String> requiredParams = value.schema().required();
                                 for (Map.Entry<String, SchemaObject> props : value.schema().properties().entrySet()) {
                                     String formName = props.getKey();
-                                    SchemaObject schema = props.getValue();
+                                    SchemaObject schema = Objects.requireNonNull(resolvedSchema(props.getValue()));
                                     El row = new El("tr").open();
                                     render("td", formName);
 
-                                    @Nullable String type = schema.type();
+                                    @Nullable String type = schemaType(schema);
                                     if (schema.format() != null) {
                                         type += " (" + schema.format() + ")";
                                     }
@@ -279,10 +300,16 @@ class HtmlDocumentor {
                                         render("strong", "REQUIRED. ");
                                     }
                                     paramDesc.content(schema.description());
-                                    renderExamples(schema.example(), null, schema.defaultValue());
+                                    renderExamples(schemaExample(schema), null, schema.defaultValue());
 
 
-                                    curlBody.append(" ").append(curlFormParam).append(" '").append(urlEncode(formName)).append("=").append(bashValue(schema.example())).append("'");
+                                    if (curlAlternative) {
+                                        EncodingObject encoding = value.encoding() == null ? null : value.encoding().get(formName);
+                                        Object sample = schemaExample(schema);
+                                        if ("-F".equals(curlFormParam) && encoding != null && "application/octet-stream".equals(encoding.contentType()) && sample == null) sample = "@file.bin";
+                                        Collection<?> samples = sample instanceof Collection ? (Collection<?>) sample : Collections.singletonList(sample);
+                                        for (Object itemSample : samples) curlBody.append(" ").append(curlFormParam).append(" '").append(bashValue(formName)).append("=").append(bashValue(itemSample)).append("'");
+                                    }
 
                                     paramDesc.close();
                                     row.close();
@@ -296,7 +323,17 @@ class HtmlDocumentor {
                         }
 
                         String curlAccept = "";
-                        if (!operation.responses().httpStatusCodes().isEmpty()) {
+                        Map<String, ResponseObject> responses = new LinkedHashMap<>();
+                        if (operation.responses() != null) {
+                            Map<String, ReferenceOr<ResponseObject>> values = new LinkedHashMap<>(operation.responses().httpStatusCodesOrReferences());
+                            if (operation.responses().defaultValueOrReferences() != null) values.put("default", operation.responses().defaultValueOrReferences());
+                            for (Map.Entry<String, ReferenceOr<ResponseObject>> response : values.entrySet()) {
+                                renderReference(response.getValue());
+                                ResponseObject resolved = references.resolve(response.getValue(), ResponseObject.class);
+                                if (resolved != null) responses.put(response.getKey(), resolved);
+                            }
+                        }
+                        if (!responses.isEmpty()) {
                             render("h4", "Responses");
 
 
@@ -313,7 +350,7 @@ class HtmlDocumentor {
                             El tbody = new El("tbody").open();
 
 
-                            for (Map.Entry<String, ResponseObject> respEntry : operation.responses().httpStatusCodes().entrySet()) {
+                            for (Map.Entry<String, ResponseObject> respEntry : responses.entrySet()) {
                                 El row = new El("tr").open();
                                 String code = respEntry.getKey();
                                 ResponseObject resp = respEntry.getValue();
@@ -352,8 +389,13 @@ class HtmlDocumentor {
     }
 
     private Map<String, PathItemObject> pathItems() {
-        Map<String, PathItemObject> paths = api.paths().pathItemObjects();
-        return paths == null ? Collections.emptyMap() : paths;
+        Map<String, PathItemObject> paths = api.paths() == null ? null : api.paths().pathItemObjects();
+        Map<String, PathItemObject> resolved = new LinkedHashMap<>();
+        if (paths != null) paths.forEach((key, value) -> {
+            PathItemObject target = references.path(value);
+            resolved.put(key, target == null ? value : target);
+        });
+        return resolved;
     }
 
     private static Map<String, OperationObject> operations(PathItemObject item) {
@@ -363,11 +405,87 @@ class HtmlDocumentor {
 
     private static List<String> operationTags(OperationObject operation) {
         List<String> tags = operation.tags();
-        return tags == null ? Collections.emptyList() : tags;
+        return tags == null || tags.isEmpty() ? Collections.singletonList("Operations") : tags;
     }
 
     private static String bashValue(@Nullable Object value) {
-        return value == null || "".equals(value) ? "" : value.toString().replace("'", "'\\''");
+        if (value == null || "".equals(value)) return "";
+        String text = value.toString();
+        if (value instanceof Map || value instanceof Collection || value.getClass().isArray() || value == JsonNull.INSTANCE) {
+            java.io.StringWriter writer = new java.io.StringWriter();
+            try { Jsonizer.writeValue(writer, value); } catch (IOException e) { throw new IllegalStateException(e); }
+            text = writer.toString();
+        }
+        return text.replace("'", "'\\''");
+    }
+
+    private static void appendQuery(StringBuilder query, ParameterObject parameter, @Nullable Object sample) {
+        String style = parameter.style() == null ? "form" : parameter.style();
+        if (sample instanceof Map && "deepObject".equals(style)) {
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) sample).entrySet()) appendQueryValue(query, parameter.name() + "[" + entry.getKey() + "]", entry.getValue());
+        } else if (sample instanceof Collection && parameter.explode()) {
+            for (Object item : (Collection<?>) sample) appendQueryValue(query, parameter.name(), item);
+        } else {
+            String delimiter = "spaceDelimited".equals(style) ? " " : "pipeDelimited".equals(style) ? "|" : ",";
+            appendQueryValue(query, parameter.name(), sample instanceof Collection ? joinSample((Collection<?>) sample, delimiter) : sample);
+        }
+    }
+
+    private static String joinSample(Collection<?> sample, String delimiter) {
+        List<String> values = new ArrayList<>();
+        for (Object value : sample) values.add(String.valueOf(value));
+        return String.join(delimiter, values);
+    }
+
+    private static void appendQueryValue(StringBuilder query, String name, @Nullable Object value) {
+        query.append(query.length() == 0 ? '?' : '&').append(urlEncode(name)).append('=')
+            .append(urlEncode(value == null ? "" : value.toString()));
+    }
+
+    private @Nullable SchemaObject resolvedSchema(@Nullable SchemaObject schema) {
+        SchemaObject resolved = references.schema(schema);
+        return resolved == null ? schema : resolved;
+    }
+
+    private static String schemaType(SchemaObject schema) {
+        if (schema.booleanValue() != null) return schema.booleanValue() ? "any value" : "no value";
+        if (schema.ref() != null) return "Reference: " + schema.ref();
+        return schema.types() == null ? "any value" : String.join(" | ", schema.types());
+    }
+
+    private static @Nullable Object schemaExample(@Nullable SchemaObject schema) {
+        if (schema == null) return null;
+        if (schema.examples() != null && !schema.examples().isEmpty()) return schema.examples().get(0);
+        if (schema.example() != null) return schema.example();
+        if (schema.properties() != null) {
+            Map<String, Object> example = new LinkedHashMap<>();
+            schema.properties().forEach((key, value) -> {
+                Object sample = schemaExample(value);
+                if (sample != null) example.put(key, sample);
+            });
+            return example;
+        }
+        return schema.defaultValue();
+    }
+
+    private void renderReference(@Nullable ReferenceOr<?> value) throws IOException {
+        if (value != null && value.isReference()) {
+            ReferenceObject ref = Objects.requireNonNull(value.reference());
+            render("p", "Reference: " + ref.ref());
+            renderIfValue("p", ref.summary());
+            renderIfValue("p", ref.description());
+        }
+    }
+
+    private @Nullable Map<String, ExampleObject> resolvedExamples(@Nullable Map<String, ReferenceOr<ExampleObject>> values) throws IOException {
+        if (values == null) return null;
+        Map<String, ExampleObject> result = new LinkedHashMap<>();
+        for (Map.Entry<String, ReferenceOr<ExampleObject>> entry : values.entrySet()) {
+            renderReference(entry.getValue());
+            ExampleObject example = references.resolve(entry.getValue(), ExampleObject.class);
+            if (example != null) result.put(entry.getKey(), example);
+        }
+        return result;
     }
 
     private void renderExternalLinksParagraph(@Nullable ExternalDocumentationObject externalDocs) throws IOException {

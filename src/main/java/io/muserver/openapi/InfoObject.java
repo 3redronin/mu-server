@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import java.util.Map;
+
 import org.jspecify.annotations.Nullable;
 
 
@@ -14,6 +16,8 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see InfoObjectBuilder
  */
 public class InfoObject implements JsonWriter {
+    private final @Nullable String summary;
+    private final Map<String, Object> extensions;
 
     private final String title;
     private final @Nullable String description;
@@ -23,7 +27,9 @@ public class InfoObject implements JsonWriter {
     private final String version;
 
 
-    InfoObject(String title, @Nullable String description, @Nullable URI termsOfService, @Nullable ContactObject contact, @Nullable LicenseObject license, String version) {
+    InfoObject(String title, @Nullable String description, @Nullable URI termsOfService, @Nullable ContactObject contact, @Nullable LicenseObject license, String version, @Nullable String summary, @Nullable Map<String, Object> extensions) {
+        this.summary = summary;
+        this.extensions = Extensions.copy(extensions);
         notNull("title", title);
         notNull("version", version);
         this.title = title;
@@ -44,6 +50,8 @@ public class InfoObject implements JsonWriter {
         isFirst = append(writer, "contact", contact, isFirst);
         isFirst = append(writer, "license", license, isFirst);
         isFirst = append(writer, "version", version, isFirst);
+        isFirst = Jsonizer.append(writer, "summary", summary, isFirst);
+        isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
 
@@ -87,5 +95,14 @@ public class InfoObject implements JsonWriter {
      */
     public String version() {
         return version;
+    }
+    /** @return the summary value */
+    public @Nullable String summary() { return summary; }
+    /** @return the extensions value */
+    public Map<String, Object> extensions() { return extensions; }
+    /** @return a builder preserving all fields and extensions */
+    public InfoObjectBuilder toBuilder() {
+        return new InfoObjectBuilder()
+            .withSummary(summary).withExtensions(extensions).withTitle(title).withDescription(description).withTermsOfService(termsOfService).withContact(contact).withLicense(license).withVersion(version);
     }
 }
