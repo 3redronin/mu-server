@@ -22,13 +22,13 @@ public class ResponseObjectBuilderTest {
     public void ifOneIsNullThenTheOtherIsUsed() {
         ResponseObject primary = responseObject()
             .withDescription("Desc")
-            .withHeaders(singletonMap("x-header", headerObject().withDescription("A header").build()))
+            .withHeaders(singletonMap("x-header", headerObject().withSchema(schemaObject().build()).withDescription("A header").build()))
             .withContent(singletonMap("text/plain", mediaTypeObject()
                 .withExample("An example")
                 .withSchema(schemaObject().withDescription("scheming").build())
                 .withEncoding(singletonMap("form", encodingObject().withStyle("form").build()))
                 .build()))
-            .withLinks(singletonMap("something", linkObject().withDescription("a link").build()))
+            .withLinks(singletonMap("something", linkObject().withOperationId("operation").withDescription("a link").build()))
             .build();
 
         ResponseObject[] mergeds = {
@@ -66,20 +66,20 @@ public class ResponseObjectBuilderTest {
     public void mapsAreMerged() {
         ResponseObject primary = responseObject()
             .withDescription("Desc")
-            .withHeaders(singletonMap("x-header", headerObject().withDescription("A header").build()))
+            .withHeaders(singletonMap("x-header", headerObject().withSchema(schemaObject().build()).withDescription("A header").build()))
             .withContent(singletonMap("text/plain", mediaTypeObject().withExample("An example").build()))
-            .withLinks(singletonMap("something", linkObject().withDescription("a link").build()))
+            .withLinks(singletonMap("something", linkObject().withOperationId("operation").withDescription("a link").build()))
             .build();
 
         Map<String, HeaderObject> secondaryHeaders = new HashMap<>();
-        secondaryHeaders.put("x-header", headerObject().withDescription("Ignored header").build());
-        secondaryHeaders.put("x-sec", headerObject().withDescription("second something").build());
+        secondaryHeaders.put("x-header", headerObject().withSchema(schemaObject().build()).withDescription("Ignored header").build());
+        secondaryHeaders.put("x-sec", headerObject().withSchema(schemaObject().build()).withDescription("second something").build());
         Map<String, MediaTypeObject> secondaryContent = new HashMap<>();
         secondaryContent.put("text/plain", mediaTypeObject().withExample("ignored").build());
         secondaryContent.put("application/json", mediaTypeObject().withExample("second example").build());
         Map<String, LinkObject> secondaryLinks = new HashMap<>();
-        secondaryLinks.put("something", linkObject().withDescription("ignored").build());
-        secondaryLinks.put("something-else", linkObject().withDescription("second link").build());
+        secondaryLinks.put("something", linkObject().withOperationId("operation").withDescription("ignored").build());
+        secondaryLinks.put("something-else", linkObject().withOperationId("operation").withDescription("second link").build());
         ResponseObject secondary = responseObject()
             .withDescription("Desc 2")
             .withHeaders(secondaryHeaders)

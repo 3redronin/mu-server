@@ -13,11 +13,14 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * <p>When using the discriminator, <em>inline</em> schemas will not be considered.</p>
  */
 public class DiscriminatorObjectBuilder {
+    private @Nullable Map<String, Object> extensions;
     private @Nullable String propertyName;
     private @Nullable Map<String, String> mapping;
 
     /**
+     *
      * @param propertyName <strong>REQUIRED</strong>. The name of the property in the payload that will hold the discriminator value.
+     *
      * @return The current builder
      */
     public DiscriminatorObjectBuilder withPropertyName(String propertyName) {
@@ -26,7 +29,9 @@ public class DiscriminatorObjectBuilder {
     }
 
     /**
+     *
      * @param mapping An object to hold mappings between payload values and schema names or references.
+     *
      * @return The current builder
      */
     public DiscriminatorObjectBuilder withMapping(@Nullable Map<String, String> mapping) {
@@ -38,7 +43,7 @@ public class DiscriminatorObjectBuilder {
      * @return A new object
      */
     public DiscriminatorObject build() {
-        return new DiscriminatorObject(propertyName, immutable(mapping));
+        return new DiscriminatorObject(propertyName, immutable(mapping), extensions);
     }
 
     /**
@@ -48,5 +53,20 @@ public class DiscriminatorObjectBuilder {
      */
     public static DiscriminatorObjectBuilder discriminatorObject() {
         return new DiscriminatorObjectBuilder();
+    }
+    /**
+     * @param value the extensions value
+     * @return this builder */
+    public DiscriminatorObjectBuilder withExtensions(@Nullable Map<String, Object> value) { this.extensions = value; return this; }
+    /**
+     * @param name an x- extension name
+     * @param value its JSON value
+     * @return this builder */
+    public DiscriminatorObjectBuilder withExtension(String name, @Nullable Object value) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>();
+        if (extensions != null) copy.putAll(extensions);
+        Extensions.put(copy, name, value);
+        extensions = copy;
+        return this;
     }
 }

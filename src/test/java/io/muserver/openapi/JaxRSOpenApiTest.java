@@ -62,23 +62,17 @@ public class JaxRSOpenApiTest {
         JSONObject getOperation = (JSONObject) openApi.optQuery("/paths/~1api~1cars~1{carId}/get");
         assertThat(getOperation, notNullValue());
         JSONObject expected = new JSONObject("{\n" +
-            "    \"requestBody\": {\n" +
-            "        \"content\": {},\n" +
-            "        \"required\": false\n" +
-            "    },\n" +
             "    \"operationId\": \"GET_api_cars__carId_\",\n" +
             "    \"responses\": {\"200\": {\n" +
             "      \"description\": \"Success\",\n" +
             "      \"content\": {\n" +
             "        \"application/json\": {\n" +
             "          \"schema\": {\n" +
-            "            \"nullable\": true,\n" +
             "            \"type\": \"string\"\n" +
             "          }\n" +
             "        },\n" +
             "        \"text/plain\": {\n" +
             "          \"schema\": {\n" +
-            "            \"nullable\": true,\n" +
             "            \"type\": \"string\"\n" +
             "          }\n" +
             "        }\n" +

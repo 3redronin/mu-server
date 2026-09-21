@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import java.util.Map;
+
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -12,6 +14,7 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see XmlObjectBuilder
  */
 public class XmlObject implements JsonWriter {
+    private final Map<String, Object> extensions;
 
     private final @Nullable String name;
     private final @Nullable URI namespace;
@@ -19,7 +22,8 @@ public class XmlObject implements JsonWriter {
     private final boolean attribute;
     private final boolean wrapped;
 
-    XmlObject(@Nullable String name, @Nullable URI namespace, @Nullable String prefix, boolean attribute, boolean wrapped) {
+    XmlObject(@Nullable String name, @Nullable URI namespace, @Nullable String prefix, boolean attribute, boolean wrapped, @Nullable Map<String, Object> extensions) {
+        this.extensions = Extensions.copy(extensions);
         this.name = name;
         this.namespace = namespace;
         this.prefix = prefix;
@@ -36,6 +40,7 @@ public class XmlObject implements JsonWriter {
         isFirst = append(writer, "prefix", prefix, isFirst);
         isFirst = append(writer, "attribute", attribute, isFirst);
         isFirst = append(writer, "wrapped", wrapped, isFirst);
+        isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
 
@@ -72,5 +77,12 @@ public class XmlObject implements JsonWriter {
      */
     public boolean wrapped() {
         return wrapped;
+    }
+    /** @return the extensions value */
+    public Map<String, Object> extensions() { return extensions; }
+    /** @return a builder preserving all fields and extensions */
+    public XmlObjectBuilder toBuilder() {
+        return new XmlObjectBuilder()
+            .withExtensions(extensions).withName(name).withNamespace(namespace).withPrefix(prefix).withAttribute(attribute).withWrapped(wrapped);
     }
 }

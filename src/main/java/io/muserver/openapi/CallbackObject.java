@@ -11,10 +11,12 @@ import static io.muserver.Mutils.notNull;
  * @see CallbackObjectBuilder
  */
 public class CallbackObject implements JsonWriter {
+    private final Map<String, Object> extensions;
 
     private final Map<String, PathItemObject> callbacks;
 
-    CallbackObject(@Nullable Map<String, PathItemObject> callbacks) {
+    CallbackObject(@Nullable Map<String, PathItemObject> callbacks, @Nullable Map<String, Object> extensions) {
+        this.extensions = Extensions.copy(extensions);
         notNull("callbacks", callbacks);
         this.callbacks = java.util.Objects.requireNonNull(callbacks);
     }
@@ -28,6 +30,7 @@ public class CallbackObject implements JsonWriter {
             isFirst = Jsonizer.append(writer, entry.getKey(), entry.getValue(), isFirst);
         }
 
+        isFirst = Extensions.write(writer, extensions, isFirst);
         writer.append('}');
 
     }
@@ -37,5 +40,12 @@ public class CallbackObject implements JsonWriter {
      */
     public Map<String, PathItemObject> callbacks() {
         return callbacks;
+    }
+    /** @return the extensions value */
+    public Map<String, Object> extensions() { return extensions; }
+    /** @return a builder preserving all fields and extensions */
+    public CallbackObjectBuilder toBuilder() {
+        return new CallbackObjectBuilder()
+            .withExtensions(extensions).withCallbacks(callbacks);
     }
 }

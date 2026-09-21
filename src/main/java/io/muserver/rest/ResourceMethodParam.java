@@ -104,9 +104,6 @@ abstract class ResourceMethodParam {
                 pattern = Pattern.compile(regex);
             }
         }
-        if (requestBased) {
-            isRequired |= (!explicitDefault && parameter.type.isPrimitive());
-        }
         @Nullable DescriptionData descriptionData = source == ValueSource.MESSAGE_BODY
             ? DescriptionData.fromAnnotation(annotationSource, null)
             : requestBased ? DescriptionData.fromAnnotation(annotationSource, key) : null;
@@ -275,7 +272,8 @@ abstract class ResourceMethodParam {
             @Nullable Pattern pattern = pattern();
             @Nullable Pattern patternIfNotDefault = pattern == null || UriPattern.DEFAULT_CAPTURING_GROUP_PATTERN.equals(pattern.pattern()) ? null : pattern;
             return builder.withSchema(
-                schemaObjectFrom(type(), genericType(), source() == ValueSource.MATRIX_PARAM || isRequired())
+                (type() == byte[].class ? io.muserver.openapi.SchemaObjectBuilder.schemaObject().withType("array")
+                    .withItems(schemaObjectFrom(byte.class).build()) : schemaObjectFrom(type(), genericType()))
                     .withDefaultValue(documentationDefaultValue())
                     .withExternalDocs(externalDoc)
                     .withPattern(patternIfNotDefault)
@@ -283,11 +281,11 @@ abstract class ResourceMethodParam {
             );
         }
 
-        private @Nullable Object documentationDefaultValue() {
+        @Nullable Object documentationDefaultValue() {
             if (source() == ValueSource.PATH_PARAM || !hasExplicitDefault()) {
                 return null;
             }
-            if (!array) {
+            if (!isMultiValued()) {
                 return defaultValue();
             }
             return Collections.singletonList(defaultValue());

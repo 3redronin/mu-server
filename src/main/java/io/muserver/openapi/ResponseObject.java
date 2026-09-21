@@ -13,13 +13,15 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see ResponseObjectBuilder
  */
 public class ResponseObject implements JsonWriter {
+    private final Map<String, Object> extensions;
 
     private final String description;
-    private final @Nullable Map<String, HeaderObject> headers;
+    private final @Nullable Map<String, ReferenceOr<HeaderObject>> headers;
     private final @Nullable Map<String, MediaTypeObject> content;
-    private final @Nullable Map<String, LinkObject> links;
+    private final @Nullable Map<String, ReferenceOr<LinkObject>> links;
 
-    ResponseObject(@Nullable String description, @Nullable Map<String, HeaderObject> headers, @Nullable Map<String, MediaTypeObject> content, @Nullable Map<String, LinkObject> links) {
+    ResponseObject(@Nullable String description, @Nullable Map<String, ReferenceOr<HeaderObject>> headers, @Nullable Map<String, MediaTypeObject> content, @Nullable Map<String, ReferenceOr<LinkObject>> links, @Nullable Map<String, Object> extensions) {
+        this.extensions = Extensions.copy(extensions);
         notNull("description", description);
         this.description = java.util.Objects.requireNonNull(description);
         this.headers = headers;
@@ -35,6 +37,7 @@ public class ResponseObject implements JsonWriter {
         isFirst = append(writer, "headers", headers, isFirst);
         isFirst = append(writer, "content", content, isFirst);
         isFirst = append(writer, "links", links, isFirst);
+        isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
 
@@ -49,7 +52,7 @@ public class ResponseObject implements JsonWriter {
       @return the value described by {@link ResponseObjectBuilder#withHeaders}
      */
     public @Nullable Map<String, HeaderObject> headers() {
-        return headers;
+        return ReferenceValues.values(headers);
     }
 
     /**
@@ -63,6 +66,17 @@ public class ResponseObject implements JsonWriter {
       @return the value described by {@link ResponseObjectBuilder#withLinks}
      */
     public @Nullable Map<String, LinkObject> links() {
-        return links;
+        return ReferenceValues.values(links);
+    }
+    /** @return the extensions value */
+    public Map<String, Object> extensions() { return extensions; }
+    /** @return inline values and references for headers */
+    public @Nullable Map<String, ReferenceOr<HeaderObject>> headersOrReferences() { return headers; }
+    /** @return inline values and references for links */
+    public @Nullable Map<String, ReferenceOr<LinkObject>> linksOrReferences() { return links; }
+    /** @return a builder preserving all fields and extensions */
+    public ResponseObjectBuilder toBuilder() {
+        return new ResponseObjectBuilder()
+            .withExtensions(extensions).withDescription(description).withHeadersOrReferences(headers).withContent(content).withLinksOrReferences(links);
     }
 }

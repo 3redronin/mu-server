@@ -11,10 +11,12 @@ import java.util.stream.Collectors;
  * @see PathsObjectBuilder
  */
 public class PathsObject implements JsonWriter {
+    private final Map<String, Object> extensions;
 
     private final @Nullable Map<String, PathItemObject> pathItemObjects;
 
-    PathsObject(@Nullable Map<String, PathItemObject> pathItemObjects) {
+    PathsObject(@Nullable Map<String, PathItemObject> pathItemObjects, @Nullable Map<String, Object> extensions) {
+        this.extensions = Extensions.copy(extensions);
         if (pathItemObjects != null) {
             for (String path : pathItemObjects.keySet()) {
                 if (!path.startsWith("/")) {
@@ -34,13 +36,7 @@ public class PathsObject implements JsonWriter {
                     }
                 }
             }
-            this.pathItemObjects = new LinkedHashMap<>(pathItemObjects.size());
-            for (Map.Entry<String, PathItemObject> entry : pathItemObjects.entrySet().stream()
-                .sorted(Comparator.comparing(Map.Entry::getKey))
-                .collect(Collectors.toList())
-            ) {
-                this.pathItemObjects.put(entry.getKey(), entry.getValue());
-            }
+            this.pathItemObjects = Collections.unmodifiableMap(new TreeMap<>(pathItemObjects));
         } else {
             this.pathItemObjects = null;
         }
@@ -55,6 +51,7 @@ public class PathsObject implements JsonWriter {
                 isFirst = Jsonizer.append(writer, entry.getKey(), entry.getValue(), isFirst);
             }
         }
+        isFirst = Extensions.write(writer, extensions, isFirst);
         writer.append('}');
     }
 
@@ -63,5 +60,12 @@ public class PathsObject implements JsonWriter {
      */
     public @Nullable Map<String, PathItemObject> pathItemObjects() {
         return pathItemObjects;
+    }
+    /** @return the extensions value */
+    public Map<String, Object> extensions() { return extensions; }
+    /** @return a builder preserving all fields and extensions */
+    public PathsObjectBuilder toBuilder() {
+        return new PathsObjectBuilder()
+            .withExtensions(extensions).withPathItemObjects(pathItemObjects);
     }
 }

@@ -12,14 +12,17 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * based on the response.</p>
  */
 public class ResponseObjectBuilder {
+    private @Nullable Map<String, Object> extensions;
     private @Nullable String description;
-    private @Nullable Map<String, HeaderObject> headers;
+    private @Nullable Map<String, ReferenceOr<HeaderObject>> headers;
     private @Nullable Map<String, MediaTypeObject> content;
-    private @Nullable Map<String, LinkObject> links;
+    private @Nullable Map<String, ReferenceOr<LinkObject>> links;
 
     /**
+     *
      * @param description <strong>REQUIRED</strong>. A short description of the response.
      *                    <a href="http://spec.commonmark.org/">CommonMark syntax</a> MAY be used for rich text representation.
+     *
      * @return The current builder
      */
     public ResponseObjectBuilder withDescription(String description) {
@@ -28,21 +31,25 @@ public class ResponseObjectBuilder {
     }
 
     /**
+     *
      * @param headers Maps a header name to its definition. <a href="https://tools.ietf.org/html/rfc7230#page-22">RFC7230</a>
      *                states header names are case insensitive. If a response header is defined with the name
      *                <code>"Content-Type"</code>, it SHALL be ignored.
+     *
      * @return The current builder
      */
     public ResponseObjectBuilder withHeaders(@Nullable Map<String, HeaderObject> headers) {
-        this.headers = headers;
+        this.headers = ReferenceValues.inline(headers);
         return this;
     }
 
     /**
+     *
      * @param content A map containing descriptions of potential response payloads. The key is a media type or
      *                <a href="https://tools.ietf.org/html/rfc7231#appendix-D">media type range</a> and the value
      *                describes it.  For responses that match multiple keys, only the most specific key is applicable.
      *                e.g. text/plain overrides text/*
+     *
      * @return The current builder
      */
     public ResponseObjectBuilder withContent(@Nullable Map<String, MediaTypeObject> content) {
@@ -51,11 +58,13 @@ public class ResponseObjectBuilder {
     }
 
     /**
+     *
      * @param links A map of operations links that can be followed from the response.
+     *
      * @return The current builder
      */
     public ResponseObjectBuilder withLinks(@Nullable Map<String, LinkObject> links) {
-        this.links = links;
+        this.links = ReferenceValues.inline(links);
         return this;
     }
 
@@ -63,7 +72,7 @@ public class ResponseObjectBuilder {
      * @return A new object
      */
     public ResponseObject build() {
-        return new ResponseObject(description, immutable(headers), immutable(content), immutable(links));
+        return new ResponseObject(description, immutable(headers), immutable(content), immutable(links), extensions);
     }
 
     /**
@@ -77,65 +86,66 @@ public class ResponseObjectBuilder {
 
     /**
      * Creates a new build by merging two existing response objects
+     *
      * @param primary A responses object to use. This is the dominant response who's values will
      *                 be preferred when values cannot be merged (such as {@link ResponseObject#description}
+     *
      * @param secondary The other responses object
+     *
      * @return A builder that is the merged value of the two given ones
      */
     public static ResponseObjectBuilder mergeResponses(@Nullable ResponseObject primary, @Nullable ResponseObject secondary) {
 
 
-        Map<String, HeaderObject> mergedHeaders = new HashMap<>();
-        addHeaders(mergedHeaders, primary);
-        addHeaders(mergedHeaders, secondary);
-
-        Map<String, MediaTypeObject> mergedContent = new HashMap<>();
-        addContent(mergedContent, primary);
-        addContent(mergedContent, secondary);
-
-        Map<String, LinkObject> mergedLinks = new HashMap<>();
-        addLinks(mergedLinks, primary);
-        addLinks(mergedLinks, secondary);
-
-        ResponseObjectBuilder builder = responseObject()
-            .withHeaders(mergedHeaders.isEmpty() ? null : mergedHeaders)
-            .withContent(mergedContent.isEmpty() ? null : mergedContent)
-            .withLinks(mergedLinks.isEmpty() ? null : mergedLinks);
-        String description = primary != null ? primary.description() : secondary != null ? secondary.description() : null;
-        return description == null ? builder : builder.withDescription(description);
+        if (primary == null) return secondary == null ? responseObject() : secondary.toBuilder();
+        if (secondary == null) return primary.toBuilder();
+        Map<String, ReferenceOr<HeaderObject>> headers = new java.util.TreeMap<>();
+        if (secondary.headersOrReferences() != null) headers.putAll(secondary.headersOrReferences());
+        if (primary.headersOrReferences() != null) headers.putAll(primary.headersOrReferences());
+        Map<String, ReferenceOr<LinkObject>> links = new java.util.TreeMap<>();
+        if (secondary.linksOrReferences() != null) links.putAll(secondary.linksOrReferences());
+        if (primary.linksOrReferences() != null) links.putAll(primary.linksOrReferences());
+        Map<String, MediaTypeObject> content = mergeContent(primary.content(), secondary.content());
+        return primary.toBuilder().withHeadersOrReferences(headers.isEmpty() ? null : headers)
+            .withLinksOrReferences(links.isEmpty() ? null : links).withContent(content.isEmpty() ? null : content);
     }
 
-    private static void addLinks(Map<String, LinkObject> dest, @Nullable ResponseObject source) {
-        if (source != null && source.links() != null) {
-            for (Map.Entry<String, LinkObject> entry : source.links().entrySet()) {
-                String name = entry.getKey();
-                if (!dest.containsKey(name)) {
-                    dest.put(name, entry.getValue());
-                }
-            }
-        }
+    /** Combines all media types and payload alternatives.
+     *
+     * @param primary first content map
+     *
+     * @param secondary second content map
+     *
+     * @return the merged content */
+    public static Map<String, MediaTypeObject> mergeContent(@Nullable Map<String, MediaTypeObject> primary, @Nullable Map<String, MediaTypeObject> secondary) {
+        Map<String, MediaTypeObject> merged = new java.util.TreeMap<>();
+        if (primary != null) merged.putAll(primary);
+        if (secondary != null) secondary.forEach((key, value) -> merged.merge(key, value,
+            (a, b) -> MediaTypeObjectBuilder.mergeMediaTypes(a, b).build()));
+        return merged;
     }
 
-    private static void addContent(Map<String, MediaTypeObject> dest, @Nullable ResponseObject source) {
-        if (source != null && source.content() != null) {
-            for (Map.Entry<String, MediaTypeObject> entry : source.content().entrySet()) {
-                String name = entry.getKey();
-                if (!dest.containsKey(name)) {
-                    dest.put(name, entry.getValue());
-                }
-            }
-        }
+    /**
+     * @param value the extensions value
+     * @return this builder */
+    public ResponseObjectBuilder withExtensions(@Nullable Map<String, Object> value) { this.extensions = value; return this; }
+    /**
+     * @param name an x- extension name
+     * @param value its JSON value
+     * @return this builder */
+    public ResponseObjectBuilder withExtension(String name, @Nullable Object value) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>();
+        if (extensions != null) copy.putAll(extensions);
+        Extensions.put(copy, name, value);
+        extensions = copy;
+        return this;
     }
-
-    private static void addHeaders(Map<String, HeaderObject> dest, @Nullable ResponseObject source) {
-        if (source != null && source.headers() != null) {
-            for (Map.Entry<String, HeaderObject> entry : source.headers().entrySet()) {
-                String name = entry.getKey();
-                if (!dest.containsKey(name)) {
-                    dest.put(name, entry.getValue()); // merging headers is too complicated so just add missing headers
-                }
-            }
-        }
-    }
-
+    /**
+     * @param value inline values and references for headers
+     * @return this builder */
+    public ResponseObjectBuilder withHeadersOrReferences(@Nullable Map<String, ReferenceOr<HeaderObject>> value) { this.headers = value; return this; }
+    /**
+     * @param value inline values and references for links
+     * @return this builder */
+    public ResponseObjectBuilder withLinksOrReferences(@Nullable Map<String, ReferenceOr<LinkObject>> value) { this.links = value; return this; }
 }

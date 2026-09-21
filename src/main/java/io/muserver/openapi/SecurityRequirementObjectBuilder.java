@@ -23,11 +23,13 @@ public class SecurityRequirementObjectBuilder {
     private @Nullable Map<String, List<String>> requirements;
 
     /**
+     *
      * @param requirements The requirements, or null to clear them. Each name MUST correspond to a security scheme
      *                     which is declared in the {@link ComponentsObject#securitySchemes()}
      *                    under the {@link ComponentsObject}. If the security scheme is of type <code>"oauth2"</code> or
      *                     <code>"openIdConnect"</code>, then the value is a list of scope names required for the execution.
      *                     For other security scheme types, the array MUST be empty.
+     *
      * @return The builder
      */
     public SecurityRequirementObjectBuilder withRequirements(@Nullable Map<String, List<String>> requirements) {

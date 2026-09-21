@@ -13,14 +13,18 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * and parameters are available.
  */
 public class PathItemObjectBuilder {
+    private @Nullable String ref;
+    private @Nullable Map<String, Object> extensions;
     private @Nullable String summary;
     private @Nullable String description;
     private @Nullable Map<String, OperationObject> operations;
     private @Nullable List<ServerObject> servers;
-    private @Nullable List<ParameterObject> parameters;
+    private @Nullable List<ReferenceOr<ParameterObject>> parameters;
 
     /**
+     *
      * @param summary An optional, string summary, intended to apply to all operations in this path.
+     *
      * @return The current builder
      */
     public PathItemObjectBuilder withSummary(@Nullable String summary) {
@@ -29,8 +33,10 @@ public class PathItemObjectBuilder {
     }
 
     /**
+     *
      * @param description An optional, string description, intended to apply to all operations in this path.
      *                    <a href="http://spec.commonmark.org/">CommonMark syntax</a> MAY be used for rich text representation.
+     *
      * @return The current builder
      */
     public PathItemObjectBuilder withDescription(@Nullable String description) {
@@ -39,7 +45,9 @@ public class PathItemObjectBuilder {
     }
 
     /**
+     *
      * @param operations The operations allowed on this path, where the keys to the map are <code>GET</code>, <code>POST</code> etc.
+     *
      * @return The current builder
      */
     public PathItemObjectBuilder withOperations(@Nullable Map<String, OperationObject> operations) {
@@ -48,7 +56,9 @@ public class PathItemObjectBuilder {
     }
 
     /**
+     *
      * @param servers An alternative server array to service all operations in this path.
+     *
      * @return The current builder
      */
     public PathItemObjectBuilder withServers(@Nullable List<ServerObject> servers) {
@@ -57,14 +67,16 @@ public class PathItemObjectBuilder {
     }
 
     /**
+     *
      * @param parameters A list of parameters that are applicable for all the operations described under this path.
      *                   These parameters can be overridden at the operation level, but cannot be removed there. The
      *                   list MUST NOT include duplicated parameters. A unique parameter is defined by a combination
      *                   of a name and location.
+     *
      * @return The current builder
      */
     public PathItemObjectBuilder withParameters(@Nullable List<ParameterObject> parameters) {
-        this.parameters = parameters;
+        this.parameters = ReferenceValues.inline(parameters);
         return this;
     }
 
@@ -72,7 +84,7 @@ public class PathItemObjectBuilder {
      * @return A new object
      */
     public PathItemObject build() {
-        return new PathItemObject(summary, description, immutable(operations), immutable(servers), immutable(parameters));
+        return new PathItemObject(summary, description, immutable(operations), immutable(servers), immutable(parameters), ref, extensions);
     }
 
     /**
@@ -104,6 +116,29 @@ public class PathItemObjectBuilder {
     }
 
     @Nullable List<ParameterObject> parameters() {
-        return parameters;
+        return ReferenceValues.values(parameters);
     }
+    /**
+     * @param value the ref value
+     * @return this builder */
+    public PathItemObjectBuilder withRef(@Nullable String value) { this.ref = value; return this; }
+    /**
+     * @param value the extensions value
+     * @return this builder */
+    public PathItemObjectBuilder withExtensions(@Nullable Map<String, Object> value) { this.extensions = value; return this; }
+    /**
+     * @param name an x- extension name
+     * @param value its JSON value
+     * @return this builder */
+    public PathItemObjectBuilder withExtension(String name, @Nullable Object value) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>();
+        if (extensions != null) copy.putAll(extensions);
+        Extensions.put(copy, name, value);
+        extensions = copy;
+        return this;
+    }
+    /**
+     * @param value inline values and references for parameters
+     * @return this builder */
+    public PathItemObjectBuilder withParametersOrReferences(@Nullable List<ReferenceOr<ParameterObject>> value) { this.parameters = value; return this; }
 }

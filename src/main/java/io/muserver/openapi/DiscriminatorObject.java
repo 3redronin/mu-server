@@ -13,10 +13,12 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see DiscriminatorObjectBuilder
  */
 public class DiscriminatorObject implements JsonWriter {
+    private final Map<String, Object> extensions;
     private final String propertyName;
     private final @Nullable Map<String, String> mapping;
 
-    DiscriminatorObject(@Nullable String propertyName, @Nullable Map<String, String> mapping) {
+    DiscriminatorObject(@Nullable String propertyName, @Nullable Map<String, String> mapping, @Nullable Map<String, Object> extensions) {
+        this.extensions = Extensions.copy(extensions);
         notNull("propertyName", propertyName);
         this.propertyName = java.util.Objects.requireNonNull(propertyName);
         this.mapping = mapping;
@@ -28,6 +30,7 @@ public class DiscriminatorObject implements JsonWriter {
         boolean isFirst = true;
         isFirst = append(writer, "propertyName", propertyName, isFirst);
         isFirst = append(writer, "mapping", mapping, isFirst);
+        isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
 
@@ -43,5 +46,12 @@ public class DiscriminatorObject implements JsonWriter {
      */
     public @Nullable Map<String, String> mapping() {
         return mapping;
+    }
+    /** @return the extensions value */
+    public Map<String, Object> extensions() { return extensions; }
+    /** @return a builder preserving all fields and extensions */
+    public DiscriminatorObjectBuilder toBuilder() {
+        return new DiscriminatorObjectBuilder()
+            .withExtensions(extensions).withPropertyName(propertyName).withMapping(mapping);
     }
 }

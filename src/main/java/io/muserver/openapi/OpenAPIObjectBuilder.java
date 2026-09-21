@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import java.util.Map;
+
 import org.jspecify.annotations.Nullable;
 
 import java.util.List;
@@ -11,6 +13,9 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * This is the root document object of the OpenAPI document.
  */
 public class OpenAPIObjectBuilder {
+    private @Nullable String jsonSchemaDialect;
+    private @Nullable Map<String, ReferenceOr<PathItemObject>> webhooks;
+    private @Nullable Map<String, Object> extensions;
     private @Nullable InfoObject info;
     private @Nullable List<ServerObject> servers;
     private @Nullable PathsObject paths;
@@ -20,7 +25,9 @@ public class OpenAPIObjectBuilder {
     private @Nullable ExternalDocumentationObject externalDocs;
 
     /**
+     *
      * @param info <strong>REQUIRED</strong>. Provides metadata about the API. The metadata MAY be used by tooling as required.
+     *
      * @return The current builder
      */
     public OpenAPIObjectBuilder withInfo(InfoObject info) {
@@ -29,9 +36,11 @@ public class OpenAPIObjectBuilder {
     }
 
     /**
+     *
      * @param servers An array of Server Objects, which provide connectivity information to a target server. If the <code>servers</code>
      *                property is not provided, or is an empty array, the default value would be a {@link ServerObject} with a
      *                <code>url</code> value of <code>/</code>.
+     *
      * @return The current builder
      */
     public OpenAPIObjectBuilder withServers(@Nullable List<ServerObject> servers) {
@@ -40,16 +49,20 @@ public class OpenAPIObjectBuilder {
     }
 
     /**
-     * @param paths <strong>REQUIRED</strong>. The available paths and operations for the API.
+     *
+     * @param paths The available paths and operations, or null. At least one of paths, components, or webhooks must be supplied.
+     *
      * @return The current builder
      */
-    public OpenAPIObjectBuilder withPaths(PathsObject paths) {
+    public OpenAPIObjectBuilder withPaths(@Nullable PathsObject paths) {
         this.paths = paths;
         return this;
     }
 
     /**
+     *
      * @param components An element to hold various schemas for the specification.
+     *
      * @return The current builder
      */
     public OpenAPIObjectBuilder withComponents(@Nullable ComponentsObject components) {
@@ -58,9 +71,11 @@ public class OpenAPIObjectBuilder {
     }
 
     /**
+     *
      * @param security A declaration of which security mechanisms can be used across the API. The list of values includes
      *                 alternative security requirement objects that can be used. Only one of the security requirement
      *                 objects need to be satisfied to authorize a request. Individual operations can override this definition.
+     *
      * @return The current builder
      */
     public OpenAPIObjectBuilder withSecurity(@Nullable List<SecurityRequirementObject> security) {
@@ -69,10 +84,12 @@ public class OpenAPIObjectBuilder {
     }
 
     /**
+     *
      * @param tags A list of tags used by the specification with additional metadata. The order of the tags can be used
      *             to reflect on their order by the parsing tools. Not all tags that are used by the {@link OperationObject} must
      *             be declared. The tags that are not declared MAY be organized randomly or based on the tools' logic.
      *             Each tag name in the list MUST be unique.
+     *
      * @return The current builder
      */
     public OpenAPIObjectBuilder withTags(@Nullable List<TagObject> tags) {
@@ -81,7 +98,9 @@ public class OpenAPIObjectBuilder {
     }
 
     /**
+     *
      * @param externalDocs Additional external documentation.
+     *
      * @return The current builder
      */
     public OpenAPIObjectBuilder withExternalDocs(@Nullable ExternalDocumentationObject externalDocs) {
@@ -94,7 +113,7 @@ public class OpenAPIObjectBuilder {
      */
     public OpenAPIObject build() {
         InfoObject infoToUse = this.info == null ? infoObject().build() : this.info;
-        return new OpenAPIObject(infoToUse, immutable(servers), paths, components, immutable(security), immutable(tags), externalDocs);
+        return new OpenAPIObject(infoToUse, immutable(servers), paths, components, immutable(security), immutable(tags), externalDocs, jsonSchemaDialect, webhooks, extensions);
     }
 
     /**
@@ -105,4 +124,33 @@ public class OpenAPIObjectBuilder {
     public static OpenAPIObjectBuilder openAPIObject() {
         return new OpenAPIObjectBuilder();
     }
+    /**
+     * @param value the jsonSchemaDialect value
+     * @return this builder */
+    public OpenAPIObjectBuilder withJsonSchemaDialect(@Nullable String value) { this.jsonSchemaDialect = value; return this; }
+    /**
+     * @param value the webhooks value
+     * @return this builder */
+    public OpenAPIObjectBuilder withWebhooksOrReferences(@Nullable Map<String, ReferenceOr<PathItemObject>> value) { this.webhooks = value; return this; }
+    /**
+     * @param value the extensions value
+     * @return this builder */
+    public OpenAPIObjectBuilder withExtensions(@Nullable Map<String, Object> value) { this.extensions = value; return this; }
+    /**
+     * @param name an x- extension name
+     * @param value its JSON value
+     * @return this builder */
+    public OpenAPIObjectBuilder withExtension(String name, @Nullable Object value) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>();
+        if (extensions != null) copy.putAll(extensions);
+        Extensions.put(copy, name, value);
+        extensions = copy;
+        return this;
+    }
+    /**
+     * @param value inline path items
+     * @return this builder */
+    public OpenAPIObjectBuilder withWebhooks(@Nullable Map<String, PathItemObject> value) { this.webhooks = ReferenceValues.inline(value); return this; }
+    /** @return the configured paths, or null if absent */
+    public @Nullable PathsObject paths() { return paths; }
 }

@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import java.util.Map;
+
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
@@ -10,19 +12,21 @@ import java.net.URI;
  * @see ExampleObjectBuilder
  */
 public class ExampleObject implements JsonWriter {
+    private final Map<String, Object> extensions;
 
     private final @Nullable String summary;
     private final @Nullable String description;
     private final @Nullable Object value;
     private final @Nullable URI externalValue;
 
-    ExampleObject(@Nullable String summary, @Nullable String description, @Nullable Object value, @Nullable URI externalValue) {
+    ExampleObject(@Nullable String summary, @Nullable String description, @Nullable Object value, @Nullable URI externalValue, @Nullable Map<String, Object> extensions) {
+        this.extensions = Extensions.copy(extensions);
         if (value != null && externalValue != null) {
             throw new IllegalArgumentException("Only one of 'value' or 'externalValue' can have a value");
         }
         this.summary = summary;
         this.description = description;
-        this.value = value;
+        this.value = value == null ? null : JsonValues.freeze(value);
         this.externalValue = externalValue;
     }
 
@@ -34,6 +38,7 @@ public class ExampleObject implements JsonWriter {
         isFirst = Jsonizer.append(writer, "description", description, isFirst);
         isFirst = Jsonizer.append(writer, "value", value, isFirst);
         isFirst = Jsonizer.append(writer, "externalValue", externalValue, isFirst);
+        isFirst = Extensions.write(writer, extensions, isFirst);
         writer.append('}');
     }
 
@@ -63,5 +68,12 @@ public class ExampleObject implements JsonWriter {
      */
     public @Nullable URI externalValue() {
         return externalValue;
+    }
+    /** @return the extensions value */
+    public Map<String, Object> extensions() { return extensions; }
+    /** @return a builder preserving all fields and extensions */
+    public ExampleObjectBuilder toBuilder() {
+        return new ExampleObjectBuilder()
+            .withExtensions(extensions).withSummary(summary).withDescription(description).withValue(value).withExternalValue(externalValue);
     }
 }

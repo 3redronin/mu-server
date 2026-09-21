@@ -14,17 +14,17 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see OAuthFlowObjectBuilder
  */
 public class OAuthFlowObject implements JsonWriter {
+    private final Map<String, Object> extensions;
 
-    private final URI authorizationUrl;
-    private final URI tokenUrl;
+    private final @Nullable URI authorizationUrl;
+    private final @Nullable URI tokenUrl;
     private final @Nullable URI refreshUrl;
     private final Map<String, String> scopes;
 
-    OAuthFlowObject(@Nullable URI authorizationUrl, @Nullable URI tokenUrl, @Nullable URI refreshUrl, @Nullable Map<String, String> scopes) {
-        notNull("authorizationUrl", authorizationUrl);
-        this.authorizationUrl = java.util.Objects.requireNonNull(authorizationUrl);
-        notNull("tokenUrl", tokenUrl);
-        this.tokenUrl = java.util.Objects.requireNonNull(tokenUrl);
+    OAuthFlowObject(@Nullable URI authorizationUrl, @Nullable URI tokenUrl, @Nullable URI refreshUrl, @Nullable Map<String, String> scopes, @Nullable Map<String, Object> extensions) {
+        this.extensions = Extensions.copy(extensions);
+        this.authorizationUrl = authorizationUrl;
+        this.tokenUrl = tokenUrl;
         this.refreshUrl = refreshUrl;
         notNull("scopes", scopes);
         this.scopes = java.util.Objects.requireNonNull(scopes);
@@ -38,20 +38,21 @@ public class OAuthFlowObject implements JsonWriter {
         isFirst = append(writer, "tokenUrl", tokenUrl, isFirst);
         isFirst = append(writer, "refreshUrl", refreshUrl, isFirst);
         isFirst = append(writer, "scopes", scopes, isFirst);
+        isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
 
     /**
      * @return the value described by {@link OAuthFlowObjectBuilder#withAuthorizationUrl}
      */
-    public URI authorizationUrl() {
+    public @Nullable URI authorizationUrl() {
         return authorizationUrl;
     }
 
     /**
       @return the value described by {@link OAuthFlowObjectBuilder#withTokenUrl}
      */
-    public URI tokenUrl() {
+    public @Nullable URI tokenUrl() {
         return tokenUrl;
     }
 
@@ -67,5 +68,12 @@ public class OAuthFlowObject implements JsonWriter {
      */
     public Map<String, String> scopes() {
         return scopes;
+    }
+    /** @return the extensions value */
+    public Map<String, Object> extensions() { return extensions; }
+    /** @return a builder preserving all fields and extensions */
+    public OAuthFlowObjectBuilder toBuilder() {
+        return new OAuthFlowObjectBuilder()
+            .withExtensions(extensions).withAuthorizationUrl(authorizationUrl).withTokenUrl(tokenUrl).withRefreshUrl(refreshUrl).withScopes(scopes);
     }
 }

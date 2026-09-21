@@ -1,519 +1,261 @@
 package io.muserver.openapi;
 
 import org.jspecify.annotations.Nullable;
-
+import java.util.*;
+import java.util.regex.Pattern;
 import java.io.IOException;
 import java.io.Writer;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.regex.Pattern;
 
-import static io.muserver.openapi.Jsonizer.append;
-
-/**
- * @see SchemaObjectBuilder
- */
+/** An immutable OpenAPI 3.1 Schema Object, including JSON Schema 2020-12 boolean schemas. */
 public class SchemaObject implements JsonWriter {
+    private final Map<String, Object> keywords;
+    private final @Nullable Boolean booleanValue;
 
-    private final @Nullable String title;
-    private final @Nullable Double multipleOf;
-    private final @Nullable Double maximum;
-    private final @Nullable Boolean exclusiveMaximum;
-    private final @Nullable Double minimum;
-    private final @Nullable Boolean exclusiveMinimum;
-    private final @Nullable Integer maxLength;
-    private final @Nullable Integer minLength;
-    private final @Nullable Pattern pattern;
-    private final @Nullable Integer maxItems;
-    private final @Nullable Integer minItems;
-    private final @Nullable Boolean uniqueItems;
-    private final @Nullable Integer maxProperties;
-    private final @Nullable Integer minProperties;
-    private final @Nullable List<String> required;
-    private final @Nullable List<Object> enumValue;
-    private final @Nullable String type;
-    private final @Nullable List<SchemaObject> allOf;
-    private final @Nullable List<SchemaObject> oneOf;
-    private final @Nullable List<SchemaObject> anyOf;
-    private final @Nullable List<SchemaObject> not;
-    private final @Nullable SchemaObject items;
-    private final @Nullable Map<String, SchemaObject> properties;
-    private final @Nullable Object additionalProperties;
-    private final @Nullable String description;
-    private final @Nullable String format;
-    private final @Nullable Object defaultValue;
-    private final @Nullable Boolean nullable;
-    private final @Nullable DiscriminatorObject discriminator;
-    private final @Nullable Boolean readOnly;
-    private final @Nullable Boolean writeOnly;
-    private final @Nullable XmlObject xml;
-    private final @Nullable ExternalDocumentationObject externalDocs;
-    private final @Nullable Object example;
-    private final @Nullable Boolean deprecated;
-
-    SchemaObject(@Nullable String title, @Nullable Double multipleOf, @Nullable Double maximum,
-                 @Nullable Boolean exclusiveMaximum, @Nullable Double minimum, @Nullable Boolean exclusiveMinimum,
-                 @Nullable Integer maxLength, @Nullable Integer minLength, @Nullable Pattern pattern,
-                 @Nullable Integer maxItems, @Nullable Integer minItems, @Nullable Boolean uniqueItems,
-                 @Nullable Integer maxProperties, @Nullable Integer minProperties, @Nullable List<String> required,
-                 @Nullable List<Object> enumValue, @Nullable String type, @Nullable List<SchemaObject> allOf,
-                 @Nullable List<SchemaObject> oneOf, @Nullable List<SchemaObject> anyOf,
-                 @Nullable List<SchemaObject> not, @Nullable SchemaObject items,
-                 @Nullable Map<String, SchemaObject> properties, @Nullable Object additionalProperties,
-                 @Nullable String description, @Nullable String format, @Nullable Object defaultValue,
-                 @Nullable Boolean nullable, @Nullable DiscriminatorObject discriminator, @Nullable Boolean readOnly,
-                 @Nullable Boolean writeOnly, @Nullable XmlObject xml,
-                 @Nullable ExternalDocumentationObject externalDocs, @Nullable Object example,
-                 @Nullable Boolean deprecated) {
-        if (readOnly != null && readOnly && writeOnly != null && writeOnly) {
-            throw new IllegalArgumentException("A schema cannot be both read only and write only");
+    SchemaObject(Map<String, Object> keywords, @Nullable Boolean booleanValue) {
+        if (booleanValue != null && !keywords.isEmpty()) {
+            throw new IllegalArgumentException("A boolean schema cannot also contain keywords");
         }
-        if ("array".equals(type) && items == null) {
-            throw new IllegalArgumentException("'items' cannot be null when type is 'array'");
-        }
-        if (defaultValue != null && type != null) {
-            Class<?> defaultClass = defaultValue.getClass();
-            switch (type) {
-                case "number":
-                    if (!Number.class.isAssignableFrom(defaultClass)) {
-                        throw new IllegalArgumentException("The default value must be a number but was " + defaultClass);
-                    }
-                    break;
-                case "boolean":
-                    if (!Boolean.class.isAssignableFrom(defaultClass)) {
-                        throw new IllegalArgumentException("The default value must be a boolean but was " + defaultClass);
-                    }
-                    break;
-                case "array":
-                    if (!Collection.class.isAssignableFrom(defaultClass) && !defaultClass.isArray()) {
-                        throw new IllegalArgumentException("The default value must be a boolean but was " + defaultClass);
-                    }
-                    break;
-            }
-        }
-        this.title = title;
-        this.multipleOf = multipleOf;
-        this.maximum = maximum;
-        this.exclusiveMaximum = exclusiveMaximum;
-        this.minimum = minimum;
-        this.exclusiveMinimum = exclusiveMinimum;
-        this.maxLength = maxLength;
-        this.minLength = minLength;
-        this.pattern = pattern;
-        this.maxItems = maxItems;
-        this.minItems = minItems;
-        this.uniqueItems = uniqueItems;
-        this.maxProperties = maxProperties;
-        this.minProperties = minProperties;
-        this.required = required;
-        this.enumValue = enumValue;
-        this.type = type;
-        this.allOf = allOf;
-        this.oneOf = oneOf;
-        this.anyOf = anyOf;
-        this.not = not;
-        this.items = items;
-        this.properties = properties;
-        this.additionalProperties = additionalProperties;
-        this.description = description;
-        this.format = format;
-        this.defaultValue = defaultValue;
-        this.nullable = nullable;
-        this.discriminator = discriminator;
-        this.readOnly = readOnly;
-        this.writeOnly = writeOnly;
-        this.xml = xml;
-        this.externalDocs = externalDocs;
-        this.example = example;
-        this.deprecated = deprecated;
+        this.keywords = JsonValues.freezeMap(keywords);
+        this.booleanValue = booleanValue;
     }
 
-
-    @Override
-    public void writeJson(Writer writer) throws IOException {
-        writer.append('{');
-        boolean isFirst = true;
-        isFirst = append(writer, "title", title, isFirst);
-        isFirst = append(writer, "multipleOf", multipleOf, isFirst);
-        isFirst = append(writer, "maximum", maximum, isFirst);
-        isFirst = append(writer, "exclusiveMaximum", exclusiveMaximum, isFirst);
-        isFirst = append(writer, "minimum", minimum, isFirst);
-        isFirst = append(writer, "exclusiveMinimum", exclusiveMinimum, isFirst);
-        isFirst = append(writer, "maxLength", maxLength, isFirst);
-        isFirst = append(writer, "minLength", minLength, isFirst);
-        isFirst = append(writer, "pattern", pattern, isFirst);
-        isFirst = append(writer, "maxItems", maxItems, isFirst);
-        isFirst = append(writer, "minItems", minItems, isFirst);
-        isFirst = append(writer, "uniqueItems", uniqueItems, isFirst);
-        isFirst = append(writer, "maxProperties", maxProperties, isFirst);
-        isFirst = append(writer, "minProperties", minProperties, isFirst);
-        isFirst = append(writer, "required", required, isFirst);
-        if (this.enumValue != null) {
-            List<@Nullable String> enums = new ArrayList<>();
-            if (nullable != null && nullable) {
-                enums.add(null);
-            }
-            for (Object o : this.enumValue) {
-                enums.add(((Enum<? extends Enum<?>>) o).name());
-            }
-            isFirst = append(writer, "enum", enums, isFirst);
-        }
-        isFirst = append(writer, "type", type, isFirst);
-        isFirst = append(writer, "allOf", allOf, isFirst);
-        isFirst = append(writer, "oneOf", oneOf, isFirst);
-        isFirst = append(writer, "anyOf", anyOf, isFirst);
-        isFirst = append(writer, "not", not, isFirst);
-        isFirst = append(writer, "items", items, isFirst);
-        isFirst = append(writer, "properties", properties, isFirst);
-        isFirst = append(writer, "additionalProperties", additionalProperties, isFirst);
-        isFirst = append(writer, "description", description, isFirst);
-        isFirst = append(writer, "format", format, isFirst);
-        isFirst = append(writer, "default", defaultValue, isFirst);
-        isFirst = append(writer, "nullable", nullable, isFirst);
-        isFirst = append(writer, "discriminator", discriminator, isFirst);
-        isFirst = append(writer, "readOnly", readOnly, isFirst);
-        isFirst = append(writer, "writeOnly", writeOnly, isFirst);
-        isFirst = append(writer, "xml", xml, isFirst);
-        isFirst = append(writer, "externalDocs", externalDocs, isFirst);
-        isFirst = append(writer, "example", example, isFirst);
-        isFirst = append(writer, "deprecated", deprecated, isFirst);
-        writer.append('}');
+    /** @return the immutable schema keyword map */
+    public Map<String, Object> keywords() { return keywords; }
+    /** @return the boolean schema value, or null for an object schema */
+    public @Nullable Boolean booleanValue() { return booleanValue; }
+    /** @return a builder containing every keyword and the boolean value */
+    public SchemaObjectBuilder toBuilder() { return new SchemaObjectBuilder(keywords, booleanValue); }
+    @Override public void writeJson(Writer writer) throws IOException {
+        if (booleanValue != null) writer.write(booleanValue.toString());
+        else Jsonizer.writeObject(writer, keywords);
     }
-
-    @Override
-    public String toString() {
-        return "SchemaObject{" +
-            "title='" + title + '\'' +
-            ", multipleOf=" + multipleOf +
-            ", maximum=" + maximum +
-            ", exclusiveMaximum=" + exclusiveMaximum +
-            ", minimum=" + minimum +
-            ", exclusiveMinimum=" + exclusiveMinimum +
-            ", maxLength=" + maxLength +
-            ", minLength=" + minLength +
-            ", pattern=" + pattern +
-            ", maxItems=" + maxItems +
-            ", minItems=" + minItems +
-            ", uniqueItems=" + uniqueItems +
-            ", maxProperties=" + maxProperties +
-            ", minProperties=" + minProperties +
-            ", required=" + required +
-            ", enumValue=" + enumValue +
-            ", type='" + type + '\'' +
-            ", allOf=" + allOf +
-            ", oneOf=" + oneOf +
-            ", anyOf=" + anyOf +
-            ", not=" + not +
-            ", items=" + items +
-            ", properties=" + properties +
-            ", additionalProperties=" + additionalProperties +
-            ", description='" + description + '\'' +
-            ", format='" + format + '\'' +
-            ", defaultValue=" + defaultValue +
-            ", nullable=" + nullable +
-            ", discriminator=" + discriminator +
-            ", readOnly=" + readOnly +
-            ", writeOnly=" + writeOnly +
-            ", xml=" + xml +
-            ", externalDocs=" + externalDocs +
-            ", example=" + example +
-            ", deprecated=" + deprecated +
-            '}';
+    @Override public String toString() {
+        java.io.StringWriter writer = new java.io.StringWriter();
+        try { writeJson(writer); } catch (IOException e) { throw new IllegalStateException(e); }
+        return writer.toString();
     }
-
+    /** @return whether this schema is deprecated */
+    public boolean isDeprecated() { return Boolean.TRUE.equals(deprecated()); }
+    /** @return the title keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable String title() { return (String) keywords.get("title"); }
+    /** @return the multipleOf keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Double multipleOf() { return JsonValues.doubleValue(keywords.get("multipleOf")); }
+    /** @return the maximum keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Double maximum() { return JsonValues.doubleValue(keywords.get("maximum")); }
+    /** @return the minimum keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Double minimum() { return JsonValues.doubleValue(keywords.get("minimum")); }
+    /** @return the maxLength keyword, or null if absent
+     * @throws IllegalStateException if the value exceeds the Integer range; use {@link #keywords()} for the exact value */
+    @SuppressWarnings("unchecked")
+    public @Nullable Integer maxLength() { return JsonValues.integerValue(keywords.get("maxLength"), "maxLength"); }
+    /** @return the minLength keyword, or null if absent
+     * @throws IllegalStateException if the value exceeds the Integer range; use {@link #keywords()} for the exact value */
+    @SuppressWarnings("unchecked")
+    public @Nullable Integer minLength() { return JsonValues.integerValue(keywords.get("minLength"), "minLength"); }
+    /** @return the pattern keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Pattern pattern() { return patternText() == null ? null : Pattern.compile(Objects.requireNonNull(patternText())); }
+    /** @return the maxItems keyword, or null if absent
+     * @throws IllegalStateException if the value exceeds the Integer range; use {@link #keywords()} for the exact value */
+    @SuppressWarnings("unchecked")
+    public @Nullable Integer maxItems() { return JsonValues.integerValue(keywords.get("maxItems"), "maxItems"); }
+    /** @return the minItems keyword, or null if absent
+     * @throws IllegalStateException if the value exceeds the Integer range; use {@link #keywords()} for the exact value */
+    @SuppressWarnings("unchecked")
+    public @Nullable Integer minItems() { return JsonValues.integerValue(keywords.get("minItems"), "minItems"); }
+    /** @return the uniqueItems keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Boolean uniqueItems() { return (Boolean) keywords.get("uniqueItems"); }
+    /** @return the maxProperties keyword, or null if absent
+     * @throws IllegalStateException if the value exceeds the Integer range; use {@link #keywords()} for the exact value */
+    @SuppressWarnings("unchecked")
+    public @Nullable Integer maxProperties() { return JsonValues.integerValue(keywords.get("maxProperties"), "maxProperties"); }
+    /** @return the minProperties keyword, or null if absent
+     * @throws IllegalStateException if the value exceeds the Integer range; use {@link #keywords()} for the exact value */
+    @SuppressWarnings("unchecked")
+    public @Nullable Integer minProperties() { return JsonValues.integerValue(keywords.get("minProperties"), "minProperties"); }
+    /** @return the required keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable List<String> required() { return (List<String>) keywords.get("required"); }
+    /** @return the enum keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable List<Object> enumValue() { return (List<Object>) keywords.get("enum"); }
+    /** @return the type keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable String type() { return JsonValues.singleType(keywords.get("type")); }
+    /** @return the allOf keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable List<SchemaObject> allOf() { return (List<SchemaObject>) keywords.get("allOf"); }
+    /** @return the oneOf keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable List<SchemaObject> oneOf() { return (List<SchemaObject>) keywords.get("oneOf"); }
+    /** @return the anyOf keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable List<SchemaObject> anyOf() { return (List<SchemaObject>) keywords.get("anyOf"); }
+    /** @return the items keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable SchemaObject items() { return (SchemaObject) keywords.get("items"); }
+    /** @return the properties keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Map<String, SchemaObject> properties() { return (Map<String, SchemaObject>) keywords.get("properties"); }
+    /** @return the additionalProperties keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Object additionalProperties() { return (Object) keywords.get("additionalProperties"); }
+    /** @return the description keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable String description() { return (String) keywords.get("description"); }
+    /** @return the format keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable String format() { return (String) keywords.get("format"); }
+    /** @return the default keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Object defaultValue() { return (Object) keywords.get("default"); }
+    /** @return the discriminator keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable DiscriminatorObject discriminator() { return (DiscriminatorObject) keywords.get("discriminator"); }
+    /** @return the readOnly keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Boolean readOnly() { return (Boolean) keywords.get("readOnly"); }
+    /** @return the writeOnly keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Boolean writeOnly() { return (Boolean) keywords.get("writeOnly"); }
+    /** @return the xml keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable XmlObject xml() { return (XmlObject) keywords.get("xml"); }
+    /** @return the externalDocs keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable ExternalDocumentationObject externalDocs() { return (ExternalDocumentationObject) keywords.get("externalDocs"); }
+    /** @return the example keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Object example() { return (Object) keywords.get("example"); }
+    /** @return the deprecated keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Boolean deprecated() { return (Boolean) keywords.get("deprecated"); }
+    /** @return the $ref keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable String ref() { return (String) keywords.get("$ref"); }
+    /** @return the $id keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable String id() { return (String) keywords.get("$id"); }
+    /** @return the $anchor keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable String anchor() { return (String) keywords.get("$anchor"); }
+    /** @return the $dynamicRef keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable String dynamicRef() { return (String) keywords.get("$dynamicRef"); }
+    /** @return the $dynamicAnchor keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable String dynamicAnchor() { return (String) keywords.get("$dynamicAnchor"); }
+    /** @return the $schema keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable String schemaDialect() { return (String) keywords.get("$schema"); }
+    /** @return the $vocabulary keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Map<String, Boolean> vocabulary() { return (Map<String, Boolean>) keywords.get("$vocabulary"); }
+    /** @return the $defs keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Map<String, SchemaObject> defs() { return (Map<String, SchemaObject>) keywords.get("$defs"); }
+    /** @return the $comment keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable String comment() { return (String) keywords.get("$comment"); }
+    /** @return the type keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable List<String> types() { return keywords.containsKey("type") ? JsonValues.types(keywords.get("type")) : null; }
+    /** @return the const keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Object constValue() { return (Object) keywords.get("const"); }
+    /** @return the examples keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable List<Object> examples() { return (List<Object>) keywords.get("examples"); }
+    /** @return the not keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable SchemaObject notSchema() { return (SchemaObject) keywords.get("not"); }
+    /** @return the pattern keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable String patternText() { return (String) keywords.get("pattern"); }
+    /** @return the multipleOf keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Number multipleOfNumber() { return (Number) keywords.get("multipleOf"); }
+    /** @return the maximum keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Number maximumNumber() { return (Number) keywords.get("maximum"); }
+    /** @return the minimum keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Number minimumNumber() { return (Number) keywords.get("minimum"); }
+    /** @return the exclusiveMaximum keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Number exclusiveMaximumValue() { return (Number) keywords.get("exclusiveMaximum"); }
+    /** @return the exclusiveMinimum keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Number exclusiveMinimumValue() { return (Number) keywords.get("exclusiveMinimum"); }
+    /** @return the prefixItems keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable List<SchemaObject> prefixItems() { return (List<SchemaObject>) keywords.get("prefixItems"); }
+    /** @return the contains keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable SchemaObject contains() { return (SchemaObject) keywords.get("contains"); }
+    /** @return the minContains keyword, or null if absent
+     * @throws IllegalStateException if the value exceeds the Integer range; use {@link #keywords()} for the exact value */
+    @SuppressWarnings("unchecked")
+    public @Nullable Integer minContains() { return JsonValues.integerValue(keywords.get("minContains"), "minContains"); }
+    /** @return the maxContains keyword, or null if absent
+     * @throws IllegalStateException if the value exceeds the Integer range; use {@link #keywords()} for the exact value */
+    @SuppressWarnings("unchecked")
+    public @Nullable Integer maxContains() { return JsonValues.integerValue(keywords.get("maxContains"), "maxContains"); }
+    /** @return the patternProperties keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Map<String, SchemaObject> patternProperties() { return (Map<String, SchemaObject>) keywords.get("patternProperties"); }
+    /** @return the propertyNames keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable SchemaObject propertyNames() { return (SchemaObject) keywords.get("propertyNames"); }
+    /** @return the dependentSchemas keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Map<String, SchemaObject> dependentSchemas() { return (Map<String, SchemaObject>) keywords.get("dependentSchemas"); }
+    /** @return the dependentRequired keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable Map<String, List<String>> dependentRequired() { return (Map<String, List<String>>) keywords.get("dependentRequired"); }
+    /** @return the if keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable SchemaObject ifSchema() { return (SchemaObject) keywords.get("if"); }
+    /** @return the then keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable SchemaObject thenSchema() { return (SchemaObject) keywords.get("then"); }
+    /** @return the else keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable SchemaObject elseSchema() { return (SchemaObject) keywords.get("else"); }
+    /** @return the unevaluatedItems keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable SchemaObject unevaluatedItems() { return (SchemaObject) keywords.get("unevaluatedItems"); }
+    /** @return the unevaluatedProperties keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable SchemaObject unevaluatedProperties() { return (SchemaObject) keywords.get("unevaluatedProperties"); }
+    /** @return the contentEncoding keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable String contentEncoding() { return (String) keywords.get("contentEncoding"); }
+    /** @return the contentMediaType keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable String contentMediaType() { return (String) keywords.get("contentMediaType"); }
+    /** @return the contentSchema keyword, or null if absent */
+    @SuppressWarnings("unchecked")
+    public @Nullable SchemaObject contentSchema() { return (SchemaObject) keywords.get("contentSchema"); }
     /**
-     * @return A new builder with the values set based on this instance
-     */
-    public SchemaObjectBuilder toBuilder() {
-        return new SchemaObjectBuilder()
-            .withTitle(title)
-            .withMultipleOf(multipleOf)
-            .withMaximum(maximum)
-            .withExclusiveMaximum(exclusiveMaximum)
-            .withMinimum(minimum)
-            .withExclusiveMinimum(exclusiveMinimum)
-            .withMaxLength(maxLength)
-            .withMinLength(minLength)
-            .withPattern(pattern)
-            .withMaxItems(maxItems)
-            .withMinItems(minItems)
-            .withUniqueItems(uniqueItems)
-            .withMaxProperties(maxProperties)
-            .withMinProperties(minProperties)
-            .withRequired(required)
-            .withEnumValue(enumValue)
-            .withType(type)
-            .withAllOf(allOf)
-            .withOneOf(oneOf)
-            .withAnyOf(anyOf)
-            .withNot(not)
-            .withItems(items)
-            .withProperties(properties)
-            .withAdditionalProperties(additionalProperties)
-            .withDescription(description)
-            .withFormat(format)
-            .withDefaultValue(defaultValue)
-            .withNullable(nullable)
-            .withDiscriminator(discriminator)
-            .withReadOnly(readOnly)
-            .withWriteOnly(writeOnly)
-            .withXml(xml)
-            .withExternalDocs(externalDocs)
-            .withExample(example)
-            .withDeprecated(deprecated);
-    }
-
+     * @return whether a numeric exclusive bound is present
+     * @deprecated Use exclusiveMaximumValue(). */
+    @Deprecated public @Nullable Boolean exclusiveMaximum() { return keywords.containsKey("exclusiveMaximum") ? true : null; }
     /**
-     * @return the value described by {@link SchemaObjectBuilder#withDeprecated(Boolean)}, unless null was passed in which case this returns false
-     */
-    public boolean isDeprecated() {
-        return deprecated != null && deprecated;
-    }
-
+     * @return whether a numeric exclusive bound is present
+     * @deprecated Use exclusiveMinimumValue(). */
+    @Deprecated public @Nullable Boolean exclusiveMinimum() { return keywords.containsKey("exclusiveMinimum") ? true : null; }
     /**
-     * @return the value described by {@link SchemaObjectBuilder#withTitle}
-     */
-    public @Nullable String title() {
-        return title;
-    }
-
+     * @return whether type explicitly admits null
+     * @deprecated Use types(). */
+    @Deprecated public @Nullable Boolean nullable() { return types() == null ? null : Objects.requireNonNull(types()).contains("null"); }
     /**
-     * @return the value described by {@link SchemaObjectBuilder#withMultipleOf}
-     */
-    public @Nullable Double multipleOf() {
-        return multipleOf;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withMaximum}
-     */
-    public @Nullable Double maximum() {
-        return maximum;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withExclusiveMaximum}
-     */
-    public @Nullable Boolean exclusiveMaximum() {
-        return exclusiveMaximum;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withMinimum}
-     */
-    public @Nullable Double minimum() {
-        return minimum;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withExclusiveMinimum}
-     */
-    public @Nullable Boolean exclusiveMinimum() {
-        return exclusiveMinimum;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withMaxLength}
-     */
-    public @Nullable Integer maxLength() {
-        return maxLength;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withMinLength}
-     */
-    public @Nullable Integer minLength() {
-        return minLength;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withPattern}
-     */
-    public @Nullable Pattern pattern() {
-        return pattern;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withMaxItems}
-     */
-    public @Nullable Integer maxItems() {
-        return maxItems;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withMinItems}
-     */
-    public @Nullable Integer minItems() {
-        return minItems;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withUniqueItems}
-     */
-    public @Nullable Boolean uniqueItems() {
-        return uniqueItems;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withMaxProperties}
-     */
-    public @Nullable Integer maxProperties() {
-        return maxProperties;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withMinProperties}
-     */
-    public @Nullable Integer minProperties() {
-        return minProperties;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withRequired}
-     */
-    public @Nullable List<String> required() {
-        return required;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withEnumValue}
-     */
-    public @Nullable List<Object> enumValue() {
-        return enumValue;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withType}
-     */
-    public @Nullable String type() {
-        return type;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withAllOf}
-     */
-    public @Nullable List<SchemaObject> allOf() {
-        return allOf;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withOneOf}
-     */
-    public @Nullable List<SchemaObject> oneOf() {
-        return oneOf;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withAnyOf}
-     */
-    public @Nullable List<SchemaObject> anyOf() {
-        return anyOf;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withNot}
-     */
-    public @Nullable List<SchemaObject> not() {
-        return not;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withItems}
-     */
-    public @Nullable SchemaObject items() {
-        return items;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withProperties}
-     */
-    public @Nullable Map<String, SchemaObject> properties() {
-        return properties;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withAdditionalProperties}
-     */
-    public @Nullable Object additionalProperties() {
-        return additionalProperties;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withDescription}
-     */
-    public @Nullable String description() {
-        return description;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withFormat}
-     */
-    public @Nullable String format() {
-        return format;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withDefaultValue}
-     */
-    public @Nullable Object defaultValue() {
-        return defaultValue;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withNullable}
-     */
-    public @Nullable Boolean nullable() {
-        return nullable;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withDiscriminator}
-     */
-    public @Nullable DiscriminatorObject discriminator() {
-        return discriminator;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withReadOnly}
-     */
-    public @Nullable Boolean readOnly() {
-        return readOnly;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withWriteOnly}
-     */
-    public @Nullable Boolean writeOnly() {
-        return writeOnly;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withXml}
-     */
-    public @Nullable XmlObject xml() {
-        return xml;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withExternalDocs}
-     */
-    public @Nullable ExternalDocumentationObject externalDocs() {
-        return externalDocs;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withExample}
-     */
-    public @Nullable Object example() {
-        return example;
-    }
-
-    /**
-     * @return the value described by {@link SchemaObjectBuilder#withDeprecated}
-     */
-    public @Nullable Boolean deprecated() {
-        return deprecated;
-    }
+     * @return a singleton view of not
+     * @deprecated Use notSchema(). */
+    @Deprecated public @Nullable List<SchemaObject> not() { return notSchema() == null ? null : Collections.singletonList(Objects.requireNonNull(notSchema())); }
 }

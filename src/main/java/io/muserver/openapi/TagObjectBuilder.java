@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import java.util.Map;
+
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -7,12 +9,15 @@ import org.jspecify.annotations.Nullable;
  * per tag defined in the Operation Object instances.
  */
 public class TagObjectBuilder {
+    private @Nullable Map<String, Object> extensions;
     private @Nullable String name;
     private @Nullable String description;
     private @Nullable ExternalDocumentationObject externalDocs;
 
     /**
+     *
      * @param name REQUIRED. The name of the tag.
+     *
      * @return The current builder
      */
     public TagObjectBuilder withName(String name) {
@@ -21,7 +26,9 @@ public class TagObjectBuilder {
     }
 
     /**
+     *
      * @param description A short description for the tag. CommonMark syntax MAY be used for rich text representation.
+     *
      * @return The current builder
      */
     public TagObjectBuilder withDescription(@Nullable String description) {
@@ -30,7 +37,9 @@ public class TagObjectBuilder {
     }
 
     /**
+     *
      * @param externalDocs Additional external documentation for this tag.
+     *
      * @return The current builder
      */
     public TagObjectBuilder withExternalDocs(@Nullable ExternalDocumentationObject externalDocs) {
@@ -42,7 +51,7 @@ public class TagObjectBuilder {
      * @return A new object
      */
     public TagObject build() {
-        return new TagObject(name, description, externalDocs);
+        return new TagObject(name, description, externalDocs, extensions);
     }
 
     /**
@@ -51,5 +60,20 @@ public class TagObjectBuilder {
      */
     public static TagObjectBuilder tagObject() {
         return new TagObjectBuilder();
+    }
+    /**
+     * @param value the extensions value
+     * @return this builder */
+    public TagObjectBuilder withExtensions(@Nullable Map<String, Object> value) { this.extensions = value; return this; }
+    /**
+     * @param name an x- extension name
+     * @param value its JSON value
+     * @return this builder */
+    public TagObjectBuilder withExtension(String name, @Nullable Object value) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>();
+        if (extensions != null) copy.putAll(extensions);
+        Extensions.put(copy, name, value);
+        extensions = copy;
+        return this;
     }
 }
