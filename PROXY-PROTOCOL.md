@@ -33,8 +33,15 @@ queue time. HTTP idle and request timeouts do not change it. Positive durations
 must represent at least one millisecond and fit in a signed nanosecond duration;
 fractional milliseconds are truncated. Invalid or incomplete headers close the
 connection without dispatching an HTTP handler. Internal executor rejection
-closes a pending connection immediately and records overload. Pending reads are
-closed on shutdown; socket read timeouts are restored before TLS/HTTP processing.
+closes a pending connection immediately and records overload, whether PROXY is
+enabled or disabled. The client may observe EOF or a connection reset; the
+acceptor does not perform TLS or send an HTTP response on this rejection path.
+This is separate from application request overload: rejection by a custom
+`withHandlerExecutor(...)` executor or the `withMaxConcurrentRequests(...)`
+limit still produces HTTP 503. A standard fixed thread pool queues excess tasks
+instead of rejecting them; a bounded executor must throw
+`RejectedExecutionException` when full. Pending reads are closed on shutdown;
+socket read timeouts are restored before TLS/HTTP processing.
 
 V1 is limited to 107 bytes including CRLF. Numeric IPv4 and IPv6 literals are
 validated without DNS. Decimal addresses and ports reject leading zeroes; ports

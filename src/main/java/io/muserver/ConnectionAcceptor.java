@@ -126,21 +126,14 @@ class ConnectionAcceptor {
                 ConnectionAcceptedTime acceptedTime = ConnectionAcceptedTime.now();
                 try {
                     connectionExecutor.execute(
-                        () -> runAcceptedSocket(clientSocket, acceptedTime, h2, false)
+                        () -> runAcceptedSocket(clientSocket, acceptedTime, h2)
                     );
                 } catch (RejectedExecutionException e) {
-                    if (server.haProxyProtocolEnabled) {
-                        server.getStatsImpl().onRejectedDueToOverload();
-                        retireAcceptedSocket(clientSocket);
-                        closeQuietly(clientSocket);
-                        continue;
-                    }
-                    try {
-                        clientSocket.setSoTimeout(2000);
-                        runAcceptedSocket(clientSocket, acceptedTime, false, true);
-                    } catch (Exception e2) {
-                        log.info("Exception while writing 503 when executor is full: {}", e2.getMessage());
-                    }
+                    // Internal rejection must not move network work onto the acceptor thread.
+                    // Application request overload is handled separately with HTTP 503.
+                    server.getStatsImpl().onRejectedDueToOverload();
+                    retireAcceptedSocket(clientSocket);
+                    closeQuietly(clientSocket);
                 } catch (RuntimeException | Error submissionFailure) {
                     retireAcceptedSocket(clientSocket);
                     closeQuietly(clientSocket);
@@ -185,15 +178,13 @@ class ConnectionAcceptor {
     private void runAcceptedSocket(
         Socket socket,
         ConnectionAcceptedTime acceptedTime,
-        boolean http2Enabled,
-        boolean rejectDueToOverload
+        boolean http2Enabled
     ) {
         try {
             handleClientSocket(
                 socket,
                 acceptedTime,
-                http2Enabled,
-                rejectDueToOverload
+                http2Enabled
             );
         } finally {
             retireAcceptedSocket(socket);
@@ -334,8 +325,7 @@ class ConnectionAcceptor {
     private void handleClientSocket(
         Socket clientSocket,
         ConnectionAcceptedTime acceptedTime,
-        boolean http2Enabled,
-        boolean rejectDueToOverload
+        boolean http2Enabled
     ) {
         Socket socket = clientSocket;
         Certificate clientCert = null;
@@ -432,19 +422,15 @@ class ConnectionAcceptor {
             }
         }
 
-        if (rejectDueToOverload) {
-            handleOverload(socket);
-        } else {
-            handleRequest(
-                clientSocket,
-                socket,
-                clientCert,
-                acceptedTime,
-                httpVersion,
-                inputStream,
-                proxyInfo
-            );
-        }
+        handleRequest(
+            clientSocket,
+            socket,
+            clientCert,
+            acceptedTime,
+            httpVersion,
+            inputStream,
+            proxyInfo
+        );
     }
 
     private HttpVersion sniffClearTextHttpVersion(Socket socket, PushbackInputStream inputStream) throws IOException {
@@ -470,30 +456,6 @@ class ConnectionAcceptor {
             }
         }
         return read == prefix.length ? HttpVersion.HTTP_2 : HttpVersion.HTTP_1_1;
-    }
-
-    private void handleOverload(Socket socket) {
-        // At this point, the server is overloaded. We want to send 503 responses to clients
-        // so they know the server is not available, but on the other hand we don't want to
-        // spend resources reading or writing to slow clients, so we have smaller timeouts
-        // and don't read large requests.
-        server.getStatsImpl().onRejectedDueToOverload();
-        try {
-            socket.setSoTimeout(2000);
-            try (InputStream inputStream = socket.getInputStream();
-                 OutputStream os = socket.getOutputStream()) {
-                os.write(serverUnavailableResponse);
-                os.flush();
-                byte[] buf = new byte[1024];
-                int reads = 0;
-                // consume the request body so it's a valid response, but only if it's not too big
-                while (inputStream.read(buf) != -1 && reads < 10) {
-                    reads++;
-                }
-            }
-        } catch (IOException e) {
-            log.warn("Error handling overload", e);
-        }
     }
 
     @SuppressWarnings("ReferenceEquality") // Sharing is defined by the exact configured executor instance.
