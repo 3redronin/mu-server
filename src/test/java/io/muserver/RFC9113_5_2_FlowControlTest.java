@@ -43,6 +43,7 @@ class RFC9113_5_2_FlowControlTest {
                     liveConnection.clientSocket,
                     liveConnection.clientCertificate,
                     ConnectionAcceptedTime.now(),
+                    liveConnection.proxyInfo().orElse(null),
                     Http2Settings.DEFAULT_CLIENT_SETTINGS,
                     5000,
                     executor,

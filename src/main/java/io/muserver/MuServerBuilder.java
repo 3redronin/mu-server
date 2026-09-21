@@ -47,6 +47,7 @@ public class MuServerBuilder {
     @Nullable List<RateLimiterImpl> rateLimiters;
     private @Nullable UnhandledExceptionHandler unhandledExceptionHandler;
     private boolean autoHandleExpectContinue = true;
+    private @Nullable HAProxyProtocolConfig haProxyProtocolConfig;
     private @Nullable List<ContentEncoder> contentEncoders = null;
     private @Nullable Path tempDirectory;
 
@@ -54,6 +55,55 @@ public class MuServerBuilder {
      * Creates an empty Mu Server builder.
      */
     public MuServerBuilder() {
+    }
+
+    /**
+     * Sets PROXY protocol listener settings. The default is null (disabled).
+     * Enable only on listeners restricted to trusted proxies.
+     * @param config the configuration, or null to disable PROXY protocol
+     * @return this builder
+     */
+    public MuServerBuilder withHAProxyProtocolConfig(@Nullable HAProxyProtocolConfig config) {
+        this.haProxyProtocolConfig = config;
+        return this;
+    }
+
+    /**
+     * Sets PROXY protocol settings from a builder. The server default is null (disabled);
+     * a new config builder enables both versions with a ten-second timeout and a 65,535-byte v2 payload limit.
+     * @param config the builder, or null to clear the configuration and disable PROXY protocol
+     * @return this builder
+     */
+    public MuServerBuilder withHAProxyProtocolConfig(@Nullable HAProxyProtocolConfigBuilder config) {
+        return withHAProxyProtocolConfig(config == null ? null : config.build());
+    }
+
+    /**
+     * Gets the configured PROXY protocol settings.
+     * @return the PROXY configuration, or null (the default) when not configured
+     */
+    public @Nullable HAProxyProtocolConfig haProxyProtocolConfig() { return haProxyProtocolConfig; }
+
+    /**
+     * Enables PROXY with default settings or clears the configuration.
+     * @param enabled true to replace any existing settings with enabled V1/V2, a ten-second timeout
+     *                and a 65,535-byte v2 payload limit; false to clear the config (the server default)
+     * @return this builder
+     * @deprecated Use {@link #withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder)}.
+     */
+    @Deprecated
+    public MuServerBuilder withHAProxyProtocolEnabled(boolean enabled) {
+        return withHAProxyProtocolConfig(enabled ? HAProxyProtocolConfigBuilder.config().build() : null);
+    }
+
+    /**
+     * Gets whether PROXY processing is enabled.
+     * @return whether the configured PROXY protocol is enabled; default false
+     * @deprecated Use {@link #haProxyProtocolConfig()} and {@link HAProxyProtocolConfig#enabled()}.
+     */
+    @Deprecated
+    public boolean haProxyProtocolEnabled() {
+        return haProxyProtocolConfig != null && haProxyProtocolConfig.enabled();
     }
 
     /**

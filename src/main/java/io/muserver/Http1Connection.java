@@ -83,8 +83,8 @@ class Http1Connection extends BaseHttpConnection {
 
     Http1Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket,
                     @Nullable Certificate clientCertificate, ConnectionAcceptedTime acceptedTime,
-                    ExecutorService handlerExecutor) {
-        super(server, creator, clientSocket, clientCertificate, acceptedTime);
+                    @Nullable ProxiedConnectionInfo proxyInfo, ExecutorService handlerExecutor) {
+        super(server, creator, clientSocket, clientCertificate, acceptedTime, proxyInfo);
         this.handlerExecutor = handlerExecutor;
     }
 

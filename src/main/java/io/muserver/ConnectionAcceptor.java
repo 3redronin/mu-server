@@ -32,6 +32,7 @@ class ConnectionAcceptor {
     private static final int ACCEPT_BACKLOG = 50;
 
     private final Mu3ServerImpl server;
+    private final @Nullable HAProxyProtocolConfig proxyConfig;
     private final ServerSocket socketServer;
     private final InetSocketAddress address;
     private final URI uri;
@@ -68,6 +69,7 @@ class ConnectionAcceptor {
     private final ReentrantLock lifecycleLock = new ReentrantLock();
     private final Condition connectionRetired = lifecycleLock.newCondition();
     private final Set<Socket> acceptedSockets = new HashSet<>();
+    private final Map<Socket, Long> pendingPreambles = new HashMap<>();
     private final Set<BaseHttpConnection> connections = new HashSet<>();
 
     public Set<HttpConnection> activeConnections() {
@@ -79,6 +81,35 @@ class ConnectionAcceptor {
         }
     }
 
+    /**
+     * Counts TCP sockets accepted by this listener that are still tracked for connection setup.
+     * Includes sockets waiting for an executor, reading a PROXY preamble, negotiating TLS,
+     * or identifying the HTTP protocol. A socket leaves this count when it is promoted to
+     * an active HTTP connection or retired after rejection, failure, timeout or shutdown.
+     * Does not include sockets still in the operating system's accept backlog.
+     *
+     * @return the current number of tracked setup sockets, read under the lifecycle lock
+     */
+    int pendingAcceptedSocketCount() {
+        lifecycleLock.lock();
+        try { return acceptedSockets.size(); }
+        finally { lifecycleLock.unlock(); }
+    }
+
+    /**
+     * Counts accepted sockets whose required PROXY preamble has not yet been accepted or rejected.
+     * Includes queued work as well as reads in progress. This is a subset of the pending
+     * accepted sockets; successful preamble completion removes it before TLS/HTTP setup continues.
+     * Rejection, timeout and shutdown also remove it. Always zero when PROXY is disabled.
+     *
+     * @return the current number of pending PROXY preambles, read under the lifecycle lock
+     */
+    int pendingPreambleCount() {
+        lifecycleLock.lock();
+        try { return pendingPreambles.size(); }
+        finally { lifecycleLock.unlock(); }
+    }
+
     private volatile State state = State.NOT_STARTED;
     private static final long FALLBACK_SHUTDOWN_TIMEOUT_MILLIS = 20_000;
     private volatile long gracefulShutdownDeadlineNanos = Long.MAX_VALUE;
@@ -88,6 +119,7 @@ class ConnectionAcceptor {
 
     private final Thread acceptorThread;
     private volatile @Nullable ScheduledFuture<?> timeoutTask;
+    private volatile @Nullable ScheduledFuture<?> preambleTimeoutTask;
 
     ConnectionAcceptor(Mu3ServerImpl server, ServerSocket socketServer, InetSocketAddress address, URI uri,
                        @Nullable HttpsConfig httpsConfig, @Nullable Http2Config http2Config,
@@ -95,6 +127,8 @@ class ConnectionAcceptor {
                        ExecutorService http2WriterExecutor,
                        List<ContentEncoder> contentEncoders) {
         this.server = server;
+        HAProxyProtocolConfig config = server.haProxyProtocolConfig;
+        this.proxyConfig = config != null && config.enabled() ? config : null;
         this.socketServer = socketServer;
         this.address = address;
         this.uri = uri;
@@ -115,23 +149,23 @@ class ConnectionAcceptor {
         while (state == State.STARTED) {
             try {
                 Socket clientSocket = socketServer.accept();
+                long proxyDeadline = MonotonicTime.deadlineAfterMillis(proxyConfig == null ? 0 : proxyConfig.timeoutMillis());
                 clientSocket.setTcpNoDelay(true);
-                if (!registerAcceptedSocket(clientSocket)) {
+                if (!registerAcceptedSocket(clientSocket, proxyDeadline)) {
                     closeQuietly(clientSocket);
                     continue;
                 }
                 ConnectionAcceptedTime acceptedTime = ConnectionAcceptedTime.now();
                 try {
                     connectionExecutor.execute(
-                        () -> runAcceptedSocket(clientSocket, acceptedTime, h2, false)
+                        () -> runAcceptedSocket(clientSocket, acceptedTime, h2)
                     );
                 } catch (RejectedExecutionException e) {
-                    try {
-                        clientSocket.setSoTimeout(2000);
-                        runAcceptedSocket(clientSocket, acceptedTime, false, true);
-                    } catch (Exception e2) {
-                        log.info("Exception while writing 503 when executor is full: {}", e2.getMessage());
-                    }
+                    // Internal rejection must not move network work onto the acceptor thread.
+                    // Application request overload is handled separately with HTTP 503.
+                    server.getStatsImpl().onRejectedDueToOverload();
+                    retireAcceptedSocket(clientSocket);
+                    closeQuietly(clientSocket);
                 } catch (RuntimeException | Error submissionFailure) {
                     retireAcceptedSocket(clientSocket);
                     closeQuietly(clientSocket);
@@ -159,13 +193,14 @@ class ConnectionAcceptor {
         }
     }
 
-    private boolean registerAcceptedSocket(Socket socket) {
+    private boolean registerAcceptedSocket(Socket socket, long proxyDeadline) {
         lifecycleLock.lock();
         try {
             if (state != State.STARTED) {
                 return false;
             }
             acceptedSockets.add(socket);
+            if (proxyConfig != null) pendingPreambles.put(socket, proxyDeadline);
             return true;
         } finally {
             lifecycleLock.unlock();
@@ -175,15 +210,13 @@ class ConnectionAcceptor {
     private void runAcceptedSocket(
         Socket socket,
         ConnectionAcceptedTime acceptedTime,
-        boolean http2Enabled,
-        boolean rejectDueToOverload
+        boolean http2Enabled
     ) {
         try {
             handleClientSocket(
                 socket,
                 acceptedTime,
-                http2Enabled,
-                rejectDueToOverload
+                http2Enabled
             );
         } finally {
             retireAcceptedSocket(socket);
@@ -195,6 +228,7 @@ class ConnectionAcceptor {
         lifecycleLock.lock();
         try {
             acceptedSockets.remove(socket);
+            pendingPreambles.remove(socket);
         } finally {
             lifecycleLock.unlock();
         }
@@ -240,6 +274,8 @@ class ConnectionAcceptor {
         try {
             pending = new ArrayList<>(acceptedSockets);
             acceptedSockets.clear();
+            for (Socket socket : pendingPreambles.keySet()) server.getStatsImpl().onFailedToConnect();
+            pendingPreambles.clear();
         } finally {
             lifecycleLock.unlock();
         }
@@ -280,6 +316,21 @@ class ConnectionAcceptor {
         }
     }
 
+    private void expirePreambles() {
+        List<Socket> expired = new ArrayList<>();
+        lifecycleLock.lock();
+        try {
+            pendingPreambles.entrySet().removeIf(entry -> {
+                if (MonotonicTime.nanosUntil(entry.getValue()) > 0) return false;
+                expired.add(entry.getKey());
+                acceptedSockets.remove(entry.getKey());
+                server.getStatsImpl().onFailedToConnect();
+                return true;
+            });
+        } finally { lifecycleLock.unlock(); }
+        for (Socket socket : expired) closeQuietly(socket);
+    }
+
     private void checkIdleTimeouts() {
         if (state != State.STARTED) {
             return;
@@ -306,8 +357,7 @@ class ConnectionAcceptor {
     private void handleClientSocket(
         Socket clientSocket,
         ConnectionAcceptedTime acceptedTime,
-        boolean http2Enabled,
-        boolean rejectDueToOverload
+        boolean http2Enabled
     ) {
         Socket socket = clientSocket;
         Certificate clientCert = null;
@@ -315,6 +365,33 @@ class ConnectionAcceptor {
 
         HttpsConfig hc = httpsConfig;
         HttpVersion httpVersion = HttpVersion.HTTP_1_1;
+
+        ProxiedConnectionInfo proxyInfo = null;
+        if (proxyConfig != null) {
+            try {
+                Long deadline;
+                lifecycleLock.lock();
+                try { deadline = pendingPreambles.get(socket); }
+                finally { lifecycleLock.unlock(); }
+                if (deadline == null) return;
+                proxyInfo = ProxyProtocol.read(socket, deadline, proxyConfig);
+                lifecycleLock.lock();
+                try {
+                    if (pendingPreambles.remove(socket) == null) return;
+                    if (state != State.STARTED || MonotonicTime.nanosUntil(deadline) <= 0) {
+                        server.getStatsImpl().onFailedToConnect();
+                        return;
+                    }
+                } finally { lifecycleLock.unlock(); }
+            } catch (IOException failure) {
+                log.debug("Rejected PROXY preamble: {}", failure.getMessage());
+                lifecycleLock.lock();
+                try {
+                    if (pendingPreambles.remove(socket) != null) server.getStatsImpl().onFailedToConnect();
+                } finally { lifecycleLock.unlock(); }
+                return;
+            }
+        }
 
         if (hc != null) {
             try {
@@ -377,18 +454,15 @@ class ConnectionAcceptor {
             }
         }
 
-        if (rejectDueToOverload) {
-            handleOverload(socket);
-        } else {
-            handleRequest(
-                clientSocket,
-                socket,
-                clientCert,
-                acceptedTime,
-                httpVersion,
-                inputStream
-            );
-        }
+        handleRequest(
+            clientSocket,
+            socket,
+            clientCert,
+            acceptedTime,
+            httpVersion,
+            inputStream,
+            proxyInfo
+        );
     }
 
     private HttpVersion sniffClearTextHttpVersion(Socket socket, PushbackInputStream inputStream) throws IOException {
@@ -416,30 +490,6 @@ class ConnectionAcceptor {
         return read == prefix.length ? HttpVersion.HTTP_2 : HttpVersion.HTTP_1_1;
     }
 
-    private void handleOverload(Socket socket) {
-        // At this point, the server is overloaded. We want to send 503 responses to clients
-        // so they know the server is not available, but on the other hand we don't want to
-        // spend resources reading or writing to slow clients, so we have smaller timeouts
-        // and don't read large requests.
-        server.getStatsImpl().onRejectedDueToOverload();
-        try {
-            socket.setSoTimeout(2000);
-            try (InputStream inputStream = socket.getInputStream();
-                 OutputStream os = socket.getOutputStream()) {
-                os.write(serverUnavailableResponse);
-                os.flush();
-                byte[] buf = new byte[1024];
-                int reads = 0;
-                // consume the request body so it's a valid response, but only if it's not too big
-                while (inputStream.read(buf) != -1 && reads < 10) {
-                    reads++;
-                }
-            }
-        } catch (IOException e) {
-            log.warn("Error handling overload", e);
-        }
-    }
-
     @SuppressWarnings("ReferenceEquality") // Sharing is defined by the exact configured executor instance.
     private void handleRequest(
         Socket acceptedSocket,
@@ -447,7 +497,8 @@ class ConnectionAcceptor {
         @Nullable Certificate clientCert,
         ConnectionAcceptedTime acceptedTime,
         HttpVersion httpVersion,
-        @Nullable InputStream providedInputStream
+        @Nullable InputStream providedInputStream,
+        @Nullable ProxiedConnectionInfo proxyInfo
     ) {
         BaseHttpConnection con;
         if (httpVersion == HttpVersion.HTTP_2) {
@@ -460,6 +511,7 @@ class ConnectionAcceptor {
                 socket,
                 clientCert,
                 acceptedTime,
+                proxyInfo,
                 http2Config.initialSettings(),
                 http2Config.settingsAckTimeoutMillis(),
                 handlerExecutor,
@@ -472,6 +524,7 @@ class ConnectionAcceptor {
                 socket,
                 clientCert,
                 acceptedTime,
+                proxyInfo,
                 handlerExecutor
             );
         }
@@ -538,6 +591,9 @@ class ConnectionAcceptor {
         }
         acceptorThread.setDaemon(false);
         try {
+            if (proxyConfig != null) {
+                preambleTimeoutTask = server.schedulePreambleExpiry(this::expirePreambles);
+            }
             if (server.idleTimeoutMillis() > 0) {
                 timeoutTask = server.scheduleConnectionTaskAtFixedRate(
                     this::checkIdleTimeouts,
@@ -548,6 +604,9 @@ class ConnectionAcceptor {
             }
             acceptorThread.start();
         } catch (RuntimeException | Error e) {
+            ScheduledFuture<?> preambleTask = preambleTimeoutTask;
+            if (preambleTask != null) preambleTask.cancel(false);
+            preambleTimeoutTask = null;
             ScheduledFuture<?> currentTimeoutTask = timeoutTask;
             if (currentTimeoutTask != null) {
                 currentTimeoutTask.cancel(false);
@@ -586,6 +645,9 @@ class ConnectionAcceptor {
             lifecycleLock.unlock();
         }
         closePendingAcceptedSockets();
+        ScheduledFuture<?> preambleTask = preambleTimeoutTask;
+        if (preambleTask != null) preambleTask.cancel(false);
+        preambleTimeoutTask = null;
         ScheduledFuture<?> currentTimeoutTask = timeoutTask;
         if (currentTimeoutTask != null) {
             currentTimeoutTask.cancel(false);

@@ -37,19 +37,27 @@ abstract class BaseHttpConnection implements HttpConnection {
     protected final AtomicLong rejectedDueToOverload = new AtomicLong(0);
     protected final AtomicBoolean closed = new AtomicBoolean(false);
     protected final int requestTimeout;
+    private final @Nullable ProxiedConnectionInfo proxiedConnectionInfo;
+
+    @Override
+    public Optional<ProxiedConnectionInfo> proxyInfo() {
+        return Optional.ofNullable(proxiedConnectionInfo);
+    }
 
     BaseHttpConnection(
         Mu3ServerImpl server,
         ConnectionAcceptor creator,
         Socket clientSocket,
         @Nullable Certificate clientCertificate,
-        ConnectionAcceptedTime acceptedTime
+        ConnectionAcceptedTime acceptedTime,
+        @Nullable ProxiedConnectionInfo proxiedConnectionInfo
     ) {
         this.server = server;
         this.creator = creator;
         this.clientSocket = clientSocket;
         this.clientCertificate = clientCertificate;
         this.acceptedTime = acceptedTime;
+        this.proxiedConnectionInfo = proxiedConnectionInfo;
         remoteAddress = (InetSocketAddress) clientSocket.getRemoteSocketAddress();
         localAddress = (InetSocketAddress) clientSocket.getLocalSocketAddress();
         requestTimeout = (int) Math.min(Integer.MAX_VALUE, server.requestIdleTimeoutMillis());
