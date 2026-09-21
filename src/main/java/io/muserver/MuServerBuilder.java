@@ -176,12 +176,12 @@ public class MuServerBuilder {
     /**
      * Sets the configuration for HTTP2
      *
-     * @param http2Config A config
+     * @param http2Config A config builder, or null to disable HTTP/2.
      * @return The current Mu Server builder
      * @see Http2ConfigBuilder
      */
-    public MuServerBuilder withHttp2Config(Http2ConfigBuilder http2Config) {
-        return withHttp2Config(http2Config.build());
+    public MuServerBuilder withHttp2Config(@Nullable Http2ConfigBuilder http2Config) {
+        return withHttp2Config(http2Config == null ? null : http2Config.build());
     }
 
     /**
