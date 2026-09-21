@@ -174,6 +174,35 @@ public class OpenApi31IntegrationTest {
         assertEquals("Registered identifier", api.at("/components/schemas/UUID/description").asText());
     }
 
+    @Test public void manualReferencedOperationsWinGeneratedCollisions() throws Exception {
+        ReferenceOr<RequestBodyObject> body = ReferenceOr.reference("#/components/requestBodies/Input");
+        ReferenceOr<ParameterObject> parameter = ReferenceOr.reference("#/components/parameters/Query");
+        OperationObject manual = OperationObjectBuilder.operationObject().withSummary("Manual references")
+            .withRequestBodyOrReferences(body).withParametersOrReferences(Collections.singletonList(parameter))
+            .withResponses(ResponsesObjectBuilder.responsesObject().withHttpStatusCodesOrReferences(
+                Collections.singletonMap("200", ReferenceOr.reference("#/components/responses/Success"))).build()).build();
+        OpenAPIObjectBuilder root = OpenAPIObjectBuilder.openAPIObject()
+            .withPaths(PathsObjectBuilder.pathsObject().withPathItemObjects(Collections.singletonMap("/alternatives",
+                PathItemObjectBuilder.pathItemObject().withOperations(Collections.singletonMap("post", manual)).build())).build())
+            .withComponents(ComponentsObjectBuilder.componentsObject()
+                .withRequestBodies(Collections.singletonMap("Input", RequestBodyObjectBuilder.requestBodyObject()
+                    .withContent(Collections.singletonMap("application/json", MediaTypeObjectBuilder.mediaTypeObject()
+                        .withSchema(booleanSchema(true).build()).build())).build()))
+                .withParameters(Collections.singletonMap("Query", ParameterObjectBuilder.parameterObject().withName("q")
+                    .withIn("query").withSchema(schemaObject().withType("string").build()).build()))
+                .withResponses(Collections.singletonMap("Success", ResponseObjectBuilder.responseObject().withDescription("Manual success").build())).build());
+        server = httpsServerForTest().addHandler(restHandler(new Alternatives()).withOpenApiDocument(root)
+            .withOpenApiJsonUrl("/openapi.json").withOpenApiHtmlUrl("/docs")).start();
+        JsonNode api = document();
+        assertEquals(json(manual), api.at("/paths/~1alternatives/post"));
+        assertTrue(api.at("/paths/~1alternatives/get").isObject());
+        assertEquals(api, document());
+        try (okhttp3.Response response = call(request(server.uri().resolve("/docs")))) {
+            assertEquals(200, response.code());
+            assertTrue(response.body().string().contains("Manual references"));
+        }
+    }
+
     private JsonNode document() throws Exception {
         try (okhttp3.Response response = call(request(server.uri().resolve("/openapi.json")))) {
             assertEquals(200, response.code());

@@ -50,6 +50,15 @@ final class JsonValues {
         return value == null ? null : ((Number) value).doubleValue();
     }
 
+    static @Nullable Integer integerValue(@Nullable Object value, String keyword) {
+        if (value == null) return null;
+        try {
+            return new java.math.BigDecimal(value.toString()).intValueExact();
+        } catch (ArithmeticException e) {
+            throw new IllegalStateException(keyword + " cannot be represented as an Integer; use keywords() for its exact value", e);
+        }
+    }
+
     @SuppressWarnings("unchecked")
     static List<String> types(@Nullable Object value) {
         return value instanceof String ? Collections.singletonList((String) value)

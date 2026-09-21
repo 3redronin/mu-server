@@ -223,6 +223,8 @@ class OpenApiDocumentor implements MuHandler {
                     .withParameters(parameters)
                     .build();
             } else {
+                // Only generated overloads reach this merge. Manual operations (including references)
+                // replace collisions later in handle(), without using their legacy inline-only getters.
                 OperationObject curOO = method.createOperationBuilder(customSchemas).build();
                 RequestBodyObject oldBody = existing.requestBody();
                 RequestBodyObject newBody = curOO.requestBody();

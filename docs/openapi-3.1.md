@@ -39,7 +39,7 @@ SchemaObject nothing = booleanSchema(false).build();
 SchemaObject reference = schemaObject().withRef("#/components/schemas/Price").build();
 ```
 
-The `Number` setters (`withMaximumNumber`, `withMinimumNumber`, `withMultipleOfNumber`, and the exclusive-bound setters) preserve `BigDecimal`/`BigInteger` precision. The existing `Double` APIs remain available as numeric views. Non-finite numbers are rejected.
+The `Number` setters (`withMaximumNumber`, `withMinimumNumber`, `withMultipleOfNumber`, and the exclusive-bound setters) preserve `BigDecimal`/`BigInteger` precision. The existing `Double` APIs remain available as numeric views. Non-finite numbers are rejected. Integral keyword getters accept any integral `Number` representation. Values outside the `Integer` range remain exact in JSON and `keywords()`; the corresponding `Integer` getter fails explicitly instead of truncating them.
 
 `withPatternText` accepts JSON Schema regular-expression text without compiling it as a Java `Pattern`. The old `withPattern(Pattern)` is an adapter. Use `patternText()` when a regex is not expressible in Java syntax.
 

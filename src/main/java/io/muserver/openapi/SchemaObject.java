@@ -48,30 +48,36 @@ public class SchemaObject implements JsonWriter {
     /** @return the minimum keyword, or null if absent */
     @SuppressWarnings("unchecked")
     public @Nullable Double minimum() { return JsonValues.doubleValue(keywords.get("minimum")); }
-    /** @return the maxLength keyword, or null if absent */
+    /** @return the maxLength keyword, or null if absent
+     * @throws IllegalStateException if the value exceeds the Integer range; use {@link #keywords()} for the exact value */
     @SuppressWarnings("unchecked")
-    public @Nullable Integer maxLength() { return (Integer) keywords.get("maxLength"); }
-    /** @return the minLength keyword, or null if absent */
+    public @Nullable Integer maxLength() { return JsonValues.integerValue(keywords.get("maxLength"), "maxLength"); }
+    /** @return the minLength keyword, or null if absent
+     * @throws IllegalStateException if the value exceeds the Integer range; use {@link #keywords()} for the exact value */
     @SuppressWarnings("unchecked")
-    public @Nullable Integer minLength() { return (Integer) keywords.get("minLength"); }
+    public @Nullable Integer minLength() { return JsonValues.integerValue(keywords.get("minLength"), "minLength"); }
     /** @return the pattern keyword, or null if absent */
     @SuppressWarnings("unchecked")
     public @Nullable Pattern pattern() { return patternText() == null ? null : Pattern.compile(Objects.requireNonNull(patternText())); }
-    /** @return the maxItems keyword, or null if absent */
+    /** @return the maxItems keyword, or null if absent
+     * @throws IllegalStateException if the value exceeds the Integer range; use {@link #keywords()} for the exact value */
     @SuppressWarnings("unchecked")
-    public @Nullable Integer maxItems() { return (Integer) keywords.get("maxItems"); }
-    /** @return the minItems keyword, or null if absent */
+    public @Nullable Integer maxItems() { return JsonValues.integerValue(keywords.get("maxItems"), "maxItems"); }
+    /** @return the minItems keyword, or null if absent
+     * @throws IllegalStateException if the value exceeds the Integer range; use {@link #keywords()} for the exact value */
     @SuppressWarnings("unchecked")
-    public @Nullable Integer minItems() { return (Integer) keywords.get("minItems"); }
+    public @Nullable Integer minItems() { return JsonValues.integerValue(keywords.get("minItems"), "minItems"); }
     /** @return the uniqueItems keyword, or null if absent */
     @SuppressWarnings("unchecked")
     public @Nullable Boolean uniqueItems() { return (Boolean) keywords.get("uniqueItems"); }
-    /** @return the maxProperties keyword, or null if absent */
+    /** @return the maxProperties keyword, or null if absent
+     * @throws IllegalStateException if the value exceeds the Integer range; use {@link #keywords()} for the exact value */
     @SuppressWarnings("unchecked")
-    public @Nullable Integer maxProperties() { return (Integer) keywords.get("maxProperties"); }
-    /** @return the minProperties keyword, or null if absent */
+    public @Nullable Integer maxProperties() { return JsonValues.integerValue(keywords.get("maxProperties"), "maxProperties"); }
+    /** @return the minProperties keyword, or null if absent
+     * @throws IllegalStateException if the value exceeds the Integer range; use {@link #keywords()} for the exact value */
     @SuppressWarnings("unchecked")
-    public @Nullable Integer minProperties() { return (Integer) keywords.get("minProperties"); }
+    public @Nullable Integer minProperties() { return JsonValues.integerValue(keywords.get("minProperties"), "minProperties"); }
     /** @return the required keyword, or null if absent */
     @SuppressWarnings("unchecked")
     public @Nullable List<String> required() { return (List<String>) keywords.get("required"); }
@@ -192,12 +198,14 @@ public class SchemaObject implements JsonWriter {
     /** @return the contains keyword, or null if absent */
     @SuppressWarnings("unchecked")
     public @Nullable SchemaObject contains() { return (SchemaObject) keywords.get("contains"); }
-    /** @return the minContains keyword, or null if absent */
+    /** @return the minContains keyword, or null if absent
+     * @throws IllegalStateException if the value exceeds the Integer range; use {@link #keywords()} for the exact value */
     @SuppressWarnings("unchecked")
-    public @Nullable Integer minContains() { return (Integer) keywords.get("minContains"); }
-    /** @return the maxContains keyword, or null if absent */
+    public @Nullable Integer minContains() { return JsonValues.integerValue(keywords.get("minContains"), "minContains"); }
+    /** @return the maxContains keyword, or null if absent
+     * @throws IllegalStateException if the value exceeds the Integer range; use {@link #keywords()} for the exact value */
     @SuppressWarnings("unchecked")
-    public @Nullable Integer maxContains() { return (Integer) keywords.get("maxContains"); }
+    public @Nullable Integer maxContains() { return JsonValues.integerValue(keywords.get("maxContains"), "maxContains"); }
     /** @return the patternProperties keyword, or null if absent */
     @SuppressWarnings("unchecked")
     public @Nullable Map<String, SchemaObject> patternProperties() { return (Map<String, SchemaObject>) keywords.get("patternProperties"); }

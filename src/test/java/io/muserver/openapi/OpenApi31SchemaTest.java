@@ -9,6 +9,33 @@ import static io.muserver.openapi.OfflineOpenApiValidator.*;
 import static org.junit.Assert.*;
 
 public class OpenApi31SchemaTest {
+    @Test public void integralKeywordViewsAcceptDifferentNumberRepresentations() throws Exception {
+        for (String keyword : Arrays.asList("maxLength", "minLength", "maxItems", "minItems",
+            "maxProperties", "minProperties", "minContains", "maxContains")) {
+            for (Number value : Arrays.asList(1L, 1.0, 1.0f, (short) 1, BigInteger.ONE, new BigDecimal("1.00"))) {
+                SchemaObject schema = schemaObject().withKeyword(keyword, value).build();
+                assertEquals(keyword + " from " + value.getClass(), Integer.valueOf(1),
+                    SchemaObject.class.getMethod(keyword).invoke(schema));
+                assertEquals(Integer.valueOf(1), SchemaObject.class.getMethod(keyword).invoke(schema.toBuilder().build()));
+                assertEquals(1, json(schema).get(keyword).intValue());
+            }
+        }
+    }
+
+    @Test public void integralKeywordViewsRejectOverflowWithoutLosingTheSchemaValue() throws Exception {
+        BigInteger large = new BigInteger("123456789012345678901234567890");
+        for (String keyword : Arrays.asList("maxLength", "minLength", "maxItems", "minItems",
+            "maxProperties", "minProperties", "minContains", "maxContains")) {
+            SchemaObject schema = schemaObject().withKeyword(keyword, large).build();
+            assertEquals(large, json(schema).get(keyword).bigIntegerValue());
+            assertEquals(large, schema.toBuilder().build().keywords().get(keyword));
+            java.lang.reflect.InvocationTargetException error = assertThrows(java.lang.reflect.InvocationTargetException.class,
+                () -> SchemaObject.class.getMethod(keyword).invoke(schema));
+            assertTrue(error.getCause().toString(), error.getCause() instanceof IllegalStateException);
+            assertTrue(error.getCause().getMessage().contains("keywords()"));
+        }
+    }
+
     @Test public void presenceAndNullabilityAreIndependent() throws Exception {
         for (boolean required : new boolean[]{false, true}) for (boolean nullable : new boolean[]{false, true}) {
             SchemaObject property = schemaObject().withTypes(nullable ? Arrays.asList("string", "null") : Collections.singletonList("string"))
@@ -81,6 +108,27 @@ public class OpenApi31SchemaTest {
         accepts(tuple, "[\"a\"]", false);
         accepts(tuple, "[\"a\",1,2,3]", false);
         accepts(tuple, "[\"a\",1,true]", false);
+    }
+
+    @Test public void oneOfAndConstSelectPaymentShapes() throws Exception {
+        SchemaObject payment = schemaObject().withType("object")
+            .withProperties(Map.of("kind", schemaObject().withType("string").build(),
+                "amount", schemaObject().withType("number").withExclusiveMinimumValue(BigDecimal.ZERO).build(),
+                "cardToken", schemaObject().withType("string").build(), "iban", schemaObject().withType("string").build()))
+            .withRequired(Arrays.asList("kind", "amount"))
+            .withOneOf(Arrays.asList(
+                schemaObject().withTitle("Card payment").withProperties(Collections.singletonMap("kind",
+                    schemaObject().withConstValue("card").build())).withRequired(Collections.singletonList("cardToken")).build(),
+                schemaObject().withTitle("Bank transfer").withProperties(Collections.singletonMap("kind",
+                    schemaObject().withConstValue("bank").build())).withRequired(Collections.singletonList("iban")).build()))
+            .withUnevaluatedProperties(booleanSchema(false).build()).build();
+        OfflineOpenApiValidator.object("SchemaObject", json(payment));
+        accepts(payment, "{\"kind\":\"card\",\"amount\":19.95,\"cardToken\":\"tok_demo\"}", true);
+        accepts(payment, "{\"kind\":\"bank\",\"amount\":42,\"iban\":\"demo\"}", true);
+        accepts(payment, "{\"kind\":\"card\",\"amount\":19.95,\"iban\":\"demo\"}", false);
+        accepts(payment, "{\"kind\":\"cash\",\"amount\":19.95,\"cardToken\":\"demo\"}", false);
+        accepts(payment, "{\"kind\":\"card\",\"amount\":0,\"cardToken\":\"demo\"}", false);
+        assertEquals(json(payment), json(payment.toBuilder().build()));
     }
 
     @Test public void refsAnchorsAndPreciseBoundsAreCopied() throws Exception {
