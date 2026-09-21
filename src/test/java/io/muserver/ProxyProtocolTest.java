@@ -37,7 +37,8 @@ class ProxyProtocolTest {
         }
     }
 
-    @Test void maximumPayloadUsesBoundedBulkReads() throws Exception {
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void maximumPayloadUsesBoundedBulkReads(boolean throughSocket) throws Exception {
         byte[] bytes = ByteBuffer.allocate(65552).put(preamble(2))
             .put((byte) 0xee).putShort((short) (65535 - 15)).array();
         bytes[14] = (byte) 255; bytes[15] = (byte) 255; bytes[65551] = 42;
@@ -53,7 +54,18 @@ class ProxyProtocolTest {
             }
         }
         Counted input = new Counted();
-        assertEquals("192.0.2.1", ProxyProtocol.parse(input).sourceAddress());
+        ProxiedConnectionInfo info;
+        if (throughSocket) {
+            Socket socket = new Socket() {
+                @Override public int getSoTimeout() { return 0; }
+                @Override public void setSoTimeout(int millis) { }
+                @Override public java.io.InputStream getInputStream() { return input; }
+            };
+            info = ProxyProtocol.read(socket, MonotonicTime.deadlineAfterMillis(10000));
+        } else {
+            info = ProxyProtocol.parse(input);
+        }
+        assertEquals("192.0.2.1", info.sourceAddress());
         assertEquals(42, input.read()); assertTrue(input.singles < 32);
         assertTrue(input.largest <= 4096, "largest read: " + input.largest);
     }
