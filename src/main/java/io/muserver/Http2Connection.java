@@ -260,12 +260,13 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         Socket clientSocket,
         @Nullable Certificate clientCertificate,
         ConnectionAcceptedTime acceptedTime,
+        @Nullable ProxiedConnectionInfo proxyInfo,
         Http2Settings initialServerSettings,
         long settingsAckTimeoutMillis,
         ExecutorService handlerExecutor,
         ExecutorService writerExecutor
     ) {
-        super(server, creator, clientSocket, clientCertificate, acceptedTime);
+        super(server, creator, clientSocket, clientCertificate, acceptedTime, proxyInfo);
         this.serverSettings = initialServerSettings;
         this.settingsAckTimeoutMillis = settingsAckTimeoutMillis;
         this.handlerExecutor = handlerExecutor;

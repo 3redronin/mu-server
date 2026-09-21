@@ -43,7 +43,9 @@ instead of rejecting them; a bounded executor must throw
 `RejectedExecutionException` when full. Pending reads are closed on shutdown;
 socket read timeouts are restored before TLS/HTTP processing.
 
-V1 is limited to 107 bytes including CRLF. Numeric IPv4 and IPv6 literals are
+The parser bulk-reads the shortest valid v1 prefix and the fixed v2 header,
+without reading ahead into TLS or HTTP. V1 reads its remaining bytes individually
+until CRLF and is limited to 107 bytes including CRLF. Numeric IPv4 and IPv6 literals are
 validated without DNS. Decimal addresses and ports reject leading zeroes; ports
 range from 0 through 65535. UNKNOWN ignores its suffix. V2 supports IPv4, IPv6
 and UNIX address blocks, with stream and datagram descriptions (the Mu listener

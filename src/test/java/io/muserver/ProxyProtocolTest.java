@@ -142,6 +142,35 @@ class ProxyProtocolTest {
         assertEquals(713, socket.getSoTimeout());
     }
 
+    @ParameterizedTest @CsvSource({"0,false", "0,true", "1,false", "1,true", "2,false", "2,true", "3,false", "3,true"})
+    void knownHeaderLengthsUseBulkReadsWithoutReadAhead(int kind, boolean fragmented) throws Exception {
+        byte[] header = kind == 0 ? "PROXY UNKNOWN\r\n".getBytes(StandardCharsets.US_ASCII)
+            : kind == 1 ? preamble(1) : kind == 2 ? binary(0x20, 0, new byte[0]) : preamble(2);
+        byte[] bytes = java.util.Arrays.copyOf(header, header.length + 1);
+        bytes[header.length] = 42;
+        class Counted extends ByteArrayInputStream {
+            int singles, bulks;
+            Counted() { super(bytes); }
+            @Override public synchronized int read() { singles++; return super.read(); }
+            @Override public synchronized int read(byte[] b, int off, int len) {
+                bulks++; return super.read(b, off, fragmented ? Math.min(1, len) : len);
+            }
+        }
+        Counted input = new Counted();
+        Socket socket = new Socket() {
+            @Override public int getSoTimeout() { return 0; }
+            @Override public void setSoTimeout(int millis) { }
+            @Override public java.io.InputStream getInputStream() { return input; }
+        };
+        ProxiedConnectionInfo info = ProxyProtocol.read(socket, MonotonicTime.deadlineAfterMillis(3000));
+        assertEquals(kind == 0 || kind == 2 ? null : "192.0.2.1", info.sourceAddress());
+        assertEquals(kind == 1 ? header.length - 14 : 1, input.singles);
+        assertTrue(input.bulks > 0);
+        if (!fragmented) assertEquals(kind == 3 ? 2 : 1, input.bulks);
+        assertEquals(42, input.read());
+        assertEquals(-1, input.read());
+    }
+
     @Test void timeoutConfigurationIsIndependentAndBounded() {
         MuServerBuilder builder = MuServerBuilder.httpServer();
         assertFalse(builder.haProxyProtocolEnabled());
@@ -194,6 +223,10 @@ class ProxyProtocolTest {
                     @Override public synchronized int read() {
                         java.util.concurrent.locks.LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(5));
                         return super.read();
+                    }
+                    @Override public synchronized int read(byte[] b, int off, int len) {
+                        java.util.concurrent.locks.LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(5));
+                        return super.read(b, off, Math.min(1, len));
                     }
                 };
             }
@@ -249,8 +282,9 @@ class ProxyProtocolTest {
     }
 
     @Test void allSplitAndTruncationPointsPreserveApplicationBytes() throws Exception {
-        for (int version : new int[]{1, 2}) {
-            byte[] header = preamble(version);
+        for (byte[] header : new byte[][]{preamble(1), preamble(2),
+            "PROXY UNKNOWN\r\n".getBytes(StandardCharsets.US_ASCII), binary(0x20, 0, new byte[0])}) {
+            String expectedSource = ProxyProtocol.parse(new ByteArrayInputStream(header)).sourceAddress();
             for (int length = 0; length < header.length; length++) {
                 byte[] truncated = java.util.Arrays.copyOf(header, length);
                 assertThrows(IOException.class, () -> ProxyProtocol.parse(new ByteArrayInputStream(truncated)));
@@ -263,7 +297,7 @@ class ProxyProtocolTest {
                         return super.read(b, off, Math.min(len, pos < boundary ? boundary - pos : 1));
                     }
                 };
-                assertEquals("192.0.2.1", ProxyProtocol.parse(input).sourceAddress());
+                assertEquals(expectedSource, ProxyProtocol.parse(input).sourceAddress());
                 assertEquals(42, input.read());
             }
         }

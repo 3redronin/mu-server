@@ -479,6 +479,7 @@ class ConnectionAcceptor {
                 socket,
                 clientCert,
                 acceptedTime,
+                proxyInfo,
                 http2Config.initialSettings(),
                 http2Config.settingsAckTimeoutMillis(),
                 handlerExecutor,
@@ -491,11 +492,11 @@ class ConnectionAcceptor {
                 socket,
                 clientCert,
                 acceptedTime,
+                proxyInfo,
                 handlerExecutor
             );
         }
 
-        con.proxiedConnectionInfo = proxyInfo;
         if (!promoteAcceptedSocket(acceptedSocket, con)) {
             return;
         }

@@ -52,6 +52,7 @@ class RFC9113_5_1_StreamStatesTest {
                     liveConnection.clientSocket,
                     liveConnection.clientCertificate,
                     ConnectionAcceptedTime.now(),
+                    liveConnection.proxyInfo().orElse(null),
                     Http2Settings.DEFAULT_CLIENT_SETTINGS,
                     5000,
                     executor,

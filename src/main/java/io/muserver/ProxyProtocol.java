@@ -2,7 +2,6 @@ package io.muserver;
 
 import org.jspecify.annotations.Nullable;
 
-import java.io.ByteArrayOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -58,34 +57,40 @@ final class ProxyProtocol {
     static ProxiedConnectionInfo parse(InputStream source) throws IOException {
         int first = source.read();
         if (first == 'P') {
-            ByteArrayOutputStream line = new ByteArrayOutputStream(107);
-            line.write(first);
-            int previous = first;
-            while (line.size() < 107) {
+            byte[] line = new byte[107];
+            line[0] = (byte) first;
+            // The shortest valid v1 line is "PROXY UNKNOWN\r\n" (15 bytes).
+            readExact(source, line, 1, 14);
+            int size = 15;
+            for (int i = 1; i < size - 1; i++) {
+                if (line[i - 1] == '\r' && line[i] == '\n') throw invalid();
+            }
+            while (true) {
+                if (line[size - 2] == '\r' && line[size - 1] == '\n') {
+                    return parseV1(new String(line, 0, size - 2, StandardCharsets.US_ASCII));
+                }
+                if (size == line.length) throw new IOException("PROXY v1 header exceeds 107 bytes");
                 int value = source.read();
                 if (value < 0) throw new EOFException("Truncated PROXY v1 header");
-                line.write(value);
-                if (value == '\n' && previous == '\r') {
-                    byte[] bytes = line.toByteArray();
-                    return parseV1(new String(bytes, 0, bytes.length - 2, StandardCharsets.US_ASCII));
-                }
-                previous = value;
+                line[size++] = (byte) value;
             }
-            throw new IOException("PROXY v1 header exceeds 107 bytes");
         }
         if (first != SIGNATURE[0]) throw invalid();
-        for (int i = 1; i < SIGNATURE.length; i++) if (source.read() != SIGNATURE[i]) throw invalid();
-        byte[] header = readExact(source, 4);
-        int command = header[0] & 255;
+        // All v2 headers have 16 fixed bytes, including the payload length.
+        byte[] header = new byte[16];
+        header[0] = (byte) first;
+        readExact(source, header, 1, 15);
+        for (int i = 1; i < SIGNATURE.length; i++) if (header[i] != SIGNATURE[i]) throw invalid();
+        int command = header[12] & 255;
         if (command != 0x20 && command != 0x21) throw invalid();
-        int length = ((header[2] & 255) << 8) | (header[3] & 255);
+        int length = ((header[14] & 255) << 8) | (header[15] & 255);
         Payload payload = new Payload(source, length);
         if (command == 0x20) {
             payload.discard(length);
             return new Info(null, 0, null, 0);
         }
-        int family = (header[1] & 255) >>> 4;
-        int transport = header[1] & 15;
+        int family = (header[13] & 255) >>> 4;
+        int transport = header[13] & 15;
         if (family > 3 || transport > 2) throw invalid();
         if (family == 0 || transport == 0) {
             payload.tlvs();
@@ -198,14 +203,18 @@ final class ProxyProtocol {
 
     private static byte[] readExact(InputStream source, int size) throws IOException {
         byte[] data = new byte[size];
-        int offset = 0;
-        while (offset < size) {
-            int count = source.read(data, offset, size - offset);
-            if (count < 0) throw new EOFException("Truncated PROXY v2 header");
+        readExact(source, data, 0, size);
+        return data;
+    }
+
+    private static void readExact(InputStream source, byte[] data, int offset, int length) throws IOException {
+        int end = offset + length;
+        while (offset < end) {
+            int count = source.read(data, offset, end - offset);
+            if (count < 0) throw new EOFException("Truncated PROXY header");
             if (count == 0) throw new IOException("PROXY input made no progress");
             offset += count;
         }
-        return data;
     }
 
     private static IOException invalid() { return new IOException("Invalid PROXY protocol header"); }
