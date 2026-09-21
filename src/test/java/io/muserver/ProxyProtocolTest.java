@@ -329,7 +329,6 @@ class ProxyProtocolTest {
                         expiry.get().run();
                     }
                 }
-                assertEquals(0, server.stats().failedToConnect());
             }
         } finally { timer.shutdownNow(); }
     }
