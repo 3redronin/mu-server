@@ -122,6 +122,14 @@ class EntityProviders {
             .orElse(null);
     }
 
+    boolean isBuiltInReader(MessageBodyReader<?> reader) {
+        return readers.stream().anyMatch(candidate -> {
+            @SuppressWarnings("ReferenceEquality")
+            boolean sameProvider = candidate.provider == reader;
+            return sameProvider && candidate.isBuiltIn;
+        });
+    }
+
     boolean isBuiltInWriter(MessageBodyWriter<?> writer) {
         return writers.stream().anyMatch(candidate -> {
             // Provider selection returns the exact instance held by its wrapper.

@@ -127,7 +127,7 @@ class ResourceMethod {
         }
     }
 
-    OperationObjectBuilder createOperationBuilder(List<SchemaReference> customSchemas) {
+    OperationObjectBuilder createOperationBuilder(List<SchemaReference> customSchemas, EntityProviders entityProviders) {
         Map<String, ResponseObject> httpStatusCodes = new TreeMap<>();
         for (ApiResponseObj apiResponse : getApiResponses()) {
             Type responseType = unwrap(apiResponse.genericReturnType == null ? apiResponse.response : apiResponse.genericReturnType);
@@ -141,7 +141,7 @@ class ResourceMethod {
                     Stream.of(apiResponse.contentType).map(MediaType::valueOf).collect(Collectors.toList());
                 for (MediaType mediaType : mediaTypes) {
                     SchemaObject responseSchema = documentedSchema(customSchemas, responseClass, responseType,
-                        SchemaObjectCustomizerTarget.RESPONSE_BODY, null, mediaType, null, null);
+                        SchemaObjectCustomizerTarget.RESPONSE_BODY, null, mediaType, null, null, entityProviders);
                     content.put(mediaType.toString(), mediaTypeObject().withSchema(responseSchema)
                         .withExample(nullOrEmpty(apiResponse.example) ? responseSchema.example() : apiResponse.example).build());
                 }
@@ -165,7 +165,7 @@ class ResourceMethod {
             Map<String, MediaTypeObject> content = new LinkedHashMap<>();
             for (MediaType mediaType : effectiveConsumes) {
                 SchemaObject schema = documentedSchema(customSchemas, body.type(), body.genericType(),
-                    SchemaObjectCustomizerTarget.REQUEST_BODY, null, mediaType, null, body.descriptionData);
+                    SchemaObjectCustomizerTarget.REQUEST_BODY, null, mediaType, null, body.descriptionData, entityProviders);
                 content.put(mediaType.toString(), mediaTypeObject().withSchema(schema)
                     .withExample(body.descriptionData == null ? null : body.descriptionData.example).build());
             }
@@ -186,7 +186,7 @@ class ResourceMethod {
                     Map<String, EncodingObject> encoding = new LinkedHashMap<>();
                     for (ResourceMethodParam.RequestBasedParam form : forms) {
                         properties.put(form.key(), documentedSchema(customSchemas, form.type(), form.genericType(),
-                            SchemaObjectCustomizerTarget.FORM_PARAM, form.key(), mediaType, form, null));
+                            SchemaObjectCustomizerTarget.FORM_PARAM, form.key(), mediaType, form, null, entityProviders));
                         boolean urlEncoded = mediaType.isCompatible(MediaType.APPLICATION_FORM_URLENCODED_TYPE);
                         Class<?> formType = form.type().isArray() ? form.type().getComponentType() : form.type();
                         if (io.muserver.UploadedFile.class.isAssignableFrom(formType) || java.io.File.class.isAssignableFrom(formType)) {
@@ -209,13 +209,27 @@ class ResourceMethod {
                 .withDefaultValue(defaultResponse).build());
     }
 
+    SchemaObject parameterSchema(List<SchemaReference> registrations, ResourceMethodParam.RequestBasedParam parameter) {
+        return documentedSchema(registrations, parameter.type(), parameter.genericType(),
+            SchemaObjectCustomizerTarget.PARAMETER, parameter.key(), MediaType.TEXT_PLAIN_TYPE, parameter, null, null);
+    }
+
     private SchemaObject documentedSchema(List<SchemaReference> registrations, Class<?> type, @Nullable Type genericType,
                                           SchemaObjectCustomizerTarget target, @Nullable String name, MediaType mediaType,
-                                          ResourceMethodParam.@Nullable RequestBasedParam form, @Nullable DescriptionData bodyDescription) {
+                                          ResourceMethodParam.@Nullable RequestBasedParam form, @Nullable DescriptionData bodyDescription, @Nullable EntityProviders entityProviders) {
         SchemaReference registration = SchemaReference.find(registrations, type, genericType);
-        SchemaObjectBuilder builder = registration == null ? SchemaReference.infer(registrations, type, genericType) : registration.schema.toBuilder();
-        if (registration == null && bodyDescription != null) builder.withTitle(bodyDescription.summary).withDescription(bodyDescription.description);
+        SchemaObjectBuilder builder = registration != null ? registration.schema.toBuilder() : form != null ? form.documentationSchema(registrations) : entitySchema(registrations, type, genericType, target, mediaType, entityProviders);
+        if (bodyDescription != null) {
+            if (bodyDescription.summary != null) builder.withTitle(bodyDescription.summary);
+            if (bodyDescription.description != null) builder.withDescription(bodyDescription.description);
+            if (bodyDescription.example != null) builder.withExamples(Collections.singletonList(bodyDescription.example));
+        }
         if (form != null) {
+            SchemaObject documented = form.source().openAPIIn == null ? null : form.createDocumentationBuilder().build().schema();
+            if (documented != null) {
+                if (documented.pattern() != null) builder.withPattern(documented.pattern());
+                if (documented.externalDocs() != null) builder.withExternalDocs(documented.externalDocs());
+            }
             if (form.deprecated()) builder.withDeprecated(true);
             if (form.hasExplicitDefault()) builder.withDefaultValue(form.documentationDefaultValue());
             if (form.descriptionData != null) {
@@ -224,9 +238,37 @@ class ResourceMethod {
                 if (form.descriptionData.example != null) builder.withExamples(Collections.singletonList(form.descriptionData.example));
             }
         }
-        SchemaObject schema = schemaObjectCustomizer.customize(builder, schemaContext(target, name, type, genericType, mediaType)).build();
+        SchemaObject schema = schemaObjectCustomizer.customize(builder, new SchemaObjectCustomizerContext(target, type, genericType, resourceClass.resourceInstance,
+            methodHandle(), name, mediaType, form == null ? null : form.source().name().replace("_PARAM", "").toLowerCase(Locale.ROOT))).build();
         return registration != null && schema.toString().equals(registration.schema.toString())
             ? schemaObject().withRef("#/components/schemas/" + registration.id).build() : schema;
+    }
+
+    private SchemaObjectBuilder entitySchema(List<SchemaReference> registrations, Class<?> type, @Nullable Type genericType,
+                                              SchemaObjectCustomizerTarget target, MediaType mediaType,
+                                              @Nullable EntityProviders providers) {
+        if (providers == null) return schemaObject();
+        Type resolved = genericType == null ? type : genericType;
+        Object provider;
+        boolean builtIn;
+        if (target == SchemaObjectCustomizerTarget.REQUEST_BODY) {
+            jakarta.ws.rs.ext.MessageBodyReader<?> reader = providers.findReader(type, resolved, methodAnnotations, mediaType);
+            provider = reader;
+            builtIn = reader != null && providers.isBuiltInReader(reader);
+        } else {
+            jakarta.ws.rs.ext.MessageBodyWriter<?> writer = providers.findWriter(type, resolved, methodAnnotations, mediaType);
+            provider = writer;
+            builtIn = writer != null && providers.isBuiltInWriter(writer);
+        }
+        if (provider == null) return SchemaReference.infer(registrations, type, genericType);
+        if (!builtIn) return schemaObject();
+        if (provider instanceof StringEntityProviders.ReaderEntityReader || provider instanceof StringEntityProviders.ReaderEntityWriter
+            || provider instanceof StringEntityProviders.CharArrayReaderWriter) return schemaObject().withType("string");
+        if (provider instanceof StringEntityProviders.TemporalEntityReaderWriter) {
+            jakarta.ws.rs.ext.ParamConverter<?> converter = new BuiltInParamConverterProvider().getConverter(type, resolved, methodAnnotations);
+            if (converter != null) return JavaValueSchemas.parameter(type, converter);
+        }
+        return SchemaReference.infer(registrations, type, genericType);
     }
 
     private static Type unwrap(Type type) {

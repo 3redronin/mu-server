@@ -35,11 +35,13 @@ class OpenApiDocumentor implements MuHandler {
     private final @Nullable String openApiHtmlCss;
     private final CORSConfig corsConfig;
     private final List<SchemaReference> customSchemas;
+    private final EntityProviders entityProviders;
     private final SchemaObjectCustomizer schemaObjectCustomizer;
     private final List<ParamConverterProvider> paramConverterProviders;
 
-    OpenApiDocumentor(List<ResourceClass> roots, @Nullable String openApiJsonUrl, @Nullable String openApiHtmlUrl, OpenAPIObject openAPIObject, @Nullable String openApiHtmlCss, CORSConfig corsConfig, List<SchemaReference> customSchemas, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders, CollectionParameterStrategy collectionParameterStrategy) {
+    OpenApiDocumentor(List<ResourceClass> roots, @Nullable String openApiJsonUrl, @Nullable String openApiHtmlUrl, OpenAPIObject openAPIObject, @Nullable String openApiHtmlCss, CORSConfig corsConfig, List<SchemaReference> customSchemas, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders, CollectionParameterStrategy collectionParameterStrategy, EntityProviders entityProviders) {
         this.collectionParameterStrategy = collectionParameterStrategy;
+        this.entityProviders = entityProviders;
         Map<String, SchemaObject> occupied = new LinkedHashMap<>();
         if (openAPIObject.components() != null && openAPIObject.components().schemas() != null) occupied.putAll(openAPIObject.components().schemas());
         this.customSchemas = new ArrayList<>();
@@ -193,6 +195,7 @@ class OpenApiDocumentor implements MuHandler {
                 .map(p -> {
                     MatrixParamDocumentation matrixParam = documentedPath.matrixParams.get(p);
                     ParameterObjectBuilder builder = p.createDocumentationBuilder(matrixParam == null ? p.key() : matrixParam.parameterName);
+                    builder.withSchema(method.parameterSchema(customSchemas, p));
                     if (p.isMultiValued() && p.source() == ResourceMethodParam.ValueSource.QUERY_PARAM) {
                         builder.withStyle("form").withExplode(collectionParameterStrategy == CollectionParameterStrategy.NO_TRANSFORM);
                     }
@@ -217,7 +220,7 @@ class OpenApiDocumentor implements MuHandler {
             if (existing == null) {
                 String operationId = uniqueName(method.requiredHttpMethod().name() + "_" + opPath, operationIds);
                 operationIds.add(operationId);
-                existing = method.createOperationBuilder(customSchemas)
+                existing = method.createOperationBuilder(customSchemas, entityProviders)
                     .withOperationId(operationId)
                     .withTags(singletonList(root.tag.name()))
                     .withParameters(parameters)
@@ -225,7 +228,7 @@ class OpenApiDocumentor implements MuHandler {
             } else {
                 // Only generated overloads reach this merge. Manual operations (including references)
                 // replace collisions later in handle(), without using their legacy inline-only getters.
-                OperationObject curOO = method.createOperationBuilder(customSchemas).build();
+                OperationObject curOO = method.createOperationBuilder(customSchemas, entityProviders).build();
                 RequestBodyObject oldBody = existing.requestBody();
                 RequestBodyObject newBody = curOO.requestBody();
                 Map<String, MediaTypeObject> mergedContent = ResponseObjectBuilder.mergeContent(

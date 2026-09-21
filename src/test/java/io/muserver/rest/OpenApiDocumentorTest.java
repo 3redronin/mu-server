@@ -432,7 +432,7 @@ public class OpenApiDocumentorTest {
             assertThat(image.has("format"), is(false));
 
             JSONObject appJson = content.getJSONObject("application/json").getJSONObject("schema");
-            assertThat(appJson.keySet(), hasSize(2));
+            assertThat(appJson.keySet(), hasSize(3));
             assertThat(appJson.getString("title"), is("An json in a format"));
             assertThat(appJson.getString("type"), is("string"));
 
@@ -560,7 +560,7 @@ public class OpenApiDocumentorTest {
                 assertThat(bodySchema.getString("type"), is("object"));
                 assertThat(bodySchema.getJSONArray("required").toString(), equalTo(new JSONArray().put("id4").toString()));
                 JSONObject id3 = bodySchema.getJSONObject("properties").getJSONObject("id3");
-                assertThat(id3.keySet(), hasSize(2));
+                assertThat(id3.keySet(), hasSize(3));
                 assertThat(id3.getString("type"), is("integer"));
                 assertThat(id3.getString("format"), is("int32"));
                 assertThat(id3.has("nullable"), is(false));
