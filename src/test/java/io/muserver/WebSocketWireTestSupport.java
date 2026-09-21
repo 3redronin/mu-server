@@ -18,6 +18,11 @@ final class WebSocketWireTestSupport implements AutoCloseable {
     final int handshakeBytes;
 
     WebSocketWireTestSupport(MuServer server) throws IOException {
+        this(server, Integer.MAX_VALUE);
+    }
+
+    WebSocketWireTestSupport(MuServer server, int handshakeWriteSize) throws IOException {
+        if (handshakeWriteSize < 1) throw new IllegalArgumentException("handshakeWriteSize must be positive");
         socket = new Socket(server.uri().getHost(), server.uri().getPort());
         socket.setSoTimeout(3000);
         socket.setTcpNoDelay(true);
@@ -28,8 +33,12 @@ final class WebSocketWireTestSupport implements AutoCloseable {
             + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n")
             .getBytes(StandardCharsets.US_ASCII);
         handshakeBytes = request.length;
-        output.write(request);
-        output.flush();
+        for (int offset = 0; offset < request.length;) {
+            int length = Math.min(handshakeWriteSize, request.length - offset);
+            output.write(request, offset, length);
+            output.flush();
+            offset += length;
+        }
         ByteArrayOutputStream response = new ByteArrayOutputStream();
         int tail = 0;
         do {

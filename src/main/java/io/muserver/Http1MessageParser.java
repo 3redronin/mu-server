@@ -377,6 +377,7 @@ class Http1MessageParser implements Http1MessageReader {
                             if (trailerPart.endsWith("\r\n\r\n")) {
                                 trailers = parseTrailers(trailerPart);
                                 buffer.reset();
+                                position++; // Consume the final LF before returning the body boundary.
                                 onMessageEnded();
                                 return EndOfBodyBit;
                             }
