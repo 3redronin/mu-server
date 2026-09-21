@@ -37,6 +37,12 @@ abstract class BaseHttpConnection implements HttpConnection {
     protected final AtomicLong rejectedDueToOverload = new AtomicLong(0);
     protected final AtomicBoolean closed = new AtomicBoolean(false);
     protected final int requestTimeout;
+    @Nullable ProxiedConnectionInfo proxiedConnectionInfo;
+
+    @Override
+    public Optional<ProxiedConnectionInfo> proxyInfo() {
+        return Optional.ofNullable(proxiedConnectionInfo);
+    }
 
     BaseHttpConnection(
         Mu3ServerImpl server,

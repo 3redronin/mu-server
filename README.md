@@ -31,3 +31,4 @@ MuServer server = MuServerBuilder.httpsServer()
 * [File upload support](https://muserver.io/uploads)
 * [Async handler support](https://muserver.io/async)
 * and more. See <https://muserver.io/> for more information.
+For listeners behind HAProxy, see [PROXY protocol configuration and connection metadata](PROXY-PROTOCOL.md).

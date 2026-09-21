@@ -68,6 +68,7 @@ class ConnectionAcceptor {
     private final ReentrantLock lifecycleLock = new ReentrantLock();
     private final Condition connectionRetired = lifecycleLock.newCondition();
     private final Set<Socket> acceptedSockets = new HashSet<>();
+    private final Map<Socket, Long> pendingPreambles = new HashMap<>();
     private final Set<BaseHttpConnection> connections = new HashSet<>();
 
     public Set<HttpConnection> activeConnections() {
@@ -88,6 +89,7 @@ class ConnectionAcceptor {
 
     private final Thread acceptorThread;
     private volatile @Nullable ScheduledFuture<?> timeoutTask;
+    private volatile @Nullable ScheduledFuture<?> preambleTimeoutTask;
 
     ConnectionAcceptor(Mu3ServerImpl server, ServerSocket socketServer, InetSocketAddress address, URI uri,
                        @Nullable HttpsConfig httpsConfig, @Nullable Http2Config http2Config,
@@ -115,8 +117,9 @@ class ConnectionAcceptor {
         while (state == State.STARTED) {
             try {
                 Socket clientSocket = socketServer.accept();
+                long proxyDeadline = MonotonicTime.deadlineAfterMillis(server.haProxyProtocolTimeoutMillis);
                 clientSocket.setTcpNoDelay(true);
-                if (!registerAcceptedSocket(clientSocket)) {
+                if (!registerAcceptedSocket(clientSocket, proxyDeadline)) {
                     closeQuietly(clientSocket);
                     continue;
                 }
@@ -126,6 +129,12 @@ class ConnectionAcceptor {
                         () -> runAcceptedSocket(clientSocket, acceptedTime, h2, false)
                     );
                 } catch (RejectedExecutionException e) {
+                    if (server.haProxyProtocolEnabled) {
+                        server.getStatsImpl().onRejectedDueToOverload();
+                        retireAcceptedSocket(clientSocket);
+                        closeQuietly(clientSocket);
+                        continue;
+                    }
                     try {
                         clientSocket.setSoTimeout(2000);
                         runAcceptedSocket(clientSocket, acceptedTime, false, true);
@@ -159,13 +168,14 @@ class ConnectionAcceptor {
         }
     }
 
-    private boolean registerAcceptedSocket(Socket socket) {
+    private boolean registerAcceptedSocket(Socket socket, long proxyDeadline) {
         lifecycleLock.lock();
         try {
             if (state != State.STARTED) {
                 return false;
             }
             acceptedSockets.add(socket);
+            if (server.haProxyProtocolEnabled) pendingPreambles.put(socket, proxyDeadline);
             return true;
         } finally {
             lifecycleLock.unlock();
@@ -195,6 +205,7 @@ class ConnectionAcceptor {
         lifecycleLock.lock();
         try {
             acceptedSockets.remove(socket);
+            pendingPreambles.remove(socket);
         } finally {
             lifecycleLock.unlock();
         }
@@ -240,6 +251,8 @@ class ConnectionAcceptor {
         try {
             pending = new ArrayList<>(acceptedSockets);
             acceptedSockets.clear();
+            for (Socket socket : pendingPreambles.keySet()) server.getStatsImpl().onFailedToConnect();
+            pendingPreambles.clear();
         } finally {
             lifecycleLock.unlock();
         }
@@ -280,6 +293,21 @@ class ConnectionAcceptor {
         }
     }
 
+    private void expirePreambles() {
+        List<Socket> expired = new ArrayList<>();
+        lifecycleLock.lock();
+        try {
+            pendingPreambles.entrySet().removeIf(entry -> {
+                if (MonotonicTime.nanosUntil(entry.getValue()) > 0) return false;
+                expired.add(entry.getKey());
+                acceptedSockets.remove(entry.getKey());
+                server.getStatsImpl().onFailedToConnect();
+                return true;
+            });
+        } finally { lifecycleLock.unlock(); }
+        for (Socket socket : expired) closeQuietly(socket);
+    }
+
     private void checkIdleTimeouts() {
         if (state != State.STARTED) {
             return;
@@ -315,6 +343,33 @@ class ConnectionAcceptor {
 
         HttpsConfig hc = httpsConfig;
         HttpVersion httpVersion = HttpVersion.HTTP_1_1;
+
+        ProxiedConnectionInfo proxyInfo = null;
+        if (server.haProxyProtocolEnabled) {
+            try {
+                Long deadline;
+                lifecycleLock.lock();
+                try { deadline = pendingPreambles.get(socket); }
+                finally { lifecycleLock.unlock(); }
+                if (deadline == null) return;
+                proxyInfo = ProxyProtocol.read(socket, deadline);
+                lifecycleLock.lock();
+                try {
+                    if (pendingPreambles.remove(socket) == null) return;
+                    if (state != State.STARTED || MonotonicTime.nanosUntil(deadline) <= 0) {
+                        server.getStatsImpl().onFailedToConnect();
+                        return;
+                    }
+                } finally { lifecycleLock.unlock(); }
+            } catch (IOException failure) {
+                log.debug("Rejected PROXY preamble: {}", failure.getMessage());
+                lifecycleLock.lock();
+                try {
+                    if (pendingPreambles.remove(socket) != null) server.getStatsImpl().onFailedToConnect();
+                } finally { lifecycleLock.unlock(); }
+                return;
+            }
+        }
 
         if (hc != null) {
             try {
@@ -386,7 +441,8 @@ class ConnectionAcceptor {
                 clientCert,
                 acceptedTime,
                 httpVersion,
-                inputStream
+                inputStream,
+                proxyInfo
             );
         }
     }
@@ -447,7 +503,8 @@ class ConnectionAcceptor {
         @Nullable Certificate clientCert,
         ConnectionAcceptedTime acceptedTime,
         HttpVersion httpVersion,
-        @Nullable InputStream providedInputStream
+        @Nullable InputStream providedInputStream,
+        @Nullable ProxiedConnectionInfo proxyInfo
     ) {
         BaseHttpConnection con;
         if (httpVersion == HttpVersion.HTTP_2) {
@@ -476,6 +533,7 @@ class ConnectionAcceptor {
             );
         }
 
+        con.proxiedConnectionInfo = proxyInfo;
         if (!promoteAcceptedSocket(acceptedSocket, con)) {
             return;
         }
@@ -538,6 +596,9 @@ class ConnectionAcceptor {
         }
         acceptorThread.setDaemon(false);
         try {
+            if (server.haProxyProtocolEnabled) {
+                preambleTimeoutTask = server.schedulePreambleExpiry(this::expirePreambles);
+            }
             if (server.idleTimeoutMillis() > 0) {
                 timeoutTask = server.scheduleConnectionTaskAtFixedRate(
                     this::checkIdleTimeouts,
@@ -548,6 +609,9 @@ class ConnectionAcceptor {
             }
             acceptorThread.start();
         } catch (RuntimeException | Error e) {
+            ScheduledFuture<?> preambleTask = preambleTimeoutTask;
+            if (preambleTask != null) preambleTask.cancel(false);
+            preambleTimeoutTask = null;
             ScheduledFuture<?> currentTimeoutTask = timeoutTask;
             if (currentTimeoutTask != null) {
                 currentTimeoutTask.cancel(false);
@@ -586,6 +650,9 @@ class ConnectionAcceptor {
             lifecycleLock.unlock();
         }
         closePendingAcceptedSockets();
+        ScheduledFuture<?> preambleTask = preambleTimeoutTask;
+        if (preambleTask != null) preambleTask.cancel(false);
+        preambleTimeoutTask = null;
         ScheduledFuture<?> currentTimeoutTask = timeoutTask;
         if (currentTimeoutTask != null) {
             currentTimeoutTask.cancel(false);

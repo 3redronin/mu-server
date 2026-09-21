@@ -36,6 +36,8 @@ class Mu3ServerImpl implements MuServer {
     private final int maxHeadersSize;
     final List<RateLimiterImpl> rateLimiters;
     final Path tempDir;
+    final boolean haProxyProtocolEnabled;
+    final long haProxyProtocolTimeoutMillis;
     private final ExecutionResources executionResources;
     private final RequestAdmission requestAdmission;
     private final ThreadLocal<ApplicationTaskContext> applicationTaskContext = new ThreadLocal<>();
@@ -44,7 +46,7 @@ class Mu3ServerImpl implements MuServer {
         new ThreadLocal<>();
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
 
-    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutionResources executionResources, int maxConcurrentRequests) {
+    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutionResources executionResources, int maxConcurrentRequests, boolean haProxyProtocolEnabled, long haProxyProtocolTimeoutMillis) {
         this.acceptors = acceptors;
         this.handlers = handlers;
         this.responseCompleteListeners = responseCompleteListeners;
@@ -60,6 +62,8 @@ class Mu3ServerImpl implements MuServer {
         this.tempDir = tempDir;
         this.executionResources = executionResources;
         this.requestAdmission = new RequestAdmission(maxConcurrentRequests);
+        this.haProxyProtocolEnabled = haProxyProtocolEnabled;
+        this.haProxyProtocolTimeoutMillis = haProxyProtocolTimeoutMillis;
     }
 
     private void startListening() {
@@ -514,7 +518,9 @@ class Mu3ServerImpl implements MuServer {
             limiters,
             tempDir,
             resources,
-            builder.maxConcurrentRequests()
+            builder.maxConcurrentRequests(),
+            builder.haProxyProtocolEnabled(),
+            builder.haProxyProtocolTimeoutMillis()
             );
 
         try {
@@ -587,6 +593,12 @@ class Mu3ServerImpl implements MuServer {
 
     ScheduledFuture<?> scheduleTimerCallback(Runnable task, long delay, TimeUnit unit) {
         return executionResources.timer.schedule(task, delay, unit);
+    }
+
+    // Must run independently of queued connection work. This callback only claims
+    // pending sockets under the lifecycle lock and closes them; it invokes no handlers.
+    ScheduledFuture<?> schedulePreambleExpiry(Runnable task) {
+        return executionResources.timer.scheduleAtFixedRate(task, 0, 50, TimeUnit.MILLISECONDS);
     }
 
     ScheduledFuture<?> scheduleConnectionTaskAtFixedRate(

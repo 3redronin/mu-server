@@ -141,6 +141,13 @@ public interface HttpConnection {
     Optional<Certificate> clientCertificate();
 
     /**
+     * Gets the endpoint metadata supplied by a trusted proxy.
+     * @return metadata when {@link MuServerBuilder#withHAProxyProtocolEnabled(boolean)} is enabled,
+     * or an empty optional otherwise
+     */
+    default Optional<ProxiedConnectionInfo> proxyInfo() { return Optional.empty(); }
+
+    /**
      * Closes this connection immediately, causing a connection reset on the client side.
      * <p>Generally, it is not recommended to use this as it may result in EOF errors for clients due to
      * skipping shutdown protocols.</p>

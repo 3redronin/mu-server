@@ -47,6 +47,8 @@ public class MuServerBuilder {
     @Nullable List<RateLimiterImpl> rateLimiters;
     private @Nullable UnhandledExceptionHandler unhandledExceptionHandler;
     private boolean autoHandleExpectContinue = true;
+    private boolean haProxyProtocolEnabled;
+    private long haProxyProtocolTimeoutMillis = 10_000;
     private @Nullable List<ContentEncoder> contentEncoders = null;
     private @Nullable Path tempDirectory;
 
@@ -55,6 +57,46 @@ public class MuServerBuilder {
      */
     public MuServerBuilder() {
     }
+
+    /**
+     * Requires a PROXY protocol v1 or v2 header before HTTP or TLS on every connection.
+     * Enable this only on listeners reachable exclusively by trusted proxies.
+     * @param enabled whether to require the PROXY preamble; defaults to false
+     * @return this builder
+     */
+    public MuServerBuilder withHAProxyProtocolEnabled(boolean enabled) {
+        haProxyProtocolEnabled = enabled;
+        return this;
+    }
+
+    /** Gets whether PROXY protocol is required.
+     * @return whether connections require a PROXY protocol preamble */
+    public boolean haProxyProtocolEnabled() { return haProxyProtocolEnabled; }
+
+    /**
+     * Sets the overall PROXY preamble timeout, measured from socket acceptance,
+     * including executor queue time. Independent of HTTP idle timeouts.
+     * @param duration a positive duration of at least one millisecond
+     * @param unit the duration unit
+     * @return this builder
+     * @throws IllegalArgumentException if below one millisecond or overflowing nanoseconds
+     */
+    public MuServerBuilder withHAProxyProtocolTimeout(long duration, TimeUnit unit) {
+        java.util.Objects.requireNonNull(unit, "unit");
+        long millis = unit.toMillis(duration);
+        java.math.BigInteger nanos = java.math.BigInteger.valueOf(duration)
+            .multiply(java.math.BigInteger.valueOf(unit.toNanos(1)));
+        if (duration <= 0 || millis < 1 || nanos.compareTo(java.math.BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+            throw new IllegalArgumentException("PROXY timeout must be at least one millisecond and fit in nanoseconds");
+        }
+        haProxyProtocolTimeoutMillis = millis;
+        return this;
+    }
+
+    /** Gets the overall PROXY preamble timeout.
+     * @return the timeout in milliseconds (default 10000) */
+    public long haProxyProtocolTimeoutMillis() { return haProxyProtocolTimeoutMillis; }
+
 
     /**
      * Sets the HTTP port to listen on.
