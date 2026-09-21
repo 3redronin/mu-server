@@ -53,7 +53,11 @@ Compatibility is assessed against the checked-out Mu3 implementation and the
 [HAProxy specification](https://www.haproxy.org/download/3.0/doc/proxy-protocol.txt).
 Mu4 intentionally accepts port zero, rejects noncanonical decimal leading
 zeroes and oversized v1 lines, and validates outer TLV framing. It adds an
-acceptance-based preamble timeout. These are protocol/lifecycle requirements;
+acceptance-based preamble timeout. Mu4 also accepts UNSPEC when either the family
+or transport nibble is zero (with outer TLV validation), supplying no advertised
+endpoints. Mu3 rejects these mixed combinations and accepts only the combined
+`0x00` UNSPEC value; the specification permits either receiver choice. These are
+explicit protocol/lifecycle choices;
 Mu3 accepting an input does not establish that the input is valid. Independent
 release evidence, raw observations and compatibility assessments belong in the
 local `mu-conformance` repository, not in the server distribution.
