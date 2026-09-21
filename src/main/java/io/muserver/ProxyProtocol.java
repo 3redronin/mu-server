@@ -29,12 +29,23 @@ final class ProxyProtocol {
                 socket.setSoTimeout((int) Math.min(Integer.MAX_VALUE, Math.max(1, millis)));
             }
             @Override public int read() throws IOException {
-                beforeRead();
-                return source.read();
+                while (true) {
+                    beforeRead();
+                    try { return source.read(); }
+                    catch (SocketTimeoutException timeout) {
+                        // SO_TIMEOUT can expire before a deadline longer than Integer.MAX_VALUE milliseconds.
+                        if (MonotonicTime.nanosUntil(deadlineNanos) <= 0) throw timeout;
+                    }
+                }
             }
             @Override public int read(byte[] bytes, int offset, int length) throws IOException {
-                beforeRead();
-                return source.read(bytes, offset, length);
+                while (true) {
+                    beforeRead();
+                    try { return source.read(bytes, offset, length); }
+                    catch (SocketTimeoutException timeout) {
+                        if (MonotonicTime.nanosUntil(deadlineNanos) <= 0) throw timeout;
+                    }
+                }
             }
         };
         try {

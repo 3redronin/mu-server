@@ -70,6 +70,78 @@ class ProxyProtocolTest {
         assertTrue(input.largest <= 4096, "largest read: " + input.largest);
     }
 
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void socketTimeoutBeforeOverallDeadlineIsRetried(boolean bulk) throws Exception {
+        ByteArrayInputStream bytes = new ByteArrayInputStream(
+            ByteBuffer.allocate(preamble(2).length + 1).put(preamble(2)).put((byte) 42).array());
+        int[] timeouts = {0};
+        Socket socket = new Socket() {
+            int timeout = 713;
+            @Override public int getSoTimeout() { return timeout; }
+            @Override public void setSoTimeout(int millis) { timeout = millis; }
+            @Override public java.io.InputStream getInputStream() {
+                return new java.io.InputStream() {
+                    private void simulateTimeout(boolean bulkRead) throws IOException {
+                        if (bulkRead == bulk && timeouts[0] < 2) {
+                            assertEquals(Integer.MAX_VALUE, timeout);
+                            timeouts[0]++;
+                            throw new java.net.SocketTimeoutException("Simulated SO_TIMEOUT ceiling");
+                        }
+                    }
+                    @Override public int read() throws IOException {
+                        simulateTimeout(false); return bytes.read();
+                    }
+                    @Override public int read(byte[] b, int off, int len) throws IOException {
+                        simulateTimeout(true); return bytes.read(b, off, len);
+                    }
+                };
+            }
+        };
+        long timeout = MuServerBuilder.httpServer()
+            .withHAProxyProtocolTimeout(30, TimeUnit.DAYS).haProxyProtocolTimeoutMillis();
+        assertEquals("192.0.2.1", ProxyProtocol.read(socket, MonotonicTime.deadlineAfterMillis(timeout)).sourceAddress());
+        assertEquals(2, timeouts[0]);
+        assertEquals(713, socket.getSoTimeout());
+        assertEquals(42, bytes.read(), "Application bytes must remain unread");
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void socketTimeoutAtOverallDeadlineIsNotRetried(boolean bulk) throws Exception {
+        long deadline = MonotonicTime.deadlineAfterMillis(100);
+        java.net.SocketTimeoutException expired = new java.net.SocketTimeoutException("Expired");
+        int[] attempts = {0};
+        Socket socket = new Socket() {
+            int timeout = 713;
+            @Override public int getSoTimeout() { return timeout; }
+            @Override public void setSoTimeout(int millis) { timeout = millis; }
+            @Override public java.io.InputStream getInputStream() {
+                ByteArrayInputStream bytes = new ByteArrayInputStream(preamble(2));
+                return new java.io.InputStream() {
+                    private void expire(boolean bulkRead) throws IOException {
+                        if (bulkRead == bulk) {
+                            attempts[0]++;
+                            long left;
+                            while ((left = MonotonicTime.nanosUntil(deadline)) > 0) {
+                                java.util.concurrent.locks.LockSupport.parkNanos(left);
+                            }
+                            throw expired;
+                        }
+                    }
+                    @Override public int read() throws IOException {
+                        expire(false); return bytes.read();
+                    }
+                    @Override public int read(byte[] b, int off, int len) throws IOException {
+                        expire(true); return bytes.read(b, off, len);
+                    }
+                };
+            }
+        };
+        assertSame(expired, assertThrows(java.net.SocketTimeoutException.class,
+            () -> ProxyProtocol.read(socket, deadline)));
+        assertEquals(1, attempts[0]);
+        assertEquals(713, socket.getSoTimeout());
+    }
+
     @Test void timeoutConfigurationIsIndependentAndBounded() {
         MuServerBuilder builder = MuServerBuilder.httpServer();
         assertFalse(builder.haProxyProtocolEnabled());
