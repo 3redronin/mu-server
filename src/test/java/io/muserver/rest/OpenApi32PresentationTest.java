@@ -41,6 +41,15 @@ public class OpenApi32PresentationTest {
         assertTrue(html.contains("Serialized value"));
     }
 
+    @Test public void queryCurlIncludesMethodContentTypeAndExactBody() throws Exception {
+        MediaTypeObject media = MediaTypeObjectBuilder.mediaTypeObject().withExample("search O'Reilly").build();
+        PathItemObject path = PathItemObjectBuilder.pathItemObject().withOperations(Map.of("query",
+            OperationObjectBuilder.operationObject().withOperationId("search").withRequestBody(
+                RequestBodyObjectBuilder.requestBodyObject().withContent(Map.of("text/plain", media)).build()).build())).build();
+        assertEquals(Arrays.asList("-is", "-X", "QUERY", "-H", "content-type: text/plain", "--data-binary",
+            "search O'Reilly", "https://example.test/example"), curlArguments(render(path, null)));
+    }
+
     @Test public void serializedQueryExamplesAreNotEncodedTwice() throws Exception {
         ParameterObject query = parameter("q", "wrong").toBuilder().withExplode(false)
             .withExamples(Map.of("wire", ExampleObjectBuilder.exampleObject().withDataValue(List.of("one two", "three"))

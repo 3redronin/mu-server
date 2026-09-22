@@ -57,7 +57,7 @@ class PrimitiveEntityProvider<T> implements MessageBodyWriter<T>, MessageBodyRea
 
     @Override
     public T readFrom(Class<T> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-        Charset charset = EntityProviders.charsetFor(mediaType);
+        Charset charset = EntityProviders.charsetForReading(mediaType);
         byte[] bytes = Mutils.toByteArray(entityStream, 2048);
         if (bytes.length == 0) {
             throw new NoContentException("No value specified for this " + type.getName() + " parameter. If optional, then use a @DefaultValue annotation.");

@@ -40,7 +40,11 @@ public enum Method {
     /**
      * The PATCH HTTP method
      */
-    PATCH;
+    PATCH,
+    /**
+     * The QUERY HTTP method
+     */
+    QUERY;
 
     static Method fromNetty(io.netty.handler.codec.http.HttpMethod method) {
         return Method.valueOf(method.name());

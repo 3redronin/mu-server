@@ -60,7 +60,7 @@ public class CORSHandlerTest {
         try (Response resp = call(request(server.uri()).header("Origin", "http://example.org"))) {
             assertThat(resp.headers("Vary"), contains("origin, accept-encoding"));
             assertThat(resp.header("Access-Control-Allow-Origin"), is("http://example.org"));
-            assertThat(resp.header("Access-Control-Allow-Methods"), is("DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT"));
+            assertThat(resp.header("Access-Control-Allow-Methods"), is("DELETE, GET, HEAD, OPTIONS, PATCH, POST, PUT, QUERY"));
             assertThat(resp.header("Access-Control-Max-Age"), is(nullValue()));
             assertThat(resp.header("Access-Control-Allow-Headers"), is(nullValue()));
             assertThat(resp.header("Access-Control-Expose-Headers"), is(nullValue()));

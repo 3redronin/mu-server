@@ -44,6 +44,7 @@ N/A Not applicable as only singletons supported
 ### 3.3 Resource Methods 
 
 - [x] Resource methods implemented with GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD support
+- [x] QUERY is supported using the `io.muserver.rest.QUERY` annotation.
 - [x] Sub-resource Locators (only supports returning of instantiated objects rather than classes, as MuServer does not instantiate classes for the API user)
 - [ ] Arbitrary custom HTTP methods are not supported. A custom request-method designator annotated with
   `@HttpMethod` is only usable when its value is one of Mu Server's built-in `Method` enum values.

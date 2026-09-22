@@ -120,7 +120,7 @@ class SourceEntityProviders {
                         try {
                             charset = Charset.forName(declaredCharset);
                         } catch (IllegalArgumentException e) {
-                            throw new NotSupportedException("Unsupported XML charset " + declaredCharset, e);
+                            throw new UnsupportedRepresentationException("Unsupported XML charset " + declaredCharset, e);
                         }
                     }
                     if (length > bomLength) {

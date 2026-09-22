@@ -63,6 +63,7 @@ public class HttpsRedirectorTest {
             }
             try (Response resp = call(request()
                 .url(server.httpUri().toString())
+                .header("Content-Type", "text/plain")
                 .method(method.name(), Util.EMPTY_REQUEST)
             )) {
                 assertThat(resp.code(), is(400));

@@ -43,6 +43,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     private boolean requestFilterChainRunning;
     private boolean responseFilterChainStarted;
     private boolean exceptionMapperUsed;
+    private Set<RequestMatcher.MatchedMethod> matchedMethodsForPath = Collections.emptySet();
 
     JaxRSRequest(MuRequest muRequest, MuResponse muResponse, InputStream inputStream, String relativePath, SecurityContext securityContext, List<ReaderInterceptor> readerInterceptors, Providers providers) {
         this.muRequest = muRequest;
@@ -244,15 +245,15 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     private Response.@Nullable ResponseBuilder evaluateIfNoneMatch(EntityTag eTag) {
         List<String> ifNoneMatchTags = muRequest.headers().getAll(HeaderNames.IF_NONE_MATCH);
-        boolean getOrHead = isGetOrHead();
-        if (!getOrHead && eTag.isWeak()) {
+        boolean conditionalRetrieval = isConditionalRetrieval();
+        if (!conditionalRetrieval && eTag.isWeak()) {
             return Response.status(412).entity(new ClientErrorException("Precondition failed: if-match failed due to weak eTag", 412));
         }
 
         boolean noneMatch = true;
         for (String suppliedEtag : ifNoneMatchTags) {
             EntityTag supplied = EntityTag.valueOf(suppliedEtag);
-            if (supplied.equals(eTag) || (getOrHead && supplied.getValue().equals(eTag.getValue()))) {
+            if (supplied.equals(eTag) || (conditionalRetrieval && supplied.getValue().equals(eTag.getValue()))) {
                 noneMatch = false;
                 break;
             }
@@ -260,11 +261,12 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         if (noneMatch) {
             return null;
         }
-        return getOrHead ? Response.status(304).tag(eTag) : Response.status(412).entity(new ClientErrorException("Precondition failed: if-match", 412));
+        return conditionalRetrieval ? Response.status(304).tag(eTag) : Response.status(412).entity(new ClientErrorException("Precondition failed: if-match", 412));
     }
 
-    private boolean isGetOrHead() {
-        return muRequest.method() == Method.GET || muRequest.method() == Method.HEAD;
+    private boolean isConditionalRetrieval() {
+        Method method = getMuMethod();
+        return method == Method.GET || method == Method.HEAD || method == Method.QUERY;
     }
 
     @Override
@@ -277,15 +279,23 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
     private Response.@Nullable ResponseBuilder evaluateIfModifiedSince(Date lastModified) {
+        // RFC 9110 section 13.1.3: entity-tag conditions take precedence over dates.
+        if (muRequest.headers().contains(HeaderNames.IF_NONE_MATCH)) {
+            return null;
+        }
         long lastModifiedSeconds = lastModified.getTime() / 1000;
         Long ifModifiedMillis = muRequest.headers().getTimeMillis(HeaderNames.IF_MODIFIED_SINCE);
         if (ifModifiedMillis == null || lastModifiedSeconds > (ifModifiedMillis / 1000)) {
             return null;
         } else {
-            return isGetOrHead() ? Response.notModified() : null;
+            return isConditionalRetrieval() ? Response.notModified() : null;
         }
     }
     private Response.@Nullable ResponseBuilder evaluateIfUnmodifiedSince(Date lastModified) {
+        // RFC 9110 section 13.1.4: If-Match replaces this date condition.
+        if (muRequest.headers().contains(HeaderNames.IF_MATCH)) {
+            return null;
+        }
         long lastModifiedSeconds = lastModified.getTime() / 1000;
         Long ifUnmodifiedSince = muRequest.headers().getTimeMillis(HeaderNames.IF_UNMODIFIED_SINCE);
         if (ifUnmodifiedSince == null || lastModifiedSeconds <= (ifUnmodifiedSince / 1000)) {
@@ -509,6 +519,14 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     void setRequestFilterChainRunning(boolean requestFilterChainRunning) {
         this.requestFilterChainRunning = requestFilterChainRunning;
+    }
+
+    void setMatchedMethodsForPath(Set<RequestMatcher.MatchedMethod> matchedMethodsForPath) {
+        this.matchedMethodsForPath = matchedMethodsForPath;
+    }
+
+    Set<RequestMatcher.MatchedMethod> matchedMethodsForPath() {
+        return matchedMethodsForPath;
     }
 
     void setMatchedMethod(RequestMatcher.MatchedMethod matchedMethod) {
