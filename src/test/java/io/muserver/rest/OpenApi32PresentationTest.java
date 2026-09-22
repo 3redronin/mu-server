@@ -62,6 +62,53 @@ public class OpenApi32PresentationTest {
             "--data-binary", "hello", "https://example.test/example"), curlArguments(render(path, null)));
     }
 
+    @Test public void serializedFormExamplesOverridePropertyExpansionIncludingEmptyValuesAndReferences() throws Exception {
+        for (String type : Arrays.asList("application/x-www-form-urlencoded", "multipart/form-data")) {
+            for (String wire : Arrays.asList("q=one%20two&sort=date&author=O'Reilly", "")) {
+                for (boolean referenced : new boolean[] {false, true}) {
+                    ExampleObject example = ExampleObjectBuilder.exampleObject().withDataValue(Map.of("q", "parsed"))
+                        .withSerializedValue(wire).build();
+                    MediaTypeObject media = formMedia().withExamplesOrReferences(Map.of("wire", referenced
+                        ? ReferenceOr.reference("#/components/examples/Wire") : ReferenceOr.inline(example))).build();
+                    ComponentsObject components = ComponentsObjectBuilder.componentsObject().withExamples(Map.of("Wire", example)).build();
+                    String html = render(formPath(type, media), components);
+                    assertEquals(type + " wire=" + wire + " referenced=" + referenced,
+                        Arrays.asList("-is", "-X", "POST", "-H", "content-type: " + type, "--data-binary", wire,
+                            "https://example.test/example"), curlArguments(html));
+                    assertTrue("Form property documentation must remain visible", html.contains("Property documentation"));
+                }
+            }
+        }
+    }
+
+    @Test public void formsWithoutSerializedExamplesStillExpandProperties() throws Exception {
+        for (String type : Arrays.asList("application/x-www-form-urlencoded", "multipart/form-data")) {
+            assertEquals(Arrays.asList("-is", "-X", "POST", "-H", "content-type: " + type,
+                type.startsWith("multipart") ? "-F" : "--data-urlencode", "q=property value", "https://example.test/example"),
+                curlArguments(render(formPath(type, formMedia().build()), null)));
+        }
+    }
+
+    @Test public void serializedMultipartExampleKeepsItsBoundaryAndFraming() throws Exception {
+        String type = "multipart/form-data;boundary=example";
+        String wire = "--example\r\nContent-Disposition: form-data; name=\"q\"\r\n\r\none two\r\n--example--\r\n";
+        MediaTypeObject media = formMedia().withExamples(Map.of("wire", ExampleObjectBuilder.exampleObject().withSerializedValue(wire).build())).build();
+        assertEquals(Arrays.asList("-is", "-X", "POST", "-H", "content-type: " + type, "--data-binary", wire,
+            "https://example.test/example"), curlArguments(render(formPath(type, media), null)));
+    }
+
+    private static MediaTypeObjectBuilder formMedia() {
+        return MediaTypeObjectBuilder.mediaTypeObject().withSchema(schemaObject().withType("object")
+            .withProperties(Map.of("q", schemaObject().withType("string").withExample("property value")
+                .withDescription("Property documentation").build())).build());
+    }
+
+    private static PathItemObject formPath(String type, MediaTypeObject media) {
+        return PathItemObjectBuilder.pathItemObject().withOperations(Map.of("post",
+            OperationObjectBuilder.operationObject().withOperationId("test").withRequestBody(
+                RequestBodyObjectBuilder.requestBodyObject().withContent(Map.of(type, media)).build()).build())).build();
+    }
+
     private static ParameterObject parameter(String name, String sample) {
         return ParameterObjectBuilder.parameterObject().withName(name).withIn("query")
             .withSchema(schemaObject().withType("string").withExample(sample).build()).build();
@@ -79,7 +126,7 @@ public class OpenApi32PresentationTest {
     private static List<String> curlArguments(String html) throws Exception {
         Matcher matcher = Pattern.compile("<code>(curl .*?)</code>", Pattern.DOTALL).matcher(html);
         assertTrue(html, matcher.find());
-        String command = matcher.group(1).replace("&#x27;", "'").replace("&quot;", "\"")
+        String command = matcher.group(1).replace("<br>", "\n").replace("&#x27;", "'").replace("&quot;", "\"")
             .replace("&#x2F;", "/").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&");
         Process process = new ProcessBuilder("bash", "-c", "curl() { printf '%s\\0' \"$@\"; }; " + command).start();
         assertTrue("curl stub timed out", process.waitFor(5, TimeUnit.SECONDS));

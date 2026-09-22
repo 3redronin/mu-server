@@ -269,13 +269,16 @@ class HtmlDocumentor {
                                 renderExamples(exampleValue(value.example(), value.examplesOrReferences(), value.schema()), resolvedExamples(value.examplesOrReferences()), value.schema() == null ? null : value.schema().defaultValue());
                                 renderIfValue("p", value.schema() == null ? null : schemaType(value.schema()));
 
+                                ExampleObject namedExample = firstExample(value.examplesOrReferences());
+                                String serializedBody = namedExample == null ? null : namedExample.serializedValue();
                                 String curlFormParam = (mediaType.equalsIgnoreCase(MediaType.MULTIPART_FORM_DATA)) ? "-F" : "--data-urlencode";
                                 if (curlAlternative) {
                                     curlBody = new StringBuilder(" -H 'content-type: " + bashValue(mediaType) + "'");
+                                    if (serializedBody != null) curlBody.append(" --data-binary '").append(bashValue(serializedBody)).append("'");
                                 }
 
                                 if (!formEncoding || value.schema() == null || value.schema().properties() == null) {
-                                    if (curlAlternative) curlBody.append(" --data-binary '").append(bashValue(exampleValue(value.example(), value.examplesOrReferences(), value.schema()))).append("'");
+                                    if (curlAlternative && serializedBody == null) curlBody.append(" --data-binary '").append(bashValue(exampleValue(value.example(), value.examplesOrReferences(), value.schema()))).append("'");
                                     continue;
                                 }
 
@@ -315,7 +318,7 @@ class HtmlDocumentor {
                                     renderExamples(schemaExample(schema), null, schema.defaultValue());
 
 
-                                    if (curlAlternative) {
+                                    if (curlAlternative && serializedBody == null) {
                                         EncodingObject encoding = value.encoding() == null ? null : value.encoding().get(formName);
                                         Object sample = schemaExample(schema);
                                         if ("-F".equals(curlFormParam) && encoding != null && "application/octet-stream".equals(encoding.contentType()) && sample == null) sample = "@file.bin";

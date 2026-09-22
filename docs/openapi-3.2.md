@@ -170,3 +170,19 @@ payments, uploads, boolean schemas, framed JSON and text/JSON/mixed/broadcast
 SSE start/stop. HTTP smoke checks passed. Both `/openapi.json` and
 `/api/features/document` passed the pinned offline validator. Its illustrative
 cookie parameter now uses the normative true explode default.
+
+### Form serialized-example follow-up
+
+OAS 3.2.1 §4.19.2.2 defines a media type's `serializedValue` as the serialized
+media document with encoding effects already applied. Curl now prefers that
+explicit wire body even when a form schema defines properties, while retaining
+the property documentation. It does not also append property-based form fields.
+`OpenApi32PresentationTest.serializedFormExamplesOverridePropertyExpansionIncludingEmptyValuesAndReferences`
+reproduced the review finding before the fix and covers both form media types,
+inline/referenced examples and explicit empty values. The companion
+`formsWithoutSerializedExamplesStillExpandProperties` and
+`serializedMultipartExampleKeepsItsBoundaryAndFraming` checks cover fallback
+and exact multipart framing. All 26 presentation/review regression tests pass
+on Java 21 / Netty 4.2 with NullAway. This follow-up used targeted verification;
+the eight-configuration matrix and showcase results above describe the preceding
+audit revision.
