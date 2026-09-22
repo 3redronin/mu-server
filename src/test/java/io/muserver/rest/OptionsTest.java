@@ -3,7 +3,7 @@ package io.muserver.rest;
 import io.muserver.MuServer;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Response;
-import okhttp3.internal.Util;
+import okhttp3.RequestBody;
 import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
@@ -38,7 +38,7 @@ public class OptionsTest {
         }
         server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Thing())).start();
         try (okhttp3.Response resp = call(request()
-            .method("OPTIONS", Util.EMPTY_REQUEST)
+            .method("OPTIONS", RequestBody.EMPTY)
             .url(server.uri().resolve("/things").toString()))) {
             assertThat(resp.code(), is(400));
             assertThat(resp.header("Content-Type"), is("application/json"));
@@ -65,14 +65,14 @@ public class OptionsTest {
         }
         server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Thing())).start();
         try (okhttp3.Response resp = call(request()
-            .method("OPTIONS", Util.EMPTY_REQUEST)
+            .method("OPTIONS", RequestBody.EMPTY)
             .url(server.uri().resolve("/things").toString()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Allow"), is("GET, HEAD, OPTIONS, POST"));
             assertThat(resp.body().contentLength(), is(0L));
         }
         try (okhttp3.Response resp = call(request()
-            .method("OPTIONS", Util.EMPTY_REQUEST)
+            .method("OPTIONS", RequestBody.EMPTY)
             .url(server.uri().resolve("/things/non-root").toString()))) {
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Allow"), is("DELETE, OPTIONS"));
@@ -87,7 +87,7 @@ public class OptionsTest {
         }
         server = ServerUtils.httpsServerForTest().addHandler(restHandler(new Thing())).start();
         try (okhttp3.Response resp = call(request()
-            .method("OPTIONS", Util.EMPTY_REQUEST)
+            .method("OPTIONS", RequestBody.EMPTY)
             .url(server.uri().resolve("/things/nothing").toString()))) {
             assertThat(resp.code(), is(404));
         }
