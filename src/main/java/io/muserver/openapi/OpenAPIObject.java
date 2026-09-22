@@ -33,6 +33,15 @@ public class OpenAPIObject implements JsonWriter {
     OpenAPIObject(@Nullable InfoObject info, @Nullable List<ServerObject> servers, @Nullable PathsObject paths, @Nullable ComponentsObject components, @Nullable List<SecurityRequirementObject> security, @Nullable List<TagObject> tags, @Nullable ExternalDocumentationObject externalDocs, @Nullable String jsonSchemaDialect, @Nullable Map<String, ReferenceOr<PathItemObject>> webhooks, @Nullable String self, @Nullable Map<String, Object> extensions) {
         this.jsonSchemaDialect = jsonSchemaDialect;
         this.webhooks = OpenApiUtils.immutable(webhooks);
+        if (self != null) {
+            try {
+                if (new java.net.URI(self).getRawFragment() != null) {
+                    throw new IllegalArgumentException("$self must not contain a URI fragment");
+                }
+            } catch (java.net.URISyntaxException e) {
+                throw new IllegalArgumentException("$self must be a valid URI reference", e);
+            }
+        }
         this.self = self;
         this.extensions = Extensions.copy(extensions);
         if (tags != null && tags.size() != tags.stream().map(t -> t.name()).collect(Collectors.toSet()).size()) {

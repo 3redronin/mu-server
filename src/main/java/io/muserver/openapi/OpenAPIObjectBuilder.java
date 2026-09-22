@@ -155,7 +155,7 @@ public class OpenAPIObjectBuilder {
     /** @return the configured paths, or null if absent */
     public @Nullable PathsObject paths() { return paths; }
     /**
-     * @param value the OpenAPI 3.2 $self value
+     * @param value the OpenAPI 3.2 $self URI reference, without a fragment, or null to omit it
      * @return this builder
      */
     public OpenAPIObjectBuilder withSelf(@Nullable String value) { this.self = value; return this; }

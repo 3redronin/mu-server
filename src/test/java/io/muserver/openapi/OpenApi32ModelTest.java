@@ -7,6 +7,32 @@ import static io.muserver.openapi.OfflineOpenApiValidator.*;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
 
 public class OpenApi32ModelTest {
+    @Test public void selfRejectsFragmentsIncludingEmptyFragments() {
+        for (String value : Arrays.asList("api.json#/components", "api.json#", "#", "https://example.test/api.json#part")) {
+            IllegalArgumentException error = assertThrows(value, IllegalArgumentException.class,
+                () -> OpenAPIObjectBuilder.openAPIObject().withComponents(ComponentsObjectBuilder.componentsObject().build()).withSelf(value).build());
+            assertTrue(error.getMessage(), error.getMessage().contains("$self"));
+        }
+    }
+    @Test public void selfRejectsMalformedUriReferences() {
+        for (String value : Arrays.asList("api document.json", "api%ZZ.json", "https://[invalid", "api.json\n")) {
+            IllegalArgumentException error = assertThrows(value, IllegalArgumentException.class,
+                () -> OpenAPIObjectBuilder.openAPIObject().withComponents(ComponentsObjectBuilder.componentsObject().build()).withSelf(value).build());
+            assertTrue(error.getMessage(), error.getMessage().contains("$self"));
+        }
+    }
+    @Test public void selfPreservesValidUriReferencesThroughCopyingAndSerialization() throws Exception {
+        for (String value : Arrays.asList(null, "", "../api.json", "https://example.test/api.json?version=3", "api%23part.json")) {
+            OpenAPIObject api = OpenAPIObjectBuilder.openAPIObject().withComponents(ComponentsObjectBuilder.componentsObject().build()).withSelf(value).build();
+            assertEquals(value, api.self());
+            assertEquals(value, api.toBuilder().build().self());
+            assertEquals(json(api), json(api.toBuilder().build()));
+            if (value == null) assertFalse(json(api).has("$self"));
+            else assertEquals(value, json(api).get("$self").asText());
+            document(api);
+        }
+    }
+
     @Test public void contentReferencesPreserveIdentityAndRejectInlineAccess() throws Exception {
         Map<String, ReferenceOr<MediaTypeObject>> content = Collections.singletonMap("text/event-stream", ReferenceOr.reference("#/components/mediaTypes/Events"));
         ResponseObject response = ResponseObjectBuilder.responseObject().withSummary("Events").withContentOrReferences(content).build();
