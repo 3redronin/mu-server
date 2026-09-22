@@ -441,15 +441,24 @@ class HtmlDocumentor {
     }
 
     private @Nullable Object querystringExample(ParameterObject parameter) throws IOException {
+        if (parameter.example() != null) return parameter.example();
+        String parameterExample = serializedExample(parameter.examplesOrReferences());
+        if (parameterExample != null) return parameterExample;
         for (MediaTypeObject media : resolvedContent(parameter.contentOrReferences()).values()) {
             if (media.example() != null) return media.example();
-            Map<String, ExampleObject> examples = resolvedExamples(media.examplesOrReferences());
-            if (examples != null) for (ExampleObject example : examples.values()) {
-                if (example.serializedValue() != null) return example.serializedValue();
-                if (example.value() instanceof String) return example.value();
-                if (example.dataValue() instanceof String) return example.dataValue();
-            }
+            String mediaExample = serializedExample(media.examplesOrReferences());
+            if (mediaExample != null) return mediaExample;
             return schemaExample(resolvedSchema(media.schema()));
+        }
+        return null;
+    }
+
+    private @Nullable String serializedExample(@Nullable Map<String, ReferenceOr<ExampleObject>> values) throws IOException {
+        Map<String, ExampleObject> examples = resolvedExamples(values);
+        if (examples != null) for (ExampleObject example : examples.values()) {
+            if (example.serializedValue() != null) return example.serializedValue();
+            if (example.value() instanceof String) return (String) example.value();
+            if (example.dataValue() instanceof String) return (String) example.dataValue();
         }
         return null;
     }

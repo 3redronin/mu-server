@@ -142,6 +142,34 @@ public class OpenApi32ReviewRegressionTest {
             assertCurlArguments(html, method, "https://example.test/example");
         }
     }
+    @Test public void querystringParameterExampleOverridesMediaExampleIncludingEmptyValue() throws Exception {
+        for (String example : List.of("author=O'Reilly&sort=date%20desc", "")) {
+            assertParameterQueryExample(queryParameter().withExample(example).build(), null, example);
+        }
+    }
+    @Test public void querystringParameterExamplesOverrideMediaExamples() throws Exception {
+        for (ExampleObject example : List.of(
+            ExampleObjectBuilder.exampleObject().withValue("filter=active").build(),
+            ExampleObjectBuilder.exampleObject().withDataValue(Map.of("filter", "active"))
+                .withSerializedValue("filter=active").build())) {
+            assertParameterQueryExample(queryParameter().withExamples(Map.of("sample", example)).build(), null, "filter=active");
+        }
+    }
+    @Test public void querystringParameterExampleReferencesAreResolved() throws Exception {
+        ComponentsObject components = ComponentsObjectBuilder.componentsObject().withExamples(Map.of("Query",
+            ExampleObjectBuilder.exampleObject().withSerializedValue("filter=active").build())).build();
+        assertParameterQueryExample(queryParameter().withExamplesOrReferences(Map.of("sample",
+            ReferenceOr.reference("#/components/examples/Query"))).build(), components, "filter=active");
+    }
+    private ParameterObjectBuilder queryParameter() {
+        return ParameterObjectBuilder.parameterObject().withName("search").withIn("querystring")
+            .withContent(Map.of("text/plain", MediaTypeObjectBuilder.mediaTypeObject().withExample("wrong=fallback").build()));
+    }
+    private void assertParameterQueryExample(ParameterObject parameter, ComponentsObject components, String query) throws Exception {
+        String html = render(PathItemObjectBuilder.pathItemObject().withOperations(Map.of("get", operation("query")
+            .toBuilder().withParameters(List.of(parameter)).build())).build(), components);
+        assertCurlArguments(html, "GET", "https://example.test/example" + (query.isEmpty() ? "" : "?" + query));
+    }
     private void assertCurlArguments(String html, String method, String url) throws Exception {
         org.junit.Assume.assumeTrue(new File("/bin/sh").canExecute());
         int start = html.indexOf("<code>curl ") + "<code>".length();
