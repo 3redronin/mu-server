@@ -265,7 +265,8 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
     private boolean isConditionalRetrieval() {
-        return muRequest.method() == Method.GET || muRequest.method() == Method.HEAD || muRequest.method() == Method.QUERY;
+        Method method = getMuMethod();
+        return method == Method.GET || method == Method.HEAD || method == Method.QUERY;
     }
 
     @Override

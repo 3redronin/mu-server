@@ -226,6 +226,40 @@ public class QueryRestTest {
         }
     }
 
+    @jakarta.ws.rs.container.PreMatching
+    public static class RewriteMethod implements ContainerRequestFilter {
+        public void filter(jakarta.ws.rs.container.ContainerRequestContext context) {
+            context.setMethod(context.getHeaderString("X-Effective-Method"));
+        }
+    }
+
+    @Test public void postRewrittenToQueryUsesRetrievalPreconditions() throws Exception {
+        assertRewrittenPreconditions("POST", "QUERY");
+    }
+
+    @Test public void queryRewrittenToPostUsesMutationPreconditions() throws Exception {
+        assertRewrittenPreconditions("QUERY", "POST");
+    }
+
+    private void assertRewrittenPreconditions(String transportMethod, String effectiveMethod) throws Exception {
+        server = serverBuilder().addHandler(restHandler(new Conditional()).addRequestFilter(new RewriteMethod())).start();
+        boolean retrieval = effectiveMethod.equals("QUERY");
+        for (String[] condition : new String[][]{
+            {"If-None-Match", "\"selected\"", retrieval ? "304" : "412"},
+            {"If-None-Match", "\"another\"", "200"},
+            {"If-Modified-Since", "Sun, 09 Sep 2001 01:46:40 GMT", retrieval ? "304" : "200"},
+            {"If-Match", "\"another\"", "412"},
+            {"If-Unmodified-Since", "Sat, 08 Sep 2001 01:46:40 GMT", "412"}}) {
+            try (okhttp3.Response response = call(request(server.uri().resolve("/conditional"))
+                .method(transportMethod, okhttp3.RequestBody.create("selected", okhttp3.MediaType.get("text/plain")))
+                .header("X-Effective-Method", effectiveMethod).header(condition[0], condition[1]))) {
+                assertEquals(Arrays.toString(condition), Integer.parseInt(condition[2]), response.code());
+                if (response.code() == 304) assertEquals("", response.body().string());
+                else if (response.code() == 200) assertEquals("result:selected", response.body().string());
+            }
+        }
+    }
+
     @Test public void entityTagConditionsTakePrecedenceOverDates() throws Exception {
         server = serverBuilder().addHandler(restHandler(new Conditional())).start();
         String unchanged = "Sun, 09 Sep 2001 01:46:40 GMT";
