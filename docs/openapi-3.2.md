@@ -124,8 +124,8 @@ supplies the meaning of the generated contracts, not Java annotation precedence.
 ### Schema versus semantic validation
 
 Official resources and their checksums remain unchanged. The pinned structural
-schema accepts `explode: false` on cookie parameters; normative section 4.12.3
-forbids it for both `form` and `cookie` styles. Section 4.12.4 gives both styles a
+schema accepts `explode: false` on cookie parameters; normative section 4.12.2.2
+forbids it for both `form` and `cookie` styles. The same section gives both styles a
 true default. Semantic tests therefore reject explicit false while keeping true
 omitted from JSON. The review suggestion to switch the default to false is not
 applied.
