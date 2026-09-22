@@ -81,11 +81,68 @@ public class OpenApi32ReviewRegressionTest {
         assertEquals("GET_generated_2", paths.getJSONObject("/generated").getJSONObject("get").getString("operationId"));
         assertEquals("GET_generated", paths.getJSONObject("/manual").getJSONObject("additionalOperations").getJSONObject("propfind").getString("operationId"));
     }
+    @Path("/interface-events")
+    @ApiSseEvent(name = "price", data = Integer.class, mediaType = "application/json")
+    public interface EventContract { @GET void events(); }
+    @Path("/interface-events")
+    public interface ExtendedEventContract extends EventContract {}
+    public static class InterfaceEvents implements ExtendedEventContract { public void events() {} }
+    @ApiSseEvent(name = "price", data = Long.class, mediaType = "application/json")
+    public static class OverriddenInterfaceEvents implements ExtendedEventContract { public void events() {} }
+    @Test public void interfaceSseDefaultsAreInheritedThroughNestedInterfaces() throws Exception {
+        assertInterfaceEvent(new InterfaceEvents(), "int32");
+    }
+    @Test public void concreteSseDeclarationsOverrideInterfaceDefaults() throws Exception {
+        assertInterfaceEvent(new OverriddenInterfaceEvents(), "int64");
+    }
+    private void assertInterfaceEvent(Object resource, String format) throws Exception {
+        server = httpsServerForTest().addHandler(restHandler(resource).withOpenApiJsonUrl("/openapi.json")).start();
+        JSONObject responses = document().getJSONObject("paths").getJSONObject("/interface-events")
+            .getJSONObject("get").getJSONObject("responses");
+        assertFalse(responses.has("204"));
+        JSONObject properties = responses.getJSONObject("200").getJSONObject("content").getJSONObject("text/event-stream")
+            .getJSONObject("itemSchema").getJSONObject("properties");
+        assertEquals("price", properties.getJSONObject("event").getString("const"));
+        assertEquals(format, properties.getJSONObject("data").getJSONObject("contentSchema").getString("format"));
+    }
+    @Test public void querystringMediaExamplesAreRenderedAsRawQueries() throws Exception {
+        assertRawQuery(MediaTypeObjectBuilder.mediaTypeObject().withExample("filter=active&sort=date%20desc").build());
+    }
+    @Test public void querystringSerializedExamplesTakePrecedenceOverParsedData() throws Exception {
+        assertRawQuery(MediaTypeObjectBuilder.mediaTypeObject().withExamples(Map.of("filter", ExampleObjectBuilder.exampleObject()
+            .withDataValue(Map.of("filter", "active")).withSerializedValue("filter=active&sort=date%20desc").build())).build());
+    }
+    @Test public void querystringStringSchemaExamplesAreRenderedAsRawQueries() throws Exception {
+        assertRawQuery(MediaTypeObjectBuilder.mediaTypeObject().withSchema(schemaObject().withType("string")
+            .withExample("filter=active&sort=date%20desc").build()).build());
+    }
+    @Test public void querystringResolvesReusableMediaAndExampleReferences() throws Exception {
+        ParameterObject parameter = ParameterObjectBuilder.parameterObject().withName("rawQuery").withIn("querystring")
+            .withContentOrReferences(Map.of("application/x-www-form-urlencoded", ReferenceOr.reference("#/components/mediaTypes/Query"))).build();
+        ComponentsObject components = ComponentsObjectBuilder.componentsObject().withMediaTypes(Map.of("Query",
+            MediaTypeObjectBuilder.mediaTypeObject().withExamplesOrReferences(Map.of("sample", ReferenceOr.reference("#/components/examples/Query"))).build()))
+            .withExamples(Map.of("Query", ExampleObjectBuilder.exampleObject().withSerializedValue("filter=active&sort=date%20desc").build())).build();
+        String html = render(PathItemObjectBuilder.pathItemObject().withOperations(Map.of("get", operation("query")
+            .toBuilder().withParameters(List.of(parameter)).build())).build(), components);
+        assertTrue(html, html.contains("?filter=active&amp;sort=date%20desc"));
+        assertFalse(html.contains("rawQuery="));
+    }
+    private void assertRawQuery(MediaTypeObject media) throws Exception {
+        ParameterObject parameter = ParameterObjectBuilder.parameterObject().withName("rawQuery").withIn("querystring")
+            .withContent(Map.of("application/x-www-form-urlencoded", media)).build();
+        String html = render(PathItemObjectBuilder.pathItemObject().withOperations(Map.of("get", operation("query")
+            .toBuilder().withParameters(List.of(parameter)).build())).build());
+        assertTrue(html, html.contains("https:&#x2F;&#x2F;example.test&#x2F;example?filter=active&amp;sort=date%20desc"));
+        assertFalse(html.contains("rawQuery="));
+    }
     private OperationObject operation(String id) {
         return OperationObjectBuilder.operationObject().withOperationId(id).withSummary(id).build();
     }
     private String render(PathItemObject path) throws Exception {
-        OpenAPIObject api = OpenAPIObjectBuilder.openAPIObject().withPaths(PathsObjectBuilder.pathsObject()
+        return render(path, null);
+    }
+    private String render(PathItemObject path, ComponentsObject components) throws Exception {
+        OpenAPIObject api = OpenAPIObjectBuilder.openAPIObject().withComponents(components).withPaths(PathsObjectBuilder.pathsObject()
             .withPathItemObjects(Map.of("/example", path)).build()).build();
         StringWriter output = new StringWriter();
         try (BufferedWriter writer = new BufferedWriter(output)) { new HtmlDocumentor(writer, api, "", URI.create("https://example.test")).writeHtml(); }

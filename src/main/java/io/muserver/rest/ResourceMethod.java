@@ -289,6 +289,10 @@ class ResourceMethod {
         List<Class<?>> hierarchy = new ArrayList<>();
         for (Class<?> c = resourceClass.resourceClass; c != null && c != Object.class; c = c.getSuperclass()) hierarchy.add(c);
         Collections.reverse(hierarchy);
+        // Interface declarations provide defaults; class declarations take precedence.
+        Set<Class<?>> interfaces = new LinkedHashSet<>();
+        for (Class<?> c : hierarchy) collectSseInterfaces(c, interfaces);
+        for (Class<?> contract : interfaces) mergeSseDeclarations(result, contract.getDeclaredAnnotationsByType(ApiSseEvent.class));
         for (Class<?> c : hierarchy) mergeSseDeclarations(result, c.getDeclaredAnnotationsByType(ApiSseEvent.class));
         List<ApiSseEvent> method = new ArrayList<>();
         for (Annotation annotation : methodAnnotations) {
@@ -297,6 +301,14 @@ class ResourceMethod {
         }
         mergeSseDeclarations(result, method.toArray(new ApiSseEvent[0]));
         return result;
+    }
+
+    private static void collectSseInterfaces(Class<?> type, Set<Class<?>> interfaces) {
+        for (Class<?> contract : type.getInterfaces()) {
+            if (interfaces.contains(contract)) continue;
+            collectSseInterfaces(contract, interfaces);
+            interfaces.add(contract);
+        }
     }
 
     private static void mergeSseDeclarations(Map<String, ApiSseEvent> result, ApiSseEvent[] declarations) {

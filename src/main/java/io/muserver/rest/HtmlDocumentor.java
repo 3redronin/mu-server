@@ -200,7 +200,12 @@ class HtmlDocumentor {
 
                                 SchemaObject schema = resolvedSchema(parameter.schema());
                                 Object sample = parameter.example() == null ? schemaExample(schema) : parameter.example();
-                                if ("query".equals(type)) {
+                                if ("querystring".equals(type)) {
+                                    sample = querystringExample(parameter);
+                                    if (sample instanceof String && !((String) sample).isEmpty()) {
+                                        queryString.append(queryString.length() == 0 ? '?' : '&').append(sample);
+                                    }
+                                } else if ("query".equals(type)) {
                                     appendQuery(queryString, parameter, sample);
                                 } else if ("header".equals(type)) {
                                     curlHeaders.append(" -H '").append(bashValue(parameter.name())).append(": ")
@@ -433,6 +438,20 @@ class HtmlDocumentor {
             text = writer.toString();
         }
         return text.replace("'", "'\\''");
+    }
+
+    private @Nullable Object querystringExample(ParameterObject parameter) throws IOException {
+        for (MediaTypeObject media : resolvedContent(parameter.contentOrReferences()).values()) {
+            if (media.example() != null) return media.example();
+            Map<String, ExampleObject> examples = resolvedExamples(media.examplesOrReferences());
+            if (examples != null) for (ExampleObject example : examples.values()) {
+                if (example.serializedValue() != null) return example.serializedValue();
+                if (example.value() instanceof String) return example.value();
+                if (example.dataValue() instanceof String) return example.dataValue();
+            }
+            return schemaExample(resolvedSchema(media.schema()));
+        }
+        return null;
     }
 
     private static void appendQuery(StringBuilder query, ParameterObject parameter, @Nullable Object sample) {
