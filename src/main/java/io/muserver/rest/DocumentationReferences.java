@@ -38,6 +38,11 @@ final class DocumentationReferences {
                 if (document.equals(base.toString().split("#", 2)[0]) && resolved.getRawFragment() != null) ref = "#" + resolved.getRawFragment();
             } catch (IllegalArgumentException ignored) { return null; }
         }
+        try {
+            String fragment = java.net.URI.create(ref).getFragment();
+            if (!ref.startsWith("#") || fragment == null) return null;
+            ref = "#" + fragment;
+        } catch (IllegalArgumentException ignored) { return null; }
         if (!ref.startsWith("#/") || !visited.add(ref)) return null;
         Object target = api;
         for (String token : ref.substring(2).split("/", -1)) {

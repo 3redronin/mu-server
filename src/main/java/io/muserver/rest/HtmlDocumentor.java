@@ -172,12 +172,15 @@ class HtmlDocumentor {
 
                         RequestBodyObject requestBody = references.resolve(operation.requestBodyOrReferences(), RequestBodyObject.class);
                         renderReference(operation.requestBodyOrReferences());
-                        List<ParameterObject> parameters = new ArrayList<>();
-                        if (operation.parametersOrReferences() != null) for (ReferenceOr<ParameterObject> parameterRef : operation.parametersOrReferences()) {
-                            renderReference(parameterRef);
-                            ParameterObject parameter = references.resolve(parameterRef, ParameterObject.class);
-                            if (parameter != null) parameters.add(parameter);
+                        Map<String, ParameterObject> effectiveParameters = new LinkedHashMap<>();
+                        for (List<ReferenceOr<ParameterObject>> level : Arrays.asList(item.parametersOrReferences(), operation.parametersOrReferences())) {
+                            if (level != null) for (ReferenceOr<ParameterObject> parameterRef : level) {
+                                renderReference(parameterRef);
+                                ParameterObject parameter = references.resolve(parameterRef, ParameterObject.class);
+                                if (parameter != null) effectiveParameters.put(parameter.in() + "\0" + parameter.name(), parameter);
+                            }
                         }
+                        Collection<ParameterObject> parameters = effectiveParameters.values();
                         if (!parameters.isEmpty()) {
                             render("h4", "Parameters");
                             El table = new El("table").open(singletonMap("class", "parameterTable"));
@@ -199,14 +202,18 @@ class HtmlDocumentor {
                                 String type = parameter.in();
 
                                 SchemaObject schema = resolvedSchema(parameter.schema());
-                                Object sample = parameter.example() == null ? schemaExample(schema) : parameter.example();
+                                Object sample = exampleValue(parameter.example(), parameter.examplesOrReferences(), schema);
                                 if ("querystring".equals(type)) {
                                     sample = querystringExample(parameter);
                                     if (sample instanceof String && !((String) sample).isEmpty()) {
                                         queryString.append(queryString.length() == 0 ? '?' : '&').append(sample);
                                     }
                                 } else if ("query".equals(type)) {
-                                    appendQuery(queryString, parameter, sample);
+                                    ExampleObject named = firstExample(parameter.examplesOrReferences());
+                                    if (named != null && named.serializedValue() != null) {
+                                        String serialized = named.serializedValue();
+                                        if (!serialized.isEmpty()) queryString.append(queryString.length() == 0 ? '?' : '&').append(serialized);
+                                    } else appendQuery(queryString, parameter, sample);
                                 } else if ("header".equals(type)) {
                                     curlHeaders.append(" -H '").append(bashValue(parameter.name())).append(": ")
                                         .append(bashValue(sample instanceof Collection ? joinSample((Collection<?>) sample, ",") : sample)).append('\'');
@@ -259,16 +266,16 @@ class HtmlDocumentor {
                                 boolean formEncoding = mediaType.equalsIgnoreCase(MediaType.MULTIPART_FORM_DATA) || mediaType.equalsIgnoreCase(MediaType.APPLICATION_FORM_URLENCODED);
                                 render("h5", mediaType);
 
-                                renderExamples(value.example() == null ? schemaExample(value.schema()) : value.example(), resolvedExamples(value.examplesOrReferences()), value.schema() == null ? null : value.schema().defaultValue());
+                                renderExamples(exampleValue(value.example(), value.examplesOrReferences(), value.schema()), resolvedExamples(value.examplesOrReferences()), value.schema() == null ? null : value.schema().defaultValue());
                                 renderIfValue("p", value.schema() == null ? null : schemaType(value.schema()));
 
                                 String curlFormParam = (mediaType.equalsIgnoreCase(MediaType.MULTIPART_FORM_DATA)) ? "-F" : "--data-urlencode";
                                 if (curlAlternative) {
-                                    curlBody = new StringBuilder(" -H 'content-type: " + mediaType + "'");
+                                    curlBody = new StringBuilder(" -H 'content-type: " + bashValue(mediaType) + "'");
                                 }
 
                                 if (!formEncoding || value.schema() == null || value.schema().properties() == null) {
-                                    if (curlAlternative) curlBody.append(" --data-binary '").append(bashValue(value.example() == null ? schemaExample(value.schema()) : value.example())).append("'");
+                                    if (curlAlternative) curlBody.append(" --data-binary '").append(bashValue(exampleValue(value.example(), value.examplesOrReferences(), value.schema()))).append("'");
                                     continue;
                                 }
 
@@ -378,7 +385,7 @@ class HtmlDocumentor {
                                 }
                                 details.close();
                                 if (curlAccept.isEmpty() && !contentTypes.isEmpty()) {
-                                    curlAccept = " -H 'accept: " + contentTypes.split("\n", 2)[0] + "'";
+                                    curlAccept = " -H 'accept: " + bashValue(contentTypes.split("\n", 2)[0]) + "'";
                                 }
 
 
@@ -438,6 +445,27 @@ class HtmlDocumentor {
             text = writer.toString();
         }
         return text.replace("'", "'\\''");
+    }
+
+    private @Nullable Object exampleValue(@Nullable Object example,
+                                          @Nullable Map<String, ReferenceOr<ExampleObject>> examples,
+                                          @Nullable SchemaObject schema) throws IOException {
+        if (example != null) return example;
+        ExampleObject candidate = firstExample(examples);
+        if (candidate != null) {
+            if (candidate.serializedValue() != null) return candidate.serializedValue();
+            if (candidate.dataValue() != null) return candidate.dataValue();
+            return candidate.value();
+        }
+        return examples == null ? schemaExample(schema) : null;
+    }
+
+    private @Nullable ExampleObject firstExample(@Nullable Map<String, ReferenceOr<ExampleObject>> examples) throws IOException {
+        Map<String, ExampleObject> resolved = resolvedExamples(examples);
+        if (resolved != null) for (ExampleObject candidate : resolved.values()) {
+            if (candidate.serializedValue() != null || candidate.dataValue() != null || candidate.value() != null) return candidate;
+        }
+        return null;
     }
 
     private @Nullable Object querystringExample(ParameterObject parameter) throws IOException {
@@ -553,7 +581,7 @@ class HtmlDocumentor {
     }
 
     private void renderExamples(@Nullable Object example, @Nullable Map<String, ExampleObject> examples, @Nullable Object defaultVal) throws IOException {
-        if (example != null) {
+        if (example != null && examples == null) {
             El div = new El("div").open().content("Example: ");
             render("code", example.toString());
             div.close();
