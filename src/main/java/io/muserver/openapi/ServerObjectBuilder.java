@@ -10,6 +10,7 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * An object representing a Server.
  */
 public class ServerObjectBuilder {
+    private @Nullable String name;
     private @Nullable Map<String, Object> extensions;
     private @Nullable String url;
     private @Nullable String description;
@@ -54,7 +55,7 @@ public class ServerObjectBuilder {
      * @return A new object
      */
     public ServerObject build() {
-        return new ServerObject(url, description, immutable(variables), extensions);
+        return new ServerObject(url, description, immutable(variables), name, extensions);
     }
 
     /**
@@ -80,4 +81,12 @@ public class ServerObjectBuilder {
         extensions = copy;
         return this;
     }
+    /**
+     * Sets a unique name by which consumers can identify this server.
+     * This is a label for the server; it does not change its URL or URL variables.
+     *
+     * @param value the server name, or null to omit it
+     * @return this builder
+     */
+    public ServerObjectBuilder withName(@Nullable String value) { this.name = value; return this; }
 }

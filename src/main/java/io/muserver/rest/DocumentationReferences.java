@@ -30,6 +30,19 @@ final class DocumentationReferences {
         } else if (value instanceof SchemaObject) ref = ((SchemaObject) value).ref();
         else if (value instanceof PathItemObject) ref = ((PathItemObject) value).ref();
         if (ref == null) return type.isInstance(value) ? type.cast(value) : null;
+        if (!ref.startsWith("#/") && api.self() != null) {
+            try {
+                java.net.URI base = java.net.URI.create(api.self());
+                java.net.URI resolved = base.resolve(ref);
+                String document = resolved.toString().split("#", 2)[0];
+                if (document.equals(base.toString().split("#", 2)[0]) && resolved.getRawFragment() != null) ref = "#" + resolved.getRawFragment();
+            } catch (IllegalArgumentException ignored) { return null; }
+        }
+        try {
+            String fragment = java.net.URI.create(ref).getFragment();
+            if (!ref.startsWith("#") || fragment == null) return null;
+            ref = "#" + fragment;
+        } catch (IllegalArgumentException ignored) { return null; }
         if (!ref.startsWith("#/") || !visited.add(ref)) return null;
         Object target = api;
         for (String token : ref.substring(2).split("/", -1)) {
@@ -58,7 +71,7 @@ final class DocumentationReferences {
             ResponsesObject responses = (ResponsesObject) value;
             return "default".equals(name) ? responses.defaultValueOrReferences() : responses.httpStatusCodesOrReferences().get(name);
         }
-        if (value instanceof PathItemObject && Arrays.asList("get", "put", "post", "delete", "options", "head", "patch", "trace").contains(name)) {
+        if (value instanceof PathItemObject && Arrays.asList("get", "put", "post", "delete", "options", "head", "patch", "trace", "query").contains(name)) {
             Map<String, OperationObject> operations = ((PathItemObject) value).operations();
             return operations == null ? null : operations.get(name);
         }

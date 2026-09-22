@@ -6,7 +6,7 @@ import java.util.regex.Pattern;
 import java.io.IOException;
 import java.io.Writer;
 
-/** An immutable OpenAPI 3.1 Schema Object, including JSON Schema 2020-12 boolean schemas. */
+/** An immutable OpenAPI Schema Object, including JSON Schema 2020-12 boolean schemas. */
 public class SchemaObject implements JsonWriter {
     private final Map<String, Object> keywords;
     private final @Nullable Boolean booleanValue;

@@ -35,6 +35,7 @@ public class OperationObject implements JsonWriter {
                            @Nullable String operationId, @Nullable List<ReferenceOr<ParameterObject>> parameters, @Nullable ReferenceOr<RequestBodyObject> requestBody, @Nullable ResponsesObject responses,
                            @Nullable Map<String, ReferenceOr<CallbackObject>> callbacks, @Nullable Boolean deprecated, @Nullable List<SecurityRequirementObject> security,
                            @Nullable List<ServerObject> servers, @Nullable Map<String, Object> extensions) {
+        ParameterObject.validateLocations(parameters);
         this.extensions = Extensions.copy(extensions);
         if (parameters != null) {
             Set<String> nameIns = parameters.stream().map(p -> p.isReference() ? "ref:" + java.util.Objects.requireNonNull(p.reference()).ref() : p.value().name() + "\0" + p.value().in()).collect(toSet());

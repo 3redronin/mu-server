@@ -16,6 +16,7 @@ import static java.util.stream.Collectors.toSet;
  */
 public class PathItemObject implements JsonWriter {
     private final @Nullable String ref;
+    private final @Nullable Map<String, OperationObject> additionalOperations;
     private final Map<String, Object> extensions;
 
     private final @Nullable String summary;
@@ -25,8 +26,30 @@ public class PathItemObject implements JsonWriter {
     private final @Nullable List<ReferenceOr<ParameterObject>> parameters;
 
     PathItemObject(@Nullable String summary, @Nullable String description, @Nullable Map<String, OperationObject> operations,
-                          @Nullable List<ServerObject> servers, @Nullable List<ReferenceOr<ParameterObject>> parameters, @Nullable String ref, @Nullable Map<String, Object> extensions) {
+                          @Nullable List<ServerObject> servers, @Nullable List<ReferenceOr<ParameterObject>> parameters, @Nullable String ref, @Nullable Map<String, OperationObject> additionalOperations, @Nullable Map<String, Object> extensions) {
+        if (additionalOperations != null) {
+            for (String method : additionalOperations.keySet()) {
+                if (!method.matches("[!#$%&'*+.^_`|~0-9A-Za-z-]+") || java.util.Arrays.asList("GET", "PUT", "POST", "DELETE", "OPTIONS", "HEAD", "PATCH", "TRACE", "QUERY").contains(method)) {
+                    throw new IllegalArgumentException("Invalid additional HTTP operation: " + method);
+                }
+            }
+        }
+        ParameterObject.validateLocations(parameters);
+        java.util.List<OperationObject> allOperations = new java.util.ArrayList<>();
+        if (operations != null) allOperations.addAll(operations.values());
+        if (additionalOperations != null) allOperations.addAll(additionalOperations.values());
+        for (OperationObject operation : allOperations) {
+            Map<String, ReferenceOr<ParameterObject>> combined = new java.util.LinkedHashMap<>();
+            for (List<ReferenceOr<ParameterObject>> level : java.util.Arrays.asList(parameters, operation.parametersOrReferences())) {
+                if (level != null) for (ReferenceOr<ParameterObject> p : level) {
+                    String key = p.isReference() ? java.util.Objects.requireNonNull(p.reference()).ref() : p.value().in() + "\0" + p.value().name();
+                    combined.put(key, p);
+                }
+            }
+            ParameterObject.validateLocations(new java.util.ArrayList<>(combined.values()));
+        }
         this.ref = ref;
+        this.additionalOperations = OpenApiUtils.immutable(additionalOperations);
         this.extensions = Extensions.copy(extensions);
         if (parameters != null) {
             Set<String> nameIns = parameters.stream().map(p -> p.isReference() ? "ref:" + java.util.Objects.requireNonNull(p.reference()).ref() : p.value().name() + "\0" + p.value().in()).collect(toSet());
@@ -41,8 +64,8 @@ public class PathItemObject implements JsonWriter {
             normalized = new java.util.LinkedHashMap<>();
             for (java.util.Map.Entry<String, OperationObject> operation : operations.entrySet()) {
                 String method = operation.getKey().toLowerCase(java.util.Locale.ROOT);
-                if (!java.util.Arrays.asList("get", "put", "post", "delete", "options", "head", "patch", "trace").contains(method)) {
-                    throw new IllegalArgumentException("Unsupported OpenAPI 3.1 method: " + operation.getKey());
+                if (!java.util.Arrays.asList("get", "put", "post", "delete", "options", "head", "patch", "trace", "query").contains(method)) {
+                    throw new IllegalArgumentException("Unsupported OpenAPI method: " + operation.getKey());
                 }
                 if (normalized.put(method, operation.getValue()) != null) throw new IllegalArgumentException("Duplicate operation: " + method);
             }
@@ -59,13 +82,14 @@ public class PathItemObject implements JsonWriter {
         isFirst = append(writer, "summary", summary, isFirst);
         isFirst = append(writer, "description", description, isFirst);
         if (operations != null) {
-            for (String method : new String[]{"get", "put", "post", "delete", "options", "head", "patch", "trace"}) {
+            for (String method : new String[]{"get", "put", "post", "delete", "options", "head", "patch", "trace", "query"}) {
                 isFirst = append(writer, method, operations.get(method), isFirst);
             }
         }
         isFirst = append(writer, "servers", servers, isFirst);
         isFirst = append(writer, "parameters", parameters, isFirst);
         isFirst = Jsonizer.append(writer, "$ref", ref, isFirst);
+        isFirst = Jsonizer.append(writer, "additionalOperations", additionalOperations, isFirst);
         isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
@@ -113,6 +137,11 @@ public class PathItemObject implements JsonWriter {
     /** @return a builder preserving all fields and extensions */
     public PathItemObjectBuilder toBuilder() {
         return new PathItemObjectBuilder()
-            .withRef(ref).withExtensions(extensions).withSummary(summary).withDescription(description).withOperations(operations).withServers(servers).withParametersOrReferences(parameters);
+            .withRef(ref).withAdditionalOperations(additionalOperations).withExtensions(extensions).withSummary(summary).withDescription(description).withOperations(operations).withServers(servers).withParametersOrReferences(parameters);
     }
+    /**
+     * @return the operations keyed by exact HTTP method name, or null when omitted
+     * @see PathItemObjectBuilder#withAdditionalOperations
+     */
+    public @Nullable Map<String, OperationObject> additionalOperations() { return additionalOperations; }
 }

@@ -8,6 +8,7 @@ import org.jspecify.annotations.Nullable;
  * Allows configuration of the supported OAuth Flows.
  */
 public class OAuthFlowsObjectBuilder {
+    private @Nullable OAuthFlowObject deviceAuthorization;
     private @Nullable Map<String, Object> extensions;
     private @Nullable OAuthFlowObject implicit;
     private @Nullable OAuthFlowObject password;
@@ -62,7 +63,7 @@ public class OAuthFlowsObjectBuilder {
      * @return A new object
      */
     public OAuthFlowsObject build() {
-        return new OAuthFlowsObject(implicit, password, clientCredentials, authorizationCode, extensions);
+        return new OAuthFlowsObject(implicit, password, clientCredentials, authorizationCode, deviceAuthorization, extensions);
     }
 
     /**
@@ -88,4 +89,13 @@ public class OAuthFlowsObjectBuilder {
         extensions = copy;
         return this;
     }
+    /**
+     * Configures OAuth device authorization for clients such as televisions or command-line tools,
+     * where the user completes authorization on a separate device.
+     * The flow requires device authorization and token URLs; an authorization URL is not allowed.
+     *
+     * @param value the device authorization flow configuration, or null to omit it
+     * @return this builder
+     */
+    public OAuthFlowsObjectBuilder withDeviceAuthorization(@Nullable OAuthFlowObject value) { this.deviceAuthorization = value; return this; }
 }

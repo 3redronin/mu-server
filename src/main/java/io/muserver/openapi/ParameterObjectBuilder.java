@@ -36,7 +36,7 @@ public class ParameterObjectBuilder {
     private @Nullable SchemaObject schema;
     private @Nullable Object example;
     private @Nullable Map<String, ReferenceOr<ExampleObject>> examples;
-    private @Nullable Map<String, MediaTypeObject> content;
+    private @Nullable Map<String, ReferenceOr<MediaTypeObject>> content;
 
     /**
      *
@@ -276,7 +276,7 @@ public class ParameterObjectBuilder {
      * @return The current builder
      */
     public ParameterObjectBuilder withContent(@Nullable Map<String, MediaTypeObject> content) {
-        this.content = content;
+        this.content = ReferenceValues.inline(content);
         return this;
     }
 
@@ -316,4 +316,7 @@ public class ParameterObjectBuilder {
      * @param value inline values and references for examples
      * @return this builder */
     public ParameterObjectBuilder withExamplesOrReferences(@Nullable Map<String, ReferenceOr<ExampleObject>> value) { this.examples = value; return this; }
+    /** @param value inline media types and references
+     * @return this builder */
+    public ParameterObjectBuilder withContentOrReferences(@Nullable Map<String, ReferenceOr<MediaTypeObject>> value) { this.content = value; return this; }
 }

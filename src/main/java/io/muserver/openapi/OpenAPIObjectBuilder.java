@@ -15,6 +15,7 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
 public class OpenAPIObjectBuilder {
     private @Nullable String jsonSchemaDialect;
     private @Nullable Map<String, ReferenceOr<PathItemObject>> webhooks;
+    private @Nullable String self;
     private @Nullable Map<String, Object> extensions;
     private @Nullable InfoObject info;
     private @Nullable List<ServerObject> servers;
@@ -113,7 +114,7 @@ public class OpenAPIObjectBuilder {
      */
     public OpenAPIObject build() {
         InfoObject infoToUse = this.info == null ? infoObject().build() : this.info;
-        return new OpenAPIObject(infoToUse, immutable(servers), paths, components, immutable(security), immutable(tags), externalDocs, jsonSchemaDialect, webhooks, extensions);
+        return new OpenAPIObject(infoToUse, immutable(servers), paths, components, immutable(security), immutable(tags), externalDocs, jsonSchemaDialect, webhooks, self, extensions);
     }
 
     /**
@@ -153,4 +154,13 @@ public class OpenAPIObjectBuilder {
     public OpenAPIObjectBuilder withWebhooks(@Nullable Map<String, PathItemObject> value) { this.webhooks = ReferenceValues.inline(value); return this; }
     /** @return the configured paths, or null if absent */
     public @Nullable PathsObject paths() { return paths; }
+    /**
+     * Sets the document URI used as the base for resolving relative references within this API description.
+     * The URI may be relative, but must not contain a fragment.
+     * This identifies the description document, not an API server endpoint.
+     *
+     * @param value the document URI reference, or null to omit it
+     * @return this builder
+     */
+    public OpenAPIObjectBuilder withSelf(@Nullable String value) { this.self = value; return this; }
 }

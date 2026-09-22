@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import org.json.JSONObject;
+import org.json.JSONArray;
 import io.muserver.MuServer;
 import io.muserver.openapi.*;
 import jakarta.ws.rs.*;
@@ -33,15 +34,19 @@ public class OpenApi31IntegrationTest {
     @Test public void presenceDefaultsAndCollectionSettingsMatchRuntime() throws Exception {
         server = httpsServerForTest().addHandler(restHandler(new Inputs()).withCollectionParameterStrategy(CollectionParameterStrategy.SPLIT_ON_COMMA)
             .withOpenApiJsonUrl("/openapi.json")).start();
-        JsonNode api = document();
-        JsonNode parameters = api.at("/paths/~1inputs/get/parameters");
-        Map<String, JsonNode> byName = new HashMap<>(); parameters.forEach(p -> byName.put(p.get("name").asText(), p));
-        for (String name : Arrays.asList("primitive", "boxed", "defaulted", "values")) assertFalse(byName.get(name).get("required").asBoolean());
-        assertTrue(byName.get("contract").get("required").asBoolean());
-        assertEquals(7, byName.get("defaulted").at("/schema/default").asInt());
-        assertEquals("[\"x\"]", byName.get("values").at("/schema/default").toString());
-        assertFalse(byName.get("values").get("explode").asBoolean());
-        for (JsonNode parameter : parameters) assertFalse(parameter.get("schema").has("nullable"));
+        JSONObject api = document();
+        JSONArray parameters = (JSONArray) api.query("/paths/~1inputs/get/parameters");
+        Map<String, JSONObject> byName = new HashMap<>();
+        for (Object value : parameters) {
+            JSONObject parameter = (JSONObject) value;
+            byName.put(parameter.getString("name"), parameter);
+        }
+        for (String name : Arrays.asList("primitive", "boxed", "defaulted", "values")) assertFalse(byName.get(name).getBoolean("required"));
+        assertTrue(byName.get("contract").getBoolean("required"));
+        assertEquals(7, byName.get("defaulted").getJSONObject("schema").getInt("default"));
+        assertEquals("[\"x\"]", byName.get("values").query("/schema/default").toString());
+        assertFalse(byName.get("values").getBoolean("explode"));
+        for (Object parameter : parameters) assertFalse(((JSONObject) parameter).getJSONObject("schema").has("nullable"));
         try (okhttp3.Response response = call(request(server.uri().resolve("/inputs")))) {
             assertEquals(200, response.code()); assertEquals("0:null:7:null:[x]", response.body().string());
         }
@@ -65,24 +70,24 @@ public class OpenApi31IntegrationTest {
     }
     @Test public void resolvedGenericsMediaTypesAndResponseMetadataAreRetained() throws Exception {
         server = httpsServerForTest().addHandler(restHandler(new GenericResource(), new Bodies()).withOpenApiJsonUrl("/openapi.json")).start();
-        JsonNode api = document();
-        JsonNode content = api.at("/paths/~1generic/get/responses/200/content");
-        assertEquals(2, content.size());
-        JsonNode schema = content.get("application/json").get("schema");
-        assertEquals("object", schema.get("type").asText());
-        assertEquals("array", schema.at("/additionalProperties/type").asText());
-        assertEquals("uuid", schema.at("/additionalProperties/items/format").asText());
+        JSONObject api = document();
+        JSONObject content = (JSONObject) api.query("/paths/~1generic/get/responses/200/content");
+        assertEquals(2, content.length());
+        JSONObject schema = content.getJSONObject("application/json").getJSONObject("schema");
+        assertEquals("object", schema.getString("type"));
+        assertEquals("array", schema.query("/additionalProperties/type"));
+        assertEquals("uuid", schema.query("/additionalProperties/items/format"));
         accepts(schema, "{\"key\":[\"93d35de9-0083-4765-8b60-822258e8ffad\"]}", true);
         accepts(schema, "{\"key\":5}", false);
         accepts(schema, "{\"key\":[null]}", false);
-        JsonNode post = api.at("/paths/~1bodies/post");
-        assertEquals(2, post.at("/requestBody/content").size());
-        assertEquals("string", post.at("/requestBody/content/application~1json/schema/items/type").asText());
-        assertEquals("Method error", post.at("/responses/400/description").asText());
-        assertEquals("integer", post.at("/responses/400/content/application~1json/schema/type").asText());
-        assertFalse(api.at("/paths/~1bodies~1empty/get/responses/304").has("content"));
-        assertFalse(api.at("/paths/~1bodies~1head/head/responses/200").has("content"));
-        assertEquals(api, document());
+        JSONObject post = (JSONObject) api.query("/paths/~1bodies/post");
+        assertEquals(2, ((JSONObject) post.query("/requestBody/content")).length());
+        assertEquals("string", post.query("/requestBody/content/application~1json/schema/items/type"));
+        assertEquals("Method error", post.query("/responses/400/description"));
+        assertEquals("integer", post.query("/responses/400/content/application~1json/schema/type"));
+        assertFalse(((JSONObject) api.query("/paths/~1bodies~1empty/get/responses/304")).has("content"));
+        assertFalse(((JSONObject) api.query("/paths/~1bodies~1head/head/responses/200")).has("content"));
+        assertJsonEquals(api, document());
     }
 
     @Path("/registered") public static class Registered {
@@ -91,7 +96,7 @@ public class OpenApi31IntegrationTest {
     @Test public void exactGenericRegistrationAndManualRootContentSurvive() throws Exception {
         Type generic = Registered.class.getMethod("post", List.class).getGenericReturnType();
         OperationObject manual = OperationObjectBuilder.operationObject().withSummary("Manual operation").build();
-        OpenAPIObjectBuilder root = OpenAPIObjectBuilder.openAPIObject().withJsonSchemaDialect("https://spec.openapis.org/oas/3.1/dialect/2024-11-10")
+        OpenAPIObjectBuilder root = OpenAPIObjectBuilder.openAPIObject().withJsonSchemaDialect("https://spec.openapis.org/oas/3.2/dialect/2026-02-26")
             .withInfo(InfoObjectBuilder.infoObject().withSummary("Root summary").build())
             .withExtension("x-owner", "test")
             .withComponents(ComponentsObjectBuilder.componentsObject().withSchemas(Collections.singletonMap("Existing", booleanSchema(true).build())).build())
@@ -103,16 +108,16 @@ public class OpenApi31IntegrationTest {
             .addCustomSchema(List.class, schemaObject().withType("array").withItems(schemaObject().withType("integer").build()).build())
             .addCustomSchema(generic, "StringList", schemaObject().withType("array").withItems(schemaObject().withType("string").build()).build())
             .withOpenApiJsonUrl("/openapi.json").withOpenApiHtmlUrl("/api.html")).start();
-        JsonNode api = document();
-        assertEquals("#/components/schemas/StringList", api.at("/paths/~1registered/post/requestBody/content/application~1json/schema/$ref").asText());
-        assertEquals("Manual operation", api.at("/paths/~1registered/get/summary").asText());
-        assertEquals("Manual operation", api.at("/paths/~1manual/get/summary").asText());
-        assertEquals("test", api.get("x-owner").asText());
-        assertEquals("Root summary", api.at("/info/summary").asText());
-        assertTrue(api.at("/components/schemas/Existing").asBoolean());
-        assertTrue(api.get("webhooks").has("hook"));
-        assertEquals("Manual tag", api.at("/tags/0/description").asText());
-        assertEquals(api, document());
+        JSONObject api = document();
+        assertEquals("#/components/schemas/StringList", api.query("/paths/~1registered/post/requestBody/content/application~1json/schema/$ref"));
+        assertEquals("Manual operation", api.query("/paths/~1registered/get/summary"));
+        assertEquals("Manual operation", api.query("/paths/~1manual/get/summary"));
+        assertEquals("test", api.getString("x-owner"));
+        assertEquals("Root summary", api.query("/info/summary"));
+        assertTrue((Boolean) api.query("/components/schemas/Existing"));
+        assertTrue(api.getJSONObject("webhooks").has("hook"));
+        assertEquals("Manual tag", api.query("/tags/0/description"));
+        assertJsonEquals(api, document());
         try (okhttp3.Response response = call(request(server.uri().resolve("/api.html")))) { assertEquals(200, response.code()); assertTrue(response.body().string().contains("Manual operation")); }
     }
 
@@ -124,15 +129,15 @@ public class OpenApi31IntegrationTest {
     }
     @Test public void overloadsMergeWithoutEmptyBodiesOrLostSchemas() throws Exception {
         server = httpsServerForTest().addHandler(restHandler(new Alternatives()).withOpenApiJsonUrl("/openapi.json")).start();
-        JsonNode api = document();
-        JsonNode get = api.at("/paths/~1alternatives/get");
+        JSONObject api = document();
+        JSONObject get = (JSONObject) api.query("/paths/~1alternatives/get");
         assertFalse(get.has("requestBody"));
-        assertFalse(get.at("/parameters/0/required").asBoolean());
-        assertEquals(2, get.at("/parameters/0/schema/anyOf").size());
-        assertEquals(2, get.at("/responses/200/content").size());
-        JsonNode body = api.at("/paths/~1alternatives/post/requestBody");
-        assertEquals(2, body.get("content").size());
-        assertFalse(body.get("required").asBoolean());
+        assertFalse((Boolean) get.query("/parameters/0/required"));
+        assertEquals(2, ((JSONArray) get.query("/parameters/0/schema/anyOf")).length());
+        assertEquals(2, ((JSONObject) get.query("/responses/200/content")).length());
+        JSONObject body = (JSONObject) api.query("/paths/~1alternatives/post/requestBody");
+        assertEquals(2, body.getJSONObject("content").length());
+        assertFalse(body.getBoolean("required"));
     }
 
     @Path("/payloads") @Produces("application/json") public static class Payloads {
@@ -144,12 +149,12 @@ public class OpenApi31IntegrationTest {
     }
     @Test public void wrappersArraysAndOpaquePayloadsDoNotInventProperties() throws Exception {
         server = httpsServerForTest().addHandler(restHandler(new Payloads()).withOpenApiJsonUrl("/openapi.json")).start();
-        JsonNode api = document();
-        assertEquals("string", api.at("/paths/~1payloads~1entity/get/responses/200/content/application~1json/schema/items/type").asText());
-        assertEquals("string", api.at("/paths/~1payloads~1array/get/responses/200/content/application~1json/schema/items/items/type").asText());
+        JSONObject api = document();
+        assertEquals("string", api.query("/paths/~1payloads~1entity/get/responses/200/content/application~1json/schema/items/type"));
+        assertEquals("string", api.query("/paths/~1payloads~1array/get/responses/200/content/application~1json/schema/items/items/type"));
         for (String path : Arrays.asList("opaque", "suspended", "unknown")) {
-            JsonNode schema = api.at("/paths/~1payloads~1" + path + "/get/responses/200/content/application~1json/schema");
-            assertTrue(schema.isObject()); assertTrue(schema.isEmpty());
+            JSONObject schema = (JSONObject) api.query("/paths/~1payloads~1" + path + "/get/responses/200/content/application~1json/schema");
+            assertTrue(schema.isEmpty());
         }
     }
 
@@ -158,10 +163,10 @@ public class OpenApi31IntegrationTest {
             .addCustomSchema(List.class, schemaObject().withType("array").withItems(schemaObject().withType("string").build()).build())
             .addSchemaObjectCustomizer((builder, context) -> context.target() == SchemaObjectCustomizerTarget.REQUEST_BODY ? builder.withMinItems(1) : builder)
             .withOpenApiJsonUrl("/openapi.json")).start();
-        JsonNode api = document();
-        JsonNode input = api.at("/paths/~1registered/post/requestBody/content/application~1json/schema");
-        assertFalse(input.has("$ref")); assertEquals(1, input.get("minItems").asInt());
-        assertEquals("#/components/schemas/List", api.at("/paths/~1registered/post/responses/200/content/application~1json/schema/$ref").asText());
+        JSONObject api = document();
+        JSONObject input = (JSONObject) api.query("/paths/~1registered/post/requestBody/content/application~1json/schema");
+        assertFalse(input.has("$ref")); assertEquals(1, input.getInt("minItems"));
+        assertEquals("#/components/schemas/List", api.query("/paths/~1registered/post/responses/200/content/application~1json/schema/$ref"));
         accepts(input, "[]", false); accepts(input, "[\"a\"]", true);
     }
 
@@ -169,9 +174,9 @@ public class OpenApi31IntegrationTest {
         server = httpsServerForTest().addHandler(restHandler(new GenericResource())
             .addCustomSchema(UUID.class, schemaObject().withType("string").withFormat("uuid").withDescription("Registered identifier").build())
             .withOpenApiJsonUrl("/openapi.json")).start();
-        JsonNode api = document();
-        assertEquals("#/components/schemas/UUID", api.at("/paths/~1generic/get/responses/200/content/application~1json/schema/additionalProperties/items/$ref").asText());
-        assertEquals("Registered identifier", api.at("/components/schemas/UUID/description").asText());
+        JSONObject api = document();
+        assertEquals("#/components/schemas/UUID", api.query("/paths/~1generic/get/responses/200/content/application~1json/schema/additionalProperties/items/$ref"));
+        assertEquals("Registered identifier", api.query("/components/schemas/UUID/description"));
     }
 
     @Test public void manualReferencedOperationsWinGeneratedCollisions() throws Exception {
@@ -193,20 +198,20 @@ public class OpenApi31IntegrationTest {
                 .withResponses(Collections.singletonMap("Success", ResponseObjectBuilder.responseObject().withDescription("Manual success").build())).build());
         server = httpsServerForTest().addHandler(restHandler(new Alternatives()).withOpenApiDocument(root)
             .withOpenApiJsonUrl("/openapi.json").withOpenApiHtmlUrl("/docs")).start();
-        JsonNode api = document();
-        assertEquals(json(manual), api.at("/paths/~1alternatives/post"));
-        assertTrue(api.at("/paths/~1alternatives/get").isObject());
-        assertEquals(api, document());
+        JSONObject api = document();
+        assertJsonEquals(json(manual), api.query("/paths/~1alternatives/post"));
+        assertTrue(api.query("/paths/~1alternatives/get") instanceof JSONObject);
+        assertJsonEquals(api, document());
         try (okhttp3.Response response = call(request(server.uri().resolve("/docs")))) {
             assertEquals(200, response.code());
             assertTrue(response.body().string().contains("Manual references"));
         }
     }
 
-    private JsonNode document() throws Exception {
+    private JSONObject document() throws Exception {
         try (okhttp3.Response response = call(request(server.uri().resolve("/openapi.json")))) {
             assertEquals(200, response.code());
-            JsonNode result = JSON.readTree(response.body().string());
+            JSONObject result = new JSONObject(response.body().string());
             OfflineOpenApiValidator.document(result);
             return result;
         }

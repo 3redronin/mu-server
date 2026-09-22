@@ -44,15 +44,15 @@ public class OpenApi31DocumentTest {
             .withPathItemsOrReferences(Map.of("Items", ReferenceOr.inline(path), "Alias", ReferenceOr.reference("#/components/pathItems/Items"))).build();
         OpenAPIObject api = OpenAPIObjectBuilder.openAPIObject().withInfo(InfoObjectBuilder.infoObject().withSummary("Example")
             .withLicense(LicenseObjectBuilder.licenseObject().withName("MIT").withIdentifier("MIT").build()).build())
-            .withComponents(components).withJsonSchemaDialect("https://spec.openapis.org/oas/3.1/dialect/2024-11-10")
+            .withComponents(components).withJsonSchemaDialect("https://spec.openapis.org/oas/3.2/dialect/2026-02-26")
             .withPaths(PathsObjectBuilder.pathsObject().withPathItemObjects(Collections.singletonMap("/items", path)).build())
             .withWebhooksOrReferences(Collections.singletonMap("created", ReferenceOr.reference("#/components/pathItems/Items")))
             .withExtension("x-test", Map.of("nested", Arrays.asList(false, JsonNull.INSTANCE))).build();
         document(api);
         document(api.toBuilder().build());
-        assertEquals(json(api), json(api.toBuilder().build()));
-        assertEquals("3.1.2", api.openApi());
-        assertTrue(json(api).at("/paths/~1items/post/security").isEmpty());
+        assertJsonEquals(json(api), json(api.toBuilder().build()));
+        assertEquals("3.2.1", api.openApi());
+        assertTrue(((org.json.JSONArray) json(api).query("/paths/~1items/post/security")).isEmpty());
         assertThrows(IllegalStateException.class, components::responses);
         assertThrows(IllegalStateException.class, operation::requestBody);
         assertThrows(IllegalStateException.class, path::parameters);
@@ -64,7 +64,7 @@ public class OpenApi31DocumentTest {
         OperationObject operation = OperationObjectBuilder.operationObject().build();
         document(OpenAPIObjectBuilder.openAPIObject().withPaths(PathsObjectBuilder.pathsObject().withPathItemObjects(Collections.singletonMap("/x",
             PathItemObjectBuilder.pathItemObject().withOperations(Collections.singletonMap("get", operation)).build())).build()).build());
-        assertEquals(1, json(ResponsesObjectBuilder.responsesObject().withDefaultValue(ResponseObjectBuilder.responseObject().withDescription("Any").build()).build()).size());
+        assertEquals(1, json(ResponsesObjectBuilder.responsesObject().withDefaultValue(ResponseObjectBuilder.responseObject().withDescription("Any").build()).build()).length());
     }
 
     @Test public void contextSensitiveValidationAndDefaults() throws Exception {
@@ -74,8 +74,9 @@ public class OpenApi31DocumentTest {
             String style = in.equals("query") || in.equals("cookie") ? "form" : "simple";
             boolean explode = style.equals("form");
             assertEquals(explode, base.explode());
-            assertEquals(json(base), json(base.toBuilder().withStyle(style).withExplode(explode).withDeprecated(false).build()));
-            assertTrue(json(base.toBuilder().withExplode(!explode).build()).has("explode"));
+            assertJsonEquals(json(base), json(base.toBuilder().withStyle(style).withExplode(explode).withDeprecated(false).build()));
+            if (in.equals("cookie")) assertThrows(IllegalArgumentException.class, () -> base.toBuilder().withExplode(false).build());
+            else assertTrue(json(base.toBuilder().withExplode(!explode).build()).has("explode"));
         }
         assertTrue(json(EncodingObjectBuilder.encodingObject().withStyle("form").withExplode(true).withAllowReserved(false).build()).has("style"));
         assertTrue(json(EncodingObjectBuilder.encodingObject().withStyle("form").withExplode(true).withAllowReserved(false).build()).has("explode"));

@@ -3,7 +3,7 @@ package io.muserver.openapi;
 import org.jspecify.annotations.Nullable;
 import java.util.Objects;
 
-/** Builds an OpenAPI 3.1 Reference Object. */
+/** Builds an OpenAPI Reference Object. */
 public final class ReferenceObjectBuilder {
     private @Nullable String ref;
     private @Nullable String summary;

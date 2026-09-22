@@ -107,7 +107,7 @@ class HtmlDocumentor {
         }
         for (TagObject tag : tags) {
             El li = new El("li").open();
-            new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(tag.name()))).content(tag.name()).close();
+            new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(tag.name()))).content(tag.summary() == null ? tag.name() : tag.summary()).close();
 
             El subNav = new El("ul").open(singletonMap("class", "subNav"));
             for (Map.Entry<String, PathItemObject> entry : pathItems().entrySet()) {
@@ -119,7 +119,7 @@ class HtmlDocumentor {
                     if (operationTags(operation).contains(tag.name())) {
 
                         El subNavLi = new El("li").open();
-                        new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(operation.operationId()))).content(method.toUpperCase(Locale.ROOT) + " " + url).close();
+                        new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(operation.operationId()))).content(method + " " + url).close();
                         subNavLi.close();
 
                     }
@@ -137,7 +137,7 @@ class HtmlDocumentor {
 
         for (TagObject tag : tags) {
             El tagContainer = new El("div").open(singletonMap("class", "tagContainer"));
-            new El("h2").open(singletonMap("id", Mutils.htmlEncode(tag.name()))).content(tag.name()).close();
+            new El("h2").open(singletonMap("id", Mutils.htmlEncode(tag.name()))).content(tag.summary() == null ? tag.name() : tag.summary()).close();
             renderIfValue("p", tag.description());
             renderExternalLinksParagraph(tag.externalDocs());
 
@@ -155,7 +155,7 @@ class HtmlDocumentor {
                         operationAttributes.put("class", "operation");
                         El operationDiv = new El("div").open(operationAttributes);
 
-                        El h3 = new El("h3").open().content(method.toUpperCase(Locale.ROOT) + " ");
+                        El h3 = new El("h3").open().content(method + " ");
                         String urlWithContext = baseUri + url;
                         new El("a").open(Collections.singletonMap("href", urlWithContext)).content(url).close();
                         h3.close();
@@ -172,12 +172,15 @@ class HtmlDocumentor {
 
                         RequestBodyObject requestBody = references.resolve(operation.requestBodyOrReferences(), RequestBodyObject.class);
                         renderReference(operation.requestBodyOrReferences());
-                        List<ParameterObject> parameters = new ArrayList<>();
-                        if (operation.parametersOrReferences() != null) for (ReferenceOr<ParameterObject> parameterRef : operation.parametersOrReferences()) {
-                            renderReference(parameterRef);
-                            ParameterObject parameter = references.resolve(parameterRef, ParameterObject.class);
-                            if (parameter != null) parameters.add(parameter);
+                        Map<String, ParameterObject> effectiveParameters = new LinkedHashMap<>();
+                        for (List<ReferenceOr<ParameterObject>> level : Arrays.asList(item.parametersOrReferences(), operation.parametersOrReferences())) {
+                            if (level != null) for (ReferenceOr<ParameterObject> parameterRef : level) {
+                                renderReference(parameterRef);
+                                ParameterObject parameter = references.resolve(parameterRef, ParameterObject.class);
+                                if (parameter != null) effectiveParameters.put(parameter.in() + "\0" + parameter.name(), parameter);
+                            }
                         }
+                        Collection<ParameterObject> parameters = effectiveParameters.values();
                         if (!parameters.isEmpty()) {
                             render("h4", "Parameters");
                             El table = new El("table").open(singletonMap("class", "parameterTable"));
@@ -199,9 +202,18 @@ class HtmlDocumentor {
                                 String type = parameter.in();
 
                                 SchemaObject schema = resolvedSchema(parameter.schema());
-                                Object sample = parameter.example() == null ? schemaExample(schema) : parameter.example();
-                                if ("query".equals(type)) {
-                                    appendQuery(queryString, parameter, sample);
+                                Object sample = exampleValue(parameter.example(), parameter.examplesOrReferences(), schema);
+                                if ("querystring".equals(type)) {
+                                    sample = querystringExample(parameter);
+                                    if (sample instanceof String && !((String) sample).isEmpty()) {
+                                        queryString.append(queryString.length() == 0 ? '?' : '&').append(sample);
+                                    }
+                                } else if ("query".equals(type)) {
+                                    ExampleObject named = firstExample(parameter.examplesOrReferences());
+                                    if (named != null && named.serializedValue() != null) {
+                                        String serialized = named.serializedValue();
+                                        if (!serialized.isEmpty()) queryString.append(queryString.length() == 0 ? '?' : '&').append(serialized);
+                                    } else appendQuery(queryString, parameter, sample);
                                 } else if ("header".equals(type)) {
                                     curlHeaders.append(" -H '").append(bashValue(parameter.name())).append(": ")
                                         .append(bashValue(sample instanceof Collection ? joinSample((Collection<?>) sample, ",") : sample)).append('\'');
@@ -246,7 +258,7 @@ class HtmlDocumentor {
 
                             renderIfValue("p", requestBody.description());
 
-                            for (Map.Entry<String, MediaTypeObject> bodyEntry : requestBody.content().entrySet()) {
+                            for (Map.Entry<String, MediaTypeObject> bodyEntry : resolvedContent(requestBody.contentOrReferences()).entrySet()) {
                                 String mediaType = bodyEntry.getKey();
                                 MediaTypeObject original = bodyEntry.getValue();
                                 MediaTypeObject value = original.toBuilder().withSchema(resolvedSchema(original.schema())).build();
@@ -254,16 +266,19 @@ class HtmlDocumentor {
                                 boolean formEncoding = mediaType.equalsIgnoreCase(MediaType.MULTIPART_FORM_DATA) || mediaType.equalsIgnoreCase(MediaType.APPLICATION_FORM_URLENCODED);
                                 render("h5", mediaType);
 
-                                renderExamples(value.example() == null ? schemaExample(value.schema()) : value.example(), resolvedExamples(value.examplesOrReferences()), value.schema() == null ? null : value.schema().defaultValue());
+                                renderExamples(exampleValue(value.example(), value.examplesOrReferences(), value.schema()), resolvedExamples(value.examplesOrReferences()), value.schema() == null ? null : value.schema().defaultValue());
                                 renderIfValue("p", value.schema() == null ? null : schemaType(value.schema()));
 
+                                ExampleObject namedExample = firstExample(value.examplesOrReferences());
+                                String serializedBody = namedExample == null ? null : namedExample.serializedValue();
                                 String curlFormParam = (mediaType.equalsIgnoreCase(MediaType.MULTIPART_FORM_DATA)) ? "-F" : "--data-urlencode";
                                 if (curlAlternative) {
-                                    curlBody = new StringBuilder(" -H 'content-type: " + mediaType + "'");
+                                    curlBody = new StringBuilder(" -H 'content-type: " + bashValue(mediaType) + "'");
+                                    if (serializedBody != null) curlBody.append(" --data-binary '").append(bashValue(serializedBody)).append("'");
                                 }
 
                                 if (!formEncoding || value.schema() == null || value.schema().properties() == null) {
-                                    if (curlAlternative) curlBody.append(" --data-binary '").append(bashValue(value.example() == null ? schemaExample(value.schema()) : value.example())).append("'");
+                                    if (curlAlternative && serializedBody == null) curlBody.append(" --data-binary '").append(bashValue(exampleValue(value.example(), value.examplesOrReferences(), value.schema()))).append("'");
                                     continue;
                                 }
 
@@ -303,7 +318,7 @@ class HtmlDocumentor {
                                     renderExamples(schemaExample(schema), null, schema.defaultValue());
 
 
-                                    if (curlAlternative) {
+                                    if (curlAlternative && serializedBody == null) {
                                         EncodingObject encoding = value.encoding() == null ? null : value.encoding().get(formName);
                                         Object sample = schemaExample(schema);
                                         if ("-F".equals(curlFormParam) && encoding != null && "application/octet-stream".equals(encoding.contentType()) && sample == null) sample = "@file.bin";
@@ -323,6 +338,7 @@ class HtmlDocumentor {
                         }
 
                         String curlAccept = "";
+                        boolean streaming = false;
                         Map<String, ResponseObject> responses = new LinkedHashMap<>();
                         if (operation.responses() != null) {
                             Map<String, ReferenceOr<ResponseObject>> values = new LinkedHashMap<>(operation.responses().httpStatusCodesOrReferences());
@@ -355,11 +371,24 @@ class HtmlDocumentor {
                                 String code = respEntry.getKey();
                                 ResponseObject resp = respEntry.getValue();
                                 render("td", code);
-                                String contentTypes = resp.content() == null ? "" : String.join("\n", resp.content().keySet());
+                                String contentTypes = resp.contentOrReferences() == null ? "" : String.join("\n", resp.contentOrReferences().keySet());
                                 render("td", contentTypes);
-                                render("td", resp.description());
+                                El details = new El("td").open();
+                                render("p", resp.summary());
+                                render("p", resp.description());
+                                for (Map.Entry<String, MediaTypeObject> contentEntry : resolvedContent(resp.contentOrReferences()).entrySet()) {
+                                    MediaTypeObject media = contentEntry.getValue();
+                                    render("p", media.description());
+                                    if (media.itemSchema() != null) {
+                                        streaming = true;
+                                        render("p", "Parsed stream item (" + contentEntry.getKey() + ")");
+                                        render("pre", String.valueOf(resolvedSchema(media.itemSchema())));
+                                    }
+                                    renderExamples(media.example(), resolvedExamples(media.examplesOrReferences()), null);
+                                }
+                                details.close();
                                 if (curlAccept.isEmpty() && !contentTypes.isEmpty()) {
-                                    curlAccept = " -H 'accept: " + contentTypes.split("\n", 2)[0] + "'";
+                                    curlAccept = " -H 'accept: " + bashValue(contentTypes.split("\n", 2)[0]) + "'";
                                 }
 
 
@@ -373,8 +402,8 @@ class HtmlDocumentor {
                         render("h4", "Curl");
                         String sampleUrl = urlWithContext.replace("{", "(").replace("}", ")")
                             + queryString;
-                        render("code", "curl -is -X " + method.toUpperCase(Locale.ROOT) + curlHeaders + curlAccept +
-                            curlBody + " '" + requestUri.resolve(sampleUrl) + "'");
+                        render("code", "curl " + (streaming ? "-N " : "") + "-is -X '" + bashValue(method) + "'" + curlHeaders + curlAccept +
+                            curlBody + " '" + bashValue(requestUri.resolve(sampleUrl)) + "'");
 
 
                         operationDiv.close();
@@ -399,8 +428,10 @@ class HtmlDocumentor {
     }
 
     private static Map<String, OperationObject> operations(PathItemObject item) {
-        Map<String, OperationObject> operations = item.operations();
-        return operations == null ? Collections.emptyMap() : operations;
+        Map<String, OperationObject> operations = new LinkedHashMap<>();
+        if (item.operations() != null) item.operations().forEach((method, operation) -> operations.put(method.toUpperCase(Locale.ROOT), operation));
+        if (item.additionalOperations() != null) operations.putAll(item.additionalOperations());
+        return operations;
     }
 
     private static List<String> operationTags(OperationObject operation) {
@@ -417,6 +448,50 @@ class HtmlDocumentor {
             text = writer.toString();
         }
         return text.replace("'", "'\\''");
+    }
+
+    private @Nullable Object exampleValue(@Nullable Object example,
+                                          @Nullable Map<String, ReferenceOr<ExampleObject>> examples,
+                                          @Nullable SchemaObject schema) throws IOException {
+        if (example != null) return example;
+        ExampleObject candidate = firstExample(examples);
+        if (candidate != null) {
+            if (candidate.serializedValue() != null) return candidate.serializedValue();
+            if (candidate.dataValue() != null) return candidate.dataValue();
+            return candidate.value();
+        }
+        return examples == null ? schemaExample(schema) : null;
+    }
+
+    private @Nullable ExampleObject firstExample(@Nullable Map<String, ReferenceOr<ExampleObject>> examples) throws IOException {
+        Map<String, ExampleObject> resolved = resolvedExamples(examples);
+        if (resolved != null) for (ExampleObject candidate : resolved.values()) {
+            if (candidate.serializedValue() != null || candidate.dataValue() != null || candidate.value() != null) return candidate;
+        }
+        return null;
+    }
+
+    private @Nullable Object querystringExample(ParameterObject parameter) throws IOException {
+        if (parameter.example() != null) return parameter.example();
+        String parameterExample = serializedExample(parameter.examplesOrReferences());
+        if (parameterExample != null) return parameterExample;
+        for (MediaTypeObject media : resolvedContent(parameter.contentOrReferences()).values()) {
+            if (media.example() != null) return media.example();
+            String mediaExample = serializedExample(media.examplesOrReferences());
+            if (mediaExample != null) return mediaExample;
+            return schemaExample(resolvedSchema(media.schema()));
+        }
+        return null;
+    }
+
+    private @Nullable String serializedExample(@Nullable Map<String, ReferenceOr<ExampleObject>> values) throws IOException {
+        Map<String, ExampleObject> examples = resolvedExamples(values);
+        if (examples != null) for (ExampleObject example : examples.values()) {
+            if (example.serializedValue() != null) return example.serializedValue();
+            if (example.value() instanceof String) return (String) example.value();
+            if (example.dataValue() instanceof String) return (String) example.dataValue();
+        }
+        return null;
     }
 
     private static void appendQuery(StringBuilder query, ParameterObject parameter, @Nullable Object sample) {
@@ -440,6 +515,16 @@ class HtmlDocumentor {
     private static void appendQueryValue(StringBuilder query, String name, @Nullable Object value) {
         query.append(query.length() == 0 ? '?' : '&').append(urlEncode(name)).append('=')
             .append(urlEncode(value == null ? "" : value.toString()));
+    }
+
+    private Map<String, MediaTypeObject> resolvedContent(@Nullable Map<String, ReferenceOr<MediaTypeObject>> content) throws IOException {
+        Map<String, MediaTypeObject> result = new LinkedHashMap<>();
+        if (content != null) for (Map.Entry<String, ReferenceOr<MediaTypeObject>> entry : content.entrySet()) {
+            renderReference(entry.getValue());
+            MediaTypeObject value = references.resolve(entry.getValue(), MediaTypeObject.class);
+            if (value != null) result.put(entry.getKey(), value);
+        }
+        return result;
     }
 
     private @Nullable SchemaObject resolvedSchema(@Nullable SchemaObject schema) {
@@ -499,7 +584,7 @@ class HtmlDocumentor {
     }
 
     private void renderExamples(@Nullable Object example, @Nullable Map<String, ExampleObject> examples, @Nullable Object defaultVal) throws IOException {
-        if (example != null) {
+        if (example != null && examples == null) {
             El div = new El("div").open().content("Example: ");
             render("code", example.toString());
             div.close();
@@ -510,6 +595,8 @@ class HtmlDocumentor {
                 new El("code").open().content(exampleEntry.getKey()).close();
                 ExampleObject ex = exampleEntry.getValue();
                 new El("span").open().content(" ", ex.summary(), " ", ex.description()).close();
+                if (ex.dataValue() != null) { render("p", "Parsed value"); render("pre", String.valueOf(ex.dataValue())); }
+                if (ex.serializedValue() != null) { render("p", "Serialized value"); render("pre", ex.serializedValue()); }
                 new El("pre").open().content(ex.value()).close();
 
                 div.close();

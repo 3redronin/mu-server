@@ -12,7 +12,7 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
 public class RequestBodyObjectBuilder {
     private @Nullable Map<String, Object> extensions;
     private @Nullable String description;
-    private @Nullable Map<String, MediaTypeObject> content;
+    private @Nullable Map<String, ReferenceOr<MediaTypeObject>> content;
     private @Nullable Boolean required;
 
     /**
@@ -36,7 +36,7 @@ public class RequestBodyObjectBuilder {
      * @return The current builder
      */
     public RequestBodyObjectBuilder withContent(Map<String, MediaTypeObject> content) {
-        this.content = content;
+        this.content = ReferenceValues.inline(content);
         return this;
     }
 
@@ -81,4 +81,7 @@ public class RequestBodyObjectBuilder {
         extensions = copy;
         return this;
     }
+    /** @param value inline media types and references
+     * @return this builder */
+    public RequestBodyObjectBuilder withContentOrReferences(@Nullable Map<String, ReferenceOr<MediaTypeObject>> value) { this.content = value; return this; }
 }

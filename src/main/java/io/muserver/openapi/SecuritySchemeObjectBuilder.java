@@ -13,6 +13,8 @@ import java.net.URI;
  * <a href="https://tools.ietf.org/html/draft-ietf-oauth-discovery-06">OpenID Connect Discovery</a>.</p>
  */
 public class SecuritySchemeObjectBuilder {
+    private java.net.@Nullable URI oauth2MetadataUrl;
+    private @Nullable Boolean deprecated;
     private @Nullable Map<String, Object> extensions;
     private @Nullable String type;
     private @Nullable String description;
@@ -121,7 +123,7 @@ public class SecuritySchemeObjectBuilder {
      * @return A new object
      */
     public SecuritySchemeObject build() {
-        return new SecuritySchemeObject(type, description, name, in, scheme, bearerFormat, flows, openIdConnectUrl, extensions);
+        return new SecuritySchemeObject(type, description, name, in, scheme, bearerFormat, flows, openIdConnectUrl, oauth2MetadataUrl, deprecated, extensions);
     }
 
     /**
@@ -147,4 +149,21 @@ public class SecuritySchemeObjectBuilder {
         extensions = copy;
         return this;
     }
+    /**
+     * Identifies the OAuth authorization server metadata document defined by RFC 8414.
+     * Consumers can use it to discover endpoints and server capabilities.
+     * This applies only to an {@code oauth2} security scheme; the endpoint must use TLS.
+     *
+     * @param value the authorization server metadata URL, or null to omit it
+     * @return this builder
+     */
+    public SecuritySchemeObjectBuilder withOauth2MetadataUrl(java.net.@Nullable URI value) { this.oauth2MetadataUrl = value; return this; }
+    /**
+     * Marks this security scheme as deprecated so consumers know to migrate away from it.
+     * The default is false. This is documentation metadata and does not disable authentication.
+     *
+     * @param value whether consumers should avoid this security scheme, or null to omit it
+     * @return this builder
+     */
+    public SecuritySchemeObjectBuilder withDeprecated(@Nullable Boolean value) { this.deprecated = value; return this; }
 }

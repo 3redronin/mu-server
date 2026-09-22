@@ -10,6 +10,10 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * Each Media Type Object provides schema and examples for the media type identified by its key.
  */
 public class MediaTypeObjectBuilder {
+    private @Nullable String description;
+    private @Nullable SchemaObject itemSchema;
+    private java.util.@Nullable List<EncodingObject> prefixEncoding;
+    private @Nullable EncodingObject itemEncoding;
     private @Nullable Map<String, Object> extensions;
     private @Nullable SchemaObject schema;
     private @Nullable Object example;
@@ -68,7 +72,7 @@ public class MediaTypeObjectBuilder {
      * @return A new object
      */
     public MediaTypeObject build() {
-        return new MediaTypeObject(schema, example, immutable(examples), immutable(encoding), extensions);
+        return new MediaTypeObject(schema, example, immutable(examples), immutable(encoding), description, itemSchema, prefixEncoding, itemEncoding, extensions);
     }
 
     /**
@@ -118,6 +122,46 @@ public class MediaTypeObjectBuilder {
             }
             combined = alternatives.size() == 1 ? a : SchemaObjectBuilder.schemaObject().withAnyOf(new java.util.ArrayList<>(alternatives.values())).build();
         }
-        return primary.toBuilder().withSchema(combined);
+        SchemaObject itemA = primary.itemSchema();
+        SchemaObject itemB = secondary.itemSchema();
+        SchemaObject item = itemA == null ? itemB : itemB == null || itemA.toString().equals(itemB.toString()) ? itemA
+            : SchemaObjectBuilder.schemaObject().withAnyOf(java.util.Arrays.asList(itemA, itemB)).build();
+        return primary.toBuilder().withSchema(combined).withItemSchema(item);
     }
+    /**
+     * Describes this representation for API consumers. CommonMark formatting may be used.
+     *
+     * @param value the description of this media-type representation, or null to omit it
+     * @return this builder
+     */
+    public MediaTypeObjectBuilder withDescription(@Nullable String value) { this.description = value; return this; }
+    /**
+     * Describes each parsed item in sequential content, such as an event stream or newline-delimited JSON.
+     * This can coexist with {@link #withSchema(SchemaObject)}, which describes the entire body.
+     * For server-sent events, the item describes a parsed event and its data field remains a string;
+     * a JSON payload inside that string needs separate decoding.
+     *
+     * @param value the schema for each stream item, or null to omit it
+     * @return this builder
+     */
+    public MediaTypeObjectBuilder withItemSchema(@Nullable SchemaObject value) { this.itemSchema = value; return this; }
+    /**
+     * Specifies how to encode the initial parts of multipart content by position.
+     * Each list entry applies to the part at the same index. Remaining parts use
+     * {@link #withItemEncoding(EncodingObject)} or the default encoding rules.
+     * This cannot be combined with named {@link #withEncoding(Map)} entries.
+     *
+     * @param value the encodings for the initial multipart parts, in order, or null to omit it
+     * @return this builder
+     */
+    public MediaTypeObjectBuilder withPrefixEncoding(java.util.@Nullable List<EncodingObject> value) { this.prefixEncoding = value; return this; }
+    /**
+     * Specifies the encoding for multipart parts after those covered by
+     * {@link #withPrefixEncoding(java.util.List)}, or for all parts when no prefix is given.
+     * This cannot be combined with named {@link #withEncoding(Map)} entries.
+     *
+     * @param value the encoding for remaining multipart parts, or null to omit it
+     * @return this builder
+     */
+    public MediaTypeObjectBuilder withItemEncoding(@Nullable EncodingObject value) { this.itemEncoding = value; return this; }
 }

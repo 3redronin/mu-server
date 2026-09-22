@@ -22,6 +22,9 @@ public class SchemaObjectCustomizerContext {
     private final Method method;
     private final @Nullable String parameter;
     private final MediaType mediaType;
+    private final @Nullable String eventName;
+    private final @Nullable Class<?> payloadType;
+    private final @Nullable MediaType payloadMediaType;
     private final @Nullable String parameterLocation;
 
     SchemaObjectCustomizerContext(SchemaObjectCustomizerTarget target, Class<?> type, @Nullable Type parameterizedType, @Nullable Object resource, Method method, @Nullable String parameter, MediaType mediaType) {
@@ -29,6 +32,15 @@ public class SchemaObjectCustomizerContext {
     }
 
     SchemaObjectCustomizerContext(SchemaObjectCustomizerTarget target, Class<?> type, @Nullable Type parameterizedType, @Nullable Object resource, Method method, @Nullable String parameter, MediaType mediaType, @Nullable String parameterLocation) {
+        this(target, type, parameterizedType, resource, method, parameter, mediaType, parameterLocation, null, null, null);
+    }
+
+    SchemaObjectCustomizerContext(SchemaObjectCustomizerTarget target, Class<?> type, @Nullable Type parameterizedType,
+        @Nullable Object resource, Method method, @Nullable String parameter, MediaType mediaType, @Nullable String parameterLocation,
+        @Nullable String eventName, @Nullable Class<?> payloadType, @Nullable MediaType payloadMediaType) {
+        this.eventName = eventName;
+        this.payloadType = payloadType;
+        this.payloadMediaType = payloadMediaType;
         this.parameterLocation = parameterLocation;
         this.target = requireNonNull(target, "target");
         this.type = requireNonNull(type, "type");
@@ -107,4 +119,10 @@ public class SchemaObjectCustomizerContext {
             ", mediaType=" + mediaType +
             '}';
     }
+    /** @return the declared SSE name, including an empty string for unnamed events */
+    public Optional<String> eventName() { return Optional.ofNullable(eventName); }
+    /** @return the Java type serialized into the SSE data string */
+    public Optional<Class<?>> payloadType() { return Optional.ofNullable(payloadType); }
+    /** @return the serialization media type of the SSE data string */
+    public Optional<MediaType> payloadMediaType() { return Optional.ofNullable(payloadMediaType); }
 }

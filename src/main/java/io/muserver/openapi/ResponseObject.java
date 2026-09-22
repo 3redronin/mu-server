@@ -13,17 +13,18 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see ResponseObjectBuilder
  */
 public class ResponseObject implements JsonWriter {
+    private final @Nullable String summary;
     private final Map<String, Object> extensions;
 
-    private final String description;
+    private final @Nullable String description;
     private final @Nullable Map<String, ReferenceOr<HeaderObject>> headers;
-    private final @Nullable Map<String, MediaTypeObject> content;
+    private final @Nullable Map<String, ReferenceOr<MediaTypeObject>> content;
     private final @Nullable Map<String, ReferenceOr<LinkObject>> links;
 
-    ResponseObject(@Nullable String description, @Nullable Map<String, ReferenceOr<HeaderObject>> headers, @Nullable Map<String, MediaTypeObject> content, @Nullable Map<String, ReferenceOr<LinkObject>> links, @Nullable Map<String, Object> extensions) {
+    ResponseObject(@Nullable String description, @Nullable Map<String, ReferenceOr<HeaderObject>> headers, @Nullable Map<String, ReferenceOr<MediaTypeObject>> content, @Nullable Map<String, ReferenceOr<LinkObject>> links, @Nullable String summary, @Nullable Map<String, Object> extensions) {
+        this.summary = summary;
         this.extensions = Extensions.copy(extensions);
-        notNull("description", description);
-        this.description = java.util.Objects.requireNonNull(description);
+        this.description = description;
         this.headers = headers;
         this.content = content;
         this.links = links;
@@ -37,6 +38,7 @@ public class ResponseObject implements JsonWriter {
         isFirst = append(writer, "headers", headers, isFirst);
         isFirst = append(writer, "content", content, isFirst);
         isFirst = append(writer, "links", links, isFirst);
+        isFirst = Jsonizer.append(writer, "summary", summary, isFirst);
         isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
@@ -44,7 +46,7 @@ public class ResponseObject implements JsonWriter {
     /**
      * @return the value described by {@link ResponseObjectBuilder#withDescription}
      */
-    public String description() {
+    public @Nullable String description() {
         return description;
     }
 
@@ -59,7 +61,7 @@ public class ResponseObject implements JsonWriter {
       @return the value described by {@link ResponseObjectBuilder#withContent}
      */
     public @Nullable Map<String, MediaTypeObject> content() {
-        return content;
+        return ReferenceValues.values(content);
     }
 
     /**
@@ -77,6 +79,13 @@ public class ResponseObject implements JsonWriter {
     /** @return a builder preserving all fields and extensions */
     public ResponseObjectBuilder toBuilder() {
         return new ResponseObjectBuilder()
-            .withExtensions(extensions).withDescription(description).withHeadersOrReferences(headers).withContent(content).withLinksOrReferences(links);
+            .withSummary(summary).withExtensions(extensions).withDescription(description).withHeadersOrReferences(headers).withContentOrReferences(content).withLinksOrReferences(links);
     }
+    /**
+     * @return the response summary, or null when omitted
+     * @see ResponseObjectBuilder#withSummary
+     */
+    public @Nullable String summary() { return summary; }
+    /** @return inline media types and references */
+    public @Nullable Map<String, ReferenceOr<MediaTypeObject>> contentOrReferences() { return content; }
 }

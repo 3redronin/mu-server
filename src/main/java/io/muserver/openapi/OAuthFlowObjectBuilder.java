@@ -11,6 +11,7 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * Configuration details for a supported OAuth Flow
  */
 public class OAuthFlowObjectBuilder {
+    private java.net.@Nullable URI deviceAuthorizationUrl;
     private @Nullable Map<String, Object> extensions;
     private @Nullable URI authorizationUrl;
     private @Nullable URI tokenUrl;
@@ -65,7 +66,7 @@ public class OAuthFlowObjectBuilder {
      * @return A new object
      */
     public OAuthFlowObject build() {
-        return new OAuthFlowObject(authorizationUrl, tokenUrl, refreshUrl, immutable(scopes), extensions);
+        return new OAuthFlowObject(authorizationUrl, tokenUrl, refreshUrl, immutable(scopes), deviceAuthorizationUrl, extensions);
     }
 
     /**
@@ -91,4 +92,13 @@ public class OAuthFlowObjectBuilder {
         extensions = copy;
         return this;
     }
+    /**
+     * Sets the endpoint where a client starts device authorization to obtain device and user codes.
+     * This URL is required in a device authorization flow and forbidden in the other flow slots.
+     * The device flow also requires a token URL, where the client polls for an access token.
+     *
+     * @param value the device authorization endpoint URL, or null to omit it
+     * @return this builder
+     */
+    public OAuthFlowObjectBuilder withDeviceAuthorizationUrl(java.net.@Nullable URI value) { this.deviceAuthorizationUrl = value; return this; }
 }

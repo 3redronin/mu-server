@@ -1,6 +1,6 @@
 package io.muserver.openapi;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -18,7 +18,7 @@ public class OpenApi31FieldCoverageTest {
     @Parameterized.Parameters(name="{0}.{1}") public static Collection<Object[]> fields() throws Exception {
         List<Object[]> fields = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-            Objects.requireNonNull(OpenApi31FieldCoverageTest.class.getResourceAsStream("/openapi-3.1/field-coverage.tsv")), StandardCharsets.UTF_8))) {
+            Objects.requireNonNull(OpenApi31FieldCoverageTest.class.getResourceAsStream("/openapi/field-coverage.tsv")), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) if (!line.startsWith("#")) fields.add(line.split("\t"));
         }
@@ -44,15 +44,25 @@ public class OpenApi31FieldCoverageTest {
             if (keyword.equals("flows")) call(builder, "withType", "oauth2");
             if (keyword.equals("openIdConnectUrl")) call(builder, "withType", "openIdConnect");
         }
+        if (model.equals("SecuritySchemeObject") && keyword.equals("oauth2MetadataUrl")) {
+            call(builder, "withScheme", null); call(builder, "withType", "oauth2");
+            call(builder, "withFlows", OAuthFlowsObjectBuilder.oAuthFlowsObject().build());
+        }
+        if (model.equals("OAuthFlowObject") && keyword.equals("deviceAuthorizationUrl")) call(builder, "withAuthorizationUrl", null);
         method.invoke(builder, value);
         Object built = builder.getClass().getMethod("build").invoke(builder);
         assertNotNull(type.getMethod(getter).invoke(built));
-        JsonNode document = json(built);
-        OfflineOpenApiValidator.object(model, document);
+        JSONObject document = json(built);
+        if (model.equals("OAuthFlowObject")) {
+            OAuthFlowsObjectBuilder flows = OAuthFlowsObjectBuilder.oAuthFlowsObject();
+            if (keyword.equals("deviceAuthorizationUrl")) flows.withDeviceAuthorization((OAuthFlowObject) built);
+            else flows.withAuthorizationCode((OAuthFlowObject) built);
+            OfflineOpenApiValidator.object("OAuthFlowsObject", json(flows.build()));
+        } else OfflineOpenApiValidator.object(model, document);
         // These explicit values equal their context-dependent defaults and are intentionally omitted.
         if (!(keyword.equals("style") && model.equals("HeaderObject"))) assertTrue(document.toString(), document.has(keyword));
         Object copy = type.getMethod("toBuilder").invoke(built);
-        assertEquals(document, json(copy.getClass().getMethod("build").invoke(copy)));
+        assertJsonEquals(document, json(copy.getClass().getMethod("build").invoke(copy)));
         if (!model.equals("ReferenceObject") && !model.equals("SecurityRequirementObject")) {
             Method extension = builder.getClass().getMethod("withExtension", String.class, Object.class);
             extension.invoke(builder, "x-test", Arrays.asList(1, JsonNull.INSTANCE));
@@ -79,11 +89,12 @@ public class OpenApi31FieldCoverageTest {
             if (generic.getRawType() == ReferenceOr.class) return ReferenceOr.inline(sample(generic.getActualTypeArguments()[0], field, model));
         }
         if (type == String.class) {
+            if (field.equals("nodeType")) return "element";
             if (field.equals("type")) return model.equals("SecuritySchemeObject") ? "http" : "string";
             if (field.equals("in")) return "query";
             if (field.equals("style")) return model.equals("HeaderObject") ? "simple" : "pipeDelimited";
             if (field.equals("email")) return "a@example.test";
-            if (field.equals("$schema") || field.equals("jsonSchemaDialect")) return "https://spec.openapis.org/oas/3.1/dialect/2024-11-10";
+            if (field.equals("$schema") || field.equals("jsonSchemaDialect")) return "https://spec.openapis.org/oas/3.2/dialect/2026-02-26";
             if (field.equals("$ref")) return "#/components/schemas/Value";
             if (field.equals("operationRef")) return "#/paths/~1item/get";
             if (field.equals("scheme")) return "bearer";
@@ -99,6 +110,7 @@ public class OpenApi31FieldCoverageTest {
         Object fixture = fixture((Class<?>) type);
         if (type == OAuthFlowObject.class) {
             OAuthFlowObjectBuilder flow = ((OAuthFlowObject) fixture).toBuilder();
+            if (field.equals("deviceAuthorization")) flow.withAuthorizationUrl(null).withDeviceAuthorizationUrl(URI.create("https://example.test/device"));
             if (field.equals("implicit")) flow.withTokenUrl(null);
             if (field.equals("password") || field.equals("clientCredentials")) flow.withAuthorizationUrl(null);
             return flow.build();

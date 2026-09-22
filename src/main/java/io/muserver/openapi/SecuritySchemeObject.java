@@ -17,6 +17,8 @@ import static java.util.Arrays.asList;
  * @see SecuritySchemeObjectBuilder
  */
 public class SecuritySchemeObject implements JsonWriter {
+    private final java.net.@Nullable URI oauth2MetadataUrl;
+    private final @Nullable Boolean deprecated;
     private final Map<String, Object> extensions;
     private static final List<String> validTypes = asList("apiKey", "http", "oauth2", "openIdConnect", "mutualTLS");
 
@@ -29,7 +31,10 @@ public class SecuritySchemeObject implements JsonWriter {
     private final @Nullable OAuthFlowsObject flows;
     private final @Nullable URI openIdConnectUrl;
 
-    SecuritySchemeObject(@Nullable String type, @Nullable String description, @Nullable String name, @Nullable String in, @Nullable String scheme, @Nullable String bearerFormat, @Nullable OAuthFlowsObject flows, @Nullable URI openIdConnectUrl, @Nullable Map<String, Object> extensions) {
+    SecuritySchemeObject(@Nullable String type, @Nullable String description, @Nullable String name, @Nullable String in, @Nullable String scheme, @Nullable String bearerFormat, @Nullable OAuthFlowsObject flows, @Nullable URI openIdConnectUrl, java.net.@Nullable URI oauth2MetadataUrl, @Nullable Boolean deprecated, @Nullable Map<String, Object> extensions) {
+        this.oauth2MetadataUrl = oauth2MetadataUrl;
+        this.deprecated = deprecated;
+        if (oauth2MetadataUrl != null && !"oauth2".equals(type)) throw new IllegalArgumentException("oauth2MetadataUrl requires oauth2");
         this.extensions = Extensions.copy(extensions);
         notNull("type", type);
         java.util.Objects.requireNonNull(type);
@@ -74,6 +79,8 @@ public class SecuritySchemeObject implements JsonWriter {
         isFirst = append(writer, "bearerFormat", bearerFormat, isFirst);
         isFirst = append(writer, "flows", flows, isFirst);
         isFirst = append(writer, "openIdConnectUrl", openIdConnectUrl, isFirst);
+        isFirst = Jsonizer.append(writer, "oauth2MetadataUrl", oauth2MetadataUrl, isFirst);
+        isFirst = Jsonizer.append(writer, "deprecated", deprecated, isFirst);
         isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
@@ -146,6 +153,16 @@ public class SecuritySchemeObject implements JsonWriter {
     /** @return a builder preserving all fields and extensions */
     public SecuritySchemeObjectBuilder toBuilder() {
         return new SecuritySchemeObjectBuilder()
-            .withExtensions(extensions).withType(type).withDescription(description).withName(name).withIn(in).withScheme(scheme).withBearerFormat(bearerFormat).withFlows(flows).withOpenIdConnectUrl(openIdConnectUrl);
+            .withOauth2MetadataUrl(oauth2MetadataUrl).withDeprecated(deprecated).withExtensions(extensions).withType(type).withDescription(description).withName(name).withIn(in).withScheme(scheme).withBearerFormat(bearerFormat).withFlows(flows).withOpenIdConnectUrl(openIdConnectUrl);
     }
+    /**
+     * @return the authorization server metadata URL, or null when omitted
+     * @see SecuritySchemeObjectBuilder#withOauth2MetadataUrl
+     */
+    public java.net.@Nullable URI oauth2MetadataUrl() { return oauth2MetadataUrl; }
+    /**
+     * @return whether consumers should avoid this security scheme, or null when omitted
+     * @see SecuritySchemeObjectBuilder#withDeprecated
+     */
+    public @Nullable Boolean deprecated() { return deprecated; }
 }

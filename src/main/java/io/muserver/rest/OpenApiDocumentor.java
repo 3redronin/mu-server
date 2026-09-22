@@ -77,14 +77,25 @@ class OpenApiDocumentor implements MuHandler {
         Map<String, PathItemObjectBuilder> pathItemBuilders = new LinkedHashMap<>();
         Set<String> operationIds = new HashSet<>();
         if (openAPIObject.paths() != null && openAPIObject.paths().pathItemObjects() != null) {
-            for (PathItemObject path : openAPIObject.paths().pathItemObjects().values()) if (path.operations() != null) {
-                for (OperationObject operation : path.operations().values()) if (operation.operationId() != null) operationIds.add(operation.operationId());
+            for (PathItemObject path : openAPIObject.paths().pathItemObjects().values()) {
+                if (path.operations() != null) for (OperationObject operation : path.operations().values()) {
+                    if (operation.operationId() != null) operationIds.add(operation.operationId());
+                }
+                if (path.additionalOperations() != null) for (OperationObject operation : path.additionalOperations().values()) {
+                    if (operation.operationId() != null) operationIds.add(operation.operationId());
+                }
             }
         }
         for (ResourceClass root : roots) {
             addResourceClass(0, Collections.emptyList(), tags, pathItemBuilders, operationIds, root);
         }
-        Map<String, PathItemObject> pathItems = pathItemBuilders.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, v -> v.getValue().build()));
+        Map<String, PathItemObject> pathItems = pathItemBuilders.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, v -> {
+            PathItemObjectBuilder builder = v.getValue();
+            Map<String, OperationObject> operations = new LinkedHashMap<>(Objects.requireNonNull(builder.operations()));
+            OperationObject connect = operations.remove("connect");
+            if (connect != null) builder.withAdditionalOperations(Collections.singletonMap("CONNECT", connect));
+            return builder.withOperations(operations).build();
+        }));
 
 
         if (openAPIObject.paths() != null && openAPIObject.paths().pathItemObjects() != null) {
@@ -92,7 +103,10 @@ class OpenApiDocumentor implements MuHandler {
                 Map<String, OperationObject> operations = new LinkedHashMap<>();
                 if (generated.operations() != null) operations.putAll(generated.operations());
                 if (explicit.operations() != null) operations.putAll(explicit.operations());
-                return explicit.toBuilder().withOperations(operations).build();
+                Map<String, OperationObject> additional = new LinkedHashMap<>();
+                if (generated.additionalOperations() != null) additional.putAll(generated.additionalOperations());
+                if (explicit.additionalOperations() != null) additional.putAll(explicit.additionalOperations());
+                return explicit.toBuilder().withOperations(operations).withAdditionalOperations(additional.isEmpty() ? null : additional).build();
             }));
         }
 

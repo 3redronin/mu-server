@@ -14,6 +14,7 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  */
 public class PathItemObjectBuilder {
     private @Nullable String ref;
+    private @Nullable Map<String, OperationObject> additionalOperations;
     private @Nullable Map<String, Object> extensions;
     private @Nullable String summary;
     private @Nullable String description;
@@ -84,7 +85,7 @@ public class PathItemObjectBuilder {
      * @return A new object
      */
     public PathItemObject build() {
-        return new PathItemObject(summary, description, immutable(operations), immutable(servers), immutable(parameters), ref, extensions);
+        return new PathItemObject(summary, description, immutable(operations), immutable(servers), immutable(parameters), ref, additionalOperations, extensions);
     }
 
     /**
@@ -141,4 +142,14 @@ public class PathItemObjectBuilder {
      * @param value inline values and references for parameters
      * @return this builder */
     public PathItemObjectBuilder withParametersOrReferences(@Nullable List<ReferenceOr<ParameterObject>> value) { this.parameters = value; return this; }
+    /**
+     * Adds operations for HTTP methods without a dedicated path-item field, such as {@code CONNECT}.
+     * Keys are case-sensitive HTTP method tokens. Uppercase standard methods such as {@code GET}
+     * and {@code QUERY} belong in {@link #withOperations(Map)} instead.
+     * Describing an operation does not register a runtime route.
+     *
+     * @param value the operations keyed by exact HTTP method name, or null to omit it
+     * @return this builder
+     */
+    public PathItemObjectBuilder withAdditionalOperations(@Nullable Map<String, OperationObject> value) { this.additionalOperations = value; return this; }
 }

@@ -10,6 +10,8 @@ import java.net.URI;
  * A builder for {@link ExampleObject} objects
  */
 public class ExampleObjectBuilder {
+    private @Nullable Object dataValue;
+    private @Nullable String serializedValue;
     private @Nullable Map<String, Object> extensions;
     private @Nullable String summary;
     private @Nullable String description;
@@ -69,7 +71,7 @@ public class ExampleObjectBuilder {
      * @return A new object
      */
     public ExampleObject build() {
-        return new ExampleObject(summary, description, value, externalValue, extensions);
+        return new ExampleObject(summary, description, value, externalValue, dataValue, serializedValue, extensions);
     }
 
     /**
@@ -95,4 +97,24 @@ public class ExampleObjectBuilder {
         extensions = copy;
         return this;
     }
+    /**
+     * Sets the example as parsed data, before media-type or parameter serialization.
+     * It should match the associated schema. Use {@link JsonNull#INSTANCE} for an explicit JSON null.
+     * It may accompany a serialized or external representation, but cannot be combined with
+     * the legacy {@link #withValue(Object)} field.
+     *
+     * @param value the parsed example data, or null to omit it
+     * @return this builder
+     */
+    public ExampleObjectBuilder withDataValue(@Nullable Object value) { this.dataValue = value; return this; }
+    /**
+     * Sets the example in its serialized wire format, with applicable encoding rules already applied.
+     * For a media type this is the complete body, for example {@code q=one%20two&sort=date}
+     * for form-urlencoded content. An empty string is an explicit empty example.
+     * This may accompany parsed data, but cannot be combined with the legacy value or an external value.
+     *
+     * @param value the serialized example text, or null to omit it
+     * @return this builder
+     */
+    public ExampleObjectBuilder withSerializedValue(@Nullable String value) { this.serializedValue = value; return this; }
 }

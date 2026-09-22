@@ -10,6 +10,9 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * A single encoding definition applied to a single schema property.
  */
 public class EncodingObjectBuilder {
+    private @Nullable Map<String, EncodingObject> encoding;
+    private java.util.@Nullable List<EncodingObject> prefixEncoding;
+    private @Nullable EncodingObject itemEncoding;
     private @Nullable Map<String, Object> extensions;
     private @Nullable String contentType;
     private @Nullable Map<String, ReferenceOr<HeaderObject>> headers;
@@ -93,7 +96,7 @@ public class EncodingObjectBuilder {
      * @return A new object
      */
     public EncodingObject build() {
-        return new EncodingObject(contentType, immutable(headers), style, explode, allowReserved, extensions);
+        return new EncodingObject(contentType, immutable(headers), style, explode, allowReserved, encoding, prefixEncoding, itemEncoding, extensions);
     }
 
     /**
@@ -123,4 +126,32 @@ public class EncodingObjectBuilder {
      * @param value inline values and references for headers
      * @return this builder */
     public EncodingObjectBuilder withHeadersOrReferences(@Nullable Map<String, ReferenceOr<HeaderObject>> value) { this.headers = value; return this; }
+    /**
+     * Describes the encoding of named properties within this part when its content is itself
+     * multipart or form-urlencoded. This allows nested multipart descriptions.
+     * Named encodings cannot be combined with positional prefix or item encodings.
+     *
+     * @param value the nested encodings keyed by property name, or null to omit it
+     * @return this builder
+     */
+    public EncodingObjectBuilder withEncoding(@Nullable Map<String, EncodingObject> value) { this.encoding = value; return this; }
+    /**
+     * Describes the initial parts, by position, when this part contains nested multipart content.
+     * Each list entry applies to the nested part at the same index. Remaining parts use
+     * {@link #withItemEncoding(EncodingObject)} or default encoding rules.
+     * This cannot be combined with {@link #withEncoding(Map)}.
+     *
+     * @param value the encodings for the initial nested multipart parts, in order, or null to omit it
+     * @return this builder
+     */
+    public EncodingObjectBuilder withPrefixEncoding(java.util.@Nullable List<EncodingObject> value) { this.prefixEncoding = value; return this; }
+    /**
+     * Describes remaining parts in nested multipart content after those covered by
+     * {@link #withPrefixEncoding(java.util.List)}, or all nested parts when no prefix is given.
+     * This cannot be combined with {@link #withEncoding(Map)}.
+     *
+     * @param value the encoding for remaining nested multipart parts, or null to omit it
+     * @return this builder
+     */
+    public EncodingObjectBuilder withItemEncoding(@Nullable EncodingObject value) { this.itemEncoding = value; return this; }
 }
