@@ -92,3 +92,81 @@ with the existing 3.1 suite. The validator refuses unbundled network resources;
 all validation dependencies remain test-only.
 
 Normative specification: https://spec.openapis.org/oas/v3.2.1.html
+
+## Behavioral audit for PR 251
+
+The field TSV is **preservation coverage**, not proof of contextual validity or
+presentation. The following is the separate behavioral checklist. Test class
+names refer to `src/test/java/io/muserver/{openapi,rest}`. Sources are sections
+of the [normative 3.2.1 specification](https://spec.openapis.org/oas/v3.2.1.html).
+Generation precedence and curl selection are library policies; the specification
+supplies the meaning of the generated contracts, not Java annotation precedence.
+
+| Behavior and normative source | Positive, negative and interaction coverage |
+| --- | --- |
+| Version, `$self` and URI fragments ([OpenAPI Object](https://spec.openapis.org/oas/v3.2.1.html#openapi-object)) | `OpenApi32ModelTest.selfPreservesValidUriReferencesThroughCopyingAndSerialization`, `selfRejectsFragmentsIncludingEmptyFragments`, `selfRejectsMalformedUriReferences`; reference resolution below. |
+| Server name and tag summary/parent/kind ([Server Object](https://spec.openapis.org/oas/v3.2.1.html#server-object), [Tag Object](https://spec.openapis.org/oas/v3.2.1.html#tag-object)) | `OpenApi32BehaviorTest.serverMetadataDoesNotAlterUrlTemplatesAndEmptyNamesArePreserved`, `tagHierarchyRejectsMissingParentsAndCyclesButAllowsForwardDeclarations`: absent/empty, snapshots, forward parents, missing parents, self and multi-tag cycles. |
+| QUERY, additional operations, casing and IDs ([Path Item Object](https://spec.openapis.org/oas/v3.2.1.html#path-item-object), [Operation Object](https://spec.openapis.org/oas/v3.2.1.html#operation-object)) | `OpenApi32ReviewRegressionTest.standardAndLowercaseAdditionalOperationsBothRender`, `additionalOperationCasingSurvivesCurlAndHeadings`, `generatedIdsAvoidAdditionalOperationIds`, `curlPreservesShellMetacharactersInCustomMethods`; existing path validation and field tests retain invalid method checks. |
+| Parameter locations, defaults and querystring exclusion ([Parameter Object](https://spec.openapis.org/oas/v3.2.1.html#parameter-object)) | `OpenApi32CookieTest` tests all three cookie styles with absent/true/false explode and JSON omission; `OpenApi32ModelTest.querystringConflictsAreCheckedAcrossPathAndOperation`; `OpenApi31DocumentTest.contextSensitiveValidationAndDefaults`; `OpenApiParameterContextTest` retains runtime/context checks. |
+| Every new media reference position ([Components Object](https://spec.openapis.org/oas/v3.2.1.html#components-object), [Reference Object](https://spec.openapis.org/oas/v3.2.1.html#reference-object)) | `OpenApi32BehaviorTest.newReferencePositionsKeepSnapshotsAndFailClearlyForInlineAccess` covers components, request bodies, responses, parameters and headers, immutable snapshots, copies, inline-access errors and conflicting merges; `OpenApi32MediaTypeKeyTest` covers valid/invalid inline and reference component names. |
+| Local and `$self`-relative references ([Relative References](https://spec.openapis.org/oas/v3.2.1.html#relative-references-in-api-description-uris)) | `OpenApi32ReferencesTest` covers local, absolute and relative targets, pointer escapes, percent-encoded spaces, literal plus, missing/malformed/external targets and cycles. `OpenApi31HtmlTest.localCyclicAndExternalReferencesAndBooleanUnionsRender` retains presentation coverage. No network resolution. |
+| Examples: parsed versus serialized, empty/false/null, conflicts ([Example Object](https://spec.openapis.org/oas/v3.2.1.html#example-object)) | `OpenApi32BehaviorTest.examplesPreserveFalseEmptyAndNullButRejectConflictingRepresentations`; `OpenApi32PresentationTest.referencedSerializedBodyOverridesSchemaExampleWithoutShellExpansion`; querystring precedence/reference regressions remain in `OpenApi32ReviewRegressionTest`. |
+| XML compatibility ([XML Object](https://spec.openapis.org/oas/v3.2.1.html#xml-object)) | `OpenApi32BehaviorTest.xmlNodeTypesRejectEveryExplicitLegacyFlag` tests all five node types against both legacy flags and both boolean values; invalid node type remains in `OpenApi32ModelTest`. |
+| Discriminator fallback ([Discriminator Object](https://spec.openapis.org/oas/v3.2.1.html#discriminator-object)) | `OpenApi32BehaviorTest.discriminatorFallbackIsAnAnnotationAndDoesNotChangeValidation` checks accepted/rejected payloads as well as preservation. Mapping is a hint, not a runtime deserializer or an alternative to JSON Schema validation. |
+| Named, positional, item and nested encoding ([Encoding Object](https://spec.openapis.org/oas/v3.2.1.html#encoding-object)) | `OpenApi32BehaviorTest.encodingCombinationsAreCheckedEvenForEmptyCollectionsAndAreImmutable` covers all eight presence combinations at media and nested encoding levels; `OpenApi32ModelTest.streamingFixturesKeepWholeStreamAndItemContracts` exercises streaming media types and merges. |
+| Response summaries, optional/empty descriptions and alternatives ([Response Object](https://spec.openapis.org/oas/v3.2.1.html#response-object), [Media Type Object](https://spec.openapis.org/oas/v3.2.1.html#media-type-object)) | `OpenApi32ReviewRegressionTest.missingResponseDescriptionsAreBackfilledWithoutReplacingExplicitEmptyValues`; `OpenApi31IntegrationTest.overloadsMergeWithoutEmptyBodiesOrLostSchemas`; referenced merge rejection above. |
+| OAuth slot rules and metadata ([OAuth Flow Object](https://spec.openapis.org/oas/v3.2.1.html#oauth-flow-object), [Security Scheme Object](https://spec.openapis.org/oas/v3.2.1.html#security-scheme-object)) | `OpenApi32OAuthTest.urlsAreValidatedInEveryContainingSlot`: all 40 slot/URL-presence combinations, required and forbidden fields, complete documents, refresh URLs, scopes, extensions and copies. `scopesAndExtensionsAreImmutableSnapshotsAndEmptyFlowsAreValid` and `OpenApi32BehaviorTest.securityMetadataIsContextualAndExplicitFalseSurvives` cover snapshots, absent/empty and false. |
+| Generation precedence, registrations and customizers (library policy) | `OpenApi31IntegrationTest.exactGenericRegistrationAndManualRootContentSurvive`, `customizersInlineChangedRegisteredSchemas`, `manualReferencedOperationsWinGeneratedCollisions`; `OpenApi32SseContractTest.manualOperationsOwnGeneratedSseContracts`; interface/class regressions and method customizer tests in `OpenApi32ReviewRegressionTest` and `OpenApi32SseTest`. |
+| SSE detection, statuses, alternatives and payload references ([Media Type Object](https://spec.openapis.org/oas/v3.2.1.html#media-type-object)) | `OpenApi32SseContractTest.sourcesAlternativesReferencesAndExplicitResponsesInteract` covers sink/context, mixed named/unnamed alternatives, invalid data/retry, registered payloads and all bodyless statuses; `duplicatesFailBeforeDocumentPublication`; `OpenApi32SseStatusTest` covers explicit/default statuses and HEAD, including `detectedSseDoesNotInventStatusesBesideExplicitResponseAnnotations`; parameterized media and whole-stream preservation regressions remain. |
+| Parsed SSE and separately decoded JSON ([Sequential Media Types](https://spec.openapis.org/oas/v3.2.1.html#sequential-media-types)) | `OpenApi32SseTest.realFramesValidateAsParsedItemsAndDecodedJsonBeforeClosure` retains bounded real delivery, parsed frame validation and explicit JSON payload decoding. |
+| Effective parameters, example precedence and executable curl (library presentation policy; Parameter/Example Objects above) | `OpenApi32PresentationTest.effectiveParametersAndExamplePrecedenceReachExecutableCurlArguments` checks path inheritance and operation override by name/location; `serializedQueryExamplesAreNotEncodedTwice` and `mediaTypeParametersAreSingleShellArguments` add wire-encoding and header quoting cases; all presentation tests execute actual generated shell commands against a local curl stub and compare every argument. Existing regressions execute unusual method and raw-query examples. |
+
+### Schema versus semantic validation
+
+Official resources and their checksums remain unchanged. The pinned structural
+schema accepts `explode: false` on cookie parameters; normative section 4.12.3
+forbids it for both `form` and `cookie` styles. Section 4.12.4 gives both styles a
+true default. Semantic tests therefore reject explicit false while keeping true
+omitted from JSON. The review suggestion to switch the default to false is not
+applied.
+
+OAuth flow objects have no independent flow type. The offline validator now
+requires a containing `OAuthFlowsObject` instead of selecting a schema from URL
+fields. Field-preservation fixtures choose their slot explicitly. Complete valid
+OAuth documents are also validated offline.
+
+Structural validation does not resolve every reference, enforce tag hierarchy
+acyclicity, interpret discriminator mappings, or decode JSON inside SSE data.
+Those responsibilities have separate tests above. HTML resolves only local
+references and leaves unresolved/external references visible; it does not fetch
+external examples or schemas.
+
+### Audit fixes and reproduction
+
+Before fixes, `OpenApi32CookieTest.explicitFalseIsInvalidForEveryCookieStyle` and
+`OpenApi32OAuthTest.urlsAreValidatedInEveryContainingSlot` failed. The initial
+`OpenApi32PresentationTest` cases failed with lost inherited parameters and
+schema examples replacing named examples. The escaped-pointer test failed on
+`space%20key`. Each now passes with the corresponding fix. Earlier review
+regressions are retained, and new tests are grouped by behavior.
+
+Further interaction tests reproduced an extra 200 beside explicit detected-SSE
+statuses, double-encoded serialized queries, and split shell arguments for media
+type parameters containing apostrophes. The SSE helper now augments existing
+response codes, serialized queries retain their wire representation, and media
+type header arguments use the shared shell-escaping helper.
+
+### Final verification (2026-09-22)
+
+All eight full `clean verify` configurations passed: Java 11, 17, 21 and 25,
+each with Netty 4.1 and 4.2. Each ran 1,521 tests with zero failures, errors or
+skips. Java 21 included the existing NullAway profile on both Netty versions.
+The configurations used isolated source snapshots checked byte-for-byte against
+the final sources; no pinned schema resource changed.
+
+The separate showcase was rebuilt against the final library. Chromium passed
+all operations, 44 query types, 11 feature panels, temporal query/form inputs,
+payments, uploads, boolean schemas, framed JSON and text/JSON/mixed/broadcast
+SSE start/stop. HTTP smoke checks passed. Both `/openapi.json` and
+`/api/features/document` passed the pinned offline validator. Its illustrative
+cookie parameter now uses the normative true explode default.
