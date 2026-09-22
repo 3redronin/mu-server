@@ -10,6 +10,7 @@ final class QueryRequestValidation {
     // Possessive repetition keeps validation bounded even for long quoted parameter values.
     private static final String TOKEN = "[!#$%&'*+.^_`|~0-9A-Za-z-]++";
     private static final String QUOTED = "\"(?:[\\t !#-\\[\\]-~\\x80-\\xFF]|\\\\[\\t !-~\\x80-\\xFF])*+\"";
+    // RFC 9110 section 5.6.6 permits empty parameter entries: *( OWS ";" OWS [ parameter ] ).
     private static final Pattern CONTENT_TYPE = Pattern.compile(
         "[\\t ]*+" + TOKEN + "/" + TOKEN + "[\\t ]*+(?:;[\\t ]*+(?:" + TOKEN + "=(?:" + TOKEN + "|" + QUOTED + "))?[\\t ]*+)*+");
 

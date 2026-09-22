@@ -49,6 +49,53 @@ public class QueryTest {
         }
     }
 
+    @Test public void methodTokensAreCaseSensitiveOnBothProtocols() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        server = httpsServerForTest().withHttp2Config(Http2ConfigBuilder.http2EnabledIfAvailable())
+            .addHandler((req, resp) -> {
+                calls.incrementAndGet();
+                if (req.method() != Method.HEAD) resp.write(req.method().name());
+                return true;
+            }).start();
+        for (Protocol protocol : Arrays.asList(Protocol.HTTP_1_1, Protocol.HTTP_2)) {
+            for (String method : Arrays.asList("query", "Query", "qUERY", "get", "Get", "head", "options", "UNKNOWN",
+                "QUERY", "GET", "HEAD", "OPTIONS")) {
+                int before = calls.get();
+                boolean supported = Arrays.asList("QUERY", "GET", "HEAD", "OPTIONS").contains(method);
+                try (Response response = call(clientFor(protocol), request(server.uri())
+                    .header("Content-Type", "text/plain").method(method, null))) {
+                    assertEquals(protocol, response.protocol());
+                    assertEquals(protocol + " " + method, supported ? 200 : 405, response.code());
+                    assertEquals(before + (supported ? 1 : 0), calls.get());
+                    if (supported) assertEquals(method.equals("HEAD") ? "" : method, response.body().string());
+                }
+            }
+        }
+    }
+
+    @jakarta.ws.rs.Path("/rest") public static class ParameterResource {
+        @io.muserver.rest.QUERY @jakarta.ws.rs.Consumes("text/plain")
+        public String query(String body) { return body; }
+    }
+
+    @Test public void emptyContentTypeParametersAreValidOnBothProtocolsAndHandlerTypes() throws Exception {
+        server = httpsServerForTest().withHttp2Config(Http2ConfigBuilder.http2EnabledIfAvailable())
+            .addHandler(Method.QUERY, "/native", (req, resp, params) -> resp.write(req.readBodyAsString()))
+            .addHandler(io.muserver.rest.RestHandlerBuilder.restHandler(new ParameterResource())).start();
+        for (Protocol protocol : Arrays.asList(Protocol.HTTP_1_1, Protocol.HTTP_2)) {
+            for (String path : Arrays.asList("/native", "/rest")) {
+                for (String type : Arrays.asList("text/plain;", "text/plain;;;", "text/plain; ;charset=UTF-8;;")) {
+                    try (Response response = call(clientFor(protocol), request(server.uri().resolve(path))
+                        .header("Content-Type", type).method("QUERY", RequestBody.create("query body", (MediaType) null)))) {
+                        assertEquals(protocol, response.protocol());
+                        assertEquals(path + " " + type, 200, response.code());
+                        assertEquals("query body", response.body().string());
+                    }
+                }
+            }
+        }
+    }
+
     @Test public void jettyCanSendQueryAndDecodeForms() throws Exception {
         server = MuServerBuilder.httpServer().addHandler(Method.QUERY, "/", (req, resp, params) ->
             resp.write(req.form().get("q") + ":" + req.query().get("q"))).start();
@@ -64,7 +111,8 @@ public class QueryTest {
         server = MuServerBuilder.httpServer().addHandler((req, resp) -> { calls.incrementAndGet(); return true; }).start();
         for (String header : Arrays.asList("", "Content-Type: \r\n", "Content-Type: invalid\r\n",
             "Content-Type: text/plain, application/json\r\n", "Content-Type: text/plain; charset=\"unterminated\r\n",
-            "Content-Type: text/pl ain\r\n", "Content-Type: */*\r\n", "Content-Type: text/plain\r\nContent-Type: application/json\r\n")) {
+            "Content-Type: text/plain; charset\r\n", "Content-Type: text/plain; charset=\r\n",
+            "Content-Type: text/plain; =UTF-8\r\n", "Content-Type: text/pl ain\r\n", "Content-Type: */*\r\n", "Content-Type: text/plain\r\nContent-Type: application/json\r\n")) {
             try (Socket socket = new Socket(server.uri().getHost(), server.uri().getPort())) {
                 socket.setSoTimeout(5000);
                 socket.getOutputStream().write(("QUERY / HTTP/1.1\r\nHost: localhost\r\n" + header
@@ -82,7 +130,7 @@ public class QueryTest {
         server = httpsServerForTest().withHttp2Config(Http2ConfigBuilder.http2EnabledIfAvailable())
             .addHandler((req, resp) -> { calls.incrementAndGet(); resp.write(req.readBodyAsString()); return true; }).start();
         OkHttpClient caller = clientFor(Protocol.HTTP_2);
-        for (String contentType : Arrays.asList("", " ", "invalid", "text/plain; charset=\"")) {
+        for (String contentType : Arrays.asList("", " ", "invalid", "text/plain; charset", "text/plain; charset=", "text/plain; =UTF-8", "text/plain; charset=\"")) {
             Request.Builder req = request(server.uri()).method("QUERY", RequestBody.create("body", (MediaType) null));
             if (!contentType.isEmpty()) req.header("Content-Type", contentType);
             try (Response response = call(caller, req)) {
