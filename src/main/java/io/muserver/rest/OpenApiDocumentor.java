@@ -77,8 +77,13 @@ class OpenApiDocumentor implements MuHandler {
         Map<String, PathItemObjectBuilder> pathItemBuilders = new LinkedHashMap<>();
         Set<String> operationIds = new HashSet<>();
         if (openAPIObject.paths() != null && openAPIObject.paths().pathItemObjects() != null) {
-            for (PathItemObject path : openAPIObject.paths().pathItemObjects().values()) if (path.operations() != null) {
-                for (OperationObject operation : path.operations().values()) if (operation.operationId() != null) operationIds.add(operation.operationId());
+            for (PathItemObject path : openAPIObject.paths().pathItemObjects().values()) {
+                if (path.operations() != null) for (OperationObject operation : path.operations().values()) {
+                    if (operation.operationId() != null) operationIds.add(operation.operationId());
+                }
+                if (path.additionalOperations() != null) for (OperationObject operation : path.additionalOperations().values()) {
+                    if (operation.operationId() != null) operationIds.add(operation.operationId());
+                }
             }
         }
         for (ResourceClass root : roots) {

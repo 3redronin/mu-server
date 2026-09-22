@@ -335,7 +335,13 @@ class ResourceMethod {
             ResponseObject existing = responses.get(code);
             Map<String, MediaTypeObject> content = new LinkedHashMap<>();
             if (existing != null && existing.content() != null) content.putAll(existing.content());
-            content.put("text/event-stream", mediaTypeObject().withItemSchema(item).build());
+            List<String> streamTypes = content.keySet().stream()
+                .filter(type -> MediaType.SERVER_SENT_EVENTS_TYPE.isCompatible(MediaType.valueOf(type))).collect(Collectors.toList());
+            if (streamTypes.isEmpty()) streamTypes = Collections.singletonList("text/event-stream");
+            for (String streamType : streamTypes) {
+                MediaTypeObject stream = content.get(streamType);
+                content.put(streamType, (stream == null ? mediaTypeObject() : stream.toBuilder()).withItemSchema(item).build());
+            }
             responses.put(code, (existing == null ? responseObject().withDescription("Event stream") : existing.toBuilder()).withContent(content).build());
         }
     }

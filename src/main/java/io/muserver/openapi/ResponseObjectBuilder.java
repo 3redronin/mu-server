@@ -109,7 +109,8 @@ public class ResponseObjectBuilder {
         Map<String, ReferenceOr<MediaTypeObject>> content = mergeContentOrReferences(primary.contentOrReferences(), secondary.contentOrReferences());
         return primary.toBuilder().withHeadersOrReferences(headers.isEmpty() ? null : headers)
             .withLinksOrReferences(links.isEmpty() ? null : links).withContentOrReferences(content.isEmpty() ? null : content)
-            .withSummary(primary.summary() == null ? secondary.summary() : primary.summary());
+            .withSummary(primary.summary() == null ? secondary.summary() : primary.summary())
+            .withDescription(primary.description() == null ? secondary.description() : primary.description());
     }
 
     /** Combines all media types and payload alternatives.
