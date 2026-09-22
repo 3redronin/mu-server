@@ -17,6 +17,10 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CompletionException;
+import javax.xml.transform.stream.StreamSource;
 import static org.junit.Assert.*;
 import static scaffolding.ClientUtils.*;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -89,6 +93,55 @@ public class QueryRestTest {
     }
     @Path("/application") public static class ApplicationError {
         @QUERY public Response query(String body) { return Response.status(415).header("Accept-Query", "\"application/override\"").build(); }
+    }
+
+    @Path("/async-root") public static class AsyncRoot {
+        final AtomicInteger calls = new AtomicInteger();
+        @Path("/child") public AsyncXml child() { calls.incrementAndGet(); return new AsyncXml(); }
+    }
+    public static class AsyncXml {
+        @QUERY @Consumes("text/plain") public String text(String body) { return body; }
+        @QUERY @Consumes("application/xml") public CompletionStage<String> query(StreamSource source,
+            @Context MuResponse response, @QueryParam("override") boolean override) {
+            if (override) response.headers().set("Accept-Query", "\"application/custom\"");
+            return read(source);
+        }
+        @POST @Consumes("application/xml") public CompletionStage<String> post(StreamSource source) { return read(source); }
+        private CompletionStage<String> read(StreamSource source) {
+            return CompletableFuture.supplyAsync(() -> {
+                try {
+                    StringWriter text = new StringWriter();
+                    source.getReader().transferTo(text);
+                    return text.toString();
+                } catch (IOException e) {
+                    throw new CompletionException(e);
+                }
+            });
+        }
+    }
+
+    @Test public void asynchronousRepresentationFailuresAdvertiseResolvedQueryFormats() throws Exception {
+        AsyncRoot root = new AsyncRoot();
+        server = serverBuilder().addHandler(restHandler(root)).start();
+        for (String method : Arrays.asList("QUERY", "POST")) {
+            for (boolean override : new boolean[]{false, true}) {
+                String path = "/async-root/child?override=" + override;
+                try (okhttp3.Response response = call(request(server.uri().resolve(path)).method(method,
+                    okhttp3.RequestBody.create("<query/>".getBytes(StandardCharsets.UTF_8), okhttp3.MediaType.get("application/xml; charset=unsupported-charset"))))) {
+                    assertEquals(415, response.code());
+                    assertEquals(method.equals("POST") ? null : override ? "\"application/custom\"" :
+                        "\"application/xml\", \"text/plain\"", response.header("Accept-Query"));
+                    response.body().string();
+                }
+            }
+        }
+        assertEquals(4, root.calls.get());
+        try (okhttp3.Response response = call(query("/async-root/child", "application/xml; charset=UTF-8", "<query/>"))) {
+            assertEquals(200, response.code());
+            assertEquals("<query/>", response.body().string());
+            assertNull(response.header("Accept-Query"));
+        }
+        assertEquals(5, root.calls.get());
     }
 
     private okhttp3.Request.Builder query(String path, String type, String body) {
