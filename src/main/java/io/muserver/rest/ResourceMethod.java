@@ -326,7 +326,9 @@ class ResourceMethod {
         Map<String, ApiSseEvent> declarations = sseDeclarations();
         if (!isSse() || requiredHttpMethod() == Method.HEAD) return;
         Map<String, List<SchemaObject>> items = new LinkedHashMap<>();
-        if (declarations.isEmpty()) items.put("200", Collections.singletonList(sseItem(null, registrations)));
+        if (declarations.isEmpty()) {
+            for (String code : responses.keySet()) items.put(code, Collections.singletonList(sseItem(null, registrations)));
+        }
         for (ApiSseEvent event : declarations.values()) items.computeIfAbsent(event.code(), key -> new ArrayList<>()).add(sseItem(event, registrations));
         for (Map.Entry<String, List<SchemaObject>> entry : items.entrySet()) {
             String code = entry.getKey();

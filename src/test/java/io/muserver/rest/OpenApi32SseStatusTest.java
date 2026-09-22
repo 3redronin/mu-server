@@ -23,6 +23,9 @@ public class OpenApi32SseStatusTest {
         @GET @Path("multiple") @ApiSseEvent(code="201") @ApiSseEvent(code="400") public void multiple() { }
         @GET @Path("implicit") @Produces(MediaType.SERVER_SENT_EVENTS) public void implicit() { }
         @GET @Path("explicit") @ApiSseEvent(code="201") @ApiResponse(code="202", message="Accepted", response=String.class, contentType="text/plain") public void explicit() { }
+        @GET @Path("detected-created") @Produces(MediaType.SERVER_SENT_EVENTS) @ApiResponse(code="201", message="Created") public void detectedCreated() { }
+        @GET @Path("detected-default") @Produces(MediaType.SERVER_SENT_EVENTS) @ApiResponse(code="default", message="Fallback") public void detectedDefault() { }
+        @GET @Path("detected-error") @Produces(MediaType.SERVER_SENT_EVENTS) @ApiResponse(code="400", message="Error") public void detectedError() { }
         @GET @Path("empty") @ApiSseEvent(code="204") public void empty() { }
         @HEAD @Path("head") @ApiSseEvent(code="201") public void head() { }
     }
@@ -54,6 +57,13 @@ public class OpenApi32SseStatusTest {
             assertEquals(Collections.singleton(code), responses.keySet());
             assertFalse(responses.getJSONObject(code).has("content"));
         }
+    }
+
+    @Test public void detectedSseDoesNotInventStatusesBesideExplicitResponseAnnotations() throws Exception {
+        JSONObject paths = paths();
+        assertEquals(Collections.singleton("201"), responses(paths, "detected-created", "get").keySet());
+        assertEquals(Collections.singleton("default"), responses(paths, "detected-default", "get").keySet());
+        assertEquals(Collections.singleton("400"), responses(paths, "detected-error", "get").keySet());
     }
 
     private JSONObject paths() throws Exception {
