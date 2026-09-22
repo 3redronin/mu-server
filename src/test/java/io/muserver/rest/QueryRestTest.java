@@ -77,6 +77,10 @@ public class QueryRestTest {
         @POST public String post(String body) { return body; }
     }
     @Path("/conditional") public static class Conditional {
+        @GET public Response get(@Context jakarta.ws.rs.core.Request request) { return query("selected", request); }
+        @POST @Consumes("text/plain") public Response post(String body, @Context jakarta.ws.rs.core.Request request) {
+            return query(body, request);
+        }
         @QUERY @Consumes("text/plain") public Response query(String body, @Context jakarta.ws.rs.core.Request request) {
             Response.ResponseBuilder precondition = request.evaluatePreconditions(new Date(1000000000000L), new EntityTag(body));
             return precondition == null ? Response.ok("result:" + body).tag(body).build() : precondition.entity("must not appear on 304").build();
@@ -218,6 +222,31 @@ public class QueryRestTest {
             try (okhttp3.Response response = call(request(server.uri().resolve("/api/unrelated")).method(method,
                 method.equals("POST") ? okhttp3.RequestBody.create("post", okhttp3.MediaType.get("text/plain")) : null))) {
                 assertEquals(method.equals("UNKNOWN") ? 405 : 200, response.code());
+            }
+        }
+    }
+
+    @Test public void entityTagConditionsTakePrecedenceOverDates() throws Exception {
+        server = serverBuilder().addHandler(restHandler(new Conditional())).start();
+        String unchanged = "Sun, 09 Sep 2001 01:46:40 GMT";
+        String changed = "Sat, 08 Sep 2001 01:46:40 GMT";
+        for (String method : Arrays.asList("QUERY", "GET", "HEAD", "POST")) {
+            for (String[] conditions : new String[][]{
+                {"If-None-Match", "\"another\"", "If-Modified-Since", unchanged, "200"},
+                {"If-None-Match", "W/\"another\"", "If-Modified-Since", unchanged, "200"},
+                {"If-None-Match", "\"selected\"", "If-Modified-Since", changed, method.equals("POST") ? "412" : "304"},
+                {"If-Match", "\"selected\"", "If-Unmodified-Since", changed, "200"},
+                {"If-Match", "\"another\"", "If-Unmodified-Since", unchanged, "412"},
+                {"If-Modified-Since", unchanged, "Accept", "*/*", method.equals("POST") ? "200" : "304"},
+                {"If-Unmodified-Since", changed, "Accept", "*/*", "412"}}) {
+                okhttp3.RequestBody body = method.equals("QUERY") || method.equals("POST")
+                    ? okhttp3.RequestBody.create("selected", okhttp3.MediaType.get("text/plain")) : null;
+                try (okhttp3.Response response = call(request(server.uri().resolve("/conditional")).method(method, body)
+                    .header(conditions[0], conditions[1]).header(conditions[2], conditions[3]))) {
+                    assertEquals(method + " " + Arrays.toString(conditions), Integer.parseInt(conditions[4]), response.code());
+                    if (method.equals("HEAD") || response.code() == 304) assertEquals("", response.body().string());
+                    else if (response.code() == 200) assertEquals("result:selected", response.body().string());
+                }
             }
         }
     }

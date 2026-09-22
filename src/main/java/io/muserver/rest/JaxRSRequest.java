@@ -278,6 +278,10 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     }
 
     private Response.@Nullable ResponseBuilder evaluateIfModifiedSince(Date lastModified) {
+        // RFC 9110 section 13.1.3: entity-tag conditions take precedence over dates.
+        if (muRequest.headers().contains(HeaderNames.IF_NONE_MATCH)) {
+            return null;
+        }
         long lastModifiedSeconds = lastModified.getTime() / 1000;
         Long ifModifiedMillis = muRequest.headers().getTimeMillis(HeaderNames.IF_MODIFIED_SINCE);
         if (ifModifiedMillis == null || lastModifiedSeconds > (ifModifiedMillis / 1000)) {
@@ -287,6 +291,10 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         }
     }
     private Response.@Nullable ResponseBuilder evaluateIfUnmodifiedSince(Date lastModified) {
+        // RFC 9110 section 13.1.4: If-Match replaces this date condition.
+        if (muRequest.headers().contains(HeaderNames.IF_MATCH)) {
+            return null;
+        }
         long lastModifiedSeconds = lastModified.getTime() / 1000;
         Long ifUnmodifiedSince = muRequest.headers().getTimeMillis(HeaderNames.IF_UNMODIFIED_SINCE);
         if (ifUnmodifiedSince == null || lastModifiedSeconds <= (ifUnmodifiedSince / 1000)) {
