@@ -77,6 +77,7 @@ public class RestHandler implements MuHandler {
             return true;
         }
         List<MediaType> acceptHeadersForException = emptyList();
+        Set<RequestMatcher.MatchedMethod> matchedMethodsForPath = Collections.emptySet();
         List<MediaType> producesRef = null;
         List<MediaType> directlyProducesRef = null;
         SecurityContext securityContext = muRequest.uri().getScheme().equals("https") ? MuSecurityContext.notLoggedInHttpsContext : MuSecurityContext.notLoggedInHttpContext;
@@ -113,14 +114,20 @@ public class RestHandler implements MuHandler {
                 }
             };
 
+            matchedMethodsForPath = requestMatcher.getMatchedMethodsForPath(requestContext.relativePath(), subResourceLocator);
             RequestMatcher.MatchedMethod mm;
             try {
-                mm = requestMatcher.findResourceMethod(requestContext, requestContext.getMuMethod(), acceptHeaders, subResourceLocator);
+                mm = requestMatcher.stepThreeIdentifyTheMethodThatWillHandleTheRequest(requestContext.getMuMethod(), matchedMethodsForPath, requestContext.getHeaderString("Content-Type"), acceptHeaders);
+            } catch (jakarta.ws.rs.NotSupportedException e) {
+                if (requestContext.getMuMethod() == Method.QUERY) {
+                    AcceptQueryHeader.write(muResponse, matchedMethodsForPath);
+                }
+                throw e;
             } catch (NotAllowedException e) {
                 if (requestContext.getMuMethod() == Method.HEAD) {
-                    mm = requestMatcher.findResourceMethod(requestContext, Method.GET, acceptHeaders, subResourceLocator);
+                    mm = requestMatcher.stepThreeIdentifyTheMethodThatWillHandleTheRequest(Method.GET, matchedMethodsForPath, requestContext.getHeaderString("Content-Type"), acceptHeaders);
                 } else if (requestContext.getMuMethod() == Method.OPTIONS) {
-                    Set<RequestMatcher.MatchedMethod> matchedMethodsForPath = requestMatcher.getMatchedMethodsForPath(requestContext.relativePath(), subResourceLocator);
+                    AcceptQueryHeader.write(muResponse, matchedMethodsForPath);
                     muResponse.headers().set(HeaderNames.ALLOW, getAllowedMethods(matchedMethodsForPath));
                     corsConfig.writeHeadersInternal(muRequest, muResponse, matchedMethodsForPath);
                     return true;
@@ -184,6 +191,9 @@ public class RestHandler implements MuHandler {
         } catch (NotMatchedException e) {
             return false;
         } catch (Exception ex) {
+            if (ex instanceof UnsupportedRepresentationException && requestContext.getMuMethod() == Method.QUERY) {
+                AcceptQueryHeader.write(muResponse, matchedMethodsForPath);
+            }
             if (producesRef == null) producesRef = emptyList();
             if (directlyProducesRef == null) directlyProducesRef = emptyList();
             try {
@@ -329,6 +339,11 @@ public class RestHandler implements MuHandler {
                             filterManagerThing.onBeforeSendResponse(requestContext, responseToWrite);
                             if (!muResponse.hasStartedSendingData()) {
                                 muResponse.status(responseToWrite.getStatus());
+                            }
+                            // A conditional retrieval has no response body, even if a resource or filter supplied one.
+                            // Do not derive Content-Length from that discarded entity.
+                            if (responseToWrite.getStatus() == 304) {
+                                responseToWrite.setEntity(null);
                             }
                             if (responseToWrite.hasEntity()) {
                                 responseToWrite.executeInterceptors(writerInterceptors,

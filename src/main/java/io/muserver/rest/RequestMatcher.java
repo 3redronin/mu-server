@@ -256,7 +256,7 @@ class RequestMatcher {
         }
     }
 
-    private MatchedMethod stepThreeIdentifyTheMethodThatWillHandleTheRequest(Method method, Set<MatchedMethod> candidates, @Nullable String requestBodyContentType, List<MediaType> acceptHeaders) throws NotAllowedException, NotAcceptableException, NotSupportedException {
+    MatchedMethod stepThreeIdentifyTheMethodThatWillHandleTheRequest(Method method, Set<MatchedMethod> candidates, @Nullable String requestBodyContentType, List<MediaType> acceptHeaders) throws NotAllowedException, NotAcceptableException, NotSupportedException {
         List<MatchedMethod> result = candidates.stream().filter(rm -> rm.resourceMethod.httpMethod() == method).collect(toList());
         if (result.isEmpty()) {
             List<String> allowed = candidates.stream().map(c -> c.resourceMethod.requiredHttpMethod().name()).distinct().collect(toList());

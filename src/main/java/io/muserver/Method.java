@@ -40,7 +40,17 @@ public enum Method {
     /**
      * The PATCH HTTP method
      */
-    PATCH;
+    PATCH,
+    /**
+     * A safe, idempotent query with a request body. A valid Content-Type is required, even for an empty body.
+     * <pre>{@code
+     * MuServerBuilder.httpServer().addHandler(Method.QUERY, "/search", (request, response, params) -> {
+     *     response.write("Result for " + request.readBodyAsString());
+     * }).start();
+     * }</pre>
+     * @see io.muserver.rest.QUERY
+     */
+    QUERY;
 
     static Method fromNetty(io.netty.handler.codec.http.HttpMethod method) {
         return Method.valueOf(method.name());

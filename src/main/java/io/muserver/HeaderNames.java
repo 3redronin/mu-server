@@ -9,6 +9,8 @@ import io.netty.util.AsciiString;
  * violating HTTP/1.x requirements.  New header names should always be lowercase.</p>
  */
 public final class HeaderNames {
+    /** The Structured Fields list of supported QUERY media ranges. */
+    public static final CharSequence ACCEPT_QUERY = AsciiString.cached("accept-query");
     /**
      * {@code "accept"}
      */

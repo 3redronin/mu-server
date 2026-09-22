@@ -241,6 +241,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
             }
 
             HttpRequest nettyReq = new Http2To1RequestAdapter(streamId, nettyMeth, uri, headers);
+            QueryRequestValidation.validate(nettyMeth, nettyReq.headers());
             boolean hasRequestBody = !endOfStream;
             if (hasRequestBody) {
                 long bodyLen = headers.getLong(HeaderNames.CONTENT_LENGTH, -1L);

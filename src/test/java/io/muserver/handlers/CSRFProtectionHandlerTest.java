@@ -39,8 +39,8 @@ public class CSRFProtectionHandlerTest {
     @Test
     public void safeMethodsAreAlwaysAllowed() throws IOException {
         startServer(CSRFProtectionHandlerBuilder.csrfProtection().build());
-        for (Method method : new Method[]{Method.GET, Method.HEAD, Method.OPTIONS}) {
-            try (Response resp = call(request().method(method.name(), null).url(server.uri().toString()))) {
+        for (Method method : new Method[]{Method.GET, Method.HEAD, Method.OPTIONS, Method.QUERY}) {
+            try (Response resp = call(request().header("Content-Type", "text/plain").method(method.name(), null).url(server.uri().toString()))) {
                 assertThat(resp.code(), is(200));
                 if (method == Method.GET) {
                     assertThat(resp.body().string(), is("OK"));

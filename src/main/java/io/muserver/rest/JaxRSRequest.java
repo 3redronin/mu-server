@@ -244,15 +244,15 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     private Response.@Nullable ResponseBuilder evaluateIfNoneMatch(EntityTag eTag) {
         List<String> ifNoneMatchTags = muRequest.headers().getAll(HeaderNames.IF_NONE_MATCH);
-        boolean getOrHead = isGetOrHead();
-        if (!getOrHead && eTag.isWeak()) {
+        boolean conditionalRetrieval = isConditionalRetrieval();
+        if (!conditionalRetrieval && eTag.isWeak()) {
             return Response.status(412).entity(new ClientErrorException("Precondition failed: if-match failed due to weak eTag", 412));
         }
 
         boolean noneMatch = true;
         for (String suppliedEtag : ifNoneMatchTags) {
             EntityTag supplied = EntityTag.valueOf(suppliedEtag);
-            if (supplied.equals(eTag) || (getOrHead && supplied.getValue().equals(eTag.getValue()))) {
+            if (supplied.equals(eTag) || (conditionalRetrieval && supplied.getValue().equals(eTag.getValue()))) {
                 noneMatch = false;
                 break;
             }
@@ -260,11 +260,11 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         if (noneMatch) {
             return null;
         }
-        return getOrHead ? Response.status(304).tag(eTag) : Response.status(412).entity(new ClientErrorException("Precondition failed: if-match", 412));
+        return conditionalRetrieval ? Response.status(304).tag(eTag) : Response.status(412).entity(new ClientErrorException("Precondition failed: if-match", 412));
     }
 
-    private boolean isGetOrHead() {
-        return muRequest.method() == Method.GET || muRequest.method() == Method.HEAD;
+    private boolean isConditionalRetrieval() {
+        return muRequest.method() == Method.GET || muRequest.method() == Method.HEAD || muRequest.method() == Method.QUERY;
     }
 
     @Override
@@ -282,7 +282,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         if (ifModifiedMillis == null || lastModifiedSeconds > (ifModifiedMillis / 1000)) {
             return null;
         } else {
-            return isGetOrHead() ? Response.notModified() : null;
+            return isConditionalRetrieval() ? Response.notModified() : null;
         }
     }
     private Response.@Nullable ResponseBuilder evaluateIfUnmodifiedSince(Date lastModified) {

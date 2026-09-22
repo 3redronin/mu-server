@@ -358,6 +358,8 @@ class HttpExchange implements ResponseInfo, Exchange {
             throw new InvalidHttpRequestException(500, "Invalid HTTP request received");
         }
 
+        QueryRequestValidation.validate(nettyRequest.method(), nettyRequest.headers());
+
         String contentLenDecl = nettyRequest.headers().get("Content-Length");
         if (HttpUtil.is100ContinueExpected(nettyRequest)) {
             long requestBodyLen = contentLenDecl == null ? -1L : Long.parseLong(contentLenDecl, 10);
