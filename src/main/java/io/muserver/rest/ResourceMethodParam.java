@@ -647,12 +647,18 @@ abstract class ResourceMethodParam {
     }
 
     enum ValueSource {
-        MESSAGE_BODY(null), QUERY_PARAM("query"), MATRIX_PARAM(null), PATH_PARAM("path"), COOKIE_PARAM("cookie"), HEADER_PARAM("header"), FORM_PARAM(null), CONTEXT(null), SUSPENDED(null);
+        MESSAGE_BODY(null), QUERY_PARAM("query"), MATRIX_PARAM(null, "matrix"), PATH_PARAM("path"), COOKIE_PARAM("cookie"), HEADER_PARAM("header"), FORM_PARAM(null, "form"), CONTEXT(null), SUSPENDED(null);
 
         final @Nullable String openAPIIn;
+        final @Nullable String parameterLocation;
 
         ValueSource(@Nullable String openAPIIn) {
+            this(openAPIIn, openAPIIn);
+        }
+
+        ValueSource(@Nullable String openAPIIn, @Nullable String parameterLocation) {
             this.openAPIIn = openAPIIn;
+            this.parameterLocation = parameterLocation;
         }
     }
 
