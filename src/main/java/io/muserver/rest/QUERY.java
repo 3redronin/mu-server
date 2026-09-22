@@ -9,11 +9,12 @@ import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
 /**
  * Handles a safe, idempotent HTTP QUERY request, as defined by RFC 10008.
- * A valid Content-Type is required, including for an empty request body.
+ * <p>A valid Content-Type is required, including for an empty request body.
  * Use {@link jakarta.ws.rs.Consumes} to declare supported query formats and
- * {@link jakarta.ws.rs.Produces} to declare result formats.
- * Automatic OPTIONS and unsupported-format responses advertise supported formats in Accept-Query.
- * Query evaluation, caching and stored results remain application responsibilities.
+ * {@link jakarta.ws.rs.Produces} to declare result formats.</p>
+ * <p>The Accept-Query response header tells clients which content types a resource accepts for query bodies.
+ * Mu Server generates it from {@code @Consumes} on automatic OPTIONS and unsupported-format (415) responses,
+ * helping clients choose a Content-Type for their next QUERY request.</p>
  * <pre>
  * &#64;QUERY
  * &#64;Consumes("text/plain")
