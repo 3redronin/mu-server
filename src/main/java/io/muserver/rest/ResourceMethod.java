@@ -273,7 +273,12 @@ class ResourceMethod {
             || provider instanceof StringEntityProviders.CharArrayReaderWriter) return schemaObject().withType("string");
         if (provider instanceof StringEntityProviders.TemporalEntityReaderWriter) {
             jakarta.ws.rs.ext.ParamConverter<?> converter = new BuiltInParamConverterProvider().getConverter(type, resolved, methodAnnotations);
-            if (converter != null) return JavaValueSchemas.parameter(type, converter);
+            if (converter != null) {
+                SchemaObjectBuilder schema = JavaValueSchemas.parameter(type, converter);
+                // Input formats describe preferred syntax; temporal writers may emit shorter Java forms.
+                if (target == SchemaObjectCustomizerTarget.RESPONSE_BODY) schema.withFormat(schemaObjectFrom(type).format());
+                return schema;
+            }
         }
         return SchemaReference.infer(registrations, type, genericType);
     }

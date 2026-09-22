@@ -32,11 +32,11 @@ final class JavaValueSchemas {
         }
         if (type == Instant.class) return text(schema, "An ISO-8601 instant with a UTC offset and optional fractional seconds.", "2021-02-12T15:33:28.123Z");
         if (type == LocalDate.class) return text(schema, "An ISO-8601 calendar date without a time or zone.", "2021-02-12");
-        if (type == OffsetDateTime.class) return text(schema, "An ISO-8601 date and time with an offset; seconds and fractional seconds are optional.", "2021-02-12T15:33:28.123+01:00");
+        if (type == OffsetDateTime.class) return text(schema.withFormat("date-time"), "An ISO-8601 date and time with an offset; seconds and fractional seconds are optional.", "2021-02-12T15:33:28.123+01:00");
         if (type == ZonedDateTime.class) return text(schema, "An ISO-8601 date and time with an offset and optional bracketed region ID; fractional seconds are optional.", "2021-02-12T15:33:28+01:00[Europe/Paris]");
-        if (type == LocalDateTime.class) return text(schema, "An ISO-8601 local date and time without an offset or zone; seconds and fractional seconds are optional.", "2021-02-12T15:33:28.123");
-        if (type == OffsetTime.class) return text(schema, "An ISO-8601 time with an offset; seconds and fractional seconds are optional.", "15:33:28.123+01:00");
-        if (type == LocalTime.class) return text(schema, "An ISO-8601 local time without an offset or zone; seconds and fractional seconds are optional.", "15:33:28.123");
+        if (type == LocalDateTime.class) return text(schema.withFormat("date-time-local"), "An ISO-8601 local date and time without an offset or zone; seconds and fractional seconds are optional.", "2021-02-12T15:33:28.123");
+        if (type == OffsetTime.class) return text(schema.withFormat("time"), "An ISO-8601 time with an offset; seconds and fractional seconds are optional.", "15:33:28.123+01:00");
+        if (type == LocalTime.class) return text(schema.withFormat("time-local"), "An ISO-8601 local time without an offset or zone; seconds and fractional seconds are optional.", "15:33:28.123");
         if (type == Year.class) return text(schema, "An ISO-8601 year, with a sign for years outside the four-digit range.", "2021");
         if (type == YearMonth.class) return text(schema, "An ISO-8601 year and month without a day.", "2021-02");
         if (type == MonthDay.class) return text(schema, "An ISO-8601 month and day prefixed with two hyphens, without a year.", "--02-12");
