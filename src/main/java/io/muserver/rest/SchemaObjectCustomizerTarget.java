@@ -19,5 +19,8 @@ public enum SchemaObjectCustomizerTarget {
     /**
      * A form parameter
      */
-    FORM_PARAM
+    FORM_PARAM,
+
+    /** A query, path, matrix, header or cookie parameter. */
+    PARAMETER
 }

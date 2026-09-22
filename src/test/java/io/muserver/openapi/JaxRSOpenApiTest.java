@@ -86,6 +86,7 @@ public class JaxRSOpenApiTest {
             "    }],\n" +
             "    \"tags\": [\"Car\"]\n" +
             "  }");
+        expected.getJSONArray("parameters").getJSONObject(0).getJSONObject("schema").put("examples", new org.json.JSONArray().put("example"));
         assertThat(getOperation.toString(4), equalTo(expected.toString(4)));
     }
 

@@ -155,7 +155,7 @@ public class SchemaObjectTest {
     public void itCanPresetbytes() {
         SchemaObject schema = schemaObjectFrom(byte.class).build();
         assertThat(schema.type(), equalTo("integer"));
-        assertThat(schema.format(), nullValue());
+        assertThat(schema.format(), equalTo("int8"));
         assertThat(schema.nullable(), is(false));
     }
 
@@ -163,7 +163,7 @@ public class SchemaObjectTest {
     public void itCanPresetBytes() {
         SchemaObject schema = schemaObjectFrom(Byte.class).build();
         assertThat(schema.type(), equalTo("integer"));
-        assertThat(schema.format(), nullValue());
+        assertThat(schema.format(), equalTo("int8"));
         assertThat(schema.nullable(), is(false));
     }
 

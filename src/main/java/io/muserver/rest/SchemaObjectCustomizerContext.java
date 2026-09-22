@@ -22,8 +22,14 @@ public class SchemaObjectCustomizerContext {
     private final Method method;
     private final @Nullable String parameter;
     private final MediaType mediaType;
+    private final @Nullable String parameterLocation;
 
     SchemaObjectCustomizerContext(SchemaObjectCustomizerTarget target, Class<?> type, @Nullable Type parameterizedType, @Nullable Object resource, Method method, @Nullable String parameter, MediaType mediaType) {
+        this(target, type, parameterizedType, resource, method, parameter, mediaType, null);
+    }
+
+    SchemaObjectCustomizerContext(SchemaObjectCustomizerTarget target, Class<?> type, @Nullable Type parameterizedType, @Nullable Object resource, Method method, @Nullable String parameter, MediaType mediaType, @Nullable String parameterLocation) {
+        this.parameterLocation = parameterLocation;
         this.target = requireNonNull(target, "target");
         this.type = requireNonNull(type, "type");
         this.parameterizedType = parameterizedType;
@@ -57,11 +63,15 @@ public class SchemaObjectCustomizerContext {
     }
 
     /**
-     * @return Where {@link #target()} is {@link SchemaObjectCustomizerTarget#FORM_PARAM}, this returns the form
-     * parameter name.
+     * @return The parameter name for ordinary and form parameters.
      */
     public Optional<String> parameterName() {
         return Optional.ofNullable(parameter);
+    }
+
+    /** @return The parameter location (query, path, matrix, header, cookie or form), when applicable. */
+    public Optional<String> parameterLocation() {
+        return Optional.ofNullable(parameterLocation);
     }
 
     /**

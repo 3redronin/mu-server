@@ -13,6 +13,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import jakarta.ws.rs.ext.Providers;
 import org.jspecify.annotations.Nullable;
 
 import static io.muserver.Mutils.notNull;
@@ -35,11 +36,13 @@ class OpenApiDocumentor implements MuHandler {
     private final @Nullable String openApiHtmlCss;
     private final CORSConfig corsConfig;
     private final List<SchemaReference> customSchemas;
+    private final Providers providers;
     private final SchemaObjectCustomizer schemaObjectCustomizer;
     private final List<ParamConverterProvider> paramConverterProviders;
 
-    OpenApiDocumentor(List<ResourceClass> roots, @Nullable String openApiJsonUrl, @Nullable String openApiHtmlUrl, OpenAPIObject openAPIObject, @Nullable String openApiHtmlCss, CORSConfig corsConfig, List<SchemaReference> customSchemas, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders, CollectionParameterStrategy collectionParameterStrategy) {
+    OpenApiDocumentor(List<ResourceClass> roots, @Nullable String openApiJsonUrl, @Nullable String openApiHtmlUrl, OpenAPIObject openAPIObject, @Nullable String openApiHtmlCss, CORSConfig corsConfig, List<SchemaReference> customSchemas, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders, CollectionParameterStrategy collectionParameterStrategy, Providers providers) {
         this.collectionParameterStrategy = collectionParameterStrategy;
+        this.providers = providers;
         Map<String, SchemaObject> occupied = new LinkedHashMap<>();
         if (openAPIObject.components() != null && openAPIObject.components().schemas() != null) occupied.putAll(openAPIObject.components().schemas());
         this.customSchemas = new ArrayList<>();
@@ -192,7 +195,9 @@ class OpenApiDocumentor implements MuHandler {
                 .filter(p -> p.source().openAPIIn != null || documentedPath.matrixParams.containsKey(p))
                 .map(p -> {
                     MatrixParamDocumentation matrixParam = documentedPath.matrixParams.get(p);
-                    ParameterObjectBuilder builder = p.createDocumentationBuilder(matrixParam == null ? p.key() : matrixParam.parameterName);
+                    String documentationName = matrixParam == null ? p.key() : matrixParam.parameterName;
+                    ParameterObjectBuilder builder = p.createDocumentationBuilder(documentationName);
+                    builder.withSchema(method.parameterSchema(customSchemas, p, documentationName));
                     if (p.isMultiValued() && p.source() == ResourceMethodParam.ValueSource.QUERY_PARAM) {
                         builder.withStyle("form").withExplode(collectionParameterStrategy == CollectionParameterStrategy.NO_TRANSFORM);
                     }
@@ -217,7 +222,7 @@ class OpenApiDocumentor implements MuHandler {
             if (existing == null) {
                 String operationId = uniqueName(method.requiredHttpMethod().name() + "_" + opPath, operationIds);
                 operationIds.add(operationId);
-                existing = method.createOperationBuilder(customSchemas)
+                existing = method.createOperationBuilder(customSchemas, providers)
                     .withOperationId(operationId)
                     .withTags(singletonList(root.tag.name()))
                     .withParameters(parameters)
@@ -225,7 +230,7 @@ class OpenApiDocumentor implements MuHandler {
             } else {
                 // Only generated overloads reach this merge. Manual operations (including references)
                 // replace collisions later in handle(), without using their legacy inline-only getters.
-                OperationObject curOO = method.createOperationBuilder(customSchemas).build();
+                OperationObject curOO = method.createOperationBuilder(customSchemas, providers).build();
                 RequestBodyObject oldBody = existing.requestBody();
                 RequestBodyObject newBody = curOO.requestBody();
                 Map<String, MediaTypeObject> mergedContent = ResponseObjectBuilder.mergeContent(

@@ -720,8 +720,17 @@ public class SchemaObjectBuilder {
         return null;
     }
 
+    // General formats for both inputs and outputs. Input-only temporal conventions live in JavaValueSchemas.
     private static @Nullable String jsonFormat(Class<?> type) {
-        if (type.equals(int.class) || type.equals(Integer.class)) {
+        if (type == byte.class || type == Byte.class) {
+            return "int8";
+        } else if (type == short.class || type == Short.class) {
+            return "int16";
+        } else if (type == char.class || type == Character.class) {
+            return "char";
+        } else if (type == java.math.BigDecimal.class) {
+            return "decimal";
+        } else if (type.equals(int.class) || type.equals(Integer.class)) {
             return "int32";
         } else if (type.equals(long.class) || type.equals(Long.class)) {
             return "int64";

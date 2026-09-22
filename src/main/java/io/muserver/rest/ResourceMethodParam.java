@@ -271,14 +271,27 @@ abstract class ResourceMethodParam {
             builder.withDescription(description);
             @Nullable Pattern pattern = pattern();
             @Nullable Pattern patternIfNotDefault = pattern == null || UriPattern.DEFAULT_CAPTURING_GROUP_PATTERN.equals(pattern.pattern()) ? null : pattern;
-            return builder.withSchema(
-                (type() == byte[].class ? io.muserver.openapi.SchemaObjectBuilder.schemaObject().withType("array")
-                    .withItems(schemaObjectFrom(byte.class).build()) : schemaObjectFrom(type(), genericType()))
-                    .withDefaultValue(documentationDefaultValue())
-                    .withExternalDocs(externalDoc)
-                    .withPattern(patternIfNotDefault)
-                    .build()
-            );
+            return builder.withSchema(documentationSchema(Collections.emptyList())
+                .withDefaultValue(documentationDefaultValue()).withExternalDocs(externalDoc)
+                .withPattern(patternIfNotDefault).build());
+        }
+
+        io.muserver.openapi.SchemaObjectBuilder documentationSchema(List<SchemaReference> registrations) {
+            SchemaReference registration = SchemaReference.find(registrations, type(), genericType());
+            if (registration != null) return registration.schema.toBuilder();
+            // Scalar File parameters bypass converters and consume an uploaded part.
+            // File arrays and collections still contain converter-backed filesystem paths.
+            if (File.class.isAssignableFrom(type())) return io.muserver.openapi.SchemaObjectBuilder.schemaObject();
+            Type valueGeneric = type().isArray() ? type().getComponentType()
+                : Collection.class.isAssignableFrom(type()) ? GenericTypeResolver.resolveTypeArgument(genericType(), Collection.class, 0) : genericType();
+            Class<?> valueType = valueGeneric == null ? convertedValueType : SchemaReference.rawClass(valueGeneric);
+            if (valueType == null) valueType = convertedValueType;
+            SchemaReference itemRegistration = SchemaReference.find(registrations, valueType, valueGeneric);
+            io.muserver.openapi.SchemaObjectBuilder value = itemRegistration == null
+                ? JavaValueSchemas.parameter(valueType, paramConverter)
+                : io.muserver.openapi.SchemaObjectBuilder.schemaObject().withRef("#/components/schemas/" + itemRegistration.id);
+            return isMultiValued() || type().isArray() ? io.muserver.openapi.SchemaObjectBuilder.schemaObject()
+                .withType("array").withItems(value.build()) : value;
         }
 
         @Nullable Object documentationDefaultValue() {
@@ -637,12 +650,18 @@ abstract class ResourceMethodParam {
     }
 
     enum ValueSource {
-        MESSAGE_BODY(null), QUERY_PARAM("query"), MATRIX_PARAM(null), PATH_PARAM("path"), COOKIE_PARAM("cookie"), HEADER_PARAM("header"), FORM_PARAM(null), CONTEXT(null), SUSPENDED(null);
+        MESSAGE_BODY(null), QUERY_PARAM("query"), MATRIX_PARAM(null, "matrix"), PATH_PARAM("path"), COOKIE_PARAM("cookie"), HEADER_PARAM("header"), FORM_PARAM(null, "form"), CONTEXT(null), SUSPENDED(null);
 
         final @Nullable String openAPIIn;
+        final @Nullable String parameterLocation;
 
         ValueSource(@Nullable String openAPIIn) {
+            this(openAPIIn, openAPIIn);
+        }
+
+        ValueSource(@Nullable String openAPIIn, @Nullable String parameterLocation) {
             this.openAPIIn = openAPIIn;
+            this.parameterLocation = parameterLocation;
         }
     }
 

@@ -125,6 +125,10 @@ final class JaxRSProviders implements Providers {
         return requiredState().entityProviders.writers;
     }
 
+    boolean isBuiltInReader(MessageBodyReader<?> reader) {
+        return requiredState().entityProviders.isBuiltInReader(reader);
+    }
+
     boolean isBuiltInWriter(MessageBodyWriter<?> writer) {
         return requiredState().entityProviders.isBuiltInWriter(writer);
     }
