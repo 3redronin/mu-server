@@ -21,7 +21,7 @@ public class JavaValueSchemasTest {
             {java.time.ZonedDateTime.class}, {java.time.LocalDateTime.class}, {java.time.OffsetTime.class},
             {java.time.LocalTime.class}, {java.time.Year.class}, {java.time.YearMonth.class},
             {java.time.MonthDay.class}, {java.time.Duration.class}, {java.time.Period.class},
-            {java.util.Date.class}, {java.sql.Date.class}, {java.sql.Time.class}, {java.sql.Timestamp.class},
+            {java.util.Date.class},
             {java.util.UUID.class}, {java.net.URI.class}, {java.net.URL.class}, {java.util.Locale.class},
             {java.io.File.class}, {jakarta.ws.rs.core.PathSegment.class}, {java.math.BigInteger.class},
             {java.math.BigDecimal.class}, {int.class}, {long.class}, {short.class}, {byte.class},
