@@ -5,7 +5,7 @@ import io.muserver.openapi.*;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.sse.*;
-import com.fasterxml.jackson.databind.JsonNode;
+import org.json.JSONObject;
 import org.junit.*;
 import java.util.*;
 import static io.muserver.openapi.OfflineOpenApiValidator.*;
@@ -33,21 +33,22 @@ public class OpenApi32SseContractTest {
             .addCustomSchema(Integer.class, "Price", schemaObject().withType("integer").withMinimum(0.0).build())
             .withOpenApiJsonUrl("/openapi.json")).start();
         try (okhttp3.Response response = call(request(server.uri().resolve("/openapi.json")))) {
-            JsonNode api = JSON.readTree(response.body().string()); document(api);
+            JSONObject api = new JSONObject(response.body().string()); document(api);
             for (String source : Arrays.asList("sink", "context")) {
-                JsonNode item = api.at("/paths/~1contracts~1" + source + "/get/responses/200/content/text~1event-stream/itemSchema");
+                JSONObject item = (JSONObject) api.query("/paths/~1contracts~1" + source + "/get/responses/200/content/text~1event-stream/itemSchema");
                 accepts(item, "{\"data\":\"hello\"}", true);
                 accepts(item, "{\"data\":false}", false);
                 accepts(item, "{\"data\":\"hello\",\"retry\":-1}", false);
             }
-            JsonNode mixed = api.at("/paths/~1contracts~1mixed/get/responses/200/content/text~1event-stream/itemSchema");
-            assertEquals(2, mixed.get("anyOf").size());
+            JSONObject mixed = (JSONObject) api.query("/paths/~1contracts~1mixed/get/responses/200/content/text~1event-stream/itemSchema");
+            assertEquals(2, mixed.getJSONArray("anyOf").length());
             assertFalse(mixed.has("oneOf"));
-            assertEquals("#/components/schemas/Price", mixed.at("/anyOf/1/properties/data/contentSchema/$ref").asText());
-            JsonNode explicit = api.at("/paths/~1contracts~1explicit/get/responses/200");
-            assertEquals("Owned", explicit.get("description").asText());
-            assertFalse(explicit.get("content").has("text/event-stream"));
-            for (JsonNode bodyless : api.at("/paths/~1contracts~1bodyless/get/responses")) assertFalse(bodyless.has("content"));
+            assertEquals("#/components/schemas/Price", mixed.query("/anyOf/1/properties/data/contentSchema/$ref"));
+            JSONObject explicit = (JSONObject) api.query("/paths/~1contracts~1explicit/get/responses/200");
+            assertEquals("Owned", explicit.getString("description"));
+            assertFalse(explicit.getJSONObject("content").has("text/event-stream"));
+            JSONObject responses = (JSONObject) api.query("/paths/~1contracts~1bodyless/get/responses");
+            for (String status : responses.keySet()) assertFalse(responses.getJSONObject(status).has("content"));
         }
     }
     @Test public void duplicatesFailBeforeDocumentPublication() throws Exception {
@@ -63,8 +64,8 @@ public class OpenApi32SseContractTest {
             .withPathItemObjects(Map.of("/contracts/mixed", PathItemObjectBuilder.pathItemObject().withOperations(Map.of("get", manual)).build())).build());
         server = httpsServerForTest().addHandler(restHandler(new Resource()).withOpenApiDocument(api).withOpenApiJsonUrl("/openapi.json")).start();
         try (okhttp3.Response response = call(request(server.uri().resolve("/openapi.json")))) {
-            JsonNode generated = JSON.readTree(response.body().string()); document(generated);
-            assertEquals(json(manual), generated.at("/paths/~1contracts~1mixed/get"));
+            JSONObject generated = new JSONObject(response.body().string()); document(generated);
+            assertJsonEquals(json(manual), generated.query("/paths/~1contracts~1mixed/get"));
         }
     }
 }

@@ -50,9 +50,9 @@ public class OpenApi31DocumentTest {
             .withExtension("x-test", Map.of("nested", Arrays.asList(false, JsonNull.INSTANCE))).build();
         document(api);
         document(api.toBuilder().build());
-        assertEquals(json(api), json(api.toBuilder().build()));
+        assertJsonEquals(json(api), json(api.toBuilder().build()));
         assertEquals("3.2.1", api.openApi());
-        assertTrue(json(api).at("/paths/~1items/post/security").isEmpty());
+        assertTrue(((org.json.JSONArray) json(api).query("/paths/~1items/post/security")).isEmpty());
         assertThrows(IllegalStateException.class, components::responses);
         assertThrows(IllegalStateException.class, operation::requestBody);
         assertThrows(IllegalStateException.class, path::parameters);
@@ -64,7 +64,7 @@ public class OpenApi31DocumentTest {
         OperationObject operation = OperationObjectBuilder.operationObject().build();
         document(OpenAPIObjectBuilder.openAPIObject().withPaths(PathsObjectBuilder.pathsObject().withPathItemObjects(Collections.singletonMap("/x",
             PathItemObjectBuilder.pathItemObject().withOperations(Collections.singletonMap("get", operation)).build())).build()).build());
-        assertEquals(1, json(ResponsesObjectBuilder.responsesObject().withDefaultValue(ResponseObjectBuilder.responseObject().withDescription("Any").build()).build()).size());
+        assertEquals(1, json(ResponsesObjectBuilder.responsesObject().withDefaultValue(ResponseObjectBuilder.responseObject().withDescription("Any").build()).build()).length());
     }
 
     @Test public void contextSensitiveValidationAndDefaults() throws Exception {
@@ -74,7 +74,7 @@ public class OpenApi31DocumentTest {
             String style = in.equals("query") || in.equals("cookie") ? "form" : "simple";
             boolean explode = style.equals("form");
             assertEquals(explode, base.explode());
-            assertEquals(json(base), json(base.toBuilder().withStyle(style).withExplode(explode).withDeprecated(false).build()));
+            assertJsonEquals(json(base), json(base.toBuilder().withStyle(style).withExplode(explode).withDeprecated(false).build()));
             if (in.equals("cookie")) assertThrows(IllegalArgumentException.class, () -> base.toBuilder().withExplode(false).build());
             else assertTrue(json(base.toBuilder().withExplode(!explode).build()).has("explode"));
         }

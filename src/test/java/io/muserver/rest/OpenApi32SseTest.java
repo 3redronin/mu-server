@@ -1,6 +1,7 @@
 package io.muserver.rest;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import org.json.JSONObject;
+import org.json.JSONArray;
 import io.muserver.MuServer;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
@@ -67,11 +68,11 @@ public class OpenApi32SseTest {
                 return builder;
             }).withOpenApiJsonUrl("/openapi.json")).start();
         try (okhttp3.Response response = call(request(server.uri().resolve("/openapi.json")))) {
-            JsonNode api = JSON.readTree(response.body().string()); document(api);
-            JsonNode choices = api.at("/paths/~1defaults/get/responses/200/content/text~1event-stream/itemSchema/oneOf");
-            assertEquals(2, choices.size());
-            assertEquals("price", choices.get(0).get("title").asText());
-            assertEquals("integer", choices.get(0).at("/properties/data/contentSchema/type").asText());
+            JSONObject api = new JSONObject(response.body().string()); document(api);
+            JSONArray choices = (JSONArray) api.query("/paths/~1defaults/get/responses/200/content/text~1event-stream/itemSchema/oneOf");
+            assertEquals(2, choices.length());
+            assertEquals("price", choices.getJSONObject(0).getString("title"));
+            assertEquals("integer", choices.getJSONObject(0).query("/properties/data/contentSchema/type"));
         }
     }
 
@@ -88,17 +89,17 @@ public class OpenApi32SseTest {
             .addCustomWriter(new IntegerJsonWriter())
             .addCustomSchema(Integer.class, schemaObject().withType("integer").withMinimum(0.0).build())
             .withOpenApiJsonUrl("/openapi.json").withOpenApiHtmlUrl("/docs")).start();
-        JsonNode api;
+        JSONObject api;
         try (okhttp3.Response response = call(request(server.uri().resolve("/openapi.json")))) {
-            api = JSON.readTree(response.body().string()); document(api);
+            api = new JSONObject(response.body().string()); document(api);
         }
-        JsonNode media = api.at("/paths/~1events/get/responses/200/content/text~1event-stream");
-        JsonNode item = media.get("itemSchema");
-        assertEquals("#/components/schemas/Integer", item.at("/properties/data/contentSchema/$ref").asText());
+        JSONObject media = (JSONObject) api.query("/paths/~1events/get/responses/200/content/text~1event-stream");
+        JSONObject item = media.getJSONObject("itemSchema");
+        assertEquals("#/components/schemas/Integer", item.query("/properties/data/contentSchema/$ref"));
         try (okhttp3.Response response = call(request(server.uri().resolve("/events")))) {
             assertEquals(200, response.code());
             okio.BufferedSource source = response.body().source();
-            com.fasterxml.jackson.databind.node.ObjectNode parsed = JSON.createObjectNode();
+            JSONObject parsed = new JSONObject();
             String line;
             while ((line = source.readUtf8LineStrict()) != null) {
                 if (line.isEmpty()) { if (parsed.has("data")) break; else continue; }
@@ -109,19 +110,19 @@ public class OpenApi32SseTest {
                 if (key.equals("retry")) parsed.put(key, Integer.parseInt(value)); else parsed.put(key, value);
             }
             assertEquals(1, release.getCount());
-            assertEquals("price", parsed.get("event").asText());
-            assertEquals("7", parsed.get("id").asText());
+            assertEquals("price", parsed.getString("event"));
+            assertEquals("7", parsed.getString("id"));
             accepts(item, parsed.toString(), true);
             // JSON Schema does not automatically decode contentSchema annotations.
-            accepts(api.at("/components/schemas/Integer"), parsed.get("data").asText(), true);
-            accepts(api.at("/components/schemas/Integer"), "-1", false);
+            accepts(api.query("/components/schemas/Integer"), parsed.getString("data"), true);
+            accepts(api.query("/components/schemas/Integer"), "-1", false);
             release.countDown();
         }
         try (okhttp3.Response response = call(request(server.uri().resolve("/events/text")))) {
             String frames = response.body().string();
             assertTrue(frames.contains("hello")); assertTrue(frames.contains("世界"));
         }
-        JsonNode generic = api.at("/paths/~1events~1text/get/responses/200/content/text~1event-stream/itemSchema");
+        JSONObject generic = (JSONObject) api.query("/paths/~1events~1text/get/responses/200/content/text~1event-stream/itemSchema");
         accepts(generic, "{\"data\":\"hello\\n世界\"}", true);
         accepts(generic, "{\"data\":\"hello\",\"retry\":-1}", false);
         try (okhttp3.Response response = call(request(server.uri().resolve("/docs")))) {

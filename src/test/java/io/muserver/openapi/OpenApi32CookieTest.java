@@ -12,7 +12,7 @@ public class OpenApi32CookieTest {
                 assertTrue(parameter.explode());
                 assertTrue(parameter.toBuilder().build().explode());
                 assertFalse(json(parameter).has("explode"));
-                assertEquals(json(parameter), json(parameter.toBuilder().build()));
+                assertJsonEquals(json(parameter), json(parameter.toBuilder().build()));
                 object("ParameterObject", json(parameter));
             }
         }

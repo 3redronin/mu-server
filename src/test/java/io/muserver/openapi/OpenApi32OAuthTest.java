@@ -32,9 +32,9 @@ public class OpenApi32OAuthTest {
                 } else {
                     OAuthFlowsObject flows = builder.build();
                     object("OAuthFlowsObject", json(flows));
-                    assertEquals(context, json(flows), json(flows.toBuilder().build()));
-                    assertEquals("/refresh", json(flows).get(slots[slot]).get("refreshUrl").asText());
-                    assertFalse(json(flows).get(slots[slot]).get("x-flow").asBoolean());
+                    assertJsonEquals(context, json(flows), json(flows.toBuilder().build()));
+                    assertEquals("/refresh", json(flows).getJSONObject(slots[slot]).getString("refreshUrl"));
+                    assertFalse(json(flows).getJSONObject(slots[slot]).getBoolean("x-flow"));
                     document(OpenAPIObjectBuilder.openAPIObject().withComponents(ComponentsObjectBuilder.componentsObject()
                         .withSecuritySchemes(Collections.singletonMap("oauth", SecuritySchemeObjectBuilder.securitySchemeObject()
                             .withType("oauth2").withFlows(flows).build())).build()).build());

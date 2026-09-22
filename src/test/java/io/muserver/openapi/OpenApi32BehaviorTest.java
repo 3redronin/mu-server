@@ -13,8 +13,8 @@ public class OpenApi32BehaviorTest {
             ExampleObject example = ExampleObjectBuilder.exampleObject().withDataValue(data).withSerializedValue("").build();
             object("ExampleObject", json(example));
             assertTrue(json(example).has("dataValue"));
-            assertEquals("", json(example).get("serializedValue").asText());
-            assertEquals(json(example), json(example.toBuilder().build()));
+            assertEquals("", json(example).getString("serializedValue"));
+            assertJsonEquals(json(example), json(example.toBuilder().build()));
             assertThrows(IllegalArgumentException.class, () -> example.toBuilder().withValue(false).build());
             assertThrows(IllegalArgumentException.class, () -> example.toBuilder().withExternalValue(URI.create("example.json")).build());
         }
@@ -31,7 +31,7 @@ public class OpenApi32BehaviorTest {
         assertEquals("", server.name());
         assertEquals(1, server.variables().size());
         assertThrows(UnsupportedOperationException.class, () -> server.variables().clear());
-        assertEquals(json(server), json(server.toBuilder().build()));
+        assertJsonEquals(json(server), json(server.toBuilder().build()));
         object("ServerObject", json(server));
         assertFalse(json(server.toBuilder().withName(null).build()).has("name"));
     }
@@ -49,7 +49,7 @@ public class OpenApi32BehaviorTest {
         assertEquals(2, api.tags().size());
         assertThrows(UnsupportedOperationException.class, () -> api.tags().clear());
         document(api);
-        assertEquals(json(api), json(api.toBuilder().build()));
+        assertJsonEquals(json(api), json(api.toBuilder().build()));
     }
 
     @Test public void newReferencePositionsKeepSnapshotsAndFailClearlyForInlineAccess() throws Exception {
@@ -70,10 +70,10 @@ public class OpenApi32BehaviorTest {
         assertThrows(IllegalStateException.class, header::content);
         assertThrows(IllegalStateException.class, components::mediaTypes);
         assertThrows(UnsupportedOperationException.class, () -> body.contentOrReferences().clear());
-        assertEquals(json(body), json(body.toBuilder().build()));
-        assertEquals(json(parameter), json(parameter.toBuilder().build()));
-        assertEquals(json(header), json(header.toBuilder().build()));
-        assertEquals(json(components), json(components.toBuilder().build()));
+        assertJsonEquals(json(body), json(body.toBuilder().build()));
+        assertJsonEquals(json(parameter), json(parameter.toBuilder().build()));
+        assertJsonEquals(json(header), json(header.toBuilder().build()));
+        assertJsonEquals(json(components), json(components.toBuilder().build()));
         document(OpenAPIObjectBuilder.openAPIObject().withComponents(components).build());
         ResponseObject other = response.toBuilder().withContentOrReferences(Map.of("text/plain", ReferenceOr.reference("#/components/mediaTypes/Other"))).build();
         assertThrows(IllegalArgumentException.class, () -> ResponseObjectBuilder.mergeResponses(response, other));
@@ -93,7 +93,7 @@ public class OpenApi32BehaviorTest {
             } else {
                 object("EncodingObject", json(encoding.build()));
                 object("MediaTypeObject", json(media.build()));
-                assertEquals(json(media.build()), json(media.build().toBuilder().build()));
+                assertJsonEquals(json(media.build()), json(media.build().toBuilder().build()));
             }
         }
         List<EncodingObject> prefix = new ArrayList<>(List.of(part));
@@ -107,7 +107,7 @@ public class OpenApi32BehaviorTest {
         for (String node : Arrays.asList("element", "attribute", "text", "cdata", "none")) {
             XmlObject xml = XmlObjectBuilder.xmlObject().withNodeType(node).build();
             object("XmlObject", json(xml));
-            assertEquals(json(xml), json(xml.toBuilder().build()));
+            assertJsonEquals(json(xml), json(xml.toBuilder().build()));
             for (boolean flag : new boolean[] {false, true}) {
                 assertThrows(IllegalArgumentException.class, () -> xml.toBuilder().withAttribute(flag).build());
                 assertThrows(IllegalArgumentException.class, () -> xml.toBuilder().withWrapped(flag).build());
@@ -124,7 +124,7 @@ public class OpenApi32BehaviorTest {
         object("SchemaObject", json(alternatives));
         accepts(alternatives, "123", true);
         accepts(alternatives, "false", false);
-        assertEquals(json(alternatives), json(alternatives.toBuilder().build()));
+        assertJsonEquals(json(alternatives), json(alternatives.toBuilder().build()));
     }
 
     @Test public void securityMetadataIsContextualAndExplicitFalseSurvives() throws Exception {
@@ -132,8 +132,8 @@ public class OpenApi32BehaviorTest {
             .withFlows(OAuthFlowsObjectBuilder.oAuthFlowsObject().build()).withOauth2MetadataUrl(URI.create("https://example.test/oauth"))
             .withDeprecated(false).build();
         object("SecuritySchemeObject", json(oauth));
-        assertFalse(json(oauth).get("deprecated").asBoolean());
-        assertEquals(json(oauth), json(oauth.toBuilder().build()));
+        assertFalse(json(oauth).getBoolean("deprecated"));
+        assertJsonEquals(json(oauth), json(oauth.toBuilder().build()));
         assertThrows(IllegalArgumentException.class, () -> oauth.toBuilder().withType("http").withScheme("bearer").build());
     }
 }

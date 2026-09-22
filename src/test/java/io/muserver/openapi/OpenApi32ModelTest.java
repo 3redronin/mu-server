@@ -26,9 +26,9 @@ public class OpenApi32ModelTest {
             OpenAPIObject api = OpenAPIObjectBuilder.openAPIObject().withComponents(ComponentsObjectBuilder.componentsObject().build()).withSelf(value).build();
             assertEquals(value, api.self());
             assertEquals(value, api.toBuilder().build().self());
-            assertEquals(json(api), json(api.toBuilder().build()));
+            assertJsonEquals(json(api), json(api.toBuilder().build()));
             if (value == null) assertFalse(json(api).has("$self"));
-            else assertEquals(value, json(api).get("$self").asText());
+            else assertEquals(value, json(api).getString("$self"));
             document(api);
         }
     }
@@ -37,8 +37,8 @@ public class OpenApi32ModelTest {
         Map<String, ReferenceOr<MediaTypeObject>> content = Collections.singletonMap("text/event-stream", ReferenceOr.reference("#/components/mediaTypes/Events"));
         ResponseObject response = ResponseObjectBuilder.responseObject().withSummary("Events").withContentOrReferences(content).build();
         assertThrows(IllegalStateException.class, response::content);
-        assertEquals(json(response), json(response.toBuilder().build()));
-        assertEquals(json(response), json(ResponseObjectBuilder.mergeResponses(response, response).build()));
+        assertJsonEquals(json(response), json(response.toBuilder().build()));
+        assertJsonEquals(json(response), json(ResponseObjectBuilder.mergeResponses(response, response).build()));
         OpenAPIObject api = OpenAPIObjectBuilder.openAPIObject().withSelf("https://example.test/api.json")
             .withComponents(ComponentsObjectBuilder.componentsObject().withMediaTypes(Collections.singletonMap("Events",
                 MediaTypeObjectBuilder.mediaTypeObject().withItemSchema(schemaObject().withType("object").build()).build()))
@@ -76,7 +76,7 @@ public class OpenApi32ModelTest {
             if (mediaType.startsWith("multipart")) builder.withPrefixEncoding(Collections.singletonList(EncodingObjectBuilder.encodingObject().withContentType("application/json").build()))
                 .withItemEncoding(EncodingObjectBuilder.encodingObject().withContentType("text/plain").build());
             MediaTypeObject value = builder.build();
-            object("MediaTypeObject", json(value)); assertEquals(json(value), json(value.toBuilder().build()));
+            object("MediaTypeObject", json(value)); assertJsonEquals(json(value), json(value.toBuilder().build()));
             MediaTypeObject merged = MediaTypeObjectBuilder.mergeMediaTypes(value, MediaTypeObjectBuilder.mediaTypeObject()
                 .withItemSchema(schemaObject().withType("boolean").build()).build()).build();
             assertEquals(2, merged.itemSchema().anyOf().size());

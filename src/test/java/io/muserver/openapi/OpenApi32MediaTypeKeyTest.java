@@ -22,7 +22,7 @@ public class OpenApi32MediaTypeKeyTest {
         values.put("Alias", ReferenceOr.reference("#/components/mediaTypes/Good-1.0_name"));
         for (Map<String, ReferenceOr<MediaTypeObject>> map : Arrays.asList(values, Collections.<String, ReferenceOr<MediaTypeObject>>emptyMap())) {
             ComponentsObject components = ComponentsObjectBuilder.componentsObject().withMediaTypesOrReferences(map).build();
-            assertEquals(json(components), json(components.toBuilder().build()));
+            assertJsonEquals(json(components), json(components.toBuilder().build()));
             document(OpenAPIObjectBuilder.openAPIObject().withComponents(components).build());
         }
     }

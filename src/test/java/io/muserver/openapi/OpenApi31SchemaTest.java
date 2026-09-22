@@ -17,7 +17,7 @@ public class OpenApi31SchemaTest {
                 assertEquals(keyword + " from " + value.getClass(), Integer.valueOf(1),
                     SchemaObject.class.getMethod(keyword).invoke(schema));
                 assertEquals(Integer.valueOf(1), SchemaObject.class.getMethod(keyword).invoke(schema.toBuilder().build()));
-                assertEquals(1, json(schema).get(keyword).intValue());
+                assertEquals(1, json(schema).getInt(keyword));
             }
         }
     }
@@ -27,7 +27,7 @@ public class OpenApi31SchemaTest {
         for (String keyword : Arrays.asList("maxLength", "minLength", "maxItems", "minItems",
             "maxProperties", "minProperties", "minContains", "maxContains")) {
             SchemaObject schema = schemaObject().withKeyword(keyword, large).build();
-            assertEquals(large, json(schema).get(keyword).bigIntegerValue());
+            assertEquals(large, json(schema).getBigInteger(keyword));
             assertEquals(large, schema.toBuilder().build().keywords().get(keyword));
             java.lang.reflect.InvocationTargetException error = assertThrows(java.lang.reflect.InvocationTargetException.class,
                 () -> SchemaObject.class.getMethod(keyword).invoke(schema));
@@ -55,7 +55,8 @@ public class OpenApi31SchemaTest {
             .withExamples(Arrays.asList(JsonNull.INSTANCE, "a")).build();
         accepts(schema, "null", false);
         accepts(schema, "\"a\"", true);
-        assertTrue(json(schema).get("default").isNull());
+        assertTrue(json(schema).has("default"));
+        assertTrue(json(schema).isNull("default"));
         assertFalse(json(schema).has("nullable"));
         assertEquals(Arrays.asList("string", "null"), schema.types());
         assertThrows(IllegalStateException.class, schema::type);
@@ -73,12 +74,12 @@ public class OpenApi31SchemaTest {
         SchemaObject string = schemaObject().withType("string").build();
         SchemaObject number = schemaObject().withType("number").build();
         SchemaObject neither = schemaObject().withNot(Arrays.asList(string, number)).build();
-        assertTrue(json(neither).get("not").isObject());
+        assertTrue(json(neither).get("not") instanceof org.json.JSONObject);
         accepts(neither, "\"a\"", false);
         accepts(neither, "2", false);
         accepts(neither, "true", true);
         assertEquals("{}", schemaObject().withNot(Collections.emptyList()).build().toString());
-        assertEquals(json(string), json(schemaObject().withNot(Collections.singletonList(string)).build()).get("not"));
+        assertJsonEquals(json(string), json(schemaObject().withNot(Collections.singletonList(string)).build()).get("not"));
         SchemaObject exclusive = schemaObject().withMinimum(1.0).withExclusiveMinimum(true).build();
         assertFalse(json(exclusive).has("minimum"));
         accepts(exclusive, "1", false);
@@ -128,7 +129,14 @@ public class OpenApi31SchemaTest {
         accepts(payment, "{\"kind\":\"card\",\"amount\":19.95,\"iban\":\"demo\"}", false);
         accepts(payment, "{\"kind\":\"cash\",\"amount\":19.95,\"cardToken\":\"demo\"}", false);
         accepts(payment, "{\"kind\":\"card\",\"amount\":0,\"cardToken\":\"demo\"}", false);
-        assertEquals(json(payment), json(payment.toBuilder().build()));
+        assertJsonEquals(json(payment), json(payment.toBuilder().build()));
+    }
+
+    @Test public void validatorRejectsUnbundledReferencesWithoutNetworkFallback() {
+        com.networknt.schema.SchemaException error = assertThrows(com.networknt.schema.SchemaException.class, () ->
+            accepts(schemaObject().withRef("https://example.test/unbundled-schema").build(), "{}", true));
+        assertTrue(error.getCause() instanceof java.io.FileNotFoundException);
+        assertEquals("https://example.test/unbundled-schema", error.getCause().getMessage());
     }
 
     @Test public void refsAnchorsAndPreciseBoundsAreCopied() throws Exception {
@@ -136,7 +144,7 @@ public class OpenApi31SchemaTest {
             .withDefs(Collections.singletonMap("amount", schemaObject().withType("number")
                 .withExclusiveMinimumValue(new BigDecimal("0.12345678901234567890123456789")).build()))
             .withRef("#/$defs/amount").withComment("unchanged").build();
-        assertEquals(json(schema), json(schema.toBuilder().build()));
+        assertJsonEquals(json(schema), json(schema.toBuilder().build()));
         accepts(schema, "0.12345678901234567890123456789", false);
         accepts(schema, "0.12345678901234567890123456790", true);
         accepts(schema, "0.1", false);
@@ -160,14 +168,14 @@ public class OpenApi31SchemaTest {
         assertEquals(before, built.toBuilder().build().toString());
         assertThrows(UnsupportedOperationException.class, () -> ((Map) built.defaultValue()).put("x", 1));
         assertThrows(UnsupportedOperationException.class, () -> ((List) ((Map) built.defaultValue()).get("list")).add(1));
-        assertEquals("[1,2]", json(new int[]{1, 2}).toString());
-        assertEquals("[1,2]", json(new LinkedHashSet<>(Arrays.asList(1, 2))).toString());
-        assertEquals("123456789012345678901234567890", json(new BigInteger("123456789012345678901234567890")).toString());
+        assertEquals("[1,2]", jsonValue(new int[]{1, 2}).toString());
+        assertEquals("[1,2]", jsonValue(new LinkedHashSet<>(Arrays.asList(1, 2))).toString());
+        assertEquals("123456789012345678901234567890", jsonValue(new BigInteger("123456789012345678901234567890")).toString());
         for (double value : new double[]{Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
             assertThrows(IllegalArgumentException.class, () -> schemaObject().withDefaultValue(value).build());
             assertThrows(IllegalArgumentException.class, () -> Jsonizer.writeValue(new StringWriter(), value));
         }
         StringBuilder controls = new StringBuilder(); for (char c = 0; c < 32; c++) controls.append(c);
-        assertEquals(controls.toString(), json(controls.toString()).asText());
+        assertEquals(controls.toString(), jsonValue(controls.toString()));
     }
 }

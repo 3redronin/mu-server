@@ -1,6 +1,6 @@
 package io.muserver.openapi;
 
-import com.fasterxml.jackson.databind.JsonNode;
+import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -52,7 +52,7 @@ public class OpenApi31FieldCoverageTest {
         method.invoke(builder, value);
         Object built = builder.getClass().getMethod("build").invoke(builder);
         assertNotNull(type.getMethod(getter).invoke(built));
-        JsonNode document = json(built);
+        JSONObject document = json(built);
         if (model.equals("OAuthFlowObject")) {
             OAuthFlowsObjectBuilder flows = OAuthFlowsObjectBuilder.oAuthFlowsObject();
             if (keyword.equals("deviceAuthorizationUrl")) flows.withDeviceAuthorization((OAuthFlowObject) built);
@@ -62,7 +62,7 @@ public class OpenApi31FieldCoverageTest {
         // These explicit values equal their context-dependent defaults and are intentionally omitted.
         if (!(keyword.equals("style") && model.equals("HeaderObject"))) assertTrue(document.toString(), document.has(keyword));
         Object copy = type.getMethod("toBuilder").invoke(built);
-        assertEquals(document, json(copy.getClass().getMethod("build").invoke(copy)));
+        assertJsonEquals(document, json(copy.getClass().getMethod("build").invoke(copy)));
         if (!model.equals("ReferenceObject") && !model.equals("SecurityRequirementObject")) {
             Method extension = builder.getClass().getMethod("withExtension", String.class, Object.class);
             extension.invoke(builder, "x-test", Arrays.asList(1, JsonNull.INSTANCE));
