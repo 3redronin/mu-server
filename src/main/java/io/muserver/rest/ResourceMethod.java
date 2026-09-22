@@ -22,7 +22,6 @@ import static io.muserver.openapi.RequestBodyObjectBuilder.requestBodyObject;
 import static io.muserver.openapi.ResponseObjectBuilder.responseObject;
 import static io.muserver.openapi.ResponsesObjectBuilder.responsesObject;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
-import static io.muserver.openapi.SchemaObjectBuilder.schemaObjectFrom;
 import static java.util.Collections.singletonMap;
 import static java.util.stream.Collectors.toMap;
 
@@ -190,7 +189,7 @@ class ResourceMethod {
                             SchemaObjectCustomizerTarget.FORM_PARAM, form.key(), mediaType, form, null, providers));
                         boolean urlEncoded = mediaType.isCompatible(MediaType.APPLICATION_FORM_URLENCODED_TYPE);
                         Class<?> formType = form.type().isArray() ? form.type().getComponentType() : form.type();
-                        if (io.muserver.UploadedFile.class.isAssignableFrom(formType) || java.io.File.class.isAssignableFrom(formType)) {
+                        if (io.muserver.UploadedFile.class.isAssignableFrom(formType) || java.io.File.class.isAssignableFrom(form.type())) {
                             encoding.put(form.key(), EncodingObjectBuilder.encodingObject().withContentType("application/octet-stream").build());
                         } else if (form.isMultiValued() && urlEncoded) {
                             encoding.put(form.key(), EncodingObjectBuilder.encodingObject().withStyle("form").withExplode(true).build());
@@ -272,13 +271,8 @@ class ResourceMethod {
         if (provider instanceof StringEntityProviders.ReaderEntityReader || provider instanceof StringEntityProviders.ReaderEntityWriter
             || provider instanceof StringEntityProviders.CharArrayReaderWriter) return schemaObject().withType("string");
         if (provider instanceof StringEntityProviders.TemporalEntityReaderWriter) {
-            jakarta.ws.rs.ext.ParamConverter<?> converter = new BuiltInParamConverterProvider().getConverter(type, resolved, methodAnnotations);
-            if (converter != null) {
-                SchemaObjectBuilder schema = JavaValueSchemas.parameter(type, converter);
-                // Input formats describe preferred syntax; temporal writers may emit shorter Java forms.
-                if (target == SchemaObjectCustomizerTarget.RESPONSE_BODY) schema.withFormat(schemaObjectFrom(type).format());
-                return schema;
-            }
+            return target == SchemaObjectCustomizerTarget.REQUEST_BODY
+                ? JavaValueSchemas.temporalInput(type) : JavaValueSchemas.temporalOutput(type);
         }
         return SchemaReference.infer(registrations, type, genericType);
     }

@@ -146,8 +146,7 @@ public class JavaValueSchemaIntegrationTest {
         assertEquals("time-local", parameters.getJSONObject(0).getJSONObject("schema").getJSONObject("items").getString("format"));
         JSONObject file = paths.getJSONObject("/formats/file").getJSONObject("get").getJSONArray("parameters")
             .getJSONObject(0).getJSONObject("schema");
-        assertEquals("string", file.getString("type"));
-        assertFalse(file.has("format"));
+        assertEquals("{}", file.toString());
         assertEquals("{}", io.muserver.openapi.SchemaObjectBuilder.schemaObjectFrom(java.io.File.class).build().toString());
     }
 

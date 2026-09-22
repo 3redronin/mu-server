@@ -279,6 +279,9 @@ abstract class ResourceMethodParam {
         io.muserver.openapi.SchemaObjectBuilder documentationSchema(List<SchemaReference> registrations) {
             SchemaReference registration = SchemaReference.find(registrations, type(), genericType());
             if (registration != null) return registration.schema.toBuilder();
+            // Scalar File parameters bypass converters and consume an uploaded part.
+            // File arrays and collections still contain converter-backed filesystem paths.
+            if (File.class.isAssignableFrom(type())) return io.muserver.openapi.SchemaObjectBuilder.schemaObject();
             Type valueGeneric = type().isArray() ? type().getComponentType()
                 : Collection.class.isAssignableFrom(type()) ? GenericTypeResolver.resolveTypeArgument(genericType(), Collection.class, 0) : genericType();
             Class<?> valueType = valueGeneric == null ? convertedValueType : SchemaReference.rawClass(valueGeneric);
