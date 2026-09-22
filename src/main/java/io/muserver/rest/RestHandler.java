@@ -115,6 +115,7 @@ public class RestHandler implements MuHandler {
             };
 
             matchedMethodsForPath = requestMatcher.getMatchedMethodsForPath(requestContext.relativePath(), subResourceLocator);
+            requestContext.setMatchedMethodsForPath(matchedMethodsForPath);
             RequestMatcher.MatchedMethod mm;
             try {
                 mm = requestMatcher.stepThreeIdentifyTheMethodThatWillHandleTheRequest(requestContext.getMuMethod(), matchedMethodsForPath, requestContext.getHeaderString("Content-Type"), acceptHeaders);
@@ -166,7 +167,6 @@ public class RestHandler implements MuHandler {
                 if (result instanceof CompletionStage) {
                     AsyncHandle asyncHandle = muRequest.handleAsync();
                     CompletionStage<?> cs = (CompletionStage<?>) result;
-                    Set<RequestMatcher.MatchedMethod> candidates = matchedMethodsForPath;
                     cs.whenComplete((value, failure) -> {
                         @Nullable Throwable completionFailure = null;
                         try {
@@ -175,7 +175,6 @@ public class RestHandler implements MuHandler {
                                     completionStageResultType(methodReturnType));
                             } else {
                                 Throwable cause = unwrapCompletionFailure(failure);
-                                advertiseUnsupportedQueryRepresentation(cause, requestContext, muResponse, candidates);
                                 dealWithUnhandledException(0, requestContext, muResponse, cause,
                                     acceptHeaders, produces, directlyProduces);
                             }
@@ -194,7 +193,6 @@ public class RestHandler implements MuHandler {
         } catch (NotMatchedException e) {
             return false;
         } catch (Exception ex) {
-            advertiseUnsupportedQueryRepresentation(ex, requestContext, muResponse, matchedMethodsForPath);
             if (producesRef == null) producesRef = emptyList();
             if (directlyProducesRef == null) directlyProducesRef = emptyList();
             try {
@@ -207,13 +205,6 @@ public class RestHandler implements MuHandler {
             }
         }
         return true;
-    }
-
-    private static void advertiseUnsupportedQueryRepresentation(Throwable failure, JaxRSRequest request,
-        MuResponse response, Set<RequestMatcher.MatchedMethod> candidates) {
-        if (failure instanceof UnsupportedRepresentationException && request.getMuMethod() == Method.QUERY) {
-            AcceptQueryHeader.write(response, candidates);
-        }
     }
 
     private static @Nullable Type completionStageResultType(@Nullable Type returnType) {
@@ -277,6 +268,9 @@ public class RestHandler implements MuHandler {
                 muResponse.write("<h1>500 Internal Server Error</h1><p>ErrorID=" + errorID + "</p>");
             }
             return;
+        }
+        if (ex instanceof UnsupportedRepresentationException && request.getMuMethod() == Method.QUERY) {
+            AcceptQueryHeader.write(muResponse, request.matchedMethodsForPath());
         }
         if (ex instanceof JaxRSRequest.FilterAbortedException) {
             sendResponse(nestingLevel, request, muResponse, acceptHeaders, producesRef, directlyProducesRef,

@@ -6,6 +6,8 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.EntityTag;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.MessageBodyReader;
+import jakarta.ws.rs.container.AsyncResponse;
+import jakarta.ws.rs.container.Suspended;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.container.ContainerResponseFilter;
 import org.json.JSONObject;
@@ -98,6 +100,7 @@ public class QueryRestTest {
     @Path("/async-root") public static class AsyncRoot {
         final AtomicInteger calls = new AtomicInteger();
         @Path("/child") public AsyncXml child() { calls.incrementAndGet(); return new AsyncXml(); }
+        @Path("/suspended") public SuspendedXml suspended() { calls.incrementAndGet(); return new SuspendedXml(); }
     }
     public static class AsyncXml {
         @QUERY @Consumes("text/plain") public String text(String body) { return body; }
@@ -107,7 +110,7 @@ public class QueryRestTest {
             return read(source);
         }
         @POST @Consumes("application/xml") public CompletionStage<String> post(StreamSource source) { return read(source); }
-        private CompletionStage<String> read(StreamSource source) {
+        private static CompletionStage<String> read(StreamSource source) {
             return CompletableFuture.supplyAsync(() -> {
                 try {
                     StringWriter text = new StringWriter();
@@ -120,12 +123,38 @@ public class QueryRestTest {
         }
     }
 
+    public static class SuspendedXml {
+        @QUERY @Consumes("text/plain") public String text(String body) { return body; }
+        @QUERY @Consumes("application/xml") public void query(StreamSource source,
+            @Context MuResponse response, @QueryParam("override") boolean override, @Suspended AsyncResponse suspended) {
+            if (override) response.headers().set("Accept-Query", "\"application/custom\"");
+            read(source, suspended);
+        }
+        @POST @Consumes("application/xml") public void post(StreamSource source, @Suspended AsyncResponse suspended) {
+            read(source, suspended);
+        }
+        private void read(StreamSource source, AsyncResponse suspended) {
+            AsyncXml.read(source).whenComplete((value, failure) -> {
+                if (failure == null) suspended.resume(value);
+                else suspended.resume(failure.getCause());
+            });
+        }
+    }
+
+    @Test public void suspendedRepresentationFailuresAdvertiseResolvedQueryFormats() throws Exception {
+        assertAsynchronousRepresentationDiscovery("/async-root/suspended");
+    }
+
     @Test public void asynchronousRepresentationFailuresAdvertiseResolvedQueryFormats() throws Exception {
+        assertAsynchronousRepresentationDiscovery("/async-root/child");
+    }
+
+    private void assertAsynchronousRepresentationDiscovery(String resourcePath) throws Exception {
         AsyncRoot root = new AsyncRoot();
         server = serverBuilder().addHandler(restHandler(root)).start();
         for (String method : Arrays.asList("QUERY", "POST")) {
             for (boolean override : new boolean[]{false, true}) {
-                String path = "/async-root/child?override=" + override;
+                String path = resourcePath + "?override=" + override;
                 try (okhttp3.Response response = call(request(server.uri().resolve(path)).method(method,
                     okhttp3.RequestBody.create("<query/>".getBytes(StandardCharsets.UTF_8), okhttp3.MediaType.get("application/xml; charset=unsupported-charset"))))) {
                     assertEquals(415, response.code());
@@ -136,7 +165,7 @@ public class QueryRestTest {
             }
         }
         assertEquals(4, root.calls.get());
-        try (okhttp3.Response response = call(query("/async-root/child", "application/xml; charset=UTF-8", "<query/>"))) {
+        try (okhttp3.Response response = call(query(resourcePath, "application/xml; charset=UTF-8", "<query/>"))) {
             assertEquals(200, response.code());
             assertEquals("<query/>", response.body().string());
             assertNull(response.header("Accept-Query"));

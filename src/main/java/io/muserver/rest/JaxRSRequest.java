@@ -43,6 +43,7 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     private boolean requestFilterChainRunning;
     private boolean responseFilterChainStarted;
     private boolean exceptionMapperUsed;
+    private Set<RequestMatcher.MatchedMethod> matchedMethodsForPath = Collections.emptySet();
 
     JaxRSRequest(MuRequest muRequest, MuResponse muResponse, InputStream inputStream, String relativePath, SecurityContext securityContext, List<ReaderInterceptor> readerInterceptors, Providers providers) {
         this.muRequest = muRequest;
@@ -509,6 +510,14 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
 
     void setRequestFilterChainRunning(boolean requestFilterChainRunning) {
         this.requestFilterChainRunning = requestFilterChainRunning;
+    }
+
+    void setMatchedMethodsForPath(Set<RequestMatcher.MatchedMethod> matchedMethodsForPath) {
+        this.matchedMethodsForPath = matchedMethodsForPath;
+    }
+
+    Set<RequestMatcher.MatchedMethod> matchedMethodsForPath() {
+        return matchedMethodsForPath;
     }
 
     void setMatchedMethod(RequestMatcher.MatchedMethod matchedMethod) {
