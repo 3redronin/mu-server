@@ -31,7 +31,7 @@ public class ComponentsObject implements JsonWriter {
         this.pathItems = OpenApiUtils.immutable(pathItems);
         this.mediaTypes = OpenApiUtils.immutable(mediaTypes);
         this.extensions = Extensions.copy(extensions);
-        checkKey(schemas, responses, parameters, examples, requestBodies, headers, securitySchemes, links, callbacks, pathItems);
+        checkKey(schemas, responses, parameters, examples, requestBodies, headers, securitySchemes, links, callbacks, pathItems, mediaTypes);
         this.schemas = schemas;
         this.responses = responses;
         this.parameters = parameters;

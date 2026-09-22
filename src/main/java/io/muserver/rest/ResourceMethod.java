@@ -402,7 +402,15 @@ class ResourceMethod {
             result.add(new ApiResponseObj(response.code(), response.message(), response.responseHeaders(), raw == null ? Object.class : raw,
                 type, response.contentType(), response.example()));
         }
-        if (result.isEmpty() || (methodResponses.isEmpty() && declared.keySet().stream().noneMatch(code -> code.startsWith("2") || "default".equals(code)))) {
+        Set<String> eventCodes = new LinkedHashSet<>();
+        for (ApiSseEvent event : sseDeclarations().values()) eventCodes.add(event.code());
+        for (String code : eventCodes) {
+            if (!declared.containsKey(code)) {
+                result.add(new ApiResponseObj(code, "Event stream", new ResponseHeader[0], void.class,
+                    void.class, new String[0], null));
+            }
+        }
+        if (eventCodes.isEmpty() && (result.isEmpty() || (methodResponses.isEmpty() && declared.keySet().stream().noneMatch(code -> code.startsWith("2") || "default".equals(code))))) {
             Type type = genericReturnType() == null ? methodHandle().getReturnType() : Objects.requireNonNull(genericReturnType());
             boolean suspended = params.stream().anyMatch(p -> p.source() == ResourceMethodParam.ValueSource.SUSPENDED);
             if (suspended) type = Object.class;
