@@ -194,8 +194,9 @@ class OpenApiDocumentor implements MuHandler {
                 .filter(p -> p.source().openAPIIn != null || documentedPath.matrixParams.containsKey(p))
                 .map(p -> {
                     MatrixParamDocumentation matrixParam = documentedPath.matrixParams.get(p);
-                    ParameterObjectBuilder builder = p.createDocumentationBuilder(matrixParam == null ? p.key() : matrixParam.parameterName);
-                    builder.withSchema(method.parameterSchema(customSchemas, p));
+                    String documentationName = matrixParam == null ? p.key() : matrixParam.parameterName;
+                    ParameterObjectBuilder builder = p.createDocumentationBuilder(documentationName);
+                    builder.withSchema(method.parameterSchema(customSchemas, p, documentationName));
                     if (p.isMultiValued() && p.source() == ResourceMethodParam.ValueSource.QUERY_PARAM) {
                         builder.withStyle("form").withExplode(collectionParameterStrategy == CollectionParameterStrategy.NO_TRANSFORM);
                     }

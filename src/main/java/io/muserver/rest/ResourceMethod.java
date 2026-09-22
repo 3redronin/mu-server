@@ -165,7 +165,7 @@ class ResourceMethod {
             Map<String, MediaTypeObject> content = new LinkedHashMap<>();
             for (MediaType mediaType : effectiveConsumes) {
                 SchemaObject schema = documentedSchema(customSchemas, body.type(), body.genericType(),
-                    SchemaObjectCustomizerTarget.REQUEST_BODY, null, mediaType, null, body.descriptionData, entityProviders);
+                    SchemaObjectCustomizerTarget.REQUEST_BODY, null, mediaType, null, body, entityProviders);
                 content.put(mediaType.toString(), mediaTypeObject().withSchema(schema)
                     .withExample(body.descriptionData == null ? null : body.descriptionData.example).build());
             }
@@ -209,16 +209,22 @@ class ResourceMethod {
                 .withDefaultValue(defaultResponse).build());
     }
 
-    SchemaObject parameterSchema(List<SchemaReference> registrations, ResourceMethodParam.RequestBasedParam parameter) {
+    SchemaObject parameterSchema(List<SchemaReference> registrations, ResourceMethodParam.RequestBasedParam parameter, String documentationName) {
+        if (!params.contains(parameter)) {
+            ResourceMethod locator = resourceClass.locatorMethod;
+            if (locator == null) throw new IllegalArgumentException("Parameter does not belong to this resource method or its locators");
+            return locator.parameterSchema(registrations, parameter, documentationName);
+        }
         return documentedSchema(registrations, parameter.type(), parameter.genericType(),
-            SchemaObjectCustomizerTarget.PARAMETER, parameter.key(), MediaType.TEXT_PLAIN_TYPE, parameter, null, null);
+            SchemaObjectCustomizerTarget.PARAMETER, documentationName, MediaType.TEXT_PLAIN_TYPE, parameter, null, null);
     }
 
     private SchemaObject documentedSchema(List<SchemaReference> registrations, Class<?> type, @Nullable Type genericType,
                                           SchemaObjectCustomizerTarget target, @Nullable String name, MediaType mediaType,
-                                          ResourceMethodParam.@Nullable RequestBasedParam form, @Nullable DescriptionData bodyDescription, @Nullable EntityProviders entityProviders) {
+                                          ResourceMethodParam.@Nullable RequestBasedParam form, ResourceMethodParam.@Nullable MessageBodyParam body, @Nullable EntityProviders entityProviders) {
         SchemaReference registration = SchemaReference.find(registrations, type, genericType);
-        SchemaObjectBuilder builder = registration != null ? registration.schema.toBuilder() : form != null ? form.documentationSchema(registrations) : entitySchema(registrations, type, genericType, target, mediaType, entityProviders);
+        SchemaObjectBuilder builder = registration != null ? registration.schema.toBuilder() : form != null ? form.documentationSchema(registrations) : entitySchema(registrations, type, genericType, target, mediaType, body == null ? methodAnnotations : body.annotations, entityProviders);
+        DescriptionData bodyDescription = body == null ? null : body.descriptionData;
         if (bodyDescription != null) {
             if (bodyDescription.summary != null) builder.withTitle(bodyDescription.summary);
             if (bodyDescription.description != null) builder.withDescription(bodyDescription.description);
@@ -245,14 +251,14 @@ class ResourceMethod {
     }
 
     private SchemaObjectBuilder entitySchema(List<SchemaReference> registrations, Class<?> type, @Nullable Type genericType,
-                                              SchemaObjectCustomizerTarget target, MediaType mediaType,
+                                              SchemaObjectCustomizerTarget target, MediaType mediaType, Annotation[] annotations,
                                               @Nullable EntityProviders providers) {
         if (providers == null) return schemaObject();
         Type resolved = genericType == null ? type : genericType;
         Object provider;
         boolean builtIn;
         if (target == SchemaObjectCustomizerTarget.REQUEST_BODY) {
-            jakarta.ws.rs.ext.MessageBodyReader<?> reader = providers.findReader(type, resolved, methodAnnotations, mediaType);
+            jakarta.ws.rs.ext.MessageBodyReader<?> reader = providers.findReader(type, resolved, annotations, mediaType);
             provider = reader;
             builtIn = reader != null && providers.isBuiltInReader(reader);
         } else {
