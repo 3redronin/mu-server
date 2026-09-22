@@ -94,6 +94,9 @@ public class OAuthFlowsObject implements JsonWriter {
             throw new IllegalArgumentException(slot + " OAuth flow " + (required ? "requires " : "does not allow ") + field);
         }
     }
-    /** @return the OpenAPI 3.2 deviceAuthorization value */
+    /**
+     * @return the device authorization flow configuration, or null when omitted
+     * @see OAuthFlowsObjectBuilder#withDeviceAuthorization
+     */
     public @Nullable OAuthFlowObject deviceAuthorization() { return deviceAuthorization; }
 }

@@ -92,6 +92,9 @@ public class XmlObject implements JsonWriter {
         return new XmlObjectBuilder()
             .withNodeType(nodeType).withExtensions(extensions).withName(name).withNamespace(namespace).withPrefix(prefix).withAttribute(attribute).withWrapped(wrapped);
     }
-    /** @return the OpenAPI 3.2 nodeType value */
+    /**
+     * @return the XML node type, or null when omitted
+     * @see XmlObjectBuilder#withNodeType
+     */
     public @Nullable String nodeType() { return nodeType; }
 }

@@ -155,7 +155,11 @@ public class OpenAPIObjectBuilder {
     /** @return the configured paths, or null if absent */
     public @Nullable PathsObject paths() { return paths; }
     /**
-     * @param value the OpenAPI 3.2 $self URI reference, without a fragment, or null to omit it
+     * Sets the document URI used as the base for resolving relative references within this API description.
+     * The URI may be relative, but must not contain a fragment.
+     * This identifies the description document, not an API server endpoint.
+     *
+     * @param value the document URI reference, or null to omit it
      * @return this builder
      */
     public OpenAPIObjectBuilder withSelf(@Nullable String value) { this.self = value; return this; }

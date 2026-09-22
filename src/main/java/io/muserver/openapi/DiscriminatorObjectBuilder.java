@@ -71,7 +71,12 @@ public class DiscriminatorObjectBuilder {
         return this;
     }
     /**
-     * @param value the OpenAPI 3.2 defaultMapping value
+     * Sets the fallback schema for a missing or unrecognized discriminator value.
+     * Use a schema name or URI reference, such as {@code #/components/schemas/OtherPet}.
+     * A fallback is required when the discriminating property is optional.
+     * This is a hint for consumers; it does not change JSON Schema validation.
+     *
+     * @param value the fallback schema name or URI reference, or null to omit it
      * @return this builder
      */
     public DiscriminatorObjectBuilder withDefaultMapping(@Nullable String value) { this.defaultMapping = value; return this; }

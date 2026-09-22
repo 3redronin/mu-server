@@ -89,12 +89,24 @@ public class MediaTypeObject implements JsonWriter {
         return new MediaTypeObjectBuilder()
             .withDescription(description).withItemSchema(itemSchema).withPrefixEncoding(prefixEncoding).withItemEncoding(itemEncoding).withExtensions(extensions).withSchema(schema).withExample(example).withExamplesOrReferences(examples).withEncoding(encoding);
     }
-    /** @return the OpenAPI 3.2 description value */
+    /**
+     * @return the description of this media-type representation, or null when omitted
+     * @see MediaTypeObjectBuilder#withDescription
+     */
     public @Nullable String description() { return description; }
-    /** @return the OpenAPI 3.2 itemSchema value */
+    /**
+     * @return the schema for each stream item, or null when omitted
+     * @see MediaTypeObjectBuilder#withItemSchema
+     */
     public @Nullable SchemaObject itemSchema() { return itemSchema; }
-    /** @return the OpenAPI 3.2 prefixEncoding value */
+    /**
+     * @return the encodings for the initial multipart parts, in order, or null when omitted
+     * @see MediaTypeObjectBuilder#withPrefixEncoding
+     */
     public java.util.@Nullable List<EncodingObject> prefixEncoding() { return prefixEncoding; }
-    /** @return the OpenAPI 3.2 itemEncoding value */
+    /**
+     * @return the encoding for remaining multipart parts, or null when omitted
+     * @see MediaTypeObjectBuilder#withItemEncoding
+     */
     public @Nullable EncodingObject itemEncoding() { return itemEncoding; }
 }

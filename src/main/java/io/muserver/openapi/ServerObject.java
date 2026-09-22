@@ -67,6 +67,9 @@ public class ServerObject implements JsonWriter {
         return new ServerObjectBuilder()
             .withName(name).withExtensions(extensions).withUrl(url).withDescription(description).withVariables(variables);
     }
-    /** @return the OpenAPI 3.2 name value */
+    /**
+     * @return the server name, or null when omitted
+     * @see ServerObjectBuilder#withName
+     */
     public @Nullable String name() { return name; }
 }

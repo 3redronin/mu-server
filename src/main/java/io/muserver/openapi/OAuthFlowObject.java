@@ -79,6 +79,9 @@ public class OAuthFlowObject implements JsonWriter {
         return new OAuthFlowObjectBuilder()
             .withDeviceAuthorizationUrl(deviceAuthorizationUrl).withExtensions(extensions).withAuthorizationUrl(authorizationUrl).withTokenUrl(tokenUrl).withRefreshUrl(refreshUrl).withScopes(scopes);
     }
-    /** @return the OpenAPI 3.2 deviceAuthorizationUrl value */
+    /**
+     * @return the device authorization endpoint URL, or null when omitted
+     * @see OAuthFlowObjectBuilder#withDeviceAuthorizationUrl
+     */
     public java.net.@Nullable URI deviceAuthorizationUrl() { return deviceAuthorizationUrl; }
 }

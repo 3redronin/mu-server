@@ -82,7 +82,10 @@ public class ServerObjectBuilder {
         return this;
     }
     /**
-     * @param value the OpenAPI 3.2 name value
+     * Sets a unique name by which consumers can identify this server.
+     * This is a label for the server; it does not change its URL or URL variables.
+     *
+     * @param value the server name, or null to omit it
      * @return this builder
      */
     public ServerObjectBuilder withName(@Nullable String value) { this.name = value; return this; }

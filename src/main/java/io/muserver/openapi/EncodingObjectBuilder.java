@@ -127,17 +127,30 @@ public class EncodingObjectBuilder {
      * @return this builder */
     public EncodingObjectBuilder withHeadersOrReferences(@Nullable Map<String, ReferenceOr<HeaderObject>> value) { this.headers = value; return this; }
     /**
-     * @param value the OpenAPI 3.2 encoding value
+     * Describes the encoding of named properties within this part when its content is itself
+     * multipart or form-urlencoded. This allows nested multipart descriptions.
+     * Named encodings cannot be combined with positional prefix or item encodings.
+     *
+     * @param value the nested encodings keyed by property name, or null to omit it
      * @return this builder
      */
     public EncodingObjectBuilder withEncoding(@Nullable Map<String, EncodingObject> value) { this.encoding = value; return this; }
     /**
-     * @param value the OpenAPI 3.2 prefixEncoding value
+     * Describes the initial parts, by position, when this part contains nested multipart content.
+     * Each list entry applies to the nested part at the same index. Remaining parts use
+     * {@link #withItemEncoding(EncodingObject)} or default encoding rules.
+     * This cannot be combined with {@link #withEncoding(Map)}.
+     *
+     * @param value the encodings for the initial nested multipart parts, in order, or null to omit it
      * @return this builder
      */
     public EncodingObjectBuilder withPrefixEncoding(java.util.@Nullable List<EncodingObject> value) { this.prefixEncoding = value; return this; }
     /**
-     * @param value the OpenAPI 3.2 itemEncoding value
+     * Describes remaining parts in nested multipart content after those covered by
+     * {@link #withPrefixEncoding(java.util.List)}, or all nested parts when no prefix is given.
+     * This cannot be combined with {@link #withEncoding(Map)}.
+     *
+     * @param value the encoding for remaining nested multipart parts, or null to omit it
      * @return this builder
      */
     public EncodingObjectBuilder withItemEncoding(@Nullable EncodingObject value) { this.itemEncoding = value; return this; }

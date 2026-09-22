@@ -143,7 +143,12 @@ public class PathItemObjectBuilder {
      * @return this builder */
     public PathItemObjectBuilder withParametersOrReferences(@Nullable List<ReferenceOr<ParameterObject>> value) { this.parameters = value; return this; }
     /**
-     * @param value the OpenAPI 3.2 additionalOperations value
+     * Adds operations for HTTP methods without a dedicated path-item field, such as {@code CONNECT}.
+     * Keys are case-sensitive HTTP method tokens. Uppercase standard methods such as {@code GET}
+     * and {@code QUERY} belong in {@link #withOperations(Map)} instead.
+     * Describing an operation does not register a runtime route.
+     *
+     * @param value the operations keyed by exact HTTP method name, or null to omit it
      * @return this builder
      */
     public PathItemObjectBuilder withAdditionalOperations(@Nullable Map<String, OperationObject> value) { this.additionalOperations = value; return this; }

@@ -152,7 +152,10 @@ public class ResponseObjectBuilder {
      * @return this builder */
     public ResponseObjectBuilder withLinksOrReferences(@Nullable Map<String, ReferenceOr<LinkObject>> value) { this.links = value; return this; }
     /**
-     * @param value the OpenAPI 3.2 summary value
+     * Sets a short summary of the response for display in documentation.
+     * Use {@link #withDescription(String)} for a fuller explanation.
+     *
+     * @param value the response summary, or null to omit it
      * @return this builder
      */
     public ResponseObjectBuilder withSummary(@Nullable String value) { this.summary = value; return this; }

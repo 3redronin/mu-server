@@ -165,7 +165,10 @@ public class ComponentsObject implements JsonWriter {
         return new ComponentsObjectBuilder()
             .withPathItemsOrReferences(pathItems).withMediaTypesOrReferences(mediaTypes).withExtensions(extensions).withSchemas(schemas).withResponsesOrReferences(responses).withParametersOrReferences(parameters).withExamplesOrReferences(examples).withRequestBodiesOrReferences(requestBodies).withHeadersOrReferences(headers).withSecuritySchemesOrReferences(securitySchemes).withLinksOrReferences(links).withCallbacksOrReferences(callbacks);
     }
-    /** @return the OpenAPI 3.2 mediaTypes value */
+    /**
+     * @return the reusable media types keyed by component name, or null when omitted
+     * @see ComponentsObjectBuilder#withMediaTypesOrReferences
+     */
     public @Nullable Map<String, ReferenceOr<MediaTypeObject>> mediaTypesOrReferences() { return mediaTypes; }
     /** @return inline media types; throws if a reference is present */
     public @Nullable Map<String, MediaTypeObject> mediaTypes() { return ReferenceValues.values(mediaTypes); }

@@ -150,12 +150,19 @@ public class SecuritySchemeObjectBuilder {
         return this;
     }
     /**
-     * @param value the OpenAPI 3.2 oauth2MetadataUrl value
+     * Identifies the OAuth authorization server metadata document defined by RFC 8414.
+     * Consumers can use it to discover endpoints and server capabilities.
+     * This applies only to an {@code oauth2} security scheme; the endpoint must use TLS.
+     *
+     * @param value the authorization server metadata URL, or null to omit it
      * @return this builder
      */
     public SecuritySchemeObjectBuilder withOauth2MetadataUrl(java.net.@Nullable URI value) { this.oauth2MetadataUrl = value; return this; }
     /**
-     * @param value the OpenAPI 3.2 deprecated value
+     * Marks this security scheme as deprecated so consumers know to migrate away from it.
+     * The default is false. This is documentation metadata and does not disable authentication.
+     *
+     * @param value whether consumers should avoid this security scheme, or null to omit it
      * @return this builder
      */
     public SecuritySchemeObjectBuilder withDeprecated(@Nullable Boolean value) { this.deprecated = value; return this; }

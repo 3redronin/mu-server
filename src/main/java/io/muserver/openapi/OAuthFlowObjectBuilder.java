@@ -93,7 +93,11 @@ public class OAuthFlowObjectBuilder {
         return this;
     }
     /**
-     * @param value the OpenAPI 3.2 deviceAuthorizationUrl value
+     * Sets the endpoint where a client starts device authorization to obtain device and user codes.
+     * This URL is required in a device authorization flow and forbidden in the other flow slots.
+     * The device flow also requires a token URL, where the client polls for an access token.
+     *
+     * @param value the device authorization endpoint URL, or null to omit it
      * @return this builder
      */
     public OAuthFlowObjectBuilder withDeviceAuthorizationUrl(java.net.@Nullable URI value) { this.deviceAuthorizationUrl = value; return this; }

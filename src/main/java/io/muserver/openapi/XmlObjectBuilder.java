@@ -107,7 +107,13 @@ public class XmlObjectBuilder {
         return this;
     }
     /**
-     * @param value the OpenAPI 3.2 nodeType value
+     * Controls how the associated schema is represented in XML. Allowed values are {@code element},
+     * {@code attribute}, {@code text}, {@code cdata} and {@code none}. The {@code none} value
+     * adds no XML node; its subschemas contribute nodes directly to the parent.
+     * Without an explicit node type or legacy flags, arrays use {@code none} and other schemas use {@code element}.
+     * This cannot be combined with either legacy attribute or wrapped flag, even when the flag is false.
+     *
+     * @param value the XML node type, or null to omit it
      * @return this builder
      */
     public XmlObjectBuilder withNodeType(@Nullable String value) { this.nodeType = value; return this; }

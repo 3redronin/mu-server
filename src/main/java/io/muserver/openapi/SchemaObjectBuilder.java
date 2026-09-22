@@ -12,7 +12,7 @@ import java.time.LocalDate;
 import java.time.temporal.Temporal;
 import static java.util.Arrays.asList;
 
-/** Builds OpenAPI 3.1 schemas using JSON Schema 2020-12 keywords. */
+/** Builds OpenAPI schemas using JSON Schema 2020-12 keywords. */
 public class SchemaObjectBuilder {
     private final Map<String, Object> keywords = new LinkedHashMap<>();
     private @Nullable Boolean booleanValue;

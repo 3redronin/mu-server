@@ -161,6 +161,9 @@ public class OpenAPIObject implements JsonWriter {
         return new OpenAPIObjectBuilder()
             .withJsonSchemaDialect(jsonSchemaDialect).withWebhooksOrReferences(webhooks).withSelf(self).withExtensions(extensions).withInfo(info).withServers(servers).withPaths(paths).withComponents(components).withSecurity(security).withTags(tags).withExternalDocs(externalDocs);
     }
-    /** @return the OpenAPI 3.2 $self value */
+    /**
+     * @return the document URI reference, or null when omitted
+     * @see OpenAPIObjectBuilder#withSelf
+     */
     public @Nullable String self() { return self; }
 }

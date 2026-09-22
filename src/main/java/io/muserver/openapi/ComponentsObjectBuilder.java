@@ -206,7 +206,11 @@ public class ComponentsObjectBuilder {
      * @return this builder */
     public ComponentsObjectBuilder withPathItems(@Nullable Map<String, PathItemObject> value) { this.pathItems = ReferenceValues.inline(value); return this; }
     /**
-     * @param value the OpenAPI 3.2 mediaTypes value
+     * Defines reusable media-type descriptions that content maps can reference using
+     * {@code #/components/mediaTypes/Name}. Entries may contain an inline description or a reference.
+     * Component names may contain letters, digits, dots, underscores and hyphens.
+     *
+     * @param value the reusable media types keyed by component name, or null to omit it
      * @return this builder
      */
     public ComponentsObjectBuilder withMediaTypesOrReferences(@Nullable Map<String, ReferenceOr<MediaTypeObject>> value) { this.mediaTypes = value; return this; }

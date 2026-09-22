@@ -89,10 +89,19 @@ public class TagObject implements JsonWriter {
         return new TagObjectBuilder()
             .withSummary(summary).withParent(parent).withKind(kind).withExtensions(extensions).withName(name).withDescription(description).withExternalDocs(externalDocs);
     }
-    /** @return the OpenAPI 3.2 summary value */
+    /**
+     * @return the display summary, or null when omitted
+     * @see TagObjectBuilder#withSummary
+     */
     public @Nullable String summary() { return summary; }
-    /** @return the OpenAPI 3.2 parent value */
+    /**
+     * @return the parent tag name, or null when omitted
+     * @see TagObjectBuilder#withParent
+     */
     public @Nullable String parent() { return parent; }
-    /** @return the OpenAPI 3.2 kind value */
+    /**
+     * @return the machine-readable tag category, or null when omitted
+     * @see TagObjectBuilder#withKind
+     */
     public @Nullable String kind() { return kind; }
 }

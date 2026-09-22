@@ -80,17 +80,28 @@ public class TagObjectBuilder {
         return this;
     }
     /**
-     * @param value the OpenAPI 3.2 summary value
+     * Sets a short display label for this tag.
+     * Operations still refer to the tag by its name, even when a different summary is displayed.
+     *
+     * @param value the display summary, or null to omit it
      * @return this builder
      */
     public TagObjectBuilder withSummary(@Nullable String value) { this.summary = value; return this; }
     /**
-     * @param value the OpenAPI 3.2 parent value
+     * Nests this tag under another tag in the API description.
+     * The parent must be identified by its name and exist in the document.
+     * Parent relationships must not form a cycle.
+     *
+     * @param value the parent tag name, or null to omit it
      * @return this builder
      */
     public TagObjectBuilder withParent(@Nullable String value) { this.parent = value; return this; }
     /**
-     * @param value the OpenAPI 3.2 kind value
+     * Categorizes the tag for documentation tools.
+     * Examples include {@code nav} for navigation, {@code badge} for a visible badge,
+     * and {@code audience} for a group of API consumers. Custom categories are allowed.
+     *
+     * @param value the machine-readable tag category, or null to omit it
      * @return this builder
      */
     public TagObjectBuilder withKind(@Nullable String value) { this.kind = value; return this; }

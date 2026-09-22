@@ -155,8 +155,14 @@ public class SecuritySchemeObject implements JsonWriter {
         return new SecuritySchemeObjectBuilder()
             .withOauth2MetadataUrl(oauth2MetadataUrl).withDeprecated(deprecated).withExtensions(extensions).withType(type).withDescription(description).withName(name).withIn(in).withScheme(scheme).withBearerFormat(bearerFormat).withFlows(flows).withOpenIdConnectUrl(openIdConnectUrl);
     }
-    /** @return the OpenAPI 3.2 oauth2MetadataUrl value */
+    /**
+     * @return the authorization server metadata URL, or null when omitted
+     * @see SecuritySchemeObjectBuilder#withOauth2MetadataUrl
+     */
     public java.net.@Nullable URI oauth2MetadataUrl() { return oauth2MetadataUrl; }
-    /** @return the OpenAPI 3.2 deprecated value */
+    /**
+     * @return whether consumers should avoid this security scheme, or null when omitted
+     * @see SecuritySchemeObjectBuilder#withDeprecated
+     */
     public @Nullable Boolean deprecated() { return deprecated; }
 }

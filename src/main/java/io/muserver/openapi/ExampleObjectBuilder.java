@@ -98,12 +98,22 @@ public class ExampleObjectBuilder {
         return this;
     }
     /**
-     * @param value the OpenAPI 3.2 dataValue value
+     * Sets the example as parsed data, before media-type or parameter serialization.
+     * It should match the associated schema. Use {@link JsonNull#INSTANCE} for an explicit JSON null.
+     * It may accompany a serialized or external representation, but cannot be combined with
+     * the legacy {@link #withValue(Object)} field.
+     *
+     * @param value the parsed example data, or null to omit it
      * @return this builder
      */
     public ExampleObjectBuilder withDataValue(@Nullable Object value) { this.dataValue = value; return this; }
     /**
-     * @param value the OpenAPI 3.2 serializedValue value
+     * Sets the example in its serialized wire format, with applicable encoding rules already applied.
+     * For a media type this is the complete body, for example {@code q=one%20two&sort=date}
+     * for form-urlencoded content. An empty string is an explicit empty example.
+     * This may accompany parsed data, but cannot be combined with the legacy value or an external value.
+     *
+     * @param value the serialized example text, or null to omit it
      * @return this builder
      */
     public ExampleObjectBuilder withSerializedValue(@Nullable String value) { this.serializedValue = value; return this; }

@@ -83,8 +83,14 @@ public class ExampleObject implements JsonWriter {
         return new ExampleObjectBuilder()
             .withDataValue(dataValue).withSerializedValue(serializedValue).withExtensions(extensions).withSummary(summary).withDescription(description).withValue(value).withExternalValue(externalValue);
     }
-    /** @return the OpenAPI 3.2 dataValue value */
+    /**
+     * @return the parsed example data, or null when omitted
+     * @see ExampleObjectBuilder#withDataValue
+     */
     public @Nullable Object dataValue() { return dataValue; }
-    /** @return the OpenAPI 3.2 serializedValue value */
+    /**
+     * @return the serialized example text, or null when omitted
+     * @see ExampleObjectBuilder#withSerializedValue
+     */
     public @Nullable String serializedValue() { return serializedValue; }
 }

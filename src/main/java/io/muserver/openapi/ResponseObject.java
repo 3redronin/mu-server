@@ -81,7 +81,10 @@ public class ResponseObject implements JsonWriter {
         return new ResponseObjectBuilder()
             .withSummary(summary).withExtensions(extensions).withDescription(description).withHeadersOrReferences(headers).withContentOrReferences(content).withLinksOrReferences(links);
     }
-    /** @return the OpenAPI 3.2 summary value */
+    /**
+     * @return the response summary, or null when omitted
+     * @see ResponseObjectBuilder#withSummary
+     */
     public @Nullable String summary() { return summary; }
     /** @return inline media types and references */
     public @Nullable Map<String, ReferenceOr<MediaTypeObject>> contentOrReferences() { return content; }

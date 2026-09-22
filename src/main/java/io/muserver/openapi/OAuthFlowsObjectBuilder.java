@@ -90,7 +90,11 @@ public class OAuthFlowsObjectBuilder {
         return this;
     }
     /**
-     * @param value the OpenAPI 3.2 deviceAuthorization value
+     * Configures OAuth device authorization for clients such as televisions or command-line tools,
+     * where the user completes authorization on a separate device.
+     * The flow requires device authorization and token URLs; an authorization URL is not allowed.
+     *
+     * @param value the device authorization flow configuration, or null to omit it
      * @return this builder
      */
     public OAuthFlowsObjectBuilder withDeviceAuthorization(@Nullable OAuthFlowObject value) { this.deviceAuthorization = value; return this; }

@@ -139,6 +139,9 @@ public class PathItemObject implements JsonWriter {
         return new PathItemObjectBuilder()
             .withRef(ref).withAdditionalOperations(additionalOperations).withExtensions(extensions).withSummary(summary).withDescription(description).withOperations(operations).withServers(servers).withParametersOrReferences(parameters);
     }
-    /** @return the OpenAPI 3.2 additionalOperations value */
+    /**
+     * @return the operations keyed by exact HTTP method name, or null when omitted
+     * @see PathItemObjectBuilder#withAdditionalOperations
+     */
     public @Nullable Map<String, OperationObject> additionalOperations() { return additionalOperations; }
 }

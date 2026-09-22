@@ -99,10 +99,19 @@ public class EncodingObject implements JsonWriter {
         return new EncodingObjectBuilder()
             .withEncoding(encoding).withPrefixEncoding(prefixEncoding).withItemEncoding(itemEncoding).withExtensions(extensions).withContentType(contentType).withHeadersOrReferences(headers).withStyle(style).withExplode(explode).withAllowReserved(allowReserved);
     }
-    /** @return the OpenAPI 3.2 encoding value */
+    /**
+     * @return the nested encodings keyed by property name, or null when omitted
+     * @see EncodingObjectBuilder#withEncoding
+     */
     public @Nullable Map<String, EncodingObject> encoding() { return encoding; }
-    /** @return the OpenAPI 3.2 prefixEncoding value */
+    /**
+     * @return the encodings for the initial nested multipart parts, in order, or null when omitted
+     * @see EncodingObjectBuilder#withPrefixEncoding
+     */
     public java.util.@Nullable List<EncodingObject> prefixEncoding() { return prefixEncoding; }
-    /** @return the OpenAPI 3.2 itemEncoding value */
+    /**
+     * @return the encoding for remaining nested multipart parts, or null when omitted
+     * @see EncodingObjectBuilder#withItemEncoding
+     */
     public @Nullable EncodingObject itemEncoding() { return itemEncoding; }
 }

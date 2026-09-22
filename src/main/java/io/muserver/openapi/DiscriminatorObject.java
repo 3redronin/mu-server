@@ -57,6 +57,9 @@ public class DiscriminatorObject implements JsonWriter {
         return new DiscriminatorObjectBuilder()
             .withDefaultMapping(defaultMapping).withExtensions(extensions).withPropertyName(propertyName).withMapping(mapping);
     }
-    /** @return the OpenAPI 3.2 defaultMapping value */
+    /**
+     * @return the fallback schema name or URI reference, or null when omitted
+     * @see DiscriminatorObjectBuilder#withDefaultMapping
+     */
     public @Nullable String defaultMapping() { return defaultMapping; }
 }
