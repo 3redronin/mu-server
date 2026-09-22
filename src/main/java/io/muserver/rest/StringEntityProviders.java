@@ -79,7 +79,7 @@ class StringEntityProviders {
 
         @Override
         public String readFrom(Class<String> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-            return new String(Mutils.toByteArray(entityStream, 2048), EntityProviders.charsetFor(mediaType));
+            return new String(Mutils.toByteArray(entityStream, 2048), EntityProviders.charsetForReading(mediaType));
         }
     }
 
@@ -99,7 +99,7 @@ class StringEntityProviders {
 
         @Override
         public char[] readFrom(Class<char[]> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-            InputStreamReader reader = new InputStreamReader(entityStream, EntityProviders.charsetFor(mediaType));
+            InputStreamReader reader = new InputStreamReader(entityStream, EntityProviders.charsetForReading(mediaType));
             CharArrayWriter charArrayWriter = new CharArrayWriter();
             char[] buffer = new char[2048];
             int read;
@@ -143,7 +143,7 @@ class StringEntityProviders {
 
         @Override
         public @Nullable T readFrom(Class<T> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-            String s = new String(Mutils.toByteArray(entityStream, 512), EntityProviders.charsetFor(mediaType));
+            String s = new String(Mutils.toByteArray(entityStream, 512), EntityProviders.charsetForReading(mediaType));
             if (Mutils.nullOrEmpty(s)) {
                 return null;
             }
@@ -205,7 +205,7 @@ class StringEntityProviders {
 
         @Override
         public Reader readFrom(Class<Reader> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-            return new InputStreamReader(entityStream, EntityProviders.charsetFor(mediaType));
+            return new InputStreamReader(entityStream, EntityProviders.charsetForReading(mediaType));
         }
     }
 
@@ -238,7 +238,7 @@ class StringEntityProviders {
 
         @Override
         public MultivaluedMap<String, String> readFrom(Class<MultivaluedMap<String, String>> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-            String body = new String(Mutils.toByteArray(entityStream, 2048), EntityProviders.charsetFor(mediaType));
+            String body = new String(Mutils.toByteArray(entityStream, 2048), EntityProviders.charsetForReading(mediaType));
             QueryStringDecoder formDecoder = new QueryStringDecoder(body, false);
             Map<String, List<String>> parameters = formDecoder.parameters();
             MultivaluedHashMap<String, String> form = new MultivaluedHashMap<>();

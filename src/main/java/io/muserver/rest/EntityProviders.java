@@ -8,7 +8,9 @@ import org.jspecify.annotations.Nullable;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.nio.charset.Charset;
+import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.StandardCharsets;
+import java.nio.charset.UnsupportedCharsetException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -154,6 +156,15 @@ class EntityProviders {
         writers.addAll(BinaryEntityProviders.binaryEntityWriters);
         writers.addAll(SourceEntityProviders.sourceEntityWriters);
         return writers;
+    }
+
+    // Only request decoding failures are unsupported representations; response writers keep their error semantics.
+    static Charset charsetForReading(MediaType mediaType) {
+        try {
+            return charsetFor(mediaType);
+        } catch (IllegalCharsetNameException | UnsupportedCharsetException e) {
+            throw new UnsupportedRepresentationException("Unsupported request charset " + mediaType.getParameters().get("charset"), e);
+        }
     }
 
     static Charset charsetFor(MediaType mediaType) {
