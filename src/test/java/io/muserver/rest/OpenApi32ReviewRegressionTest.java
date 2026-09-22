@@ -61,14 +61,14 @@ public class OpenApi32ReviewRegressionTest {
             .withAdditionalOperations(Map.of("get", operation("lowercase"))).build());
         assertTrue(html.contains("id=\"standard\""));
         assertTrue(html.contains("id=\"lowercase\""));
-        assertTrue(html.contains("-X GET"));
-        assertTrue(html.contains("-X get"));
+        assertTrue(html.contains("-X &#x27;GET&#x27;"));
+        assertTrue(html.contains("-X &#x27;get&#x27;"));
     }
     @Test public void additionalOperationCasingSurvivesCurlAndHeadings() throws Exception {
         String html = render(PathItemObjectBuilder.pathItemObject()
             .withAdditionalOperations(Map.of("propfind", operation("lower"), "CuStOm", operation("mixed"))).build());
-        assertTrue(html.contains("-X propfind"));
-        assertTrue(html.contains("-X CuStOm"));
+        assertTrue(html.contains("-X &#x27;propfind&#x27;"));
+        assertTrue(html.contains("-X &#x27;CuStOm&#x27;"));
         assertFalse(html.contains("PROPFIND"));
         assertFalse(html.contains("CUSTOM"));
     }
@@ -126,6 +126,39 @@ public class OpenApi32ReviewRegressionTest {
             .toBuilder().withParameters(List.of(parameter)).build())).build(), components);
         assertTrue(html, html.contains("?filter=active&amp;sort=date%20desc"));
         assertFalse(html.contains("rawQuery="));
+    }
+    @Test public void curlPreservesApostrophesInRawQueryExamples() throws Exception {
+        String query = "author=O'Reilly&sort=date%20desc";
+        ParameterObject parameter = ParameterObjectBuilder.parameterObject().withName("search").withIn("querystring")
+            .withContent(Map.of("text/plain", MediaTypeObjectBuilder.mediaTypeObject().withExample(query).build())).build();
+        String html = render(PathItemObjectBuilder.pathItemObject().withOperations(Map.of("get", operation("query")
+            .toBuilder().withParameters(List.of(parameter)).build())).build());
+        assertCurlArguments(html, "GET", "https://example.test/example?" + query);
+    }
+    @Test public void curlPreservesShellMetacharactersInCustomMethods() throws Exception {
+        for (String method : List.of("FOO'BAR", "FOO&BAR", "FOO|BAR", "FOO`BAR", "FOO$BAR", "foo!#%*+-.^_~bar")) {
+            String html = render(PathItemObjectBuilder.pathItemObject()
+                .withAdditionalOperations(Map.of(method, operation("custom"))).build());
+            assertCurlArguments(html, method, "https://example.test/example");
+        }
+    }
+    private void assertCurlArguments(String html, String method, String url) throws Exception {
+        org.junit.Assume.assumeTrue(new File("/bin/sh").canExecute());
+        int start = html.indexOf("<code>curl ") + "<code>".length();
+        String command = html.substring(start, html.indexOf("</code>", start))
+            .replace("&#x27;", "'").replace("&#x2F;", "/").replace("&quot;", "\"")
+            .replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&");
+        // A local stub records arguments; no HTTP request or external curl process is run.
+        Process process = new ProcessBuilder("/bin/sh", "-c", "curl() { printf '%s\\n' \"$@\"; }; " + command)
+            .redirectErrorStream(true).start();
+        try {
+            assertTrue("Shell did not finish", process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS));
+            String output = new String(process.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            assertEquals(output, 0, process.exitValue());
+            assertEquals(List.of("-is", "-X", method, url), Arrays.asList(output.stripTrailing().split("\\n")));
+        } finally {
+            process.destroyForcibly();
+        }
     }
     private void assertRawQuery(MediaTypeObject media) throws Exception {
         ParameterObject parameter = ParameterObjectBuilder.parameterObject().withName("rawQuery").withIn("querystring")

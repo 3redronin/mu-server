@@ -392,8 +392,8 @@ class HtmlDocumentor {
                         render("h4", "Curl");
                         String sampleUrl = urlWithContext.replace("{", "(").replace("}", ")")
                             + queryString;
-                        render("code", "curl " + (streaming ? "-N " : "") + "-is -X " + method + curlHeaders + curlAccept +
-                            curlBody + " '" + requestUri.resolve(sampleUrl) + "'");
+                        render("code", "curl " + (streaming ? "-N " : "") + "-is -X '" + bashValue(method) + "'" + curlHeaders + curlAccept +
+                            curlBody + " '" + bashValue(requestUri.resolve(sampleUrl)) + "'");
 
 
                         operationDiv.close();
