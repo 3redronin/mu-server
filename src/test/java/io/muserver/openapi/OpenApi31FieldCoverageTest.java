@@ -53,7 +53,12 @@ public class OpenApi31FieldCoverageTest {
         Object built = builder.getClass().getMethod("build").invoke(builder);
         assertNotNull(type.getMethod(getter).invoke(built));
         JsonNode document = json(built);
-        OfflineOpenApiValidator.object(model, document);
+        if (model.equals("OAuthFlowObject")) {
+            OAuthFlowsObjectBuilder flows = OAuthFlowsObjectBuilder.oAuthFlowsObject();
+            if (keyword.equals("deviceAuthorizationUrl")) flows.withDeviceAuthorization((OAuthFlowObject) built);
+            else flows.withAuthorizationCode((OAuthFlowObject) built);
+            OfflineOpenApiValidator.object("OAuthFlowsObject", json(flows.build()));
+        } else OfflineOpenApiValidator.object(model, document);
         // These explicit values equal their context-dependent defaults and are intentionally omitted.
         if (!(keyword.equals("style") && model.equals("HeaderObject"))) assertTrue(document.toString(), document.has(keyword));
         Object copy = type.getMethod("toBuilder").invoke(built);

@@ -60,7 +60,7 @@ public final class OfflineOpenApiValidator {
         if (model.equals("OpenAPIObject")) { document(value); return; }
         if (model.equals("SchemaObject")) location = "https://spec.openapis.org/oas/3.2/dialect/2026-02-26";
         else if (model.equals("DiscriminatorObject") || model.equals("XmlObject")) location = "https://spec.openapis.org/oas/3.2/meta/2026-02-26#/$defs/" + (model.equals("XmlObject") ? "xml" : "discriminator");
-        else if (model.equals("OAuthFlowObject")) location = "https://spec.openapis.org/oas/3.2/schema/2026-08-30#/$defs/oauth-flows/$defs/" + (value.has("deviceAuthorizationUrl") ? "device-authorization" : "authorization-code");
+        else if (model.equals("OAuthFlowObject")) throw new IllegalArgumentException("Validate OAuth flows in their containing OAuthFlowsObject slot");
         else {
             String name = model.substring(0, model.length() - "Object".length()).replaceAll("([a-z])([A-Z])", "$1-$2").toLowerCase(Locale.ROOT);
             if (model.equals("OAuthFlowsObject")) name = "oauth-flows";

@@ -62,8 +62,8 @@ public class OpenApi32ModelTest {
         assertThrows(IllegalArgumentException.class, () -> PathItemObjectBuilder.pathItemObject().withParameters(Collections.singletonList(querystring))
             .withOperations(Collections.singletonMap("query", operation)).build());
         ParameterObject cookie = ParameterObjectBuilder.parameterObject().withName("session").withIn("cookie").withStyle("cookie")
-            .withExplode(false).withSchema(schemaObject().build()).build();
-        assertFalse(cookie.explode()); assertTrue(json(cookie).has("explode"));
+            .withExplode(true).withSchema(schemaObject().build()).build();
+        assertTrue(cookie.explode()); assertFalse(json(cookie).has("explode"));
         object("ParameterObject", json(cookie)); object("ParameterObject", json(querystring));
         object("ParameterObject", json(ParameterObjectBuilder.parameterObject().withName("path").withIn("path").withRequired(true)
             .withAllowReserved(true).withSchema(schemaObject().build()).build()));

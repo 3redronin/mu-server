@@ -71,6 +71,9 @@ public class ParameterObject implements JsonWriter {
         this.deprecated = deprecated;
         this.allowEmptyValue = allowEmptyValue;
         this.style = style;
+        if ("cookie".equals(in) && Boolean.FALSE.equals(explode)) {
+            throw new IllegalArgumentException("Cookie parameters cannot use explode: false");
+        }
         this.explode = explode;
         this.allowReserved = allowReserved;
         if (content != null && (style != null || explode != null)) {

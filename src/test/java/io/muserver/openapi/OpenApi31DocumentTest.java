@@ -75,7 +75,8 @@ public class OpenApi31DocumentTest {
             boolean explode = style.equals("form");
             assertEquals(explode, base.explode());
             assertEquals(json(base), json(base.toBuilder().withStyle(style).withExplode(explode).withDeprecated(false).build()));
-            assertTrue(json(base.toBuilder().withExplode(!explode).build()).has("explode"));
+            if (in.equals("cookie")) assertThrows(IllegalArgumentException.class, () -> base.toBuilder().withExplode(false).build());
+            else assertTrue(json(base.toBuilder().withExplode(!explode).build()).has("explode"));
         }
         assertTrue(json(EncodingObjectBuilder.encodingObject().withStyle("form").withExplode(true).withAllowReserved(false).build()).has("style"));
         assertTrue(json(EncodingObjectBuilder.encodingObject().withStyle("form").withExplode(true).withAllowReserved(false).build()).has("explode"));
