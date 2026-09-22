@@ -42,13 +42,7 @@ public enum Method {
      */
     PATCH,
     /**
-     * A safe, idempotent query with a request body. A valid Content-Type is required, even for an empty body.
-     * <pre>{@code
-     * MuServerBuilder.httpServer().addHandler(Method.QUERY, "/search", (request, response, params) -> {
-     *     response.write("Result for " + request.readBodyAsString());
-     * }).start();
-     * }</pre>
-     * @see io.muserver.rest.QUERY
+     * The QUERY HTTP method
      */
     QUERY;
 
