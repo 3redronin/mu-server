@@ -18,7 +18,7 @@ public class OpenApi31FieldCoverageTest {
     @Parameterized.Parameters(name="{0}.{1}") public static Collection<Object[]> fields() throws Exception {
         List<Object[]> fields = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(
-            Objects.requireNonNull(OpenApi31FieldCoverageTest.class.getResourceAsStream("/openapi-3.1/field-coverage.tsv")), StandardCharsets.UTF_8))) {
+            Objects.requireNonNull(OpenApi31FieldCoverageTest.class.getResourceAsStream("/openapi/field-coverage.tsv")), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) if (!line.startsWith("#")) fields.add(line.split("\t"));
         }

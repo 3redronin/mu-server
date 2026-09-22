@@ -38,7 +38,7 @@ public final class OfflineOpenApiValidator {
     }
 
     private static byte[] resource(String name) throws IOException {
-        try (InputStream in = OfflineOpenApiValidator.class.getResourceAsStream("/openapi-3.2/" + name)) {
+        try (InputStream in = OfflineOpenApiValidator.class.getResourceAsStream("/openapi/" + name)) {
             if (in == null) throw new FileNotFoundException(name);
             return in.readAllBytes();
         }
