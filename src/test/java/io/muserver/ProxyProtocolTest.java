@@ -1,5 +1,6 @@
 package io.muserver;
 
+import okhttp3.internal.connection.BufferedSocketKt;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -330,7 +331,8 @@ class ProxyProtocolTest {
                 secure.startHandshake(); assertEquals("h2", secure.getApplicationProtocol()); transport = secure;
             }
             try (okhttp3.internal.http2.Http2Connection connection = new okhttp3.internal.http2.Http2Connection
-                .Builder(true, okhttp3.internal.concurrent.TaskRunner.INSTANCE).socket(transport).build()) {
+                .Builder(true, okhttp3.internal.concurrent.TaskRunner.INSTANCE)
+                .socket(BufferedSocketKt.asBufferedSocket(transport), "mu-server proxy test").build()) {
                 connection.start();
                 java.util.List<okhttp3.internal.http2.Http2Stream> streams = new java.util.ArrayList<>();
                 for (int i = 0; i < 3; i++) {
@@ -341,7 +343,7 @@ class ProxyProtocolTest {
                 }
                 for (var stream : streams) {
                     stream.readTimeout().timeout(3, TimeUnit.SECONDS);
-                    assertEquals("200", stream.takeHeaders().get(":status"));
+                    assertEquals("200", stream.takeHeaders(false).get(":status"));
                     assertEquals("192.0.2.1", okio.Okio.buffer(stream.getSource()).readUtf8());
                 }
             }

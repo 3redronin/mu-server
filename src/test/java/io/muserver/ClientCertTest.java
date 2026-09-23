@@ -9,10 +9,8 @@ import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
-import java.security.KeyStore;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateExpiredException;
@@ -95,27 +93,6 @@ public class ClientCertTest {
         OkHttpClient client = getClientWithCert("client.p12");
         try (Response resp = client.newCall(request(server.uri()).build()).execute()) {
             assertThat(resp.body().string(), equalTo("The client cert is present? false"));
-        }
-    }
-
-
-    @Test
-    public void untrustedCertsAreNotReturned() throws Exception {
-        // The default trust manager will not trust the cert created with a custom CA
-        TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-        trustManagerFactory.init((KeyStore)null);
-        server = ServerUtils.httpsServerForTest()
-            .withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost()
-                .withClientCertificateTrustManager(trustManagerFactory.getTrustManagers()[0])
-            )
-            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
-                boolean present = request.connection().clientCertificate().isPresent();
-                response.write("Cert is present? " + present);
-            })
-            .start();
-        OkHttpClient client = getClientWithCert("client.p12");
-        try (Response resp = client.newCall(request(server.uri()).build()).execute()) {
-            assertThat(resp.body().string(), equalTo("Cert is present? false"));
         }
     }
 

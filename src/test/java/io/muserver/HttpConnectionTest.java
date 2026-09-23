@@ -6,6 +6,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.ServerUtils;
 
+import java.net.InetAddress;
 import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -78,7 +79,7 @@ public class HttpConnectionTest {
                     HttpConnection con = request.connection();
                     assertThat(con.startTime().toEpochMilli(), lessThanOrEqualTo(Instant.now().toEpochMilli()));
                     assertThat(con.handshakeDurationMillis(), greaterThanOrEqualTo(0L));
-                    assertThat(con.remoteAddress().getAddress().getHostAddress(), is("127.0.0.1"));
+                    assertThat(InetAddress.getByName(con.remoteAddress().getAddress().getHostAddress()).isLoopbackAddress(), is(true));
 
                     assertThat(con.activeRequests(), contains(request));
                     assertThat(con.completedRequests(), is(1L));

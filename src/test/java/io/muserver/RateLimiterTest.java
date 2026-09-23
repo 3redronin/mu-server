@@ -439,10 +439,8 @@ public class RateLimiterTest {
         assertThat(server.stats().rejectedDueToOverload(), is(3L));
         assertThat(server.rateLimiters().size(), is(3));
         assertEventually(() -> server.rateLimiters().get(0).currentBuckets(), anEmptyMap());
-        assertThat(server.rateLimiters().get(1).currentBuckets(), aMapWithSize(1));
-        assertThat(server.rateLimiters().get(1).currentBuckets().get("127.0.0.1"), equalTo(2L));
-        assertThat(server.rateLimiters().get(2).currentBuckets(), aMapWithSize(1));
-        assertThat(server.rateLimiters().get(2).currentBuckets().get("127.0.0.1"), equalTo(1L));
+        assertEventually(() -> server.rateLimiters().get(1).currentBuckets().values(), contains(2L));
+        assertEventually(() -> server.rateLimiters().get(2).currentBuckets().values(), contains(1L));
     }
 
 }

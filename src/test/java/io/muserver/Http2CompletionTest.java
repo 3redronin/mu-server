@@ -1,6 +1,7 @@
 package io.muserver;
 
 import okhttp3.internal.concurrent.TaskRunner;
+import okhttp3.internal.connection.BufferedSocketKt;
 import okhttp3.internal.http2.ErrorCode;
 import okhttp3.internal.http2.Header;
 import okhttp3.internal.http2.Http2Stream;
@@ -78,7 +79,7 @@ public class Http2CompletionTest {
             socket.startHandshake();
             assertThat(socket.getApplicationProtocol(), is("h2"));
             try (okhttp3.internal.http2.Http2Connection connection = new okhttp3.internal.http2.Http2Connection
-                .Builder(true, TaskRunner.INSTANCE).socket(socket).build()) {
+                .Builder(true, TaskRunner.INSTANCE).socket(BufferedSocketKt.asBufferedSocket(socket), "mu-server test").build()) {
                 connection.start();
                 Http2Stream stream = connection.newStream(List.of(
                     new Header(":method", "POST"), new Header(":path", "/"),
@@ -87,7 +88,7 @@ public class Http2CompletionTest {
                 stream.writeTimeout().timeout(5, TimeUnit.SECONDS);
                 stream.getSink().write(new Buffer().writeUtf8("a"), 1);
                 stream.getSink().flush();
-                assertThat(stream.takeHeaders().get(":status"), is("200"));
+                assertThat(stream.takeHeaders(false).get(":status"), is("200"));
                 assertThat(Okio.buffer(stream.getSource()).readUtf8(), is("accepted"));
                 scaffolding.MuAssert.assertEventually(() -> serverResponse.get().responseState().endState(), is(true));
                 // The response has ended, but the client has deliberately left its request open.

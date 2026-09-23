@@ -2,8 +2,8 @@ package io.muserver.handlers;
 
 import io.muserver.Method;
 import io.muserver.MuServer;
+import okhttp3.RequestBody;
 import okhttp3.Response;
-import okhttp3.internal.Util;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -64,7 +64,7 @@ public class HttpsRedirectorTest {
             try (Response resp = call(request()
                 .url(server.httpUri().toString())
                 .header("Content-Type", "text/plain")
-                .method(method.name(), Util.EMPTY_REQUEST)
+                .method(method.name(), RequestBody.EMPTY)
             )) {
                 assertThat(resp.code(), is(400));
                 assertThat(resp.body().string(), containsString("HTTP is not supported for this endpoint. Please use the HTTPS endpoint at " + server.httpsUri()));

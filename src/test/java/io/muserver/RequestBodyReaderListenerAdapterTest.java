@@ -78,7 +78,7 @@ public class RequestBodyReaderListenerAdapterTest {
 
     @Test
     @Timeout(20)
-    public void ifTheRequestBodyIsTooSlowAnErrorIsReturnedOrConnectionIsKilled() throws IOException {
+    public void ifTheRequestBodyIsTooSlowAndTheResponseHasStartedTheConnectionIsKilled() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .withRequestTimeout(100, TimeUnit.MILLISECONDS)
             .addHandler((request, response) -> {
@@ -94,7 +94,8 @@ public class RequestBodyReaderListenerAdapterTest {
             .post(new SlowBodySender(100, 200));
 
         try (Response resp = call(request)) {
-            assertThat(resp.code(), equalTo(408));
+            resp.body().string();
+            Assertions.fail("Should not complete successfully");
         } catch (Exception ex) {
             MuAssert.assertIOException(ex);
         }
@@ -267,7 +268,8 @@ public class RequestBodyReaderListenerAdapterTest {
         server = ServerUtils.httpsServerForTest()
             .withMaxRequestSize(1000)
             .addHandler((request, response) -> {
-                response.write("Hello there");
+                AsyncHandle handle = request.handleAsync();
+                handle.write(Mutils.toByteBuffer("Hello there"), error -> { });
                 return true;
             })
             .start();

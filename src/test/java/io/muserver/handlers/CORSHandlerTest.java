@@ -2,8 +2,8 @@ package io.muserver.handlers;
 
 import io.muserver.Method;
 import io.muserver.MuServer;
+import okhttp3.RequestBody;
 import okhttp3.Response;
-import okhttp3.internal.Util;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import scaffolding.ServerUtils;
@@ -86,7 +86,7 @@ public class CORSHandlerTest {
             )
             .addHandler(null, "/", (request, response, pathParams) -> {})
             .start();
-        try (Response resp = call(request(server.uri()).post(Util.EMPTY_REQUEST).header("Origin", "http://example.org"))) {
+        try (Response resp = call(request(server.uri()).post(RequestBody.EMPTY).header("Origin", "http://example.org"))) {
             assertThat(resp.headers("Vary"), contains("origin"));
             assertThat(resp.header("Access-Control-Allow-Origin"), is("http://example.org"));
             assertThat(resp.header("Access-Control-Allow-Methods"), is("GET, HEAD, OPTIONS, POST"));
@@ -95,7 +95,7 @@ public class CORSHandlerTest {
             assertThat(resp.header("Access-Control-Expose-Headers"), is("X-Exposed"));
             assertThat(resp.header("Access-Control-Allow-Credentials"), is("true"));
         }
-        try (Response resp = call(request(server.uri()).method("OPTIONS", Util.EMPTY_REQUEST).header("Origin", "http://example.org"))) {
+        try (Response resp = call(request(server.uri()).method("OPTIONS", RequestBody.EMPTY).header("Origin", "http://example.org"))) {
             assertThat(resp.headers("Vary"), contains("origin"));
             assertThat(resp.header("Access-Control-Allow-Origin"), is("http://example.org"));
             assertThat(resp.header("Access-Control-Allow-Methods"), is("GET, HEAD, OPTIONS, POST"));

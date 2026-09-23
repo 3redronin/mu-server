@@ -4,9 +4,9 @@ import io.muserver.MuServer;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
-import okhttp3.internal.Util;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import okhttp3.RequestBody;
 import scaffolding.ServerUtils;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
@@ -43,7 +43,7 @@ public class CORSTest {
                 )
         ).start();
         try (okhttp3.Response resp = call(request()
-            .method("OPTIONS", Util.EMPTY_REQUEST)
+            .method("OPTIONS", RequestBody.EMPTY)
             .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
             .header("Accept-Language", " en-us,en;q=0.5")
             .header("Accept-Charset", " ISO-8859-1,utf-8;q=0.7,*;q=0.7")
@@ -148,7 +148,7 @@ public class CORSTest {
         server = ServerUtils.httpsServerForTest().addHandler(
             restHandler(new Thing()).withCORS(CORSConfigBuilder.disabled())).start();
         try (okhttp3.Response resp = call(request()
-            .method("OPTIONS", Util.EMPTY_REQUEST)
+            .method("OPTIONS", RequestBody.EMPTY)
             .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
             .header("Accept-Language", " en-us,en;q=0.5")
             .header("Accept-Charset", " ISO-8859-1,utf-8;q=0.7,*;q=0.7")
@@ -180,7 +180,7 @@ public class CORSTest {
         server = ServerUtils.httpsServerForTest().addHandler(
             restHandler(new Thing()).withCORS(CORSConfigBuilder.corsConfig().withAllowedOrigins(asList("http://localhost")))).start();
         try (okhttp3.Response resp = call(request()
-            .method("OPTIONS", Util.EMPTY_REQUEST)
+            .method("OPTIONS", RequestBody.EMPTY)
             .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
             .header("Accept-Language", " en-us,en;q=0.5")
             .header("Accept-Charset", " ISO-8859-1,utf-8;q=0.7,*;q=0.7")

@@ -2,6 +2,7 @@ package io.muserver.handlers;
 
 import io.muserver.Method;
 import io.muserver.MuServer;
+import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -40,7 +41,8 @@ public class CSRFProtectionHandlerTest {
     public void safeMethodsAreAlwaysAllowed() throws IOException {
         startServer(CSRFProtectionHandlerBuilder.csrfProtection().build());
         for (Method method : new Method[]{Method.GET, Method.HEAD, Method.OPTIONS, Method.QUERY}) {
-            try (Response resp = call(request().header("Content-Type", "text/plain").method(method.name(), null).url(server.uri().toString()))) {
+            try (Response resp = call(request().header("Content-Type", "text/plain")
+                .method(method.name(), method == Method.QUERY ? RequestBody.EMPTY : null).url(server.uri().toString()))) {
                 assertThat(resp.code(), is(200));
                 if (method == Method.GET) {
                     assertThat(resp.body().string(), is("OK"));
@@ -53,7 +55,7 @@ public class CSRFProtectionHandlerTest {
     public void unsafeMethodsWithSameOriginSecFetchSiteAreAllowed() throws IOException {
         startServer(CSRFProtectionHandlerBuilder.csrfProtection().build());
         try (Response resp = call(request()
-            .method("POST", okhttp3.internal.Util.EMPTY_REQUEST)
+            .method("POST", RequestBody.EMPTY)
             .url(server.uri().toString())
             .header("Sec-Fetch-Site", "same-origin"))) {
             assertThat(resp.code(), is(200));
@@ -64,7 +66,7 @@ public class CSRFProtectionHandlerTest {
     public void unsafeMethodsWithNoneSecFetchSiteAreAllowed() throws IOException {
         startServer(CSRFProtectionHandlerBuilder.csrfProtection().build());
         try (Response resp = call(request()
-            .method("POST", okhttp3.internal.Util.EMPTY_REQUEST)
+            .method("POST", RequestBody.EMPTY)
             .url(server.uri().toString())
             .header("Sec-Fetch-Site", "none"))) {
             assertThat(resp.code(), is(200));
@@ -76,7 +78,7 @@ public class CSRFProtectionHandlerTest {
         startServer(CSRFProtectionHandlerBuilder.csrfProtection().build());
         String origin = server.uri().getScheme() + "://" + server.uri().getAuthority();
         try (Response resp = call(request()
-            .method("POST", okhttp3.internal.Util.EMPTY_REQUEST)
+            .method("POST", RequestBody.EMPTY)
             .url(server.uri().toString())
             .header("Origin", origin))) {
             assertThat(resp.code(), is(200));
@@ -88,7 +90,7 @@ public class CSRFProtectionHandlerTest {
         String trustedOrigin = "https://trusted.com";
         startServer(CSRFProtectionHandlerBuilder.csrfProtection().addTrustedOrigin(trustedOrigin).build());
         try (Response resp = call(request()
-            .method("POST", okhttp3.internal.Util.EMPTY_REQUEST)
+            .method("POST", RequestBody.EMPTY)
             .url(server.uri().toString())
             .header("Origin", trustedOrigin))) {
             assertThat(resp.code(), is(200));
@@ -99,7 +101,7 @@ public class CSRFProtectionHandlerTest {
     public void unsafeMethodsWithBypassPathAreAllowed() throws IOException {
         startServer(CSRFProtectionHandlerBuilder.csrfProtection().addBypassPath("/bypass").build());
         try (Response resp = call(request()
-            .method("POST", okhttp3.internal.Util.EMPTY_REQUEST)
+            .method("POST", RequestBody.EMPTY)
             .url(server.uri().resolve("/bypass").toString()))) {
             assertThat(resp.code(), is(200));
         }
@@ -109,7 +111,7 @@ public class CSRFProtectionHandlerTest {
     public void unsafeMethodsWithNoHeadersAreAllowed() throws IOException {
         startServer(CSRFProtectionHandlerBuilder.csrfProtection().build());
         try (Response resp = call(request()
-            .method("POST", okhttp3.internal.Util.EMPTY_REQUEST)
+            .method("POST", RequestBody.EMPTY)
             .url(server.uri().toString()))) {
             assertThat(resp.code(), is(200));
         }
@@ -119,7 +121,7 @@ public class CSRFProtectionHandlerTest {
     public void crossOriginRequestsAreRejectedByDefault() throws IOException {
         startServer(CSRFProtectionHandlerBuilder.csrfProtection().build());
         try (Response resp = call(request()
-            .method("POST", okhttp3.internal.Util.EMPTY_REQUEST)
+            .method("POST", RequestBody.EMPTY)
             .url(server.uri().toString())
             .header("Origin", "https://evil.com"))) {
             assertThat(resp.code(), is(400));
@@ -140,7 +142,7 @@ public class CSRFProtectionHandlerTest {
             .build();
         startServer(handler);
         try (Response resp = call(request()
-            .method("POST", okhttp3.internal.Util.EMPTY_REQUEST)
+            .method("POST", RequestBody.EMPTY)
             .url(server.uri().toString())
             .header("Origin", "https://evil.com"))) {
             assertThat(resp.code(), is(403));
@@ -154,7 +156,7 @@ public class CSRFProtectionHandlerTest {
         String trustedOrigin = "https://trusted.com";
         startServer(CSRFProtectionHandlerBuilder.csrfProtection().addTrustedOrigin(trustedOrigin).build());
         try (Response resp = call(request()
-            .method("POST", okhttp3.internal.Util.EMPTY_REQUEST)
+            .method("POST", RequestBody.EMPTY)
             .url(server.uri().toString())
             .header("Sec-Fetch-Site", "cross-site")
             .header("Origin", trustedOrigin))) {
@@ -166,7 +168,7 @@ public class CSRFProtectionHandlerTest {
     public void bypassPathWorksWithSecFetchSiteCrossSite() throws IOException {
         startServer(CSRFProtectionHandlerBuilder.csrfProtection().addBypassPath("/bypass").build());
         try (Response resp = call(request()
-            .method("POST", okhttp3.internal.Util.EMPTY_REQUEST)
+            .method("POST", RequestBody.EMPTY)
             .url(server.uri().resolve("/bypass").toString())
             .header("Sec-Fetch-Site", "cross-site")
             .header("Origin", "https://evil.com"))) {
@@ -179,7 +181,7 @@ public class CSRFProtectionHandlerTest {
         startServer(CSRFProtectionHandlerBuilder.csrfProtection().build());
         String origin = server.uri().getScheme() + "://" + server.uri().getHost() + ":" + server.uri().getPort();
         try (Response resp = call(request()
-            .method("POST", okhttp3.internal.Util.EMPTY_REQUEST)
+            .method("POST", RequestBody.EMPTY)
             .url(server.uri().toString())
             .header("Origin", origin))) {
             assertThat(resp.code(), is(200));

@@ -1,5 +1,6 @@
 package io.muserver;
 
+import okhttp3.internal.connection.BufferedSocketKt;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -104,7 +105,8 @@ class ConnectionRejectionTest {
             }
             if (h2) {
                 try (var connection = new okhttp3.internal.http2.Http2Connection
-                    .Builder(true, okhttp3.internal.concurrent.TaskRunner.INSTANCE).socket(transport).build()) {
+                    .Builder(true, okhttp3.internal.concurrent.TaskRunner.INSTANCE)
+                    .socket(BufferedSocketKt.asBufferedSocket(transport), "mu-server rejection test").build()) {
                     connection.start();
                     var stream = connection.newStream(List.of(
                         new okhttp3.internal.http2.Header(":method", "GET"),
@@ -112,7 +114,7 @@ class ConnectionRejectionTest {
                         new okhttp3.internal.http2.Header(":scheme", "http"),
                         new okhttp3.internal.http2.Header(":authority", "localhost")), false);
                     stream.readTimeout().timeout(3, TimeUnit.SECONDS);
-                    int status = Integer.parseInt(stream.takeHeaders().get(":status"));
+                    int status = Integer.parseInt(stream.takeHeaders(false).get(":status"));
                     String body = okio.Okio.buffer(stream.getSource()).readUtf8();
                     assertEquals(status == 200 ? "ok" : "503 Service Unavailable", body);
                     return status;
