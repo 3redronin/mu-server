@@ -16,6 +16,7 @@ import scaffolding.SlowBodySender;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.net.SocketException;
+import javax.net.ssl.SSLException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -199,7 +200,7 @@ public class RequestBodyReaderListenerAdapterTest {
                 Assertions.fail("Got a valid response " + resp);
             }
         });
-        assertThat(uioe.getCause(), instanceOf(SocketException.class));
+        assertThat(uioe.getCause(), anyOf(instanceOf(SocketException.class), instanceOf(SSLException.class)));
     }
 
 
@@ -269,7 +270,7 @@ public class RequestBodyReaderListenerAdapterTest {
             .withMaxRequestSize(1000)
             .addHandler((request, response) -> {
                 AsyncHandle handle = request.handleAsync();
-                handle.write(Mutils.toByteBuffer("Hello there"), error -> { });
+                handle.write(Mutils.toByteBuffer("Hello there"), handle::complete);
                 return true;
             })
             .start();

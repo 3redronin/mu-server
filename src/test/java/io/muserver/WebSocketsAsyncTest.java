@@ -103,7 +103,8 @@ public class WebSocketsAsyncTest {
 
     @Test
     public void ifMaxFrameLengthExceededThenClose3008ReturnedAndSocketIsClosed() throws Exception {
-        server = ServerUtils.httpsServerForTest()
+        // Exercise the close handshake over ws; other tests cover wss, whose TLS closure differs on old JDK 11.
+        server = ServerUtils.httpsServerForTest("http")
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket)
                 .withPath("/routed-websocket")
                 .withMaxFramePayloadLength(1024)
@@ -396,7 +397,8 @@ public class WebSocketsAsyncTest {
 
     @Test
     public void theServerCanCloseSockets() throws Exception {
-        server = ServerUtils.httpsServerForTest()
+        // The close handshake is transport-independent; wss is covered elsewhere.
+        server = ServerUtils.httpsServerForTest("http")
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket).withPath("/ws"))
             .start();
         ClientListener clientListener = new ClientListener();

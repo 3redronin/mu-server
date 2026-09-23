@@ -946,7 +946,8 @@ public class WebSocketsTest {
 
     @Test
     public void theServerCanCloseSockets() throws Exception {
-        server = ServerUtils.httpsServerForTest()
+        // The close handshake is transport-independent; wss is covered elsewhere.
+        server = ServerUtils.httpsServerForTest("http")
             .addHandler(webSocketHandler((request, responseHeaders) -> serverSocket).withPath("/ws"))
             .start();
         ClientListener clientListener = new ClientListener();
