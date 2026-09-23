@@ -6,7 +6,7 @@
 
     <groupId>io.muserver</groupId>
     <artifactId>mu-server</artifactId>
-    <version>0.0.3-SNAPSHOT</version>
+    <version>0.0.4-SNAPSHOT</version>
 
     <name>mu-server</name>
     <description>A simple but powerful web server library</description>
@@ -20,8 +20,8 @@
         <netty.version>${netty.version.4.1}</netty.version>
         <netty.codec.artifactId>netty-codec</netty.codec.artifactId>
         <nullaway.version>0.13.8</nullaway.version>
-        <slf4j.version>2.0.18</slf4j.version>
-        <jetty.version>9.4.58.v20250814</jetty.version>
+        <slf4j.version>2.0.16</slf4j.version>
+        <jetty.version>9.4.57.v20241219</jetty.version>
     </properties>
 
     <scm>
@@ -163,19 +163,19 @@
         <dependency>
             <groupId>com.squareup.okio</groupId>
             <artifactId>okio</artifactId>
-            <version>3.17.0</version>
+            <version>3.9.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.squareup.okio</groupId>
             <artifactId>okio-jvm</artifactId>
-            <version>3.17.0</version>
+            <version>3.9.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
-            <version>20251224</version>
+            <version>20250517</version>
             <scope>test</scope>
         </dependency>
         <dependency>
