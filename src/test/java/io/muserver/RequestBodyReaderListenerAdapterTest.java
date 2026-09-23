@@ -219,9 +219,11 @@ public class RequestBodyReaderListenerAdapterTest {
 
         try (Response resp = call(request)) {
             assertThat(resp.code(), equalTo(200));
-            resp.body().string();
-        } catch (Exception ex) {
-            MuAssert.assertIOException(ex);
+            try {
+                assertThat(resp.body().string(), equalTo("Hello there"));
+            } catch (Exception ex) {
+                MuAssert.assertIOException(ex);
+            }
         }
     }
 
