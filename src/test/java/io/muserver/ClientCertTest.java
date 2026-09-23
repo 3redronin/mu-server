@@ -9,10 +9,8 @@ import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 import java.io.IOException;
-import java.security.KeyStore;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateExpiredException;
@@ -100,21 +98,34 @@ public class ClientCertTest {
 
     @Test
     public void untrustedCertsThrowExceptions() throws Exception {
-        // The default trust manager will not trust the cert created with a custom CA
-        TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-        trustManagerFactory.init((KeyStore)null);
+        AtomicBoolean clientCertificateWasChecked = new AtomicBoolean();
+        X509TrustManager rejectingTrustManager = new X509TrustManager() {
+            @Override
+            public void checkClientTrusted(X509Certificate[] chain, String authType) throws CertificateException {
+                clientCertificateWasChecked.set(true);
+                throw new CertificateException("Client certificate is not trusted");
+            }
+
+            @Override
+            public void checkServerTrusted(X509Certificate[] chain, String authType) {
+            }
+
+            @Override
+            public X509Certificate[] getAcceptedIssuers() {
+                return new X509Certificate[0];
+            }
+        };
         server = ServerUtils.httpsServerForTest()
             .withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost()
-                .withClientCertificateTrustManager(trustManagerFactory.getTrustManagers()[0])
+                .withClientCertificateTrustManager(rejectingTrustManager)
             )
-            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
-                boolean present = request.connection().clientCertificate().isPresent();
-                response.write("Cert is present? " + present);
-            })
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> fail("The request handler must not be called"))
             .start();
-        OkHttpClient client = getClientWithCert("client.p12");
-        try (Response resp = client.newCall(request(server.uri()).build()).execute()) {
-            assertThat(resp.body().string(), equalTo("Cert is present? false"));
+        try (Response ignored = clientForcingCertificate("client.p12")
+            .newCall(request(server.uri()).build()).execute()) {
+            fail("Expected the TLS handshake to fail");
+        } catch (IOException expected) {
+            assertTrue("The client certificate should have been checked", clientCertificateWasChecked.get());
         }
     }
 

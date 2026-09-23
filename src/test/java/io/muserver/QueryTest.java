@@ -63,7 +63,7 @@ public class QueryTest {
                 int before = calls.get();
                 boolean supported = Arrays.asList("QUERY", "GET", "HEAD", "OPTIONS").contains(method);
                 try (Response response = call(clientFor(protocol), request(server.uri())
-                    .header("Content-Type", "text/plain").method(method, null))) {
+                    .header("Content-Type", "text/plain").method(method, method.equals("QUERY") ? RequestBody.EMPTY : null))) {
                     assertEquals(protocol, response.protocol());
                     assertEquals(protocol + " " + method, supported ? 200 : 405, response.code());
                     assertEquals(before + (supported ? 1 : 0), calls.get());

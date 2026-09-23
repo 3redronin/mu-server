@@ -11,6 +11,7 @@ import scaffolding.ServerUtils;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.net.InetAddress;
 import java.net.URI;
 import java.util.Collections;
 import java.util.List;
@@ -372,7 +373,7 @@ public class HeadersTest {
             assertThat(resp.body().string(), equalTo("10.10.0.11"));
         }
         try (Response resp = call(request(server.uri()))) {
-            assertThat(resp.body().string(), equalTo("127.0.0.1"));
+            assertThat(InetAddress.getByName(resp.body().string()).isLoopbackAddress(), is(true));
         }
     }
 

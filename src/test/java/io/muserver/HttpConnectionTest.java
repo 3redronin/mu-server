@@ -4,6 +4,7 @@ import org.junit.After;
 import org.junit.Test;
 import scaffolding.ServerUtils;
 
+import java.net.InetAddress;
 import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -73,7 +74,7 @@ public class HttpConnectionTest {
                 try {
                     HttpConnection con = request.connection();
                     assertThat(con.startTime().toEpochMilli(), lessThanOrEqualTo(Instant.now().toEpochMilli()));
-                    assertThat(con.remoteAddress().getAddress().getHostAddress(), is("127.0.0.1"));
+                    assertThat(InetAddress.getByName(con.remoteAddress().getAddress().getHostAddress()).isLoopbackAddress(), is(true));
 
                     assertThat(con.activeRequests(), contains(request));
                     assertThat(con.completedRequests(), is(1L));
