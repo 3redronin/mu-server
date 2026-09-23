@@ -146,7 +146,7 @@ public class OpenApiDocumentorTest {
             String yaml = resp.body().string();
 
             Map<String, Object> doc = new Yaml().load(yaml);
-            assertThat(doc.get("openapi"), equalTo("3.0.1"));
+            assertThat(doc.get("openapi"), equalTo("3.2.1"));
 
             Map<String, Object> paths = (Map<String, Object>) doc.get("paths");
             assertThat(paths.containsKey("/pet"), is(true));
