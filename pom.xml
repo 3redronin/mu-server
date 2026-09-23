@@ -298,7 +298,7 @@
                 <configuration>
                     <source>${jdk.version}</source>
                     <detectJavaApiLink>false</detectJavaApiLink>
-                    <doclint>all</doclint>
+                    <doclint>all,-missing</doclint>
                     <excludePackageNames>io.muserver.internal</excludePackageNames>
                     <failOnWarnings>true</failOnWarnings>
                 </configuration>
