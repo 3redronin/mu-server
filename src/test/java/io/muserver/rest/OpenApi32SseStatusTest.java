@@ -4,17 +4,17 @@ import io.muserver.MuServer;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import org.json.JSONObject;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import java.util.*;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static scaffolding.ClientUtils.*;
 import static scaffolding.ServerUtils.httpsServerForTest;
 
 public class OpenApi32SseStatusTest {
     private MuServer server;
-    @After public void stop() { if (server != null) server.stop(); }
+    @AfterEach public void stop() { if (server != null) server.stop(); }
 
     @Path("/status") public static class Statuses {
         @GET @Path("created") @ApiSseEvent(code="201") public void created() { }
@@ -38,7 +38,7 @@ public class OpenApi32SseStatusTest {
         for (String code : Arrays.asList("201", "default", "400")) {
             String endpoint = code.equals("201") ? "created" : code.equals("400") ? "error" : "default";
             JSONObject responses = paths.getJSONObject("/status/" + endpoint).getJSONObject("get").getJSONObject("responses");
-            assertEquals(endpoint, Collections.singleton(code), responses.keySet());
+            assertEquals(Collections.singleton(code), responses.keySet(), endpoint);
             assertTrue(responses.getJSONObject(code).getJSONObject("content").getJSONObject("text/event-stream").has("itemSchema"));
         }
         assertEquals(new HashSet<>(Arrays.asList("201", "400")), responses(paths, "multiple", "get").keySet());

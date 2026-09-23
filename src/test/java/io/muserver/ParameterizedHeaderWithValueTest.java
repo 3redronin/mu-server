@@ -21,7 +21,7 @@ public class ParameterizedHeaderWithValueTest {
         assertThat(values.get(1).parameter("charset"), is("UTF-8"));
         assertThat(values.get(1).parameter("profile"), is("one;two"));
         assertThat(values.get(1).parameters().entrySet(), hasSize(2));
-        org.junit.Assert.assertThrows(IllegalArgumentException.class, () -> fromString("text/plain;charset;"));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () -> fromString("text/plain;charset;"));
     }
 
 

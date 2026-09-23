@@ -77,7 +77,7 @@ class Http1MessageParser implements Http1MessageReader {
                 byte b = readBuffer[position];
                 switch (state) {
                     case REQUEST_START: {
-                        if (isUpperCase(b)) {
+                        if (ParseUtils.isTChar(b)) {
                             requestQueue.offer((HttpRequestTemp) exchange);
                             state = ParseState.METHOD;
                             append(buffer, b);
@@ -86,7 +86,7 @@ class Http1MessageParser implements Http1MessageReader {
                     }
 
                     case METHOD: {
-                        if (isUpperCase(b)) {
+                        if (ParseUtils.isTChar(b)) {
                             append(buffer, b);
                         } else if (b == SP) {
                             try {

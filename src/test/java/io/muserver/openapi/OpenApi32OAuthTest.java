@@ -1,10 +1,10 @@
 package io.muserver.openapi;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import java.net.URI;
 import java.util.*;
 import static io.muserver.openapi.OfflineOpenApiValidator.*;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class OpenApi32OAuthTest {
     @Test public void urlsAreValidatedInEveryContainingSlot() throws Exception {
@@ -28,7 +28,7 @@ public class OpenApi32OAuthTest {
                 }
                 String context = slots[slot] + " URL mask " + mask;
                 if (mask != required[slot]) {
-                    assertThrows(context, IllegalArgumentException.class, builder::build);
+                    assertThrows(IllegalArgumentException.class, builder::build, context);
                 } else {
                     OAuthFlowsObject flows = builder.build();
                     object("OAuthFlowsObject", json(flows));

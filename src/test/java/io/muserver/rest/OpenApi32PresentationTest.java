@@ -1,7 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.openapi.*;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import java.io.*;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -9,7 +9,7 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.*;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class OpenApi32PresentationTest {
     @Test public void effectiveParametersAndExamplePrecedenceReachExecutableCurlArguments() throws Exception {
@@ -81,10 +81,10 @@ public class OpenApi32PresentationTest {
                         ? ReferenceOr.reference("#/components/examples/Wire") : ReferenceOr.inline(example))).build();
                     ComponentsObject components = ComponentsObjectBuilder.componentsObject().withExamples(Map.of("Wire", example)).build();
                     String html = render(formPath(type, media), components);
-                    assertEquals(type + " wire=" + wire + " referenced=" + referenced,
-                        Arrays.asList("-is", "-X", "POST", "-H", "content-type: " + type, "--data-binary", wire,
-                            "https://example.test/example"), curlArguments(html));
-                    assertTrue("Form property documentation must remain visible", html.contains("Property documentation"));
+                    assertEquals(Arrays.asList("-is", "-X", "POST", "-H", "content-type: " + type, "--data-binary", wire,
+                            "https://example.test/example"), curlArguments(html),
+                        type + " wire=" + wire + " referenced=" + referenced);
+                    assertTrue(html.contains("Property documentation"), "Form property documentation must remain visible");
                 }
             }
         }
@@ -134,11 +134,11 @@ public class OpenApi32PresentationTest {
     // Execute the actual command with a local curl stub that emits each exact argument.
     private static List<String> curlArguments(String html) throws Exception {
         Matcher matcher = Pattern.compile("<code>(curl .*?)</code>", Pattern.DOTALL).matcher(html);
-        assertTrue(html, matcher.find());
+        assertTrue(matcher.find(), html);
         String command = matcher.group(1).replace("<br>", "\n").replace("&#x27;", "'").replace("&quot;", "\"")
             .replace("&#x2F;", "/").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&");
         Process process = new ProcessBuilder("bash", "-c", "curl() { printf '%s\\0' \"$@\"; }; " + command).start();
-        assertTrue("curl stub timed out", process.waitFor(5, TimeUnit.SECONDS));
+        assertTrue(process.waitFor(5, TimeUnit.SECONDS), "curl stub timed out");
         assertEquals(0, process.exitValue());
         String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
         return Arrays.asList(output.split("\u0000"));

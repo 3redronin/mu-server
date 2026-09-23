@@ -2,19 +2,17 @@ package io.muserver.rest;
 
 import io.muserver.openapi.SchemaObject;
 import jakarta.ws.rs.ext.ParamConverter;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.lang.annotation.Annotation;
 import java.util.Arrays;
 import java.util.Collection;
 
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
-@RunWith(Parameterized.class)
 public class JavaValueSchemasTest {
-    @Parameterized.Parameters(name = "{0}")
     public static Collection<Object[]> types() {
         return Arrays.asList(new Object[][] {
             {java.time.Instant.class}, {java.time.LocalDate.class}, {java.time.OffsetDateTime.class},
@@ -29,9 +27,7 @@ public class JavaValueSchemasTest {
         });
     }
 
-    @Parameterized.Parameter public Class<?> type;
-
-    @Test public void fixedExampleIsAcceptedByTheActualConverter() {
+    @ParameterizedTest @MethodSource("types") public void fixedExampleIsAcceptedByTheActualConverter(Class<?> type) {
         ParamConverter<?> converter = new BuiltInParamConverterProvider().getConverter(type, type, new Annotation[0]);
         assertNotNull(converter);
         SchemaObject schema = JavaValueSchemas.parameter(type, converter).build();
@@ -41,7 +37,7 @@ public class JavaValueSchemasTest {
         assertEquals(schema.toString(), JavaValueSchemas.parameter(type, converter).build().toString());
     }
 
-    @Test public void customConverterDoesNotInheritJavaSyntaxConstraints() {
+    @ParameterizedTest @MethodSource("types") public void customConverterDoesNotInheritJavaSyntaxConstraints(Class<?> type) {
         ParamConverter<Object> custom = new ParamConverter<Object>() {
             public Object fromString(String value) { return value; }
             public String toString(Object value) { return value.toString(); }

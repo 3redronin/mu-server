@@ -1,9 +1,9 @@
 package io.muserver.rest;
 
 import io.muserver.openapi.*;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import java.util.*;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
 
 public class OpenApi32ReferencesTest {
@@ -16,7 +16,7 @@ public class OpenApi32ReferencesTest {
         for (String pointer : Arrays.asList("#/components/schemas/Parent/properties/a~1b~0c",
             "#/components/schemas/Parent/properties/space%20key", "#/components/schemas/Parent/properties/+",
             "api.json#/components/schemas/Parent/properties/space%20key")) {
-            assertSame(pointer, value, references.schema(schemaObject().withRef(pointer).build()));
+            assertSame(value, references.schema(schemaObject().withRef(pointer).build()), pointer);
         }
         for (String pointer : Arrays.asList("#/components/schemas/Missing", "#/components/schemas/%ZZ", "other.json#/components/schemas/Parent")) {
             assertNull(references.schema(schemaObject().withRef(pointer).build()));

@@ -1,8 +1,8 @@
 package io.muserver.openapi;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import static io.muserver.openapi.OfflineOpenApiValidator.*;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class OpenApi32CookieTest {
     @Test public void cookieDefaultsAreTrueAndOmittedForEveryCookieStyle() throws Exception {
@@ -19,7 +19,7 @@ public class OpenApi32CookieTest {
     }
     @Test public void explicitFalseIsInvalidForEveryCookieStyle() {
         for (String style : new String[] {null, "form", "cookie"}) {
-            assertThrows("style=" + style, IllegalArgumentException.class, () -> cookie(style).withExplode(false).build());
+            assertThrows(IllegalArgumentException.class, () -> cookie(style).withExplode(false).build(), "style=" + style);
         }
     }
     private static ParameterObjectBuilder cookie(String style) {

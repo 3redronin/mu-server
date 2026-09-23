@@ -437,7 +437,8 @@ class Http2Stream implements ResponseInfo {
         InputStream protocolBody = headerFrame.endStream() ? EmptyInputStream.INSTANCE : new Http2BodyInputStream(
             connection.server.requestIdleTimeoutMillis(),
             read -> connection.returnInboundCredit(id, read, true),
-            read -> connection.returnInboundCredit(id, read, false)
+            read -> connection.returnInboundCredit(id, read, false),
+            connection.server.maxRequestBodySize()
         );
         InputStream applicationBody = BodySize.NONE.equals(bodySize)
             ? EmptyInputStream.INSTANCE

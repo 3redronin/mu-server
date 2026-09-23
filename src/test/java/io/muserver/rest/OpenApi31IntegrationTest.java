@@ -7,8 +7,8 @@ import io.muserver.openapi.*;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.GenericEntity;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import scaffolding.MuAssert;
 import java.util.*;
 import java.util.concurrent.*;
@@ -16,13 +16,13 @@ import java.lang.reflect.Type;
 import static io.muserver.openapi.OfflineOpenApiValidator.*;
 import static io.muserver.openapi.SchemaObjectBuilder.*;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static scaffolding.ClientUtils.*;
 import static scaffolding.ServerUtils.httpsServerForTest;
 
 public class OpenApi31IntegrationTest {
     private MuServer server;
-    @After public void stop() { MuAssert.stopAndCheck(server); }
+    @AfterEach public void stop() { MuAssert.stopAndCheck(server); }
 
     @Path("/inputs") public static class Inputs {
         @GET @Produces("text/plain") public String get(@QueryParam("primitive") int primitive,

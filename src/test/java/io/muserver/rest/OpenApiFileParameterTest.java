@@ -3,8 +3,8 @@ package io.muserver.rest;
 import io.muserver.MuServer;
 import jakarta.ws.rs.*;
 import org.json.JSONObject;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.nio.file.Files;
@@ -12,13 +12,13 @@ import java.util.List;
 
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static scaffolding.ClientUtils.*;
 import static scaffolding.ServerUtils.httpsServerForTest;
 
 public class OpenApiFileParameterTest {
     private MuServer server;
-    @After public void stop() { if (server != null) server.stop(); }
+    @AfterEach public void stop() { if (server != null) server.stop(); }
 
     @Path("/files") public static class FilesResource {
         @POST @Consumes("multipart/form-data") @Produces("text/plain")

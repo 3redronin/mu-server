@@ -141,6 +141,8 @@ class Http1Connection extends BaseHttpConnection {
                     try {
                         QueryRequestValidation.validate(method, request.headers());
                     } catch (HttpException e) {
+                        // The peer might be waiting for 100 Continue instead of sending its body.
+                        e.responseHeaders().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
                         rejectException = e;
                     }
                 }
@@ -171,7 +173,13 @@ class Http1Connection extends BaseHttpConnection {
                         if (rejectException.getMessage() != null) {
                             muResponse.write(rejectException.getMessage());
                         }
-                        closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest);
+                        if (rejectException.responseHeaders().closeConnectionRequested(httpVersion)) {
+                            // Do not block draining a body that an Expect: 100-continue peer never sent.
+                            muResponse.cleanup();
+                            closeConnection = true;
+                        } else {
+                            closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest);
+                        }
                     } finally {
                         // Rejection listeners are also an audit/metrics hook. Notify after
                         // attempting the response even when the client aborts during its write.

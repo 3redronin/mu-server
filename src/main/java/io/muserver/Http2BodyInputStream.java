@@ -31,6 +31,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
     }
 
     private final long readTimeoutMillis;
+    private final long maxBodySize;
     private final CreditAvailableListener onDataReadCallback;
     private final CreditAvailableListener onDataDiscardedCallback;
     private final Lock lock = new ReentrantLock();
@@ -46,6 +47,8 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
     private @org.jspecify.annotations.Nullable IOException failure;
     // Guarded by lock.
     private @org.jspecify.annotations.Nullable FieldBlock trailers;
+    // Guarded by lock.
+    private long bytesRead;
 
     private static final class EndOfStreamMarker {
         private EndOfStreamMarker() {
@@ -61,7 +64,13 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
     private static final DiscardingMarker DISCARDING = new DiscardingMarker();
 
     Http2BodyInputStream(long readTimeoutMillis, CreditAvailableListener onDataReadCallback, CreditAvailableListener onDataDiscardedCallback) {
+        this(readTimeoutMillis, onDataReadCallback, onDataDiscardedCallback, Long.MAX_VALUE);
+    }
+
+    Http2BodyInputStream(long readTimeoutMillis, CreditAvailableListener onDataReadCallback,
+                         CreditAvailableListener onDataDiscardedCallback, long maxBodySize) {
         this.readTimeoutMillis = readTimeoutMillis;
+        this.maxBodySize = maxBodySize;
         this.onDataReadCallback = onDataReadCallback;
         this.onDataDiscardedCallback = onDataDiscardedCallback;
     }
@@ -109,6 +118,9 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
 
                     int offset = data.payloadOffset() + pending.currentOffset;
                     int remaining = data.payloadLength() - pending.currentOffset;
+                    if (remaining > maxBodySize - bytesRead) {
+                        throw new HttpException(HttpStatus.CONTENT_TOO_LARGE_413);
+                    }
                     if (remaining == 0) {
                         if (data.endStream()) {
                             return -1;
@@ -138,6 +150,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
                         creditToReturn += pending.flowControlSize - data.payloadLength();
                     }
                     pending.creditReturned += creditToReturn;
+                    bytesRead += readAmount;
                     break;
                 } else if (frame == END_OF_STREAM || frame == DISCARDING) {
                     return -1;

@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import io.muserver.internal.AsyncExecution;
 import io.muserver.*;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotAllowedException;
@@ -168,21 +169,30 @@ public class RestHandler implements MuHandler {
                     AsyncHandle asyncHandle = muRequest.handleAsync();
                     CompletionStage<?> cs = (CompletionStage<?>) result;
                     cs.whenComplete((value, failure) -> {
-                        @Nullable Throwable completionFailure = null;
-                        try {
-                            if (failure == null) {
-                                sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, value,
-                                    completionStageResultType(methodReturnType));
-                            } else {
-                                Throwable cause = unwrapCompletionFailure(failure);
-                                dealWithUnhandledException(0, requestContext, muResponse, cause,
-                                    acceptHeaders, produces, directlyProduces);
+                        Runnable continuation = () -> {
+                            @Nullable Throwable completionFailure = null;
+                            try {
+                                if (failure == null) {
+                                    sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, value,
+                                        completionStageResultType(methodReturnType));
+                                } else {
+                                    Throwable cause = unwrapCompletionFailure(failure);
+                                    FatalErrors.rethrow(cause);
+                                    dealWithUnhandledException(0, requestContext, muResponse, cause,
+                                        acceptHeaders, produces, directlyProduces);
+                                }
+                            } catch (Throwable e) {
+                                completionFailure = e;
+                                FatalErrors.rethrow(e);
+                            } finally {
+                                completeAsyncResponse(asyncHandle, requestContext, completionFailure);
                             }
-                        } catch (Throwable e) {
-                            // CompletionStage captures callback failures in a dependent future that we do not return.
-                            completionFailure = e;
-                        } finally {
-                            completeAsyncResponse(asyncHandle, requestContext, completionFailure);
+                        };
+                        try {
+                            AsyncExecution.forHandle(asyncHandle).executeApplicationTask(continuation);
+                        } catch (Throwable dispatchFailure) {
+                            completeAsyncResponse(asyncHandle, requestContext, dispatchFailure);
+                            FatalErrors.rethrow(dispatchFailure);
                         }
                     });
                 } else {
@@ -232,7 +242,11 @@ public class RestHandler implements MuHandler {
                 failure.addSuppressed(cleanupFailure);
             }
         } finally {
-            asyncHandle.complete(failure);
+            // Mu4's transport fallback accepts Exception; preserve nonfatal Error causes after REST mapping.
+            Throwable transportFailure = failure != null && !(failure instanceof Exception)
+                && !(failure instanceof VirtualMachineError) && !(failure instanceof ThreadDeath)
+                ? new MuException("Asynchronous REST response failed", failure) : failure;
+            asyncHandle.complete(transportFailure);
         }
     }
 

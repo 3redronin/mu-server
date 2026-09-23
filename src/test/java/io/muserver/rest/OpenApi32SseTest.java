@@ -8,15 +8,15 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.sse.Sse;
 import jakarta.ws.rs.sse.SseEventSink;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.*;
 
 import static io.muserver.openapi.OfflineOpenApiValidator.*;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static scaffolding.ClientUtils.*;
 import static scaffolding.ServerUtils.httpsServerForTest;
 
@@ -24,7 +24,7 @@ public class OpenApi32SseTest {
     private MuServer server;
     private final CountDownLatch release = new CountDownLatch(1);
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    @After public void stop() throws Exception {
+    @AfterEach public void stop() throws Exception {
         release.countDown(); executor.shutdownNow();
         if (server != null) server.stop();
         assertTrue(executor.awaitTermination(5, TimeUnit.SECONDS));

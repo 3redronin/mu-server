@@ -4,20 +4,20 @@ import io.muserver.MuServer;
 import io.muserver.openapi.*;
 import jakarta.ws.rs.*;
 import org.json.JSONObject;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import java.io.*;
 import java.net.URI;
 import java.util.*;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static scaffolding.ClientUtils.*;
 import static scaffolding.ServerUtils.httpsServerForTest;
 
 public class OpenApi32ReviewRegressionTest {
     private MuServer server;
-    @After public void stop() { if (server != null) server.stop(); }
+    @AfterEach public void stop() { if (server != null) server.stop(); }
     @Path("/generated") public static class Resource {
         @GET @Produces("text/event-stream") public String events() { return "data: hello\n\n"; }
     }
@@ -124,7 +124,7 @@ public class OpenApi32ReviewRegressionTest {
             .withExamples(Map.of("Query", ExampleObjectBuilder.exampleObject().withSerializedValue("filter=active&sort=date%20desc").build())).build();
         String html = render(PathItemObjectBuilder.pathItemObject().withOperations(Map.of("get", operation("query")
             .toBuilder().withParameters(List.of(parameter)).build())).build(), components);
-        assertTrue(html, html.contains("?filter=active&amp;sort=date%20desc"));
+        assertTrue(html.contains("?filter=active&amp;sort=date%20desc"), html);
         assertFalse(html.contains("rawQuery="));
     }
     @Test public void curlPreservesApostrophesInRawQueryExamples() throws Exception {
@@ -171,7 +171,7 @@ public class OpenApi32ReviewRegressionTest {
         assertCurlArguments(html, "GET", "https://example.test/example" + (query.isEmpty() ? "" : "?" + query));
     }
     private void assertCurlArguments(String html, String method, String url) throws Exception {
-        org.junit.Assume.assumeTrue(new File("/bin/sh").canExecute());
+        org.junit.jupiter.api.Assumptions.assumeTrue(new File("/bin/sh").canExecute());
         int start = html.indexOf("<code>curl ") + "<code>".length();
         String command = html.substring(start, html.indexOf("</code>", start))
             .replace("&#x27;", "'").replace("&#x2F;", "/").replace("&quot;", "\"")
@@ -180,9 +180,9 @@ public class OpenApi32ReviewRegressionTest {
         Process process = new ProcessBuilder("/bin/sh", "-c", "curl() { printf '%s\\n' \"$@\"; }; " + command)
             .redirectErrorStream(true).start();
         try {
-            assertTrue("Shell did not finish", process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS));
+            assertTrue(process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS), "Shell did not finish");
             String output = new String(process.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            assertEquals(output, 0, process.exitValue());
+            assertEquals(0, process.exitValue(), output);
             assertEquals(List.of("-is", "-X", method, url), Arrays.asList(output.stripTrailing().split("\\n")));
         } finally {
             process.destroyForcibly();
@@ -193,7 +193,7 @@ public class OpenApi32ReviewRegressionTest {
             .withContent(Map.of("application/x-www-form-urlencoded", media)).build();
         String html = render(PathItemObjectBuilder.pathItemObject().withOperations(Map.of("get", operation("query")
             .toBuilder().withParameters(List.of(parameter)).build())).build());
-        assertTrue(html, html.contains("https:&#x2F;&#x2F;example.test&#x2F;example?filter=active&amp;sort=date%20desc"));
+        assertTrue(html.contains("https:&#x2F;&#x2F;example.test&#x2F;example?filter=active&amp;sort=date%20desc"), html);
         assertFalse(html.contains("rawQuery="));
     }
     private OperationObject operation(String id) {

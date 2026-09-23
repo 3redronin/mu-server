@@ -7,8 +7,8 @@ import jakarta.ws.rs.core.MultivaluedMap;
 import jakarta.ws.rs.ext.MessageBodyReader;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.*;
 import java.lang.annotation.*;
@@ -17,13 +17,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static scaffolding.ClientUtils.*;
 import static scaffolding.ServerUtils.httpsServerForTest;
 
 public class OpenApiParameterContextTest {
     private MuServer server;
-    @After public void stop() { if (server != null) server.stop(); }
+    @AfterEach public void stop() { if (server != null) server.stop(); }
 
     @Retention(RetentionPolicy.RUNTIME) @Target(ElementType.PARAMETER)
     public @interface EncodedBody { }
@@ -54,7 +54,7 @@ public class OpenApiParameterContextTest {
         }
         JSONObject api = document();
         JSONObject custom = (JSONObject) api.query("/paths/~1body~1custom/post/requestBody/content/text~1plain/schema");
-        assertTrue("Annotation-selected custom readers must remain opaque: " + custom, custom.isEmpty());
+        assertTrue(custom.isEmpty(), "Annotation-selected custom readers must remain opaque: " + custom);
         assertEquals("string", api.query("/paths/~1body~1plain/post/requestBody/content/text~1plain/schema/type"));
     }
 

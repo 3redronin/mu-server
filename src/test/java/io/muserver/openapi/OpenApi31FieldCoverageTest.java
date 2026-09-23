@@ -1,21 +1,20 @@
 package io.muserver.openapi;
 
 import org.json.JSONObject;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import java.io.*;
 import java.lang.reflect.*;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import static io.muserver.openapi.OfflineOpenApiValidator.*;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /** Executable field checklist: builder, getter, JSON, immutable copying, and extension isolation. */
-@RunWith(Parameterized.class)
 public class OpenApi31FieldCoverageTest {
-    @Parameterized.Parameters(name="{0}.{1}") public static Collection<Object[]> fields() throws Exception {
+    public static Collection<Object[]> fields() throws Exception {
         List<Object[]> fields = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(
             Objects.requireNonNull(OpenApi31FieldCoverageTest.class.getResourceAsStream("/openapi/field-coverage.tsv")), StandardCharsets.UTF_8))) {
@@ -24,12 +23,8 @@ public class OpenApi31FieldCoverageTest {
         }
         return fields;
     }
-    private final String model, keyword, getter, setter;
-    public OpenApi31FieldCoverageTest(String model, String keyword, String getter, String setter) {
-        this.model = model; this.keyword = keyword; this.getter = getter; this.setter = setter;
-    }
-
-    @Test public void fieldSurvivesBuildSerializationAndCopy() throws Exception {
+    @ParameterizedTest(name="{0}.{1}") @MethodSource("fields")
+    public void fieldSurvivesBuildSerializationAndCopy(String model, String keyword, String getter, String setter) throws Exception {
         Class<?> type = Class.forName("io.muserver.openapi." + model);
         Object builder = fixture(type).getClass().getMethod("toBuilder").invoke(fixture(type));
         Method method = Arrays.stream(builder.getClass().getMethods()).filter(m -> m.getName().equals(setter)).findFirst().orElseThrow();
@@ -60,7 +55,7 @@ public class OpenApi31FieldCoverageTest {
             OfflineOpenApiValidator.object("OAuthFlowsObject", json(flows.build()));
         } else OfflineOpenApiValidator.object(model, document);
         // These explicit values equal their context-dependent defaults and are intentionally omitted.
-        if (!(keyword.equals("style") && model.equals("HeaderObject"))) assertTrue(document.toString(), document.has(keyword));
+        if (!(keyword.equals("style") && model.equals("HeaderObject"))) assertTrue(document.has(keyword), document.toString());
         Object copy = type.getMethod("toBuilder").invoke(built);
         assertJsonEquals(document, json(copy.getClass().getMethod("build").invoke(copy)));
         if (!model.equals("ReferenceObject") && !model.equals("SecurityRequirementObject")) {

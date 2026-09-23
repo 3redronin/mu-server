@@ -1,11 +1,11 @@
 package io.muserver.openapi;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import java.util.*;
 import java.net.URI;
 import static io.muserver.openapi.OfflineOpenApiValidator.*;
 import static io.muserver.openapi.SchemaObjectBuilder.*;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class OpenApi31DocumentTest {
     @Test public void completeManualDocumentValidatesWithAllReferencePositions() throws Exception {

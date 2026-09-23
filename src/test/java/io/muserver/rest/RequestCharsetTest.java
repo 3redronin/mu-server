@@ -9,10 +9,10 @@ import jakarta.ws.rs.ext.MessageBodyReader;
 import okhttp3.OkHttpClient;
 import okhttp3.Protocol;
 import okhttp3.RequestBody;
-import org.junit.After;
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.*;
 import java.lang.annotation.Annotation;
@@ -24,22 +24,20 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static scaffolding.ClientUtils.*;
 
-@RunWith(Parameterized.class)
 public class RequestCharsetTest {
-    @Parameterized.Parameters(name = "{0}")
     public static Object[] protocols() { return new Object[]{Protocol.HTTP_1_1, Protocol.HTTP_2}; }
-    private final Protocol protocol;
-    private final OkHttpClient caller;
+    private Protocol protocol;
+    private OkHttpClient caller;
     private MuServer server;
-    public RequestCharsetTest(Protocol protocol) {
+    private void setProtocol(Protocol protocol) {
         this.protocol = protocol;
         caller = client.newBuilder().protocols(protocol == Protocol.HTTP_2
             ? Arrays.asList(Protocol.HTTP_2, Protocol.HTTP_1_1) : Collections.singletonList(protocol)).build();
     }
-    @After public void stop() { scaffolding.MuAssert.stopAndCheck(server); }
+    @AfterEach public void stop() { scaffolding.MuAssert.stopAndCheck(server); }
 
     @Path("/charset") @Consumes("text/plain") @Produces("text/plain")
     public static class Resource {
@@ -92,14 +90,15 @@ public class RequestCharsetTest {
     }
     private static String type(String path) { return path.equals("form") ? "application/x-www-form-urlencoded" : "text/plain"; }
 
-    @Test public void unknownAndMalformedRequestCharsetsReturn415BeforeInvocation() {
+    @ParameterizedTest @MethodSource("protocols") public void unknownAndMalformedRequestCharsetsReturn415BeforeInvocation(Protocol protocol) {
+        setProtocol(protocol);
         Resource resource = new Resource();
         start(resource, null);
         for (String method : Arrays.asList("QUERY", "POST")) {
             for (String path : Arrays.asList("string", "chars", "reader", "primitive", "temporal", "form")) {
                 for (String charset : Arrays.asList("not-a-charset", "bad charset")) {
                     try (okhttp3.Response response = send(method, path, type(path) + ";charset=\"" + charset + "\"", new byte[]{'1'})) {
-                        assertEquals(method + " " + path + " " + charset, 415, response.code());
+                        assertEquals(415, response.code(), method + " " + path + " " + charset);
                         assertEquals(method.equals("QUERY") ? "\"" + type(path) + "\"" : null, response.header("Accept-Query"));
                     }
                 }
@@ -108,7 +107,8 @@ public class RequestCharsetTest {
         assertEquals(0, resource.calls.get());
     }
 
-    @Test public void validCharsetsStillDecodeRequestBodies() throws Exception {
+    @ParameterizedTest @MethodSource("protocols") public void validCharsetsStillDecodeRequestBodies(Protocol protocol) throws Exception {
+        setProtocol(protocol);
         Resource resource = new Resource();
         start(resource, null);
         for (String method : Arrays.asList("QUERY", "POST")) {
@@ -126,7 +126,8 @@ public class RequestCharsetTest {
         assertEquals(24, resource.calls.get());
     }
 
-    @Test public void byteReadersDoNotRequireARecognizedCharset() throws Exception {
+    @ParameterizedTest @MethodSource("protocols") public void byteReadersDoNotRequireARecognizedCharset(Protocol protocol) throws Exception {
+        setProtocol(protocol);
         start(new Resource(), null);
         for (String method : Arrays.asList("QUERY", "POST")) {
             try (okhttp3.Response response = send(method, "bytes", "text/plain;charset=not-a-charset", new byte[]{'x'})) {
@@ -135,7 +136,8 @@ public class RequestCharsetTest {
         }
     }
 
-    @Test public void responseCharsetFailuresRemainServerErrorsWithoutQueryAdvertisement() {
+    @ParameterizedTest @MethodSource("protocols") public void responseCharsetFailuresRemainServerErrorsWithoutQueryAdvertisement(Protocol protocol) {
+        setProtocol(protocol);
         start(new Resource(), null);
         for (String method : Arrays.asList("QUERY", "POST")) {
             for (String charset : Arrays.asList("not-a-charset", "bad charset")) {
@@ -158,7 +160,8 @@ public class RequestCharsetTest {
             throw new java.nio.charset.UnsupportedCharsetException("custom-provider-failure");
         }
     }
-    @Test public void customReaderFailuresAreNotReclassified() {
+    @ParameterizedTest @MethodSource("protocols") public void customReaderFailuresAreNotReclassified(Protocol protocol) {
+        setProtocol(protocol);
         start(new Resource(), new FailingCustomReader());
         for (String method : Arrays.asList("QUERY", "POST")) {
             try (okhttp3.Response response = send(method, "string", "text/plain;charset=UTF-8", new byte[]{'x'})) {

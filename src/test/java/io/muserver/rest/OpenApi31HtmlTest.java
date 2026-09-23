@@ -1,12 +1,12 @@
 package io.muserver.rest;
 
 import io.muserver.openapi.*;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import java.io.*;
 import java.net.URI;
 import java.util.*;
 import static io.muserver.openapi.SchemaObjectBuilder.*;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class OpenApi31HtmlTest {
     @Test public void localCyclicAndExternalReferencesAndBooleanUnionsRender() throws Exception {

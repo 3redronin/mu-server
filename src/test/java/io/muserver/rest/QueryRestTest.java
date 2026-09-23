@@ -11,8 +11,10 @@ import jakarta.ws.rs.container.Suspended;
 import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.container.ContainerResponseFilter;
 import org.json.JSONObject;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 import java.lang.annotation.*;
 import java.lang.reflect.Type;
 import java.io.*;
@@ -23,17 +25,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CompletionException;
 import javax.xml.transform.stream.StreamSource;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static scaffolding.ClientUtils.*;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 
-@org.junit.runner.RunWith(org.junit.runners.Parameterized.class)
 public class QueryRestTest {
-    @org.junit.runners.Parameterized.Parameters(name = "{0}")
     public static Object[] protocols() { return new Object[]{okhttp3.Protocol.HTTP_1_1, okhttp3.Protocol.HTTP_2}; }
-    private final okhttp3.Protocol protocol;
-    private final okhttp3.OkHttpClient caller;
-    public QueryRestTest(okhttp3.Protocol protocol) {
+    private okhttp3.Protocol protocol;
+    private okhttp3.OkHttpClient caller;
+    private void setProtocol(okhttp3.Protocol protocol) {
         this.protocol = protocol;
         this.caller = client.newBuilder().protocols(protocol == okhttp3.Protocol.HTTP_2
             ? Arrays.asList(okhttp3.Protocol.HTTP_2, okhttp3.Protocol.HTTP_1_1) : Collections.singletonList(protocol)).build();
@@ -47,7 +47,7 @@ public class QueryRestTest {
         return MuServerBuilder.httpsServer().withHttp2Config(Http2ConfigBuilder.http2EnabledIfAvailable());
     }
     private MuServer server;
-    @After public void stop() { scaffolding.MuAssert.stopAndCheck(server); }
+    @AfterEach public void stop() { scaffolding.MuAssert.stopAndCheck(server); }
     @Target(ElementType.METHOD) @Retention(RetentionPolicy.RUNTIME) @HttpMethod("QUERY")
     public @interface CustomQuery {}
 
@@ -145,11 +145,13 @@ public class QueryRestTest {
         }
     }
 
-    @Test public void suspendedRepresentationFailuresAdvertiseResolvedQueryFormats() throws Exception {
+    @ParameterizedTest @MethodSource("protocols") public void suspendedRepresentationFailuresAdvertiseResolvedQueryFormats(okhttp3.Protocol protocol) throws Exception {
+        setProtocol(protocol);
         assertAsynchronousRepresentationDiscovery("/async-root/suspended");
     }
 
-    @Test public void asynchronousRepresentationFailuresAdvertiseResolvedQueryFormats() throws Exception {
+    @ParameterizedTest @MethodSource("protocols") public void asynchronousRepresentationFailuresAdvertiseResolvedQueryFormats(okhttp3.Protocol protocol) throws Exception {
+        setProtocol(protocol);
         assertAsynchronousRepresentationDiscovery("/async-root/child");
     }
 
@@ -181,7 +183,8 @@ public class QueryRestTest {
         return request(server.uri().resolve(path)).method("QUERY", okhttp3.RequestBody.create(body, okhttp3.MediaType.get(type)));
     }
 
-    @Test public void routingNegotiationDiscoveryAndCorsUseResolvedCandidates() throws Exception {
+    @ParameterizedTest @MethodSource("protocols") public void routingNegotiationDiscoveryAndCorsUseResolvedCandidates(okhttp3.Protocol protocol) throws Exception {
+        setProtocol(protocol);
         Root root = new Root();
         server = serverBuilder().addHandler(ContextHandlerBuilder.context("/api").addHandler(
             restHandler(new Search(), new Inherited(), root, new Explicit(), new Unrelated())
@@ -233,11 +236,13 @@ public class QueryRestTest {
         }
     }
 
-    @Test public void postRewrittenToQueryUsesRetrievalPreconditions() throws Exception {
+    @ParameterizedTest @MethodSource("protocols") public void postRewrittenToQueryUsesRetrievalPreconditions(okhttp3.Protocol protocol) throws Exception {
+        setProtocol(protocol);
         assertRewrittenPreconditions("POST", "QUERY");
     }
 
-    @Test public void queryRewrittenToPostUsesMutationPreconditions() throws Exception {
+    @ParameterizedTest @MethodSource("protocols") public void queryRewrittenToPostUsesMutationPreconditions(okhttp3.Protocol protocol) throws Exception {
+        setProtocol(protocol);
         assertRewrittenPreconditions("QUERY", "POST");
     }
 
@@ -253,14 +258,15 @@ public class QueryRestTest {
             try (okhttp3.Response response = call(request(server.uri().resolve("/conditional"))
                 .method(transportMethod, okhttp3.RequestBody.create("selected", okhttp3.MediaType.get("text/plain")))
                 .header("X-Effective-Method", effectiveMethod).header(condition[0], condition[1]))) {
-                assertEquals(Arrays.toString(condition), Integer.parseInt(condition[2]), response.code());
+                assertEquals(Integer.parseInt(condition[2]), response.code(), Arrays.toString(condition));
                 if (response.code() == 304) assertEquals("", response.body().string());
                 else if (response.code() == 200) assertEquals("result:selected", response.body().string());
             }
         }
     }
 
-    @Test public void entityTagConditionsTakePrecedenceOverDates() throws Exception {
+    @ParameterizedTest @MethodSource("protocols") public void entityTagConditionsTakePrecedenceOverDates(okhttp3.Protocol protocol) throws Exception {
+        setProtocol(protocol);
         server = serverBuilder().addHandler(restHandler(new Conditional())).start();
         String unchanged = "Sun, 09 Sep 2001 01:46:40 GMT";
         String changed = "Sat, 08 Sep 2001 01:46:40 GMT";
@@ -277,7 +283,7 @@ public class QueryRestTest {
                     ? okhttp3.RequestBody.create("selected", okhttp3.MediaType.get("text/plain")) : null;
                 try (okhttp3.Response response = call(request(server.uri().resolve("/conditional")).method(method, body)
                     .header(conditions[0], conditions[1]).header(conditions[2], conditions[3]))) {
-                    assertEquals(method + " " + Arrays.toString(conditions), Integer.parseInt(conditions[4]), response.code());
+                    assertEquals(Integer.parseInt(conditions[4]), response.code(), method + " " + Arrays.toString(conditions));
                     if (method.equals("HEAD") || response.code() == 304) assertEquals("", response.body().string());
                     else if (response.code() == 200) assertEquals("result:selected", response.body().string());
                 }
@@ -285,7 +291,8 @@ public class QueryRestTest {
         }
     }
 
-    @Test public void conditionalQueryUsesSelectedResultValidators() throws Exception {
+    @ParameterizedTest @MethodSource("protocols") public void conditionalQueryUsesSelectedResultValidators(okhttp3.Protocol protocol) throws Exception {
+        setProtocol(protocol);
         server = serverBuilder().addHandler(restHandler(new Conditional())).start();
         for (String[] condition : new String[][]{
             {"If-None-Match", "\"selected\"", "304"}, {"If-None-Match", "W/\"selected\"", "304"},
@@ -293,13 +300,14 @@ public class QueryRestTest {
             {"If-Modified-Since", "Sun, 09 Sep 2001 01:46:40 GMT", "304"},
             {"If-Unmodified-Since", "Sat, 08 Sep 2001 01:46:40 GMT", "412"}}) {
             try (okhttp3.Response response = call(query("/conditional", "text/plain", "selected").header(condition[0], condition[1]))) {
-                assertEquals(Arrays.toString(condition), Integer.parseInt(condition[2]), response.code());
+                assertEquals(Integer.parseInt(condition[2]), response.code(), Arrays.toString(condition));
                 if (response.code() == 304) assertEquals("", response.body().string());
             }
         }
     }
 
-    @Test public void providersAndFiltersWorkAndApplicationHeadersArePreserved() throws Exception {
+    @ParameterizedTest @MethodSource("protocols") public void providersAndFiltersWorkAndApplicationHeadersArePreserved(okhttp3.Protocol protocol) throws Exception {
+        setProtocol(protocol);
         AtomicInteger filtered = new AtomicInteger();
         server = serverBuilder().addHandler(restHandler(new ProviderResource(), new ApplicationError(), new Search())
             .addCustomReader(new Reader())
@@ -325,7 +333,8 @@ public class QueryRestTest {
     @Path("/application-exception") public static class ApplicationException {
         @QUERY public String query(String body) { throw new NotSupportedException(); }
     }
-    @Test public void discoveryPreservesClassDeclarationsWildcardsAndEarlierHeaders() throws Exception {
+    @ParameterizedTest @MethodSource("protocols") public void discoveryPreservesClassDeclarationsWildcardsAndEarlierHeaders(okhttp3.Protocol protocol) throws Exception {
+        setProtocol(protocol);
         server = serverBuilder().addHandler((req, resp) -> {
             if (req.query().get("override") != null) resp.headers().set(HeaderNames.ACCEPT_QUERY, "\"application/earlier\"");
             return false;
@@ -349,14 +358,16 @@ public class QueryRestTest {
         }
     }
 
-    @Test public void missingProviderAdvertisesEffectiveConsumes() throws Exception {
+    @ParameterizedTest @MethodSource("protocols") public void missingProviderAdvertisesEffectiveConsumes(okhttp3.Protocol protocol) throws Exception {
+        setProtocol(protocol);
         server = serverBuilder().addHandler(restHandler(new ProviderResource())).start();
         try (okhttp3.Response response = call(query("/provider", "application/custom", "body"))) {
             assertEquals(415, response.code()); assertEquals("\"application/custom\"", response.header("Accept-Query"));
         }
     }
 
-    @Test public void openApiIncludesCompleteQueryOperationAndCustomizations() throws Exception {
+    @ParameterizedTest @MethodSource("protocols") public void openApiIncludesCompleteQueryOperationAndCustomizations(okhttp3.Protocol protocol) throws Exception {
+        setProtocol(protocol);
         server = serverBuilder().addHandler(restHandler(new Inherited()).withOpenApiJsonUrl("/openapi.json")
             .withOpenApiHtmlUrl("/docs")
             .addSchemaObjectCustomizer((builder, context) -> builder.withDescription("Query schema").withExample("query example"))).start();
@@ -371,7 +382,7 @@ public class QueryRestTest {
         }
         try (okhttp3.Response response = call(request(server.uri().resolve("/docs")))) {
             String html = response.body().string();
-            assertTrue(html, html.contains("QUERY")); assertTrue(html.contains("query example"));
+            assertTrue(html.contains("QUERY"), html); assertTrue(html.contains("query example"));
         }
     }
 }

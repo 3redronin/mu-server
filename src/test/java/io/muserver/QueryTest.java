@@ -4,20 +4,20 @@ import io.muserver.handlers.CSRFProtectionHandlerBuilder;
 import okhttp3.*;
 import okio.BufferedSink;
 import org.eclipse.jetty.client.util.StringContentProvider;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import java.io.*;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static scaffolding.ClientUtils.*;
 import static scaffolding.ServerUtils.httpsServerForTest;
 
 public class QueryTest {
     private MuServer server;
-    @After public void stop() { scaffolding.MuAssert.stopAndCheck(server); }
+    @AfterEach public void stop() { scaffolding.MuAssert.stopAndCheck(server); }
 
     private OkHttpClient clientFor(Protocol protocol) {
         return client.newBuilder().protocols(protocol == Protocol.HTTP_2
@@ -65,7 +65,7 @@ public class QueryTest {
                 try (Response response = call(clientFor(protocol), request(server.uri())
                     .header("Content-Type", "text/plain").method(method, null))) {
                     assertEquals(protocol, response.protocol());
-                    assertEquals(protocol + " " + method, supported ? 200 : 405, response.code());
+                    assertEquals(supported ? 200 : 405, response.code(), protocol + " " + method);
                     assertEquals(before + (supported ? 1 : 0), calls.get());
                     if (supported) assertEquals(method.equals("HEAD") ? "" : method, response.body().string());
                 }
@@ -88,7 +88,7 @@ public class QueryTest {
                     try (Response response = call(clientFor(protocol), request(server.uri().resolve(path))
                         .header("Content-Type", type).method("QUERY", RequestBody.create("query body", (MediaType) null)))) {
                         assertEquals(protocol, response.protocol());
-                        assertEquals(path + " " + type, 200, response.code());
+                        assertEquals(200, response.code(), path + " " + type);
                         assertEquals("query body", response.body().string());
                     }
                 }
@@ -118,8 +118,8 @@ public class QueryTest {
                 socket.getOutputStream().write(("QUERY / HTTP/1.1\r\nHost: localhost\r\n" + header
                     + "Content-Length: 20\r\nExpect: 100-continue\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
                 String response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-                assertTrue(response, response.startsWith("HTTP/1.1 400"));
-                assertFalse(response, response.contains("100 Continue"));
+                assertTrue(response.startsWith("HTTP/1.1 400"), response);
+                assertFalse(response.contains("100 Continue"), response);
             }
         }
         assertEquals(0, calls.get());

@@ -1,12 +1,12 @@
 package io.muserver.openapi;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import java.math.*;
 import java.io.*;
 import java.util.*;
 import static io.muserver.openapi.SchemaObjectBuilder.*;
 import static io.muserver.openapi.OfflineOpenApiValidator.*;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class OpenApi31SchemaTest {
     @Test public void integralKeywordViewsAcceptDifferentNumberRepresentations() throws Exception {
@@ -14,8 +14,8 @@ public class OpenApi31SchemaTest {
             "maxProperties", "minProperties", "minContains", "maxContains")) {
             for (Number value : Arrays.asList(1L, 1.0, 1.0f, (short) 1, BigInteger.ONE, new BigDecimal("1.00"))) {
                 SchemaObject schema = schemaObject().withKeyword(keyword, value).build();
-                assertEquals(keyword + " from " + value.getClass(), Integer.valueOf(1),
-                    SchemaObject.class.getMethod(keyword).invoke(schema));
+                assertEquals(Integer.valueOf(1), SchemaObject.class.getMethod(keyword).invoke(schema),
+                    keyword + " from " + value.getClass());
                 assertEquals(Integer.valueOf(1), SchemaObject.class.getMethod(keyword).invoke(schema.toBuilder().build()));
                 assertEquals(1, json(schema).getInt(keyword));
             }
@@ -31,7 +31,7 @@ public class OpenApi31SchemaTest {
             assertEquals(large, schema.toBuilder().build().keywords().get(keyword));
             java.lang.reflect.InvocationTargetException error = assertThrows(java.lang.reflect.InvocationTargetException.class,
                 () -> SchemaObject.class.getMethod(keyword).invoke(schema));
-            assertTrue(error.getCause().toString(), error.getCause() instanceof IllegalStateException);
+            assertTrue(error.getCause() instanceof IllegalStateException, error.getCause().toString());
             assertTrue(error.getCause().getMessage().contains("keywords()"));
         }
     }

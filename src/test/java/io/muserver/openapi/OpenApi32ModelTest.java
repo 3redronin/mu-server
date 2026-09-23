@@ -1,24 +1,24 @@
 package io.muserver.openapi;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import java.util.*;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static io.muserver.openapi.OfflineOpenApiValidator.*;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
 
 public class OpenApi32ModelTest {
     @Test public void selfRejectsFragmentsIncludingEmptyFragments() {
         for (String value : Arrays.asList("api.json#/components", "api.json#", "#", "https://example.test/api.json#part")) {
-            IllegalArgumentException error = assertThrows(value, IllegalArgumentException.class,
-                () -> OpenAPIObjectBuilder.openAPIObject().withComponents(ComponentsObjectBuilder.componentsObject().build()).withSelf(value).build());
-            assertTrue(error.getMessage(), error.getMessage().contains("$self"));
+            IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> OpenAPIObjectBuilder.openAPIObject().withComponents(ComponentsObjectBuilder.componentsObject().build()).withSelf(value).build(), value);
+            assertTrue(error.getMessage().contains("$self"), error.getMessage());
         }
     }
     @Test public void selfRejectsMalformedUriReferences() {
         for (String value : Arrays.asList("api document.json", "api%ZZ.json", "https://[invalid", "api.json\n")) {
-            IllegalArgumentException error = assertThrows(value, IllegalArgumentException.class,
-                () -> OpenAPIObjectBuilder.openAPIObject().withComponents(ComponentsObjectBuilder.componentsObject().build()).withSelf(value).build());
-            assertTrue(error.getMessage(), error.getMessage().contains("$self"));
+            IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> OpenAPIObjectBuilder.openAPIObject().withComponents(ComponentsObjectBuilder.componentsObject().build()).withSelf(value).build(), value);
+            assertTrue(error.getMessage().contains("$self"), error.getMessage());
         }
     }
     @Test public void selfPreservesValidUriReferencesThroughCopyingAndSerialization() throws Exception {

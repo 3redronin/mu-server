@@ -23,4 +23,5 @@ final class QueryRequestValidation {
             throw new HttpException(HttpStatus.BAD_REQUEST_400, "400 Bad Request - QUERY requires a concrete Content-Type");
         }
     }
+
 }

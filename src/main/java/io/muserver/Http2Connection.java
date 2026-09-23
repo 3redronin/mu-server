@@ -1070,6 +1070,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         if (fh.streamId() == 0 || (fh.streamId() % 2) == 0) {
             throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID " + fh.streamId());
         }
+        boolean newStreamAdmitted = false;
         try {
             var headerFragment = Http2HeadersFrame.readLogicalFrame(
                 fh,
@@ -1120,13 +1121,21 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             if (fh.streamId() <= lifecycle.lastStreamId) {
                 throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID " + fh.streamId());
             }
-            if (acceptNewStream(headerFragment.streamId())) {
-                String methodName = headerFragment.headers().get(HeaderNames.PSEUDO_METHOD);
-                try {
-                    QueryRequestValidation.validate(Method.valueOf(methodName), headerFragment.headers());
-                } catch (IllegalArgumentException ignored) {
-                    // Http2Stream.start reports malformed :method values as protocol errors.
+            String methodName = headerFragment.headers().get(HeaderNames.PSEUDO_METHOD);
+            if (methodName != null) {
+                if (methodName.isEmpty() || !methodName.chars().allMatch(c -> ParseUtils.isTChar((char) c))) {
+                    throw Http2Exception.stream(Http2ErrorCode.PROTOCOL_ERROR, "invalid method", fh.streamId());
                 }
+                Method method;
+                try {
+                    method = Method.valueOf(methodName);
+                } catch (IllegalArgumentException unknownMethod) {
+                    throw new HttpException(HttpStatus.METHOD_NOT_ALLOWED_405);
+                }
+                QueryRequestValidation.validate(method, headerFragment.headers());
+            }
+            if (acceptNewStream(headerFragment.streamId())) {
+                newStreamAdmitted = true;
                 startRequest(headerFragment);
             }
         } catch (HttpException e) {
@@ -1163,13 +1172,13 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, rejectReason, fh.streamId());
                 }
             }
-            if (fh.streamId() <= lifecycle.lastStreamId) {
+            if (!newStreamAdmitted && fh.streamId() <= lifecycle.lastStreamId) {
                 throw Http2Exception.connection(
                     Http2ErrorCode.PROTOCOL_ERROR,
                     "Invalid stream ID " + fh.streamId()
                 );
             }
-            if (!acceptNewStream(fh.streamId())) {
+            if (!newStreamAdmitted && !acceptNewStream(fh.streamId())) {
                 return;
             }
             var rejectedRequest =

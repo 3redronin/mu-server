@@ -10,7 +10,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.*;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 /** Test-only, pinned schema validation with no network fallback. */
 public final class OfflineOpenApiValidator {
@@ -26,7 +26,7 @@ public final class OfflineOpenApiValidator {
                 byte[] bytes = resource(entry.getString("resource"));
                 StringBuilder checksum = new StringBuilder();
                 for (byte b : MessageDigest.getInstance("SHA-256").digest(bytes)) checksum.append(String.format(Locale.ROOT, "%02x", b));
-                assertEquals(uri, entry.getString("sha256"), checksum.toString());
+                assertEquals(entry.getString("sha256"), checksum.toString(), uri);
                 schemas.put(uri, new String(bytes, StandardCharsets.UTF_8));
             }
             return SchemaRegistry.withDefaultDialect(SpecificationVersion.DRAFT_2020_12, builder ->
@@ -63,15 +63,15 @@ public final class OfflineOpenApiValidator {
     }
 
     public static void assertJsonEquals(String message, Object expected, Object actual) {
-        if (expected instanceof JSONObject) assertTrue(message + ": " + expected + " != " + actual, ((JSONObject) expected).similar(actual));
-        else if (expected instanceof JSONArray) assertTrue(message + ": " + expected + " != " + actual, ((JSONArray) expected).similar(actual));
-        else assertEquals(message, expected, actual);
+        if (expected instanceof JSONObject) assertTrue(((JSONObject) expected).similar(actual), message + ": " + expected + " != " + actual);
+        else if (expected instanceof JSONArray) assertTrue(((JSONArray) expected).similar(actual), message + ": " + expected + " != " + actual);
+        else assertEquals(expected, actual, message);
     }
 
     public static void document(OpenAPIObject document) throws IOException { document(json(document)); }
     public static void document(JSONObject document) {
         List<com.networknt.schema.Error> errors = REGISTRY.getSchema(SchemaLocation.of(BASE)).validate(document.toString(), InputFormat.JSON);
-        assertTrue(errors.toString(), errors.isEmpty());
+        assertTrue(errors.isEmpty(), errors.toString());
     }
     public static void object(String model, JSONObject value) {
         String location;
@@ -86,7 +86,7 @@ public final class OfflineOpenApiValidator {
             location = "https://spec.openapis.org/oas/3.2/schema/2026-08-30#/$defs/" + name;
         }
         List<com.networknt.schema.Error> errors = REGISTRY.getSchema(SchemaLocation.of(location)).validate(value.toString(), InputFormat.JSON);
-        assertTrue(model + " " + value + ": " + errors, errors.isEmpty());
+        assertTrue(errors.isEmpty(), model + " " + value + ": " + errors);
     }
 
     public static void accepts(SchemaObject schema, String payload, boolean expected) throws IOException {
@@ -94,6 +94,6 @@ public final class OfflineOpenApiValidator {
     }
     public static void accepts(Object schema, String payload, boolean expected) throws IOException {
         List<com.networknt.schema.Error> errors = REGISTRY.getSchema(schema.toString(), InputFormat.JSON).validate(payload, InputFormat.JSON);
-        assertEquals(schema + " validating " + payload + ": " + errors, expected, errors.isEmpty());
+        assertEquals(expected, errors.isEmpty(), schema + " validating " + payload + ": " + errors);
     }
 }

@@ -3,8 +3,8 @@ package io.muserver.rest;
 import io.muserver.MuServer;
 import jakarta.ws.rs.*;
 import org.json.JSONObject;
-import org.junit.After;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 
 import java.time.*;
 import java.util.List;
@@ -13,13 +13,13 @@ import java.util.Map;
 
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static scaffolding.ClientUtils.*;
 import static scaffolding.ServerUtils.httpsServerForTest;
 
 public class JavaValueSchemaIntegrationTest {
     private MuServer server;
-    @After public void stop() { if (server != null) server.stop(); }
+    @AfterEach public void stop() { if (server != null) server.stop(); }
 
     @Path("/values") public static class Values {
         @POST @Path("{day}") @Consumes("application/x-www-form-urlencoded")
@@ -116,7 +116,7 @@ public class JavaValueSchemaIntegrationTest {
                     found = true;
                 }
             }
-            assertTrue("Query parameter " + name, found);
+            assertTrue(found, "Query parameter " + name);
             formBody.add(name, entry.getValue()[1]);
             queryUrl.addQueryParameter(name, entry.getValue()[1]);
             JSONObject operation = paths.getJSONObject("/formats/" + entry.getKey()).getJSONObject("post");

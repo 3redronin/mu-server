@@ -18,32 +18,26 @@ class ExpectContinueHandler implements MuHandler {
         Headers h = request.headers();
         if (h.contains(HeaderNames.EXPECT) && request.httpVersion() != HttpVersion.HTTP_1_0) {
             if (h.containsValue(HeaderNames.EXPECT, HeaderValues.CONTINUE, true)) {
-                throwIfDeclaredSizeTooLarge(request, false);
+                throwIfDeclaredSizeTooLarge(request);
                 response.sendInformationalResponse(HttpStatus.CONTINUE_100, null);
             } else {
                 throw new HttpException(HttpStatus.EXPECTATION_FAILED_417, "Unknown expectation");
             }
         } else {
-            throwIfDeclaredSizeTooLarge(request, true);
+            throwIfDeclaredSizeTooLarge(request);
         }
         return false;
     }
 
-    private void throwIfDeclaredSizeTooLarge(MuRequest request, boolean consumeBody) throws IOException {
+    private void throwIfDeclaredSizeTooLarge(MuRequest request) {
         var declaredSize = request.declaredBodySize().size();
         if (declaredSize != null && declaredSize > maxRequestBodySize) {
-            // one has to consume the body for it to be a valid HTTP response
-            if (consumeBody) {
-                try (var body = request.body()) {
-                    var buf = new byte[8192];
-                    while (body.read(buf) != -1) {
-                        // ignore it
-                    }
-                }
-            }
-
             HttpException ex = new HttpException(HttpStatus.CONTENT_TOO_LARGE_413);
-            ex.responseHeaders().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+            // The body is deliberately not read. HTTP/1.1 must close after this response;
+            // HTTP/2 can reject just this stream without a forbidden Connection header.
+            if (request.httpVersion() != HttpVersion.HTTP_2) {
+                ex.responseHeaders().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+            }
             throw ex;
         }
     }

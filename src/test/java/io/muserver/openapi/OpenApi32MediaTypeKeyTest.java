@@ -1,15 +1,15 @@
 package io.muserver.openapi;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import java.util.*;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 import static io.muserver.openapi.OfflineOpenApiValidator.*;
 
 public class OpenApi32MediaTypeKeyTest {
     @Test public void inlineMediaTypesRejectInvalidComponentKeys() {
         for (String name : Arrays.asList("bad/key", "bad key", "", "bad#key")) {
-            assertThrows(name, IllegalArgumentException.class, () -> ComponentsObjectBuilder.componentsObject()
-                .withMediaTypes(Collections.singletonMap(name, MediaTypeObjectBuilder.mediaTypeObject().build())).build());
+            assertThrows(IllegalArgumentException.class, () -> ComponentsObjectBuilder.componentsObject()
+                .withMediaTypes(Collections.singletonMap(name, MediaTypeObjectBuilder.mediaTypeObject().build())).build(), name);
         }
     }
     @Test public void referencedMediaTypesRejectInvalidComponentKeys() {

@@ -1,11 +1,11 @@
 package io.muserver.openapi;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 import java.net.URI;
 import java.util.*;
 import static io.muserver.openapi.OfflineOpenApiValidator.*;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class OpenApi32BehaviorTest {
     @Test public void examplesPreserveFalseEmptyAndNullButRejectConflictingRepresentations() throws Exception {

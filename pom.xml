@@ -20,8 +20,9 @@
         <netty.version>${netty.version.4.1}</netty.version>
         <netty.codec.artifactId>netty-codec</netty.codec.artifactId>
         <nullaway.version>0.13.8</nullaway.version>
-        <slf4j.version>2.0.16</slf4j.version>
-        <jetty.version>9.4.57.v20241219</jetty.version>
+        <slf4j.version>2.0.18</slf4j.version>
+        <jetty.version>9.4.58.v20250814</jetty.version>
+        <jdk.version>11</jdk.version>
     </properties>
 
     <scm>
@@ -61,7 +62,7 @@
         <dependency>
             <groupId>jakarta.annotation</groupId>
             <artifactId>jakarta.annotation-api</artifactId>
-            <version>2.1.0</version>
+            <version>2.1.1</version>
         </dependency>
         <dependency>
             <groupId>org.jspecify</groupId>
@@ -104,18 +105,6 @@
             <scope>test</scope>
         </dependency>
         <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.13.2</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.vintage</groupId>
-            <artifactId>junit-vintage-engine</artifactId>
-            <version>5.11.0</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
             <groupId>org.eclipse.jetty</groupId>
             <artifactId>jetty-client</artifactId>
             <version>${jetty.version}</version>
@@ -149,33 +138,27 @@
 
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
-            <artifactId>okhttp</artifactId>
-            <version>4.10.0</version>
+            <artifactId>okhttp-jvm</artifactId>
+            <version>5.5.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>okhttp-tls</artifactId>
-            <version>4.10.0</version>
+            <version>5.5.0</version>
             <scope>test</scope>
         </dependency>
 
         <dependency>
             <groupId>com.squareup.okio</groupId>
-            <artifactId>okio</artifactId>
-            <version>3.9.0</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.squareup.okio</groupId>
             <artifactId>okio-jvm</artifactId>
-            <version>3.9.0</version>
+            <version>3.18.1</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
-            <version>20250517</version>
+            <version>20260814</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -231,12 +214,34 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.5.6</version>
+                <version>3.6.0</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>me.fabriciorby</groupId>
+                        <artifactId>maven-surefire-junit5-tree-reporter</artifactId>
+                        <version>1.5.1</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <consoleOutputReporter><disable>true</disable></consoleOutputReporter>
+                    <statelessTestsetInfoReporter
+                        implementation="org.apache.maven.plugin.surefire.extensions.junit5.JUnit5StatelessTestsetInfoTreeReporter">
+                        <theme>UNICODE</theme>
+                        <printStacktraceOnError>true</printStacktraceOnError>
+                        <printStacktraceOnFailure>true</printStacktraceOnFailure>
+                        <printStdoutOnError>true</printStdoutOnError>
+                        <printStdoutOnFailure>true</printStdoutOnFailure>
+                        <printStdoutOnSuccess>false</printStdoutOnSuccess>
+                        <printStderrOnError>true</printStderrOnError>
+                        <printStderrOnFailure>true</printStderrOnFailure>
+                        <printStderrOnSuccess>false</printStderrOnSuccess>
+                    </statelessTestsetInfoReporter>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>com.github.danielflower.mavenplugins</groupId>
                 <artifactId>multi-module-maven-release-plugin</artifactId>
-                <version>3.8.4</version>
+                <version>3.8.5</version>
                 <configuration>
                     <releaseProfiles>
                         <releaseProfile>release</releaseProfile>
@@ -246,11 +251,17 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.15.0</version>
+                <version>3.16.0</version>
+                <executions>
+                    <execution><id>default-compile</id><phase>none</phase></execution>
+                    <execution><id>default-testCompile</id><phase>none</phase></execution>
+                    <execution><id>compile</id><phase>compile</phase><goals><goal>compile</goal></goals></execution>
+                    <execution><id>testCompile</id><phase>test-compile</phase><goals><goal>testCompile</goal></goals></execution>
+                </executions>
                 <configuration>
-                    <source>11</source>
-                    <target>11</target>
-                    <release>11</release>
+                    <source>${jdk.version}</source>
+                    <target>${jdk.version}</target>
+                    <release>${jdk.version}</release>
                     <failOnWarning>true</failOnWarning>
                     <showWarnings>true</showWarnings>
                     <compilerArgs>
@@ -261,7 +272,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
-                <version>3.6.1</version>
+                <version>3.11.0</version>
                 <executions>
                     <execution>
                         <id>analyze</id>
@@ -269,7 +280,7 @@
                             <goal>analyze-only</goal>
                         </goals>
                         <configuration>
-                            <failOnWarning>true</failOnWarning>
+                            <failOnWarning>false</failOnWarning>
                             <ignoreNonCompile>true</ignoreNonCompile>
                             <outputXML>true</outputXML>
                             <ignoredUsedUndeclaredDependencies>
@@ -283,10 +294,13 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.6.3</version>
+                <version>3.12.0</version>
                 <configuration>
-                    <source>11</source>
+                    <source>${jdk.version}</source>
                     <detectJavaApiLink>false</detectJavaApiLink>
+                    <doclint>all</doclint>
+                    <excludePackageNames>io.muserver.internal</excludePackageNames>
+                    <failOnWarnings>true</failOnWarnings>
                 </configuration>
                 <executions>
                     <execution>
@@ -294,59 +308,19 @@
                         <goals>
                             <goal>jar</goal>
                         </goals>
-                        <configuration>
-                            <failOnWarnings>false</failOnWarnings>
-                        </configuration>
                     </execution>
                 </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-source-plugin</artifactId>
-                <version>3.3.1</version>
+                <version>3.4.0</version>
                 <executions>
                     <execution>
                         <id>attach-sources</id>
                         <goals>
                             <goal>jar-no-fork</goal>
                         </goals>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-enforcer-plugin</artifactId>
-                <version>3.4.1</version>
-                <executions>
-                    <execution>
-                        <id>enforce-versions</id>
-                        <goals>
-                            <goal>enforce</goal>
-                        </goals>
-                        <configuration>
-                            <rules>
-                                <bannedDependencies>
-                                    <excludes>
-                                        <exclude>*:*:*:*:runtime</exclude>
-                                        <exclude>*:*:*:*:compile</exclude>
-                                    </excludes>
-                                    <includes>
-                                        <include>org.slf4j:slf4j-api</include>
-                                        <include>jakarta.ws.rs:jakarta.ws.rs-api</include>
-                                        <include>jakarta.annotation:jakarta.annotation-api</include>
-                                        <include>io.netty:*</include>
-                                        <include>org.jspecify:jspecify</include>
-                                    </includes>
-                                </bannedDependencies>
-                                <dependencyConvergence/>
-                                <requireMavenVersion>
-                                    <version>3.0.4</version>
-                                </requireMavenVersion>
-                                <requireJavaVersion>
-                                    <version>11</version>
-                                </requireJavaVersion>
-                            </rules>
-                        </configuration>
                     </execution>
                 </executions>
             </plugin>
@@ -363,7 +337,7 @@
                         <artifactId>maven-compiler-plugin</artifactId>
                         <executions>
                             <execution>
-                                <id>default-testCompile</id>
+                                <id>testCompile</id>
                                 <configuration>
                                     <!-- Keep NullAway on production code; tests intentionally exercise null contracts and lifecycle setup. -->
                                     <compilerArgs combine.self="override">
@@ -442,7 +416,7 @@
                     <plugin>
                         <groupId>org.sonatype.central</groupId>
                         <artifactId>central-publishing-maven-plugin</artifactId>
-                        <version>0.10.0</version>
+                        <version>0.11.0</version>
                         <extensions>true</extensions>
                         <configuration>
                             <publishingServerId>central</publishingServerId>

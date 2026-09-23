@@ -1,6 +1,6 @@
 package io.muserver;
 
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 public class QueryRequestValidationTest {
     @Test public void emptyParametersAreValidButIncompleteNameValuePairsAreNot() throws Exception {
@@ -8,7 +8,7 @@ public class QueryRequestValidationTest {
             QueryRequestValidation.validate(Method.QUERY, headers(value));
         }
         for (String value : new String[]{"text/plain; charset", "text/plain; charset=", "text/plain; =UTF-8"}) {
-            org.junit.Assert.assertThrows(value, HttpException.class, () ->
+            org.junit.jupiter.api.Assertions.assertThrows(HttpException.class, () ->
                 QueryRequestValidation.validate(Method.QUERY, headers(value)));
         }
     }

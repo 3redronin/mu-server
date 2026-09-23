@@ -6,18 +6,19 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.sse.*;
 import org.json.JSONObject;
-import org.junit.*;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import java.util.*;
 import static io.muserver.openapi.OfflineOpenApiValidator.*;
 import static io.muserver.openapi.SchemaObjectBuilder.schemaObject;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static scaffolding.ClientUtils.*;
 import static scaffolding.ServerUtils.httpsServerForTest;
-import static org.junit.Assert.*;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class OpenApi32SseContractTest {
     private MuServer server;
-    @After public void stop() { if (server != null) server.stop(); }
+    @AfterEach public void stop() { if (server != null) server.stop(); }
     @Path("/contracts") public static class Resource {
         @GET @Path("sink") public void sink(@Context SseEventSink sink) {}
         @GET @Path("context") public void context(@Context Sse sse) {}
