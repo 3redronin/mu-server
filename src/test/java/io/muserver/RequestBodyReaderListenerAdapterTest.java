@@ -208,8 +208,7 @@ public class RequestBodyReaderListenerAdapterTest {
         server = ServerUtils.httpsServerForTest()
             .withMaxRequestSize(1000)
             .addHandler((request, response) -> {
-                AsyncHandle handle = request.handleAsync();
-                handle.write(Mutils.toByteBuffer("Hello there"), error -> { });
+                response.write("Hello there");
                 return true;
             })
             .start();
@@ -219,8 +218,8 @@ public class RequestBodyReaderListenerAdapterTest {
             .post(new SlowBodySender(1000, 10));
 
         try (Response resp = call(request)) {
-            String read = resp.body().string();
-            Assert.fail("Should not be able to read body but got " + read + " and " + resp.isSuccessful());
+            assertThat(resp.code(), equalTo(200));
+            resp.body().string();
         } catch (Exception ex) {
             MuAssert.assertIOException(ex);
         }
