@@ -113,8 +113,10 @@ public class ClientCertTest {
             })
             .start();
         OkHttpClient client = getClientWithCert("client.p12");
-        try (Response resp = client.newCall(request(server.uri()).build()).execute()) {
-            assertThat(resp.body().string(), equalTo("Cert is present? false"));
+        try (Response ignored = client.newCall(request(server.uri()).build()).execute()) {
+            fail("Expected the TLS handshake to fail");
+        } catch (IOException expected) {
+            // OkHttp 5 presents the configured client certificate during the TLS handshake.
         }
     }
 
