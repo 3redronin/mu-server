@@ -9,6 +9,7 @@ import okhttp3.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Test;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
@@ -73,7 +74,7 @@ public class RequestBodyReaderListenerAdapterTest {
     }
 
     @Test
-    public void ifTheRequestBodyIsTooSlowAnErrorIsReturnedOrConnectionIsKilled() throws IOException {
+    public void ifTheRequestBodyIsTooSlowAndTheResponseHasStartedTheConnectionIsKilled() throws IOException {
         server = ServerUtils.httpsServerForTest()
             .withRequestTimeout(100, TimeUnit.MILLISECONDS)
             .addHandler((request, response) -> {
@@ -89,7 +90,8 @@ public class RequestBodyReaderListenerAdapterTest {
             .post(new SlowBodySender(100, 200));
 
         try (Response resp = call(request)) {
-            assertThat(resp.code(), anyOf(equalTo(200), equalTo(408)));
+            resp.body().string();
+            Assert.fail("Should not complete successfully");
         } catch (Exception ex) {
             MuAssert.assertIOException(ex);
         }
@@ -206,7 +208,8 @@ public class RequestBodyReaderListenerAdapterTest {
         server = ServerUtils.httpsServerForTest()
             .withMaxRequestSize(1000)
             .addHandler((request, response) -> {
-                response.write("Hello there");
+                AsyncHandle handle = request.handleAsync();
+                handle.write(Mutils.toByteBuffer("Hello there"), error -> { });
                 return true;
             })
             .start();
@@ -216,8 +219,8 @@ public class RequestBodyReaderListenerAdapterTest {
             .post(new SlowBodySender(1000, 10));
 
         try (Response resp = call(request)) {
-            assertThat(resp.code(), equalTo(200));
-            resp.body().string();
+            String read = resp.body().string();
+            Assert.fail("Should not be able to read body but got " + read + " and " + resp.isSuccessful());
         } catch (Exception ex) {
             MuAssert.assertIOException(ex);
         }
