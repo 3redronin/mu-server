@@ -349,7 +349,6 @@ public class RequestBodyReaderStringTest {
         try (Response resp = call(request)) {
             assertThat(resp.code(), equalTo(413));
             assertThat(resp.body().string(), containsString("413 Request Entity Too Large"));
-            Assert.fail("Should not read the whole body");
         } catch (Exception e) {
             // The HttpServerKeepAliveHandler will probably close the connection before the full request body is read, which is probably a good thing in this case.
             // So allow a valid 413 response or an error
