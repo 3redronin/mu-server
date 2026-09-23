@@ -1,8 +1,7 @@
 package io.muserver.rest;
 
 import io.muserver.Mutils;
-import io.netty.buffer.ByteBufUtil;
-import io.netty.handler.codec.http.QueryStringDecoder;
+import io.muserver.QueryString;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.Produces;
@@ -20,7 +19,7 @@ import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.CharsetEncoder;
 import java.time.*;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.Temporal;
@@ -56,15 +55,32 @@ class StringEntityProviders {
 
         @Override
         public long getSize(String s, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
+            if (s == null || s.isEmpty()) {
+                return 0;
+            }
             if (s.length() > 100000) {
                 return -1;
             }
-
             Charset charset = EntityProviders.charsetFor(mediaType);
-            if (charset.equals(StandardCharsets.UTF_8)) {
-                return ByteBufUtil.utf8Bytes(s);
+            return getEncodedByteLength(s, charset);
+        }
+
+        static long getEncodedByteLength(String input, Charset charset) {
+            if (input == null || input.isEmpty()) {
+                return 0L;
             }
-            return s.getBytes(charset).length;
+            CharsetEncoder encoder = charset.newEncoder();
+            CharBuffer charBuffer = CharBuffer.wrap(input);
+            long byteLength = 0L;
+            ByteBuffer byteBuffer = ByteBuffer.allocate(1024);
+            while (charBuffer.hasRemaining()) {
+                encoder.encode(charBuffer, byteBuffer, false);
+                byteLength += byteBuffer.position();
+                byteBuffer.clear();
+            }
+            encoder.encode(charBuffer, byteBuffer, true);
+            byteLength += byteBuffer.position();
+            return byteLength;
         }
 
         @Override
@@ -239,12 +255,10 @@ class StringEntityProviders {
         @Override
         public MultivaluedMap<String, String> readFrom(Class<MultivaluedMap<String, String>> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
             String body = new String(Mutils.toByteArray(entityStream, 2048), EntityProviders.charsetForReading(mediaType));
-            QueryStringDecoder formDecoder = new QueryStringDecoder(body, false);
-            Map<String, List<String>> parameters = formDecoder.parameters();
+            QueryString formDecoder = QueryString.parse(body);
+            Map<String, List<String>> parameters = formDecoder.all();
             MultivaluedHashMap<String, String> form = new MultivaluedHashMap<>();
-            for (Map.Entry<String, List<String>> entry : parameters.entrySet()) {
-                form.put(entry.getKey(), entry.getValue());
-            }
+            form.putAll(parameters);
             return form;
         }
     }

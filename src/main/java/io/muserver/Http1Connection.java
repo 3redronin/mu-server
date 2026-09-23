@@ -140,7 +140,7 @@ class Http1Connection extends BaseHttpConnection {
                 if (rejectException == null) {
                     try {
                         QueryRequestValidation.validate(method, request.headers());
-                    } catch (InvalidHttpRequestException e) {
+                    } catch (HttpException e) {
                         rejectException = e;
                     }
                 }

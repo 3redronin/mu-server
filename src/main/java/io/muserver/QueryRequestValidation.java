@@ -12,15 +12,15 @@ final class QueryRequestValidation {
     private static final Pattern CONTENT_TYPE = Pattern.compile(
         "[\\t ]*+" + TOKEN + "/" + TOKEN + "[\\t ]*+(?:;[\\t ]*+(?:" + TOKEN + "=(?:" + TOKEN + "|" + QUOTED + "))?[\\t ]*+)*+");
 
-    static void validate(Method method, FieldBlock headers) throws InvalidHttpRequestException {
+    static void validate(Method method, FieldBlock headers) throws HttpException {
         if (method != Method.QUERY) return;
         List<String> values = headers.getAll(HeaderNames.CONTENT_TYPE);
         if (values.size() != 1 || !CONTENT_TYPE.matcher(values.get(0)).matches()) {
-            throw new InvalidHttpRequestException(400, "400 Bad Request - QUERY requires a valid Content-Type");
+            throw new HttpException(HttpStatus.BAD_REQUEST_400, "400 Bad Request - QUERY requires a valid Content-Type");
         }
         String mediaRange = values.get(0).split(";", 2)[0];
         if (mediaRange.indexOf('*') >= 0) {
-            throw new InvalidHttpRequestException(400, "400 Bad Request - QUERY requires a concrete Content-Type");
+            throw new HttpException(HttpStatus.BAD_REQUEST_400, "400 Bad Request - QUERY requires a concrete Content-Type");
         }
     }
 }

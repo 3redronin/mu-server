@@ -47,6 +47,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private final List<ParamConverterProvider> customParamConverterProviders = new ArrayList<>();
     private final List<SchemaReference> customSchemas = new ArrayList<>();
     private @Nullable String openApiJsonUrl;
+    private @Nullable String openApiYamlUrl;
     private @Nullable String openApiHtmlUrl;
     private @Nullable OpenAPIObjectBuilder openAPIObject;
     private @Nullable String openApiHtmlCss;
@@ -202,6 +203,12 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      */
     public RestHandlerBuilder withOpenApiJsonUrl(@Nullable String url) {
         this.openApiJsonUrl = url;
+        return this;
+    }
+
+    /** Enables an OpenAPI YAML endpoint. */
+    public RestHandlerBuilder withOpenApiYamlUrl(@Nullable String url) {
+        this.openApiYamlUrl = url;
         return this;
     }
 
@@ -609,6 +616,11 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         return openApiJsonUrl;
     }
 
+    /** @return the YAML endpoint URL, or null when disabled. */
+    public @Nullable String openApiYamlUrl() {
+        return openApiYamlUrl;
+    }
+
     /**
      * @return The current value of this property
      */
@@ -728,7 +740,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         List<ResourceClass> roots = Collections.unmodifiableList(list);
 
         @Nullable OpenApiDocumentor documentor = null;
-        if (openApiHtmlUrl != null || openApiJsonUrl != null) {
+        if (openApiHtmlUrl != null || openApiJsonUrl != null || openApiYamlUrl != null) {
             if (openApiHtmlCss == null) {
                 InputStream cssStream = Objects.requireNonNull(
                     RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css"),
@@ -740,7 +752,7 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
             }
             OpenAPIObjectBuilder openAPIObjectToUse = this.openAPIObject == null ? OpenAPIObjectBuilder.openAPIObject() : this.openAPIObject;
             if (openAPIObjectToUse.paths() == null) openAPIObjectToUse.withPaths(pathsObject().build());
-            documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss, corsConfig, new ArrayList<>(customSchemas), schemaObjectCustomizer, paramConverterProviders, collectionParameterStrategy(), providers);
+            documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiYamlUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss, corsConfig, new ArrayList<>(customSchemas), schemaObjectCustomizer, paramConverterProviders, collectionParameterStrategy(), providers);
         }
 
         CustomExceptionMapper customExceptionMapper = new CustomExceptionMapper(providers);
