@@ -1,7 +1,6 @@
 package io.muserver.rest;
 
 import jakarta.ws.rs.InternalServerErrorException;
-import jakarta.ws.rs.NotSupportedException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.ext.ContextResolver;
 import jakarta.ws.rs.ext.ExceptionMapper;
@@ -125,6 +124,10 @@ final class JaxRSProviders implements Providers {
         return requiredState().entityProviders.writers;
     }
 
+    boolean isBuiltInReader(MessageBodyReader<?> reader) {
+        return requiredState().entityProviders.isBuiltInReader(reader);
+    }
+
     boolean isBuiltInWriter(MessageBodyWriter<?> writer) {
         return requiredState().entityProviders.isBuiltInWriter(writer);
     }
@@ -133,7 +136,7 @@ final class JaxRSProviders implements Providers {
                                                               Annotation[] annotations, MediaType mediaType) {
         MessageBodyReader<T> reader = providers.getMessageBodyReader(type, genericType, annotations, mediaType);
         if (reader == null) {
-            throw new NotSupportedException("Could not find a suitable entity provider to read " + type);
+            throw new UnsupportedRepresentationException("Could not find a suitable entity provider to read " + type);
         }
         return reader;
     }

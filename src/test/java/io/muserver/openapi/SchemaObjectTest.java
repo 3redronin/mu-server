@@ -1,7 +1,7 @@
 package io.muserver.openapi;
 
 import io.muserver.UploadedFile;
-import org.junit.jupiter.api.Test;
+import org.junit.Test;
 
 import java.io.*;
 import java.time.Instant;
@@ -14,7 +14,6 @@ import static io.muserver.openapi.SchemaObjectBuilder.schemaObjectFrom;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class SchemaObjectTest {
 
@@ -24,15 +23,13 @@ public class SchemaObjectTest {
     }
 
     @Test
-    public void youCannotHaveReadAndWriteOnly() {
-        assertThrows(IllegalArgumentException.class, () ->
-            schemaObject().withReadOnly(true).withWriteOnly(true).build());
+    public void readAndWriteOnlyAreIndependentAnnotations() {
+        schemaObject().withReadOnly(true).withWriteOnly(true).build();
     }
 
     @Test
-    public void ifTypeIsArrayThenItemsIsRequired() {
-        assertThrows(IllegalArgumentException.class, () ->
-            schemaObject().withType("array").build());
+    public void arrayItemsMayBeOmitted() {
+        schemaObject().withType("array").build();
     }
 
     @Test
@@ -61,7 +58,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(boolean.class).build();
         assertThat(schema.type(), equalTo("boolean"));
         assertThat(schema.format(), is(nullValue()));
-        assertThat(schema.nullable(), is(nullValue()));
+        assertThat(schema.nullable(), is(false));
     }
 
     @Test
@@ -69,7 +66,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(Boolean.class).build();
         assertThat(schema.type(), equalTo("boolean"));
         assertThat(schema.format(), is(nullValue()));
-        assertThat(schema.nullable(), is(true));
+        assertThat(schema.nullable(), is(false));
     }
 
     @Test
@@ -77,7 +74,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(int.class).build();
         assertThat(schema.type(), equalTo("integer"));
         assertThat(schema.format(), equalTo("int32"));
-        assertThat(schema.nullable(), is(nullValue()));
+        assertThat(schema.nullable(), is(false));
     }
 
     @Test
@@ -85,7 +82,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(Integer.class).build();
         assertThat(schema.type(), equalTo("integer"));
         assertThat(schema.format(), equalTo("int32"));
-        assertThat(schema.nullable(), is(true));
+        assertThat(schema.nullable(), is(false));
     }
 
     @Test
@@ -93,7 +90,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(long.class).build();
         assertThat(schema.type(), equalTo("integer"));
         assertThat(schema.format(), equalTo("int64"));
-        assertThat(schema.nullable(), is(nullValue()));
+        assertThat(schema.nullable(), is(false));
     }
 
     @Test
@@ -101,7 +98,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(Long.class).build();
         assertThat(schema.type(), equalTo("integer"));
         assertThat(schema.format(), equalTo("int64"));
-        assertThat(schema.nullable(), is(true));
+        assertThat(schema.nullable(), is(false));
     }
 
     @Test
@@ -109,7 +106,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(float.class).build();
         assertThat(schema.type(), equalTo("number"));
         assertThat(schema.format(), equalTo("float"));
-        assertThat(schema.nullable(), is(nullValue()));
+        assertThat(schema.nullable(), is(false));
     }
 
     @Test
@@ -117,7 +114,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(Float.class).build();
         assertThat(schema.type(), equalTo("number"));
         assertThat(schema.format(), equalTo("float"));
-        assertThat(schema.nullable(), is(true));
+        assertThat(schema.nullable(), is(false));
     }
 
     @Test
@@ -125,7 +122,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(double.class).build();
         assertThat(schema.type(), equalTo("number"));
         assertThat(schema.format(), equalTo("double"));
-        assertThat(schema.nullable(), is(nullValue()));
+        assertThat(schema.nullable(), is(false));
     }
 
     @Test
@@ -133,7 +130,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(Double.class).build();
         assertThat(schema.type(), equalTo("number"));
         assertThat(schema.format(), equalTo("double"));
-        assertThat(schema.nullable(), is(true));
+        assertThat(schema.nullable(), is(false));
     }
 
     @Test
@@ -141,7 +138,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(String.class).build();
         assertThat(schema.type(), equalTo("string"));
         assertThat(schema.format(), is(nullValue()));
-        assertThat(schema.nullable(), is(true));
+        assertThat(schema.nullable(), is(false));
     }
 
     @Test
@@ -149,25 +146,25 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(UUID.class).build();
         assertThat(schema.type(), equalTo("string"));
         assertThat(schema.format(), equalTo("uuid"));
-        assertThat(schema.pattern().pattern(), equalTo("[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]"));
-        assertThat(schema.nullable(), is(true));
-        assertThat(schema.example(), instanceOf(UUID.class));
+        assertThat(schema.pattern(), nullValue());
+        assertThat(schema.nullable(), is(false));
+        assertThat(schema.examples(), contains("93d35de9-0083-4765-8b60-822258e8ffad"));
     }
 
     @Test
     public void itCanPresetbytes() {
         SchemaObject schema = schemaObjectFrom(byte.class).build();
-        assertThat(schema.type(), equalTo("string"));
-        assertThat(schema.format(), equalTo("byte"));
-        assertThat(schema.nullable(), is(nullValue()));
+        assertThat(schema.type(), equalTo("integer"));
+        assertThat(schema.format(), equalTo("int8"));
+        assertThat(schema.nullable(), is(false));
     }
 
     @Test
     public void itCanPresetBytes() {
         SchemaObject schema = schemaObjectFrom(Byte.class).build();
-        assertThat(schema.type(), equalTo("string"));
-        assertThat(schema.format(), equalTo("byte"));
-        assertThat(schema.nullable(), is(true));
+        assertThat(schema.type(), equalTo("integer"));
+        assertThat(schema.format(), equalTo("int8"));
+        assertThat(schema.nullable(), is(false));
     }
 
 
@@ -176,8 +173,8 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(Instant.class).build();
         assertThat(schema.type(), equalTo("string"));
         assertThat(schema.format(), equalTo("date-time"));
-        assertThat(schema.nullable(), is(true));
-        assertThat(schema.example(), instanceOf(Instant.class));
+        assertThat(schema.nullable(), is(false));
+        assertThat(schema.examples(), contains("2021-02-12T15:33:28Z"));
     }
 
     @Test
@@ -185,16 +182,16 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(LocalDate.class).build();
         assertThat(schema.type(), equalTo("string"));
         assertThat(schema.format(), equalTo("date"));
-        assertThat(schema.nullable(), is(true));
-        assertThat(schema.example(), instanceOf(LocalDate.class));
+        assertThat(schema.nullable(), is(false));
+        assertThat(schema.examples(), contains("2021-02-12"));
     }
     @Test
     public void itCanPresetYearMonth() {
         SchemaObject schema = schemaObjectFrom(YearMonth.class).build();
         assertThat(schema.type(), equalTo("string"));
         assertThat(schema.format(), nullValue());
-        assertThat(schema.nullable(), is(true));
-        assertThat(schema.example(), instanceOf(YearMonth.class));
+        assertThat(schema.nullable(), is(false));
+        assertThat(schema.examples(), nullValue());
     }
 
     @Test
@@ -202,7 +199,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(Date.class).build();
         assertThat(schema.type(), equalTo("string"));
         assertThat(schema.format(), equalTo("date-time"));
-        assertThat(schema.nullable(), is(true));
+        assertThat(schema.nullable(), is(false));
     }
 
     @Test
@@ -210,8 +207,8 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(Set.class).build();
         assertThat(schema.type(), equalTo("array"));
         assertThat(schema.format(), is(nullValue()));
-        assertThat(schema.nullable(), is(true));
-        assertThat(schema.items().type(), equalTo("object"));
+        assertThat(schema.nullable(), is(false));
+        assertThat(schema.items().type(), nullValue());
     }
 
     @Test
@@ -219,8 +216,8 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(Collection.class).build();
         assertThat(schema.type(), equalTo("array"));
         assertThat(schema.format(), is(nullValue()));
-        assertThat(schema.nullable(), is(true));
-        assertThat(schema.items().type(), equalTo("object"));
+        assertThat(schema.nullable(), is(false));
+        assertThat(schema.items().type(), nullValue());
     }
 
     @Test
@@ -228,8 +225,8 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(List.class).build();
         assertThat(schema.type(), equalTo("array"));
         assertThat(schema.format(), is(nullValue()));
-        assertThat(schema.nullable(), is(true));
-        assertThat(schema.items().type(), equalTo("object"));
+        assertThat(schema.nullable(), is(false));
+        assertThat(schema.items().type(), nullValue());
     }
 
     @Test
@@ -237,7 +234,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(String[].class).build();
         assertThat(schema.type(), equalTo("array"));
         assertThat(schema.format(), is(nullValue()));
-        assertThat(schema.nullable(), is(true));
+        assertThat(schema.nullable(), is(false));
         assertThat(schema.items().type(), equalTo("string"));
     }
 
@@ -246,9 +243,9 @@ public class SchemaObjectTest {
         Class<?>[] clazzes = {File.class, InputStream.class, byte[].class};
         for (Class<?> clazz : clazzes) {
             SchemaObject schema = schemaObjectFrom(clazz).build();
-            assertThat(clazz.getName(), schema.type(), is("string"));
-            assertThat(clazz.getName(), schema.format(), is("binary"));
-            assertThat(clazz.getName(), schema.nullable(), is(true));
+            assertThat(clazz.getName(), schema.type(), nullValue());
+            assertThat(clazz.getName(), schema.format(), nullValue());
+            assertThat(clazz.getName(), schema.nullable(), nullValue());
         }
     }
 
@@ -260,7 +257,7 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(listOfString.getClass(), getClass().getField("listOfString").getGenericType(), false).build();
         assertThat(schema.type(), equalTo("array"));
         assertThat(schema.format(), is(nullValue()));
-        assertThat(schema.nullable(), is(true));
+        assertThat(schema.nullable(), is(false));
         assertThat(schema.items().type(), equalTo("string"));
     }
 
@@ -273,28 +270,25 @@ public class SchemaObjectTest {
         SchemaObject schema = schemaObjectFrom(listOfUploadedFiles.getClass(), getClass().getField("listOfUploadedFiles").getGenericType(), false).build();
         assertThat(schema.type(), equalTo("array"));
         assertThat(schema.format(), is(nullValue()));
-        assertThat(schema.nullable(), is(true));
-        assertThat(schema.items().type(), equalTo("string"));
-        assertThat(schema.items().format(), equalTo("binary"));
+        assertThat(schema.nullable(), is(false));
+        assertThat(schema.items().type(), nullValue());
+        assertThat(schema.items().format(), nullValue());
     }
 
 
     @Test
-    public void defaultsMustMatchTypeForNumber() {
-        assertThrows(IllegalArgumentException.class, () ->
-            schemaObject().withType("number").withDefaultValue("1").build());
+    public void defaultsAreAnnotationsForNumber() {
+        schemaObject().withType("number").withDefaultValue("1").build();
     }
 
     @Test
-    public void defaultsMustMatchTypeForBoolean() {
-        assertThrows(IllegalArgumentException.class, () ->
-            schemaObject().withType("boolean").withDefaultValue("1").build());
+    public void defaultsAreAnnotationsForBoolean() {
+        schemaObject().withType("boolean").withDefaultValue("1").build();
     }
 
     @Test
-    public void defaultsMustMatchTypeForArray() {
-        assertThrows(IllegalArgumentException.class, () ->
-            schemaObject().withType("array").withItems(schemaObject().build()).withDefaultValue("something").build());
+    public void defaultsAreAnnotationsForArray() {
+        schemaObject().withType("array").withItems(schemaObject().build()).withDefaultValue("something").build();
     }
 
     @Test

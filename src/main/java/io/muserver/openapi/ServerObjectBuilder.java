@@ -10,22 +10,18 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * An object representing a Server.
  */
 public class ServerObjectBuilder {
+    private @Nullable String name;
+    private @Nullable Map<String, Object> extensions;
     private @Nullable String url;
     private @Nullable String description;
     private @Nullable Map<String, ServerVariableObject> variables;
 
     /**
-     * Creates an empty server object builder.
-     */
-    public ServerObjectBuilder() {
-    }
-
-    /**
-     * Sets the server URL template.
      *
      * @param url <strong>REQUIRED</strong>. A URL to the target host.  This URL supports Server Variables and MAY be relative, to indicate
      * that the host location is relative to the location where the OpenAPI document is being served. Variable substitutions will
      * be made when a variable is named in <code>{</code>brackets<code>}</code>.
+     *
      * @return The current builder
      */
     public ServerObjectBuilder withUrl(String url) {
@@ -34,9 +30,9 @@ public class ServerObjectBuilder {
     }
 
     /**
-     * Sets the server description.
      *
      * @param description An optional string describing the host designated by the URL. CommonMark syntax MAY be used for rich text representation.
+     *
      * @return The current builder
      */
     public ServerObjectBuilder withDescription(@Nullable String description) {
@@ -45,9 +41,9 @@ public class ServerObjectBuilder {
     }
 
     /**
-     * Sets the server URL variables.
      *
      * @param variables A map between a variable name and its value. The value is used for substitution in the server's URL template.
+     *
      * @return The current builder
      */
     public ServerObjectBuilder withVariables(@Nullable Map<String, ServerVariableObject> variables) {
@@ -56,12 +52,10 @@ public class ServerObjectBuilder {
     }
 
     /**
-     * Builds a server object from the configured values.
-     *
      * @return A new object
      */
     public ServerObject build() {
-        return new ServerObject(url, description, immutable(variables));
+        return new ServerObject(url, description, immutable(variables), name, extensions);
     }
 
     /**
@@ -72,4 +66,27 @@ public class ServerObjectBuilder {
     public static ServerObjectBuilder serverObject() {
         return new ServerObjectBuilder();
     }
+    /**
+     * @param value the extensions value
+     * @return this builder */
+    public ServerObjectBuilder withExtensions(@Nullable Map<String, Object> value) { this.extensions = value; return this; }
+    /**
+     * @param name an x- extension name
+     * @param value its JSON value
+     * @return this builder */
+    public ServerObjectBuilder withExtension(String name, @Nullable Object value) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>();
+        if (extensions != null) copy.putAll(extensions);
+        Extensions.put(copy, name, value);
+        extensions = copy;
+        return this;
+    }
+    /**
+     * Sets a unique name by which consumers can identify this server.
+     * This is a label for the server; it does not change its URL or URL variables.
+     *
+     * @param value the server name, or null to omit it
+     * @return this builder
+     */
+    public ServerObjectBuilder withName(@Nullable String value) { this.name = value; return this; }
 }

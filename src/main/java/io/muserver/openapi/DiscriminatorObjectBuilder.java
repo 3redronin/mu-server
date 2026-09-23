@@ -13,19 +13,15 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * <p>When using the discriminator, <em>inline</em> schemas will not be considered.</p>
  */
 public class DiscriminatorObjectBuilder {
-
-    /**
-     * Creates an empty discriminator builder.
-     */
-    public DiscriminatorObjectBuilder() {
-    }
+    private @Nullable String defaultMapping;
+    private @Nullable Map<String, Object> extensions;
     private @Nullable String propertyName;
     private @Nullable Map<String, String> mapping;
 
     /**
-     * Sets the discriminator property name.
      *
      * @param propertyName <strong>REQUIRED</strong>. The name of the property in the payload that will hold the discriminator value.
+     *
      * @return The current builder
      */
     public DiscriminatorObjectBuilder withPropertyName(String propertyName) {
@@ -34,9 +30,9 @@ public class DiscriminatorObjectBuilder {
     }
 
     /**
-     * Sets the discriminator mapping.
      *
      * @param mapping An object to hold mappings between payload values and schema names or references.
+     *
      * @return The current builder
      */
     public DiscriminatorObjectBuilder withMapping(@Nullable Map<String, String> mapping) {
@@ -45,12 +41,10 @@ public class DiscriminatorObjectBuilder {
     }
 
     /**
-     * Builds the discriminator object.
-     *
      * @return A new object
      */
     public DiscriminatorObject build() {
-        return new DiscriminatorObject(propertyName, immutable(mapping));
+        return new DiscriminatorObject(propertyName, immutable(mapping), defaultMapping, extensions);
     }
 
     /**
@@ -61,4 +55,29 @@ public class DiscriminatorObjectBuilder {
     public static DiscriminatorObjectBuilder discriminatorObject() {
         return new DiscriminatorObjectBuilder();
     }
+    /**
+     * @param value the extensions value
+     * @return this builder */
+    public DiscriminatorObjectBuilder withExtensions(@Nullable Map<String, Object> value) { this.extensions = value; return this; }
+    /**
+     * @param name an x- extension name
+     * @param value its JSON value
+     * @return this builder */
+    public DiscriminatorObjectBuilder withExtension(String name, @Nullable Object value) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>();
+        if (extensions != null) copy.putAll(extensions);
+        Extensions.put(copy, name, value);
+        extensions = copy;
+        return this;
+    }
+    /**
+     * Sets the fallback schema for a missing or unrecognized discriminator value.
+     * Use a schema name or URI reference, such as {@code #/components/schemas/OtherPet}.
+     * A fallback is required when the discriminating property is optional.
+     * This is a hint for consumers; it does not change JSON Schema validation.
+     *
+     * @param value the fallback schema name or URI reference, or null to omit it
+     * @return this builder
+     */
+    public DiscriminatorObjectBuilder withDefaultMapping(@Nullable String value) { this.defaultMapping = value; return this; }
 }

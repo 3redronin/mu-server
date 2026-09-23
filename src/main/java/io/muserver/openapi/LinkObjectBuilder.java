@@ -16,6 +16,8 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * an operation and using them as parameters while invoking the linked operation.</p>
  */
 public class LinkObjectBuilder {
+    private @Nullable String operationRef;
+    private @Nullable Map<String, Object> extensions;
     private @Nullable String operationId;
     private @Nullable Map<String, Object> parameters;
     private @Nullable Object requestBody;
@@ -23,15 +25,9 @@ public class LinkObjectBuilder {
     private @Nullable ServerObject server;
 
     /**
-     * Creates an empty link object builder.
-     */
-    public LinkObjectBuilder() {
-    }
-
-    /**
-     * Sets the linked operation identifier.
      *
      * @param operationId The name of an <em>existing</em>, resolvable OAS operation, as defined with a unique <code>operationId</code>.
+     *
      * @return The current builder
      */
     public LinkObjectBuilder withOperationId(@Nullable String operationId) {
@@ -40,12 +36,12 @@ public class LinkObjectBuilder {
     }
 
     /**
-     * Sets the linked operation parameters.
      *
      * @param parameters A map representing parameters to pass to an operation as specified with <code>operationId</code>.
      *                   The key is the parameter name to be used, whereas the value can be a constant or an expression to be
      *                   evaluated and passed to the linked operation.  The parameter name can be qualified using the parameter
      *                   location <code>[{in}.]{name}</code> for operations that use the same parameter name in different locations (e.g. path.id).
+     *
      * @return The current builder
      */
     public LinkObjectBuilder withParameters(@Nullable Map<String, Object> parameters) {
@@ -54,9 +50,9 @@ public class LinkObjectBuilder {
     }
 
     /**
-     * Sets the linked operation request body override.
      *
      * @param requestBody A literal value or {expression} to use as a request body when calling the target operation.
+     *
      * @return The current builder
      */
     public LinkObjectBuilder withRequestBody(@Nullable Object requestBody) {
@@ -65,10 +61,10 @@ public class LinkObjectBuilder {
     }
 
     /**
-     * Sets the link description.
      *
      * @param description A description of the link. <a href="http://spec.commonmark.org/">CommonMark syntax</a> MAY be
      *                    used for rich text representation.
+     *
      * @return The current builder
      */
     public LinkObjectBuilder withDescription(@Nullable String description) {
@@ -77,9 +73,9 @@ public class LinkObjectBuilder {
     }
 
     /**
-     * Sets the linked operation server override.
      *
      * @param server A server object to be used by the target operation.
+     *
      * @return The current builder
      */
     public LinkObjectBuilder withServer(@Nullable ServerObject server) {
@@ -88,12 +84,10 @@ public class LinkObjectBuilder {
     }
 
     /**
-     * Builds a link object from the configured values.
-     *
      * @return A new object
      */
     public LinkObject build() {
-        return new LinkObject(operationId, immutable(parameters), requestBody, description, server);
+        return new LinkObject(operationRef, operationId, immutable(parameters), requestBody, description, server, extensions);
     }
 
     /**
@@ -104,4 +98,23 @@ public class LinkObjectBuilder {
     public static LinkObjectBuilder linkObject() {
         return new LinkObjectBuilder();
     }
+    /**
+     * @param value the extensions value
+     * @return this builder */
+    public LinkObjectBuilder withExtensions(@Nullable Map<String, Object> value) { this.extensions = value; return this; }
+    /**
+     * @param name an x- extension name
+     * @param value its JSON value
+     * @return this builder */
+    public LinkObjectBuilder withExtension(String name, @Nullable Object value) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>();
+        if (extensions != null) copy.putAll(extensions);
+        Extensions.put(copy, name, value);
+        extensions = copy;
+        return this;
+    }
+    /**
+     * @param value the URI reference of the target operation
+     * @return this builder */
+    public LinkObjectBuilder withOperationRef(@Nullable String value) { operationRef = value; return this; }
 }

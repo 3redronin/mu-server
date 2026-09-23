@@ -23,6 +23,11 @@ public final class HeaderNames {
     }
 
     /**
+     * The Structured Fields list of supported QUERY media ranges.
+     */
+    public static final CharSequence ACCEPT_QUERY = builtInHeader("accept-query");
+
+    /**
      * {@code "accept"}
      */
     public static final CharSequence ACCEPT = builtInHeader("accept");

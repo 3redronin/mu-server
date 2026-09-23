@@ -15,19 +15,25 @@ import static io.muserver.openapi.Jsonizer.append;
  * @see ComponentsObjectBuilder
  */
 public class ComponentsObject implements JsonWriter {
+    private final @Nullable Map<String, ReferenceOr<PathItemObject>> pathItems;
+    private final @Nullable Map<String, ReferenceOr<MediaTypeObject>> mediaTypes;
+    private final Map<String, Object> extensions;
 
     private final @Nullable Map<String, SchemaObject> schemas;
-    private final @Nullable Map<String, ResponseObject> responses;
-    private final @Nullable Map<String, ParameterObject> parameters;
-    private final @Nullable Map<String, ExampleObject> examples;
-    private final @Nullable Map<String, RequestBodyObject> requestBodies;
-    private final @Nullable Map<String, HeaderObject> headers;
-    private final @Nullable Map<String, SecuritySchemeObject> securitySchemes;
-    private final @Nullable Map<String, LinkObject> links;
-    private final @Nullable Map<String, CallbackObject> callbacks;
+    private final @Nullable Map<String, ReferenceOr<ResponseObject>> responses;
+    private final @Nullable Map<String, ReferenceOr<ParameterObject>> parameters;
+    private final @Nullable Map<String, ReferenceOr<ExampleObject>> examples;
+    private final @Nullable Map<String, ReferenceOr<RequestBodyObject>> requestBodies;
+    private final @Nullable Map<String, ReferenceOr<HeaderObject>> headers;
+    private final @Nullable Map<String, ReferenceOr<SecuritySchemeObject>> securitySchemes;
+    private final @Nullable Map<String, ReferenceOr<LinkObject>> links;
+    private final @Nullable Map<String, ReferenceOr<CallbackObject>> callbacks;
 
-    ComponentsObject(@Nullable Map<String, SchemaObject> schemas, @Nullable Map<String, ResponseObject> responses, @Nullable Map<String, ParameterObject> parameters, @Nullable Map<String, ExampleObject> examples, @Nullable Map<String, RequestBodyObject> requestBodies, @Nullable Map<String, HeaderObject> headers, @Nullable Map<String, SecuritySchemeObject> securitySchemes, @Nullable Map<String, LinkObject> links, @Nullable Map<String, CallbackObject> callbacks) {
-        checkKey(schemas, responses, parameters, examples, requestBodies, headers, securitySchemes, links, callbacks);
+    ComponentsObject(@Nullable Map<String, SchemaObject> schemas, @Nullable Map<String, ReferenceOr<ResponseObject>> responses, @Nullable Map<String, ReferenceOr<ParameterObject>> parameters, @Nullable Map<String, ReferenceOr<ExampleObject>> examples, @Nullable Map<String, ReferenceOr<RequestBodyObject>> requestBodies, @Nullable Map<String, ReferenceOr<HeaderObject>> headers, @Nullable Map<String, ReferenceOr<SecuritySchemeObject>> securitySchemes, @Nullable Map<String, ReferenceOr<LinkObject>> links, @Nullable Map<String, ReferenceOr<CallbackObject>> callbacks, @Nullable Map<String, ReferenceOr<PathItemObject>> pathItems, @Nullable Map<String, ReferenceOr<MediaTypeObject>> mediaTypes, @Nullable Map<String, Object> extensions) {
+        this.pathItems = OpenApiUtils.immutable(pathItems);
+        this.mediaTypes = OpenApiUtils.immutable(mediaTypes);
+        this.extensions = Extensions.copy(extensions);
+        checkKey(schemas, responses, parameters, examples, requestBodies, headers, securitySchemes, links, callbacks, pathItems, mediaTypes);
         this.schemas = schemas;
         this.responses = responses;
         this.parameters = parameters;
@@ -66,6 +72,9 @@ public class ComponentsObject implements JsonWriter {
         isFirst = append(writer, "securitySchemes", securitySchemes, isFirst);
         isFirst = append(writer, "links", links, isFirst);
         isFirst = append(writer, "callbacks", callbacks, isFirst);
+        isFirst = Jsonizer.append(writer, "pathItems", pathItems, isFirst);
+        isFirst = Jsonizer.append(writer, "mediaTypes", mediaTypes, isFirst);
+        isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
 
@@ -84,7 +93,7 @@ public class ComponentsObject implements JsonWriter {
       @return The value described by {@link ComponentsObjectBuilder#withResponses}
      */
     public @Nullable Map<String, ResponseObject> responses() {
-        return responses;
+        return ReferenceValues.values(responses);
     }
 
     /**
@@ -93,7 +102,7 @@ public class ComponentsObject implements JsonWriter {
       @return The value described by {@link ComponentsObjectBuilder#withParameters}
      */
     public @Nullable Map<String, ParameterObject> parameters() {
-        return parameters;
+        return ReferenceValues.values(parameters);
     }
 
     /**
@@ -102,7 +111,7 @@ public class ComponentsObject implements JsonWriter {
       @return The value described by {@link ComponentsObjectBuilder#withExamples}
      */
     public @Nullable Map<String, ExampleObject> examples() {
-        return examples;
+        return ReferenceValues.values(examples);
     }
 
     /**
@@ -111,7 +120,7 @@ public class ComponentsObject implements JsonWriter {
       @return The value described by {@link ComponentsObjectBuilder#withRequestBodies}
      */
     public @Nullable Map<String, RequestBodyObject> requestBodies() {
-        return requestBodies;
+        return ReferenceValues.values(requestBodies);
     }
 
     /**
@@ -120,7 +129,7 @@ public class ComponentsObject implements JsonWriter {
       @return The value described by {@link ComponentsObjectBuilder#withHeaders}
      */
     public @Nullable Map<String, HeaderObject> headers() {
-        return headers;
+        return ReferenceValues.values(headers);
     }
 
     /**
@@ -129,7 +138,7 @@ public class ComponentsObject implements JsonWriter {
       @return The value described by {@link ComponentsObjectBuilder#withSecuritySchemes}
      */
     public @Nullable Map<String, SecuritySchemeObject> securitySchemes() {
-        return securitySchemes;
+        return ReferenceValues.values(securitySchemes);
     }
 
     /**
@@ -138,7 +147,7 @@ public class ComponentsObject implements JsonWriter {
       @return The value described by {@link ComponentsObjectBuilder#withLinks}
      */
     public @Nullable Map<String, LinkObject> links() {
-        return links;
+        return ReferenceValues.values(links);
     }
 
     /**
@@ -147,6 +156,40 @@ public class ComponentsObject implements JsonWriter {
       @return The value described by {@link ComponentsObjectBuilder#withCallbacks}
      */
     public @Nullable Map<String, CallbackObject> callbacks() {
-        return callbacks;
+        return ReferenceValues.values(callbacks);
     }
+    /** @return the pathItems value */
+    public @Nullable Map<String, PathItemObject> pathItems() { return ReferenceValues.values(pathItems); }
+    /** @return inline path items and references */
+    public @Nullable Map<String, ReferenceOr<PathItemObject>> pathItemsOrReferences() { return pathItems; }
+    /** @return the extensions value */
+    public Map<String, Object> extensions() { return extensions; }
+    /** @return inline values and references for responses */
+    public @Nullable Map<String, ReferenceOr<ResponseObject>> responsesOrReferences() { return responses; }
+    /** @return inline values and references for parameters */
+    public @Nullable Map<String, ReferenceOr<ParameterObject>> parametersOrReferences() { return parameters; }
+    /** @return inline values and references for examples */
+    public @Nullable Map<String, ReferenceOr<ExampleObject>> examplesOrReferences() { return examples; }
+    /** @return inline values and references for requestBodies */
+    public @Nullable Map<String, ReferenceOr<RequestBodyObject>> requestBodiesOrReferences() { return requestBodies; }
+    /** @return inline values and references for headers */
+    public @Nullable Map<String, ReferenceOr<HeaderObject>> headersOrReferences() { return headers; }
+    /** @return inline values and references for securitySchemes */
+    public @Nullable Map<String, ReferenceOr<SecuritySchemeObject>> securitySchemesOrReferences() { return securitySchemes; }
+    /** @return inline values and references for links */
+    public @Nullable Map<String, ReferenceOr<LinkObject>> linksOrReferences() { return links; }
+    /** @return inline values and references for callbacks */
+    public @Nullable Map<String, ReferenceOr<CallbackObject>> callbacksOrReferences() { return callbacks; }
+    /** @return a builder preserving all fields and extensions */
+    public ComponentsObjectBuilder toBuilder() {
+        return new ComponentsObjectBuilder()
+            .withPathItemsOrReferences(pathItems).withMediaTypesOrReferences(mediaTypes).withExtensions(extensions).withSchemas(schemas).withResponsesOrReferences(responses).withParametersOrReferences(parameters).withExamplesOrReferences(examples).withRequestBodiesOrReferences(requestBodies).withHeadersOrReferences(headers).withSecuritySchemesOrReferences(securitySchemes).withLinksOrReferences(links).withCallbacksOrReferences(callbacks);
+    }
+    /**
+     * @return the reusable media types keyed by component name, or null when omitted
+     * @see ComponentsObjectBuilder#withMediaTypesOrReferences
+     */
+    public @Nullable Map<String, ReferenceOr<MediaTypeObject>> mediaTypesOrReferences() { return mediaTypes; }
+    /** @return inline media types; throws if a reference is present */
+    public @Nullable Map<String, MediaTypeObject> mediaTypes() { return ReferenceValues.values(mediaTypes); }
 }

@@ -3,7 +3,6 @@ package io.muserver.rest;
 import io.muserver.*;
 import io.muserver.openapi.*;
 import jakarta.ws.rs.ext.ParamConverterProvider;
-import org.jspecify.annotations.Nullable;
 
 import java.io.BufferedWriter;
 import java.io.OutputStreamWriter;
@@ -13,6 +12,9 @@ import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import jakarta.ws.rs.ext.Providers;
+import org.jspecify.annotations.Nullable;
 
 import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.ComponentsObjectBuilder.componentsObject;
@@ -26,30 +28,37 @@ import static java.util.Collections.singletonList;
 
 class OpenApiDocumentor implements MuHandler {
     private static final Pattern PATH_TEMPLATE_PATTERN = Pattern.compile("\\{([^{}]+)}");
+    private final CollectionParameterStrategy collectionParameterStrategy;
     private final List<ResourceClass> roots;
     private final @Nullable String openApiJsonUrl;
-    private final @Nullable String openApiYamlUrl;
     private final OpenAPIObject openAPIObject;
     private final @Nullable String openApiHtmlUrl;
-    private final String openApiHtmlCss;
+    private final @Nullable String openApiHtmlCss;
     private final CORSConfig corsConfig;
     private final List<SchemaReference> customSchemas;
+    private final Providers providers;
     private final SchemaObjectCustomizer schemaObjectCustomizer;
     private final List<ParamConverterProvider> paramConverterProviders;
 
-    OpenApiDocumentor(List<ResourceClass> roots, @Nullable String openApiJsonUrl,
-                      @Nullable String openApiYamlUrl, @Nullable String openApiHtmlUrl,
-                      OpenAPIObject openAPIObject, String openApiHtmlCss, CORSConfig corsConfig,
-                      List<SchemaReference> customSchemas, SchemaObjectCustomizer schemaObjectCustomizer,
-                      List<ParamConverterProvider> paramConverterProviders) {
-        this.customSchemas = customSchemas;
+    OpenApiDocumentor(List<ResourceClass> roots, @Nullable String openApiJsonUrl, @Nullable String openApiHtmlUrl, OpenAPIObject openAPIObject, @Nullable String openApiHtmlCss, CORSConfig corsConfig, List<SchemaReference> customSchemas, SchemaObjectCustomizer schemaObjectCustomizer, List<ParamConverterProvider> paramConverterProviders, CollectionParameterStrategy collectionParameterStrategy, Providers providers) {
+        this.collectionParameterStrategy = collectionParameterStrategy;
+        this.providers = providers;
+        Map<String, SchemaObject> occupied = new LinkedHashMap<>();
+        if (openAPIObject.components() != null && openAPIObject.components().schemas() != null) occupied.putAll(openAPIObject.components().schemas());
+        this.customSchemas = new ArrayList<>();
+        for (SchemaReference registration : customSchemas) {
+            String id = registration.id;
+            int suffix = 2;
+            while (occupied.containsKey(id) && !Objects.requireNonNull(occupied.get(id)).toString().equals(registration.schema.toString())) id = registration.id + suffix++;
+            occupied.put(id, registration.schema);
+            this.customSchemas.add(new SchemaReference(id, registration.type, registration.genericType, registration.schema));
+        }
         this.schemaObjectCustomizer = schemaObjectCustomizer;
         this.paramConverterProviders = paramConverterProviders;
         notNull("openAPIObject", openAPIObject);
         this.corsConfig = corsConfig;
         this.roots = roots;
         this.openApiJsonUrl = openApiJsonUrl == null ? null : Mutils.trim(openApiJsonUrl, "/");
-        this.openApiYamlUrl = openApiYamlUrl == null ? null : Mutils.trim(openApiYamlUrl, "/");
         this.openApiHtmlUrl = openApiHtmlUrl == null ? null : Mutils.trim(openApiHtmlUrl, "/");
         this.openAPIObject = openAPIObject;
         this.openApiHtmlCss = openApiHtmlCss;
@@ -59,24 +68,52 @@ class OpenApiDocumentor implements MuHandler {
     public boolean handle(MuRequest request, MuResponse response) throws Exception {
         String relativePath = Mutils.trim(request.relativePath(), "/");
 
-        if (request.method() != Method.GET || (!relativePath.equals(openApiJsonUrl) && !relativePath.equals(openApiYamlUrl) && !relativePath.equals(openApiHtmlUrl))) {
+        if (request.method() != Method.GET || (!relativePath.equals(openApiJsonUrl) && !relativePath.equals(openApiHtmlUrl))) {
             return false;
         }
 
-        List<TagObject> tags = new ArrayList<>();
+        List<TagObject> tags = new ArrayList<>(openAPIObject.tags() == null ? Collections.emptyList() : openAPIObject.tags());
 
         Map<String, PathItemObjectBuilder> pathItemBuilders = new LinkedHashMap<>();
         Set<String> operationIds = new HashSet<>();
+        if (openAPIObject.paths() != null && openAPIObject.paths().pathItemObjects() != null) {
+            for (PathItemObject path : openAPIObject.paths().pathItemObjects().values()) {
+                if (path.operations() != null) for (OperationObject operation : path.operations().values()) {
+                    if (operation.operationId() != null) operationIds.add(operation.operationId());
+                }
+                if (path.additionalOperations() != null) for (OperationObject operation : path.additionalOperations().values()) {
+                    if (operation.operationId() != null) operationIds.add(operation.operationId());
+                }
+            }
+        }
         for (ResourceClass root : roots) {
             addResourceClass(0, Collections.emptyList(), tags, pathItemBuilders, operationIds, root);
         }
-        Map<String, PathItemObject> pathItems = pathItemBuilders.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, v -> v.getValue().build()));
+        Map<String, PathItemObject> pathItems = pathItemBuilders.entrySet().stream().collect(Collectors.toMap(Map.Entry::getKey, v -> {
+            PathItemObjectBuilder builder = v.getValue();
+            Map<String, OperationObject> operations = new LinkedHashMap<>(Objects.requireNonNull(builder.operations()));
+            OperationObject connect = operations.remove("connect");
+            if (connect != null) builder.withAdditionalOperations(Collections.singletonMap("CONNECT", connect));
+            return builder.withOperations(operations).build();
+        }));
 
+
+        if (openAPIObject.paths() != null && openAPIObject.paths().pathItemObjects() != null) {
+            openAPIObject.paths().pathItemObjects().forEach((path, manual) -> pathItems.merge(path, manual, (generated, explicit) -> {
+                Map<String, OperationObject> operations = new LinkedHashMap<>();
+                if (generated.operations() != null) operations.putAll(generated.operations());
+                if (explicit.operations() != null) operations.putAll(explicit.operations());
+                Map<String, OperationObject> additional = new LinkedHashMap<>();
+                if (generated.additionalOperations() != null) additional.putAll(generated.additionalOperations());
+                if (explicit.additionalOperations() != null) additional.putAll(explicit.additionalOperations());
+                return explicit.toBuilder().withOperations(operations).withAdditionalOperations(additional.isEmpty() ? null : additional).build();
+            }));
+        }
 
         ComponentsObject components = openAPIObject.components();
         if (!customSchemas.isEmpty()) {
             ComponentsObjectBuilder componentsObjectBuilder = componentsObject(components);
-            Map<String, SchemaObject> schemas = (components != null && components.schemas() != null) ? components.schemas() : new HashMap<>();
+            Map<String, SchemaObject> schemas = (components != null && components.schemas() != null) ? new LinkedHashMap<>(components.schemas()) : new LinkedHashMap<>();
             for (SchemaReference customSchema : customSchemas) {
                 if (!schemas.containsKey(customSchema.id)) {
                     schemas.put(customSchema.id, customSchema.schema);
@@ -85,7 +122,7 @@ class OpenApiDocumentor implements MuHandler {
             components = componentsObjectBuilder.withSchemas(schemas).build();
         }
 
-        OpenAPIObjectBuilder api = OpenAPIObjectBuilder.openAPIObject()
+        OpenAPIObjectBuilder api = openAPIObject.toBuilder()
             .withInfo(openAPIObject.info())
             .withExternalDocs(openAPIObject.externalDocs())
             .withSecurity(openAPIObject.security())
@@ -98,7 +135,7 @@ class OpenApiDocumentor implements MuHandler {
                             .build())
                     : null
             )
-            .withPaths(pathsObject().withPathItemObjects(pathItems).build())
+            .withPaths((openAPIObject.paths() == null ? pathsObject() : openAPIObject.paths().toBuilder()).withPathItemObjects(pathItems).build())
             .withTags(tags);
 
         OpenAPIObject builtApi = api.build();
@@ -113,22 +150,15 @@ class OpenApiDocumentor implements MuHandler {
                  BufferedWriter writer = new BufferedWriter(osw, 8192)) {
                 builtApi.writeJson(writer);
             }
-        } else if (relativePath.equals(openApiYamlUrl)) {
-            response.contentType(ContentTypes.APPLICATION_YAML);
-            corsConfig.writeHeadersInternal(request, response, emptySet());
-            response.headers().set("Access-Control-Allow-Methods", "GET");
-
-            try (OutputStreamWriter osw = new OutputStreamWriter(response.outputStream(), StandardCharsets.UTF_8);
-                 BufferedWriter writer = new BufferedWriter(osw, 8192)) {
-                builtApi.writeYaml(writer);
-            }
         } else {
             response.contentType(ContentTypes.TEXT_HTML_UTF8);
             response.headers().set("X-UA-Compatible", "IE=edge");
 
             try (OutputStreamWriter osw = new OutputStreamWriter(response.outputStream(), StandardCharsets.UTF_8);
                  BufferedWriter writer = new BufferedWriter(osw, 8192)) {
-                new HtmlDocumentor(writer, builtApi, openApiHtmlCss, request.uri()).writeHtml();
+                new HtmlDocumentor(writer, builtApi,
+                    Objects.requireNonNull(openApiHtmlCss, "OpenAPI HTML CSS was not initialized"),
+                    request.uri()).writeHtml();
             }
         }
 
@@ -141,11 +171,13 @@ class OpenApiDocumentor implements MuHandler {
         if (recursiveLevel == 5) {
             return;
         }
-        if (!tags.contains(root.tag)) {
+        if (tags.stream().noneMatch(tag -> tag.name().equals(root.tag.name()))) {
             tags.add(root.tag);
         }
 
-        for (ResourceMethod method : root.resourceMethods) {
+        List<ResourceMethod> sortedMethods = new ArrayList<>(root.resourceMethods);
+        sortedMethods.sort(Comparator.comparing(method -> method.methodHandle().toGenericString()));
+        for (ResourceMethod method : sortedMethods) {
             if (method.isSubResourceLocator()) {
                 ResourceClass rc = ResourceClass.forSubResourceLocator(method, method.methodHandle().getReturnType(), null, schemaObjectCustomizer, paramConverterProviders);
                 List<PathPart> newParentPathParts = new ArrayList<>(parentPathParts);
@@ -157,14 +189,18 @@ class OpenApiDocumentor implements MuHandler {
             DocumentedPath documentedPath = documentedPath(parentPathParts, root, method);
             String path = documentedPath.path;
 
-            PathItemObjectBuilder pathItem;
-            @Nullable Map<String, OperationObject> operations;
+            Map<String, OperationObject> operations;
             if (pathItems.containsKey(path)) {
-                pathItem = Objects.requireNonNull(pathItems.get(path));
-                operations = pathItem.operations();
+                PathItemObjectBuilder pathItem = Objects.requireNonNull(pathItems.get(path));
+                Map<String, OperationObject> configuredOperations = pathItem.operations();
+                operations = configuredOperations == null ? new LinkedHashMap<>() : configuredOperations;
+                if (configuredOperations == null) {
+                    pathItem.withOperations(operations);
+                }
             } else {
                 operations = new LinkedHashMap<>();
-                pathItem = pathItemObject().withOperations(operations);
+                PathItemObjectBuilder pathItem = pathItemObject()
+                    .withOperations(operations);
                 pathItems.put(path, pathItem);
             }
             List<ParameterObject> parameters = method.paramsIncludingLocators().stream()
@@ -173,7 +209,12 @@ class OpenApiDocumentor implements MuHandler {
                 .filter(p -> p.source().openAPIIn != null || documentedPath.matrixParams.containsKey(p))
                 .map(p -> {
                     MatrixParamDocumentation matrixParam = documentedPath.matrixParams.get(p);
-                    ParameterObjectBuilder builder = p.createDocumentationBuilder(matrixParam == null ? p.key() : matrixParam.parameterName);
+                    String documentationName = matrixParam == null ? p.key() : matrixParam.parameterName;
+                    ParameterObjectBuilder builder = p.createDocumentationBuilder(documentationName);
+                    builder.withSchema(method.parameterSchema(customSchemas, p, documentationName));
+                    if (p.isMultiValued() && p.source() == ResourceMethodParam.ValueSource.QUERY_PARAM) {
+                        builder.withStyle("form").withExplode(collectionParameterStrategy == CollectionParameterStrategy.NO_TRANSFORM);
+                    }
                     if (matrixParam != null && matrixParam.nativeMatrixStyle) {
                         builder.withStyle("matrix").withExplode(true);
                     }
@@ -191,48 +232,31 @@ class OpenApiDocumentor implements MuHandler {
             String opIdPath = documentedPath.plainPath.replace("{", "_").replace("}", "_");
             String opPath = Mutils.trim(opIdPath, "/").replace("/", "_");
             String opKey = method.requiredHttpMethod().name().toLowerCase(Locale.ROOT);
-            Map<String, OperationObject> configuredOperations = operations;
-            if (configuredOperations == null) {
-                configuredOperations = new LinkedHashMap<>();
-                pathItem.withOperations(configuredOperations);
-            }
-            OperationObject existing = configuredOperations.get(opKey);
+            OperationObject existing = operations.get(opKey);
             if (existing == null) {
                 String operationId = uniqueName(method.requiredHttpMethod().name() + "_" + opPath, operationIds);
                 operationIds.add(operationId);
-                existing = method.createOperationBuilder(customSchemas)
+                existing = method.createOperationBuilder(customSchemas, providers)
                     .withOperationId(operationId)
                     .withTags(singletonList(root.tag.name()))
                     .withParameters(parameters)
                     .build();
             } else {
-                OperationObject curOO = method.createOperationBuilder(customSchemas).build();
-                List<ParameterObject> combinedParams = new ArrayList<>(
-                    existing.parameters() == null ? Collections.emptyList() : existing.parameters());
-                for (ParameterObject po : parameters) {
-                    // add to combinedParams if none with same name and in
-                    if (combinedParams.stream().noneMatch(p -> p.name().equals(po.name()) &&
-                        p.in().equals(po.in()))) {
-                        combinedParams.add(po);
-                    }
-                }
-
-                Map<String, MediaTypeObject> mergedContent = new HashMap<>();
-                if (existing.requestBody() != null && existing.requestBody().content() != null) {
-                    mergedContent.putAll(existing.requestBody().content());
-                }
-                if (curOO.requestBody() != null) {
-                    mergedContent.putAll(curOO.requestBody().content());
-                }
+                // Only generated overloads reach this merge. Manual operations (including references)
+                // replace collisions later in handle(), without using their legacy inline-only getters.
+                OperationObject curOO = method.createOperationBuilder(customSchemas, providers).build();
+                RequestBodyObject oldBody = existing.requestBody();
+                RequestBodyObject newBody = curOO.requestBody();
+                Map<String, MediaTypeObject> mergedContent = ResponseObjectBuilder.mergeContent(
+                    oldBody == null ? null : oldBody.content(), newBody == null ? null : newBody.content());
+                RequestBodyObject body = mergedContent.isEmpty() ? null : requestBodyObject()
+                    .withRequired(oldBody != null && oldBody.required() && newBody != null && newBody.required())
+                    .withDescription(Mutils.coalesce(oldBody == null ? null : oldBody.description(), newBody == null ? null : newBody.description()))
+                    .withContent(mergedContent).build();
                 OperationObjectBuilder operationObjectBuilder = OperationObjectBuilder.builderFrom(existing)
-                    .withParameters(combinedParams)
+                    .withParameters(mergeParameters(existing.parameters(), parameters))
                     .withResponses(mergeResponses(existing.responses(), curOO.responses()).build())
-                    .withRequestBody(requestBodyObject()
-                        .withRequired(existing.requestBody() != null && existing.requestBody().required() &&
-                            curOO.requestBody() != null && curOO.requestBody().required())
-                        .withDescription(Mutils.coalesce(existing.description(), curOO.description()))
-                        .withContent(mergedContent)
-                        .build());
+                    .withRequestBody(body);
                 if (existing.summary() == null && existing.description() == null) {
                     operationObjectBuilder
                         .withSummary(curOO.summary())
@@ -240,8 +264,33 @@ class OpenApiDocumentor implements MuHandler {
                 }
                 existing = operationObjectBuilder.build();
             }
-            configuredOperations.put(opKey, existing);
+            operations.put(opKey, existing);
         }
+    }
+
+    private static List<ParameterObject> mergeParameters(@Nullable List<ParameterObject> left, List<ParameterObject> right) {
+        Map<String, ParameterObject> a = new LinkedHashMap<>();
+        Map<String, ParameterObject> b = new LinkedHashMap<>();
+        if (left != null) for (ParameterObject p : left) a.put(p.in() + "\0" + p.name(), p);
+        for (ParameterObject p : right) b.put(p.in() + "\0" + p.name(), p);
+        Set<String> keys = new LinkedHashSet<>(a.keySet()); keys.addAll(b.keySet());
+        List<ParameterObject> result = new ArrayList<>();
+        for (String key : keys) {
+            ParameterObject p = a.get(key), q = b.get(key);
+            ParameterObject base = Objects.requireNonNull(p == null ? q : p);
+            ParameterObjectBuilder builder = base.toBuilder().withRequired("path".equals(base.in()) || (p != null && q != null && p.required() && q.required()));
+            if (p != null && q != null) {
+                if (p.schema() != null && q.schema() != null) {
+                    builder.withSchema(MediaTypeObjectBuilder.mergeMediaTypes(
+                        MediaTypeObjectBuilder.mediaTypeObject().withSchema(p.schema()).build(),
+                        MediaTypeObjectBuilder.mediaTypeObject().withSchema(q.schema()).build()).build().schema());
+                } else if (p.content() != null && q.content() != null) {
+                    builder.withContent(ResponseObjectBuilder.mergeContent(p.content(), q.content()));
+                }
+            }
+            result.add(builder.build());
+        }
+        return result;
     }
 
     private static DocumentedPath documentedPath(List<PathPart> parentPathParts, ResourceClass resourceClass, ResourceMethod resourceMethod) {
@@ -416,9 +465,49 @@ class SchemaReference {
         this.schema = schema;
     }
 
+    static @Nullable Class<?> rawClass(Type type) {
+        if (type instanceof java.lang.reflect.GenericArrayType) {
+            Class<?> component = rawClass(((java.lang.reflect.GenericArrayType) type).getGenericComponentType());
+            return component == null ? null : java.lang.reflect.Array.newInstance(component, 0).getClass();
+        }
+        if (type instanceof java.lang.reflect.WildcardType) {
+            Type[] bounds = ((java.lang.reflect.WildcardType) type).getUpperBounds();
+            return bounds.length == 0 ? null : rawClass(bounds[0]);
+        }
+        return GenericTypeResolver.rawClass(type);
+    }
+
+    static SchemaObjectBuilder infer(List<SchemaReference> registrations, Class<?> raw, @Nullable Type generic) {
+        return infer(registrations, raw, generic == null ? raw : generic, new HashSet<>());
+    }
+
+    private static SchemaObjectBuilder infer(List<SchemaReference> registrations, Class<?> raw, Type type, Set<Type> visiting) {
+        SchemaReference registered = find(registrations, raw, type);
+        if (registered != null) return SchemaObjectBuilder.schemaObject().withRef("#/components/schemas/" + registered.id);
+        SchemaObjectBuilder builder = SchemaObjectBuilder.schemaObjectFrom(raw, type);
+        if (!visiting.add(type)) return SchemaObjectBuilder.schemaObject();
+        try {
+            Type nested = null;
+            boolean map = Map.class.isAssignableFrom(raw);
+            if (map) nested = GenericTypeResolver.resolveTypeArgument(type, Map.class, 1);
+            else if (Collection.class.isAssignableFrom(raw)) nested = GenericTypeResolver.resolveTypeArgument(type, Collection.class, 0);
+            else if (raw.isArray() && raw != byte[].class) nested = type instanceof java.lang.reflect.GenericArrayType
+                ? ((java.lang.reflect.GenericArrayType) type).getGenericComponentType() : raw.getComponentType();
+            if (nested != null) {
+                Class<?> nestedRaw = rawClass(nested);
+                SchemaObject child = nestedRaw == null ? SchemaObjectBuilder.schemaObject().build() : infer(registrations, nestedRaw, nested, visiting).build();
+                if (map) builder.withAdditionalProperties(child); else builder.withItems(child);
+            }
+            return builder;
+        } finally { visiting.remove(type); }
+    }
+
     static @Nullable SchemaReference find(List<SchemaReference> references, Class<?> type, @Nullable Type genericType) {
         for (SchemaReference reference : references) {
-            if (reference.type.equals(type)) {
+            if (reference.genericType != null && reference.genericType.equals(genericType)) return reference;
+        }
+        for (SchemaReference reference : references) {
+            if (reference.genericType == null && reference.type.equals(type)) {
                 return reference;
             }
         }

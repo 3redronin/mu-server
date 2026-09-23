@@ -21,29 +21,23 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * successful operation call.</p>
  */
 public class ResponsesObjectBuilder {
-    private @Nullable ResponseObject defaultValue;
-    private @Nullable Map<String, ResponseObject> httpStatusCodes;
+    private @Nullable Map<String, Object> extensions;
+    private @Nullable ReferenceOr<ResponseObject> defaultValue;
+    private @Nullable Map<String, ReferenceOr<ResponseObject>> httpStatusCodes;
 
     /**
-     * Creates an empty responses object builder.
-     */
-    public ResponsesObjectBuilder() {
-    }
-
-    /**
-     * Sets the default response definition.
      *
      * @param defaultValue The documentation of responses other than the ones declared for specific HTTP response codes.
      *                     Use this field to cover undeclared responses.
+     *
      * @return The current builder
      */
     public ResponsesObjectBuilder withDefaultValue(@Nullable ResponseObject defaultValue) {
-        this.defaultValue = defaultValue;
+        this.defaultValue = ReferenceValues.inline(defaultValue);
         return this;
     }
 
     /**
-     * Sets the response definitions keyed by status code.
      *
      * @param httpStatusCodes The response codes, or null to clear them. To define a range of response codes,
      *                        this field MAY contain the uppercase wildcard character
@@ -52,20 +46,19 @@ public class ResponsesObjectBuilder {
      *                        <code>2XX</code>, <code>3XX</code>, <code>4XX</code>, and <code>5XX</code>. If a response
      *                        range is defined using an explicit code, the explicit code definition takes precedence over
      *                        the range definition for that code.
+     *
      * @return The current builder
      */
     public ResponsesObjectBuilder withHttpStatusCodes(@Nullable Map<String, ResponseObject> httpStatusCodes) {
-        this.httpStatusCodes = httpStatusCodes;
+        this.httpStatusCodes = ReferenceValues.inline(httpStatusCodes);
         return this;
     }
 
     /**
-     * Builds a responses object from the configured values.
-     *
      * @return A new object
      */
     public ResponsesObject build() {
-        return new ResponsesObject(defaultValue, immutable(httpStatusCodes));
+        return new ResponsesObject(defaultValue, immutable(httpStatusCodes), extensions);
     }
 
     /**
@@ -79,24 +72,51 @@ public class ResponsesObjectBuilder {
 
     /**
      * Creates a new build by merging two exising responses
+     *
      * @param primary A responses object to use. This is the dominant response who's values will
      *                 be preferred when values cannot be merged (such as {@link ResponseObject#description()}
+     *
      * @param secondary The other responses object
+     *
      * @return A builder that is the merged value of the two given ones
      */
-    public static ResponsesObjectBuilder mergeResponses(ResponsesObject primary, ResponsesObject secondary) {
-        Set<String> allCodes = new HashSet<>(primary.httpStatusCodes().keySet());
-        allCodes.addAll(secondary.httpStatusCodes().keySet());
-        Map<String, ResponseObject> mergedStatusCodes = new HashMap<>();
-        for (String code : allCodes) {
-            mergedStatusCodes.put(code, ResponseObjectBuilder.mergeResponses(
-                primary.httpStatusCodes().get(code), secondary.httpStatusCodes().get(code)
-            ).build());
-        }
-        return responsesObject()
-            .withHttpStatusCodes(mergedStatusCodes)
-            .withDefaultValue(Mutils.coalesce(primary.defaultValue(), secondary.defaultValue()));
+    public static ResponsesObjectBuilder mergeResponses(@Nullable ResponsesObject primary, @Nullable ResponsesObject secondary) {
+        if (primary == null) return secondary == null ? responsesObject() : secondary.toBuilder();
+        if (secondary == null) return primary.toBuilder();
+        Map<String, ReferenceOr<ResponseObject>> codes = new java.util.TreeMap<>(primary.httpStatusCodesOrReferences());
+        secondary.httpStatusCodesOrReferences().forEach((key, value) -> codes.merge(key, value, ResponsesObjectBuilder::mergeReference));
+        ReferenceOr<ResponseObject> defaultResponse = primary.defaultValueOrReferences();
+        if (secondary.defaultValueOrReferences() != null) defaultResponse = defaultResponse == null
+            ? secondary.defaultValueOrReferences() : mergeReference(defaultResponse, secondary.defaultValueOrReferences());
+        return primary.toBuilder().withHttpStatusCodesOrReferences(codes).withDefaultValueOrReferences(defaultResponse);
+    }
+
+    private static ReferenceOr<ResponseObject> mergeReference(ReferenceOr<ResponseObject> a, ReferenceOr<ResponseObject> b) {
+        return a.isReference() || b.isReference() ? a : ReferenceOr.inline(ResponseObjectBuilder.mergeResponses(a.value(), b.value()).build());
     }
 
 
+    /**
+     * @param value the extensions value
+     * @return this builder */
+    public ResponsesObjectBuilder withExtensions(@Nullable Map<String, Object> value) { this.extensions = value; return this; }
+    /**
+     * @param name an x- extension name
+     * @param value its JSON value
+     * @return this builder */
+    public ResponsesObjectBuilder withExtension(String name, @Nullable Object value) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>();
+        if (extensions != null) copy.putAll(extensions);
+        Extensions.put(copy, name, value);
+        extensions = copy;
+        return this;
+    }
+    /**
+     * @param value inline values and references for defaultValue
+     * @return this builder */
+    public ResponsesObjectBuilder withDefaultValueOrReferences(@Nullable ReferenceOr<ResponseObject> value) { this.defaultValue = value; return this; }
+    /**
+     * @param value inline values and references for httpStatusCodes
+     * @return this builder */
+    public ResponsesObjectBuilder withHttpStatusCodesOrReferences(@Nullable Map<String, ReferenceOr<ResponseObject>> value) { this.httpStatusCodes = value; return this; }
 }

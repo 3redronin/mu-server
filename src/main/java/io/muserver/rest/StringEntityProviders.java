@@ -1,7 +1,8 @@
 package io.muserver.rest;
 
 import io.muserver.Mutils;
-import io.muserver.QueryString;
+import io.netty.buffer.ByteBufUtil;
+import io.netty.handler.codec.http.QueryStringDecoder;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.Produces;
@@ -19,7 +20,7 @@ import java.lang.reflect.Type;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
-import java.nio.charset.CharsetEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.*;
 import java.time.format.DateTimeParseException;
 import java.time.temporal.Temporal;
@@ -55,33 +56,15 @@ class StringEntityProviders {
 
         @Override
         public long getSize(String s, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType) {
-            if (s == null || s.isEmpty()) {
-                return 0;
-            }
             if (s.length() > 100000) {
                 return -1;
             }
-            Charset charset = EntityProviders.charsetFor(mediaType);
-            return getEncodedByteLength(s, charset);
-        }
 
-        static long getEncodedByteLength(String input, Charset charset) {
-            if (input == null || input.isEmpty()) {
-                return 0L;
+            Charset charset = EntityProviders.charsetFor(mediaType);
+            if (charset.equals(StandardCharsets.UTF_8)) {
+                return ByteBufUtil.utf8Bytes(s);
             }
-            // get the length without loading the whole thing into memory
-            CharsetEncoder encoder = charset.newEncoder();
-            CharBuffer charBuffer = CharBuffer.wrap(input);
-            long byteLength = 0L;
-            ByteBuffer byteBuffer = ByteBuffer.allocate(1024);
-            while (charBuffer.hasRemaining()) {
-                encoder.encode(charBuffer, byteBuffer, false);
-                byteLength += byteBuffer.position();
-                byteBuffer.clear();
-            }
-            encoder.encode(charBuffer, byteBuffer, true);
-            byteLength += byteBuffer.position();
-            return byteLength;
+            return s.getBytes(charset).length;
         }
 
         @Override
@@ -96,7 +79,7 @@ class StringEntityProviders {
 
         @Override
         public String readFrom(Class<String> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-            return new String(Mutils.toByteArray(entityStream, 2048), EntityProviders.charsetFor(mediaType));
+            return new String(Mutils.toByteArray(entityStream, 2048), EntityProviders.charsetForReading(mediaType));
         }
     }
 
@@ -116,7 +99,7 @@ class StringEntityProviders {
 
         @Override
         public char[] readFrom(Class<char[]> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-            InputStreamReader reader = new InputStreamReader(entityStream, EntityProviders.charsetFor(mediaType));
+            InputStreamReader reader = new InputStreamReader(entityStream, EntityProviders.charsetForReading(mediaType));
             CharArrayWriter charArrayWriter = new CharArrayWriter();
             char[] buffer = new char[2048];
             int read;
@@ -160,7 +143,7 @@ class StringEntityProviders {
 
         @Override
         public @Nullable T readFrom(Class<T> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-            String s = new String(Mutils.toByteArray(entityStream, 512), EntityProviders.charsetFor(mediaType));
+            String s = new String(Mutils.toByteArray(entityStream, 512), EntityProviders.charsetForReading(mediaType));
             if (Mutils.nullOrEmpty(s)) {
                 return null;
             }
@@ -222,7 +205,7 @@ class StringEntityProviders {
 
         @Override
         public Reader readFrom(Class<Reader> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-            return new InputStreamReader(entityStream, EntityProviders.charsetFor(mediaType));
+            return new InputStreamReader(entityStream, EntityProviders.charsetForReading(mediaType));
         }
     }
 
@@ -255,11 +238,13 @@ class StringEntityProviders {
 
         @Override
         public MultivaluedMap<String, String> readFrom(Class<MultivaluedMap<String, String>> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, String> httpHeaders, InputStream entityStream) throws IOException, WebApplicationException {
-            String body = new String(Mutils.toByteArray(entityStream, 2048), EntityProviders.charsetFor(mediaType));
-            QueryString formDecoder = QueryString.parse(body);
-            Map<String, List<String>> parameters = formDecoder.all();
+            String body = new String(Mutils.toByteArray(entityStream, 2048), EntityProviders.charsetForReading(mediaType));
+            QueryStringDecoder formDecoder = new QueryStringDecoder(body, false);
+            Map<String, List<String>> parameters = formDecoder.parameters();
             MultivaluedHashMap<String, String> form = new MultivaluedHashMap<>();
-            form.putAll(parameters);
+            for (Map.Entry<String, List<String>> entry : parameters.entrySet()) {
+                form.put(entry.getKey(), entry.getValue());
+            }
             return form;
         }
     }
@@ -278,11 +263,11 @@ class StringEntityProviders {
 
         @Override
         public void writeTo(MultivaluedMap<String, String> form, Class<?> type, Type genericType, Annotation[] annotations, MediaType mediaType, MultivaluedMap<String, Object> httpHeaders, OutputStream entityStream) throws IOException, WebApplicationException {
-            var sb = new StringBuilder();
-            for (String key : form.keySet()) {
-                String encodedKey = FormUrlEncoder.formUrlEncode(key);
-                for (String value : form.get(key)) {
-                    if (sb.length() > 1) sb.append('&');
+            StringBuilder sb = new StringBuilder();
+            for (Map.Entry<String, List<String>> entry : form.entrySet()) {
+                String encodedKey = FormUrlEncoder.formUrlEncode(entry.getKey());
+                for (String value : entry.getValue()) {
+                    if (sb.length() > 0) sb.append('&');
                     sb.append(encodedKey).append('=').append(FormUrlEncoder.formUrlEncode(value));
                 }
             }

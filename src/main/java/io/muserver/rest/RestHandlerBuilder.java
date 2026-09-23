@@ -46,9 +46,8 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     private final List<ReaderInterceptor> readerInterceptors = new ArrayList<>();
     private final List<ParamConverterProvider> customParamConverterProviders = new ArrayList<>();
     private final List<SchemaReference> customSchemas = new ArrayList<>();
-    private @Nullable String openApiJsonUrl = null;
-    private @Nullable String openApiYamlUrl = null;
-    private @Nullable String openApiHtmlUrl = null;
+    private @Nullable String openApiJsonUrl;
+    private @Nullable String openApiHtmlUrl;
     private @Nullable OpenAPIObjectBuilder openAPIObject;
     private @Nullable String openApiHtmlCss;
     private final List<JaxRSProviders.ExceptionMapperRegistration<?>> exceptionMappers = new ArrayList<>();
@@ -63,12 +62,6 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     {
         exceptionMappers.add(new JaxRSProviders.ExceptionMapperRegistration<>(
             Throwable.class, DEFAULT_EXCEPTION_MAPPER, true));
-    }
-
-    /**
-     * Creates an empty REST handler builder.
-     */
-    public RestHandlerBuilder() {
     }
 
     /**
@@ -209,21 +202,6 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
      */
     public RestHandlerBuilder withOpenApiJsonUrl(@Nullable String url) {
         this.openApiJsonUrl = url;
-        return this;
-    }
-
-    /**
-     * Enables an <a href="https://www.openapis.org">Open API</a> YAML URL at the specified endpoint. This YAML describes the API exposed
-     * by the rest resources declared by this builder.
-     *
-     * @param url The URL to serve from, for example <code>/openapi.yaml</code> or <code>null</code> to disable the YAML endpoint. Disabled by default.
-     * @return The current Rest Handler Builder
-     * @see #withOpenApiDocument(OpenAPIObjectBuilder)
-     * @see #withOpenApiHtmlUrl(String)
-     * @see #withOpenApiJsonUrl(String)
-     */
-    public RestHandlerBuilder withOpenApiYamlUrl(@Nullable String url) {
-        this.openApiYamlUrl = url;
         return this;
     }
 
@@ -515,6 +493,22 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         return this;
     }
 
+    /** Registers an exact generic schema with a stable component name.
+     * @param type the resolved generic type
+     * @param componentName a unique component name
+     * @param schema the schema
+     * @return this builder */
+    public RestHandlerBuilder addCustomSchema(java.lang.reflect.Type type, String componentName, SchemaObject schema) {
+        Class<?> raw = SchemaReference.rawClass(type);
+        if (raw == null) throw new IllegalArgumentException("Cannot determine raw class of " + type);
+        if (!componentName.matches("[a-zA-Z0-9._-]+")) throw new IllegalArgumentException("Invalid component name " + componentName);
+        for (SchemaReference existing : customSchemas) {
+            if (existing.id.equals(componentName) || type.equals(existing.genericType)) throw new IllegalArgumentException("Duplicate schema registration " + componentName);
+        }
+        customSchemas.add(new SchemaReference(componentName, raw, type, schema));
+        return this;
+    }
+
     /**
      * Registers a writer interceptor allowing for inspection and alteration of response bodies.
      * <p>Interceptors are executed in ascending {@link Priority} order, defaulting to {@link Priorities#USER}, and are
@@ -560,117 +554,84 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     }
 
     /**
-     * Gets the singleton JAX-RS resource instances registered with this handler.
-     *
-     * @return An unmodifiable list of configured resource instances.
+     * @return The current value of this property
      */
     public List<Object> resources() {
         return Collections.unmodifiableList(resources);
     }
 
     /**
-     * Gets the custom message body writers registered for REST responses.
-     *
-     * @return A list of configured custom writers.
+     * @return The current value of this property
      */
     public List<MessageBodyWriter<?>> customWriters() {
         return customWriters.stream().map(w -> (MessageBodyWriter<?>)w).collect(Collectors.toList());
     }
 
     /**
-     * Gets the writer interceptors that can inspect or alter REST response bodies.
-     *
-     * @return An unmodifiable list of configured writer interceptors in execution order.
+     * @return The current value of this property
      */
     public List<WriterInterceptor> writerInterceptors() {
         return Collections.unmodifiableList(writerInterceptors);
     }
 
     /**
-     * Gets the custom message body readers registered for REST request bodies.
-     *
-     * @return A list of configured custom readers.
+     * @return The current value of this property
      */
     public List<MessageBodyReader<?>> customReaders() {
         return customReaders.stream().map(r -> (MessageBodyReader<?>)r).collect(Collectors.toList());
     }
 
     /**
-     * Gets the reader interceptors that can inspect or alter REST request bodies.
-     *
-     * @return An unmodifiable list of configured reader interceptors in execution order.
+     * @return The current value of this property
      */
     public List<ReaderInterceptor> readerInterceptors() {
         return Collections.unmodifiableList(readerInterceptors);
     }
 
     /**
-     * Gets the custom parameter converter providers registered with this handler.
-     *
-     * @return An unmodifiable list of configured parameter converter providers.
+     * @return The current value of this property
      */
     public List<ParamConverterProvider> customParamConverterProviders() {
         return Collections.unmodifiableList(customParamConverterProviders);
     }
 
     /**
-     * Gets the custom OpenAPI schemas registered for specific Java classes.
-     *
-     * @return A map of Java types to their configured schema objects.
+     * @return The current value of this property
      */
     public Map<Class<?>, SchemaObject> customSchemas() {
-        return customSchemas.stream().collect(Collectors.toMap(ref -> ref.type, ref -> ref.schema));
+        return customSchemas.stream().filter(ref -> ref.genericType == null).collect(Collectors.toMap(ref -> ref.type, ref -> ref.schema));
     }
 
     /**
-     * Gets the URL that serves the generated OpenAPI document as JSON.
-     *
-     * @return The JSON endpoint URL, or <code>null</code> if the endpoint is disabled.
+     * @return The current value of this property
      */
     public @Nullable String openApiJsonUrl() {
         return openApiJsonUrl;
     }
 
     /**
-     * Gets the URL that serves the generated OpenAPI document as YAML.
-     *
-     * @return The YAML endpoint URL, or <code>null</code> if the endpoint is disabled.
-     */
-    public @Nullable String openApiYamlUrl() {
-        return openApiYamlUrl;
-    }
-
-    /**
-     * Gets the URL that serves the generated HTML API documentation.
-     *
-     * @return The HTML documentation endpoint URL, or <code>null</code> if the endpoint is disabled.
+     * @return The current value of this property
      */
     public @Nullable String openApiHtmlUrl() {
         return openApiHtmlUrl;
     }
 
     /**
-     * Gets the base OpenAPI document builder used when generating API documentation.
-     *
-     * @return The configured OpenAPI builder, or <code>null</code> to start from a default empty builder.
+     * @return The current value of this property
      */
     public @Nullable OpenAPIObjectBuilder openAPIObject() {
         return openAPIObject;
     }
 
     /**
-     * Gets the CSS used by the generated HTML API documentation endpoint.
-     *
-     * @return The configured stylesheet, or <code>null</code> to use the bundled default CSS when HTML docs are enabled.
+     * @return The current value of this property
      */
     public @Nullable String openApiHtmlCss() {
         return openApiHtmlCss;
     }
 
     /**
-     * Gets the exception mappers that convert exceptions into REST responses.
-     *
-     * @return An unmodifiable map of exception types to their configured mappers.
+     * @return The current value of this property
      */
     public Map<Class<? extends Throwable>, ExceptionMapper<? extends Throwable>> exceptionMappers() {
         Map<Class<? extends Throwable>, JaxRSProviders.ExceptionMapperRegistration<?>> effective = new LinkedHashMap<>();
@@ -686,64 +647,49 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
     }
 
     /**
-     * Gets the request filters that run before resource matching.
-     *
-     * @return An unmodifiable list of prematching request filters.
+     * @return The current value of this property
      */
     public List<ContainerRequestFilter> preMatchRequestFilters() {
         return Collections.unmodifiableList(preMatchRequestFilters);
     }
 
     /**
-     * Gets the request filters that run after a resource method has been matched.
-     *
-     * @return An unmodifiable list of request filters.
+     * @return The current value of this property
      */
     public List<ContainerRequestFilter> requestFilters() {
         return Collections.unmodifiableList(requestFilters);
     }
 
     /**
-     * Gets the response filters that run after resource method execution.
-     *
-     * @return An unmodifiable list of response filters.
+     * @return The current value of this property
      */
     public List<ContainerResponseFilter> responseFilters() {
         return Collections.unmodifiableList(responseFilters);
     }
 
     /**
-     * Gets the CORS configuration applied to REST responses.
-     *
-     * @return The configured CORS settings. The default is {@link CORSConfigBuilder#disabled()}.
+     * @return The current value of this property
      */
     public CORSConfig corsConfig() {
         return corsConfig;
     }
 
     /**
-     * Gets the schema customizers used when generating OpenAPI schemas.
-     *
-     * @return An unmodifiable list of schema object customizers.
+     * @return The current value of this property
      */
     public List<SchemaObjectCustomizer> schemaObjectCustomizers() {
         return Collections.unmodifiableList(schemaObjectCustomizers);
     }
 
     /**
-     * Gets the strategy used to split collection-valued query and header parameters.
-     *
-     * @return The configured collection parameter strategy, or <code>null</code> to use
-     * {@link CollectionParameterStrategy#NO_TRANSFORM}.
+     * @return The current value of this property
      */
-    public @Nullable CollectionParameterStrategy collectionParameterStrategy() {
-        return collectionParameterStrategy;
+    public CollectionParameterStrategy collectionParameterStrategy() {
+        return collectionParameterStrategy == null ? CollectionParameterStrategy.NO_TRANSFORM : collectionParameterStrategy;
     }
 
     /**
-     * Builds the REST handler represented by this builder.
-     *
-     * @return The newly built {@link RestHandler}.
+     * @return The newly build {@link RestHandler}
      */
     @Override
     public RestHandler build() {
@@ -781,8 +727,8 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
         }
         List<ResourceClass> roots = Collections.unmodifiableList(list);
 
-        OpenApiDocumentor documentor = null;
-        if (openApiHtmlUrl != null || openApiJsonUrl != null || openApiYamlUrl != null) {
+        @Nullable OpenApiDocumentor documentor = null;
+        if (openApiHtmlUrl != null || openApiJsonUrl != null) {
             if (openApiHtmlCss == null) {
                 InputStream cssStream = Objects.requireNonNull(
                     RestHandlerBuilder.class.getResourceAsStream("/io/muserver/resources/api.css"),
@@ -793,8 +739,8 @@ public class RestHandlerBuilder implements MuHandlerBuilder<RestHandler> {
 
             }
             OpenAPIObjectBuilder openAPIObjectToUse = this.openAPIObject == null ? OpenAPIObjectBuilder.openAPIObject() : this.openAPIObject;
-            openAPIObjectToUse.withPaths(pathsObject().build());
-            documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiYamlUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss, corsConfig, new ArrayList<>(customSchemas), schemaObjectCustomizer, paramConverterProviders);
+            if (openAPIObjectToUse.paths() == null) openAPIObjectToUse.withPaths(pathsObject().build());
+            documentor = new OpenApiDocumentor(roots, openApiJsonUrl, openApiHtmlUrl, openAPIObjectToUse.build(), openApiHtmlCss, corsConfig, new ArrayList<>(customSchemas), schemaObjectCustomizer, paramConverterProviders, collectionParameterStrategy(), providers);
         }
 
         CustomExceptionMapper customExceptionMapper = new CustomExceptionMapper(providers);

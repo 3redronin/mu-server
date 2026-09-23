@@ -11,8 +11,8 @@ import jakarta.ws.rs.core.EntityTag;
 import jakarta.ws.rs.core.Request;
 import okhttp3.RequestBody;
 import okhttp3.Response;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
+import org.junit.After;
+import org.junit.Test;
 
 import java.net.URI;
 import java.util.Date;
@@ -308,7 +308,30 @@ public class PreconditionsTest {
     }
 
 
-    @AfterEach
+    @Test
+    public void dateOnlyEvaluationIgnoresDatesWhenEntityTagConditionsArePresent() throws Exception {
+        Date lastModified = new Date(1000000000000L);
+        @Path("samples")
+        class Sample {
+            @GET
+            public jakarta.ws.rs.core.Response get(@Context Request request) {
+                jakarta.ws.rs.core.Response.ResponseBuilder response = request.evaluatePreconditions(lastModified);
+                return response == null ? jakarta.ws.rs.core.Response.ok("The content").build() : response.build();
+            }
+        }
+        server = httpsServerForTest().addHandler(restHandler(new Sample())).start();
+        for (String[] headers : new String[][]{
+            {"If-None-Match", "If-Modified-Since", "Sun, 09 Sep 2001 01:46:40 GMT"},
+            {"If-Match", "If-Unmodified-Since", "Sat, 08 Sep 2001 01:46:40 GMT"}}) {
+            try (Response response = call(request(server.uri().resolve("/samples"))
+                .header(headers[0], "\"selected\"").header(headers[1], headers[2]))) {
+                assertThat(response.code(), equalTo(200));
+                assertThat(response.body().string(), equalTo("The content"));
+            }
+        }
+    }
+
+    @After
     public void stop() {
         scaffolding.MuAssert.stopAndCheck(server);
     }

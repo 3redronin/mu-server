@@ -23,6 +23,7 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * </ul>
  */
 public class ParameterObjectBuilder {
+    private @Nullable Map<String, Object> extensions;
     private @Nullable String name;
     private @Nullable String in;
     private @Nullable String description;
@@ -34,17 +35,10 @@ public class ParameterObjectBuilder {
     private @Nullable Boolean allowReserved;
     private @Nullable SchemaObject schema;
     private @Nullable Object example;
-    private @Nullable Map<String, ExampleObject> examples;
-    private @Nullable Map<String, MediaTypeObject> content;
+    private @Nullable Map<String, ReferenceOr<ExampleObject>> examples;
+    private @Nullable Map<String, ReferenceOr<MediaTypeObject>> content;
 
     /**
-     * Creates an empty parameter builder.
-     */
-    public ParameterObjectBuilder() {
-    }
-
-    /**
-     * Sets the parameter name.
      *
      * @param name <strong>REQUIRED</strong>. The name of the parameter. Parameter names are <em>case sensitive</em>.
      *             <ul>
@@ -56,6 +50,7 @@ public class ParameterObjectBuilder {
      *             <li>For all other cases, the <code>name</code> corresponds to the parameter name used by the
      *             <code>in</code> property.</li>
      *             </ul>
+     *
      * @return The current builder
      */
     public ParameterObjectBuilder withName(String name) {
@@ -64,9 +59,9 @@ public class ParameterObjectBuilder {
     }
 
     /**
-     * Sets the parameter location.
      *
-     * @param in <strong>REQUIRED</strong>. The location of the parameter. Possible values are "query", "header",  "path" or "cookie".
+     * @param in <strong>REQUIRED</strong>. The location of the parameter. Possible values are "query", "header", "path" or "cookie".
+     *
      * @return The current builder
      */
     public ParameterObjectBuilder withIn(String in) {
@@ -75,10 +70,10 @@ public class ParameterObjectBuilder {
     }
 
     /**
-     * Sets the parameter description.
      *
      * @param description A brief description of the parameter. This could contain examples of use.
      *                    <a href="http://spec.commonmark.org/">CommonMark syntax</a> MAY be used for rich text representation.
+     *
      * @return The current builder
      */
     public ParameterObjectBuilder withDescription(@Nullable String description) {
@@ -87,11 +82,11 @@ public class ParameterObjectBuilder {
     }
 
     /**
-     * Sets whether the parameter is required.
      *
      * @param required Determines whether this parameter is mandatory. If the parameter location is "path",
      *                 this property is <strong>REQUIRED</strong> and its value MUST be <code>true</code>.
      *                 Otherwise, the property MAY be included and its default value is <code>false</code>.
+     *
      * @return The current builder
      */
     public ParameterObjectBuilder withRequired(@Nullable Boolean required) {
@@ -100,9 +95,9 @@ public class ParameterObjectBuilder {
     }
 
     /**
-     * Marks the parameter as deprecated or current.
      *
      * @param deprecated Specifies that a parameter is deprecated and SHOULD be transitioned out of usage.
+     *
      * @return The current builder
      */
     public ParameterObjectBuilder withDeprecated(@Nullable Boolean deprecated) {
@@ -111,24 +106,30 @@ public class ParameterObjectBuilder {
     }
 
     /**
-     * Sets whether empty parameter values are allowed.
      *
      * @param allowEmptyValue Sets the ability to pass empty-valued parameters. This is valid only for
      *                        <code>query</code> parameters and allows sending a parameter with an empty value.
      *                        Default value is <code>false</code>. If <code>style</code> is used, and if behavior
      *                        is <code>n/a</code> (cannot be serialized), the value of <code>allowEmptyValue</code>
      *                        SHALL be ignored.
+     *
      * @return The current builder
      */
+    /**
+     * @param allowEmptyValue whether an empty query value is allowed
+     * @return this builder
+     * @deprecated OpenAPI discourages allowEmptyValue. Describe empty strings with schema constraints
+     * and use required to document presence; this flag does not allow JSON null.
+     */
+    @Deprecated
     public ParameterObjectBuilder withAllowEmptyValue(@Nullable Boolean allowEmptyValue) {
         this.allowEmptyValue = allowEmptyValue;
         return this;
     }
 
     /**
-     * Sets the parameter serialization style.
      *
-     * @param style <p>Describes how the parameter value will be serialized depending on the type of the parameter  value.
+     * @param style <p>Describes how the parameter value will be serialized depending on the type of the parameter value.
      *              Default values (based on value of <code>in</code>): for <code>query</code> - <code>form</code>;
      *              for <code>path</code> - <code>simple</code>; for <code>header</code> - <code>simple</code>;
      *              for <code>cookie</code> - <code>form</code>.</p>
@@ -188,6 +189,7 @@ public class ParameterObjectBuilder {
      *              </tr>
      *              </tbody>
      *              </table>
+     *
      * @return The current builder
      */
     public ParameterObjectBuilder withStyle(@Nullable String style) {
@@ -196,12 +198,12 @@ public class ParameterObjectBuilder {
     }
 
     /**
-     * Sets whether the parameter value is exploded.
      *
      * @param explode When this is true, parameter values of type <code>array</code> or <code>object</code> generate
      *                separate parameters for each value of the array or key-value pair of the map.  For other types
      *                of parameters this property has no effect. When <code>style</code> is <code>form</code>, the
      *                default value is <code>true</code>. For all other styles, the default value is <code>false</code>.
+     *
      * @return The current builder
      */
     public ParameterObjectBuilder withExplode(@Nullable Boolean explode) {
@@ -210,13 +212,13 @@ public class ParameterObjectBuilder {
     }
 
     /**
-     * Sets whether reserved characters may remain unencoded.
      *
      * @param allowReserved Determines whether the parameter value SHOULD allow reserved characters, as defined by
      *                      <a href="https://tools.ietf.org/html/rfc3986#section-2.2">RFC3986</a>
      *                      <code>:/?#[]@!$&amp;'()*+,;=</code> to be included without percent-encoding. This property
      *                      only applies to parameters with an <code>in</code> value of <code>query</code>. The
      *                      default value is <code>false</code>.
+     *
      * @return The current builder
      */
     public ParameterObjectBuilder withAllowReserved(@Nullable Boolean allowReserved) {
@@ -225,9 +227,9 @@ public class ParameterObjectBuilder {
     }
 
     /**
-     * Sets the parameter schema.
      *
      * @param schema The schema defining the type used for the parameter.
+     *
      * @return The current builder
      */
     public ParameterObjectBuilder withSchema(@Nullable SchemaObject schema) {
@@ -236,7 +238,6 @@ public class ParameterObjectBuilder {
     }
 
     /**
-     * Sets an example parameter value.
      *
      * @param example Example of the media type.  The example SHOULD match the specified schema and encoding properties
      *                if present.  The <code>example</code> field is mutually exclusive of the <code>examples</code>
@@ -244,6 +245,7 @@ public class ParameterObjectBuilder {
      *                <code>example</code> value SHALL <em>override</em> the example provided by the schema.
      *                To represent examples of media types that cannot naturally be represented in JSON or YAML,
      *                a string value can contain the example with escaping where necessary.
+     *
      * @return The current builder
      */
     public ParameterObjectBuilder withExample(@Nullable Object example) {
@@ -252,41 +254,39 @@ public class ParameterObjectBuilder {
     }
 
     /**
-     * Sets named parameter examples.
      *
      * @param examples Examples of the media type.  Each example SHOULD contain a value in the correct format as
      *                 specified in the parameter encoding.  The <code>examples</code> field is mutually exclusive
      *                 of the <code>example</code> field.  Furthermore, if referencing a <code>schema</code> which
      *                 contains an example, the <code>examples</code> value SHALL <em>override</em> the example
      *                 provided by the schema.
+     *
      * @return The current builder
      */
     public ParameterObjectBuilder withExamples(@Nullable Map<String, ExampleObject> examples) {
-        this.examples = examples;
+        this.examples = ReferenceValues.inline(examples);
         return this;
     }
 
     /**
-     * Sets the parameter content representations.
      *
-     * @param content A map containing the representations for the parameter. The key is the media type and the value  describes it.
+     * @param content A map containing the representations for the parameter. The key is the media type and the value describes it.
      *                The map MUST only contain one entry.
+     *
      * @return The current builder
      */
     public ParameterObjectBuilder withContent(@Nullable Map<String, MediaTypeObject> content) {
-        this.content = content;
+        this.content = ReferenceValues.inline(content);
         return this;
     }
 
     /**
-     * Builds a parameter object from the configured values.
-     *
      * @return A new object
      */
     public ParameterObject build() {
         boolean requiredVal = this.required == null ? "path".equals(in) : this.required;
         return new ParameterObject(name, in, description, requiredVal, deprecated, allowEmptyValue, style, explode,
-            allowReserved, schema, example, immutable(examples), immutable(content));
+            allowReserved, schema, example, immutable(examples), immutable(content), extensions);
     }
 
     /**
@@ -297,4 +297,26 @@ public class ParameterObjectBuilder {
     public static ParameterObjectBuilder parameterObject() {
         return new ParameterObjectBuilder();
     }
+    /**
+     * @param value the extensions value
+     * @return this builder */
+    public ParameterObjectBuilder withExtensions(@Nullable Map<String, Object> value) { this.extensions = value; return this; }
+    /**
+     * @param name an x- extension name
+     * @param value its JSON value
+     * @return this builder */
+    public ParameterObjectBuilder withExtension(String name, @Nullable Object value) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>();
+        if (extensions != null) copy.putAll(extensions);
+        Extensions.put(copy, name, value);
+        extensions = copy;
+        return this;
+    }
+    /**
+     * @param value inline values and references for examples
+     * @return this builder */
+    public ParameterObjectBuilder withExamplesOrReferences(@Nullable Map<String, ReferenceOr<ExampleObject>> value) { this.examples = value; return this; }
+    /** @param value inline media types and references
+     * @return this builder */
+    public ParameterObjectBuilder withContentOrReferences(@Nullable Map<String, ReferenceOr<MediaTypeObject>> value) { this.content = value; return this; }
 }

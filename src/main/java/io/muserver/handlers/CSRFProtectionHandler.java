@@ -38,7 +38,7 @@ public class CSRFProtectionHandler implements MuHandler {
     @Override
     public boolean handle(MuRequest request, MuResponse response) throws Exception {
         Method method = request.method();
-        if (method == Method.GET || method == Method.HEAD || method == Method.OPTIONS) {
+        if (method == Method.GET || method == Method.HEAD || method == Method.OPTIONS || method == Method.QUERY) {
             return false;
         }
 

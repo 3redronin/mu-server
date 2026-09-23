@@ -16,12 +16,14 @@ import static io.muserver.openapi.ParameterObject.actualValue;
  * @see RequestBodyObjectBuilder
  */
 public class RequestBodyObject implements JsonWriter {
+    private final Map<String, Object> extensions;
 
     private final @Nullable String description;
-    private final Map<String, MediaTypeObject> content;
+    private final Map<String, ReferenceOr<MediaTypeObject>> content;
     private final @Nullable Boolean required;
 
-    RequestBodyObject(@Nullable String description, @Nullable Map<String, MediaTypeObject> content, @Nullable Boolean required) {
+    RequestBodyObject(@Nullable String description, @Nullable Map<String, ReferenceOr<MediaTypeObject>> content, @Nullable Boolean required, @Nullable Map<String, Object> extensions) {
+        this.extensions = Extensions.copy(extensions);
         this.description = description;
         notNull("content", content);
         this.content = java.util.Objects.requireNonNull(content);
@@ -35,6 +37,7 @@ public class RequestBodyObject implements JsonWriter {
         isFirst = append(writer, "description", description, isFirst);
         isFirst = append(writer, "content", content, isFirst);
         isFirst = append(writer, "required", required, isFirst);
+        isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
 
@@ -53,7 +56,7 @@ public class RequestBodyObject implements JsonWriter {
      * @return the value described by {@link RequestBodyObjectBuilder#withContent}
      */
     public Map<String, MediaTypeObject> content() {
-        return content;
+        return java.util.Objects.requireNonNull(ReferenceValues.values(content));
     }
 
     /**
@@ -64,4 +67,13 @@ public class RequestBodyObject implements JsonWriter {
     public boolean required() {
         return actualValue(required, false);
     }
+    /** @return the extensions value */
+    public Map<String, Object> extensions() { return extensions; }
+    /** @return a builder preserving all fields and extensions */
+    public RequestBodyObjectBuilder toBuilder() {
+        return new RequestBodyObjectBuilder()
+            .withExtensions(extensions).withDescription(description).withContentOrReferences(content).withRequired(required);
+    }
+    /** @return inline media types and references */
+    public @Nullable Map<String, ReferenceOr<MediaTypeObject>> contentOrReferences() { return content; }
 }

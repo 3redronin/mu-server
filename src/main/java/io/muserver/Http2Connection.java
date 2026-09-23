@@ -1121,6 +1121,12 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID " + fh.streamId());
             }
             if (acceptNewStream(headerFragment.streamId())) {
+                String methodName = headerFragment.headers().get(HeaderNames.PSEUDO_METHOD);
+                try {
+                    QueryRequestValidation.validate(Method.valueOf(methodName), headerFragment.headers());
+                } catch (IllegalArgumentException ignored) {
+                    // Http2Stream.start reports malformed :method values as protocol errors.
+                }
                 startRequest(headerFragment);
             }
         } catch (HttpException e) {

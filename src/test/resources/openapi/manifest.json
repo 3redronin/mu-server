@@ -1,0 +1,50 @@
+{
+  "https://json-schema.org/draft/2020-12/schema": {
+    "resource": "draft-2020-12-schema.json",
+    "sha256": "41da76f5afb7ce062d248f762463a92f7ca47e4e0f905b224ba6afeef91ded0f"
+  },
+  "https://json-schema.org/draft/2020-12/meta/core": {
+    "resource": "draft-2020-12-core.json",
+    "sha256": "21f79d143fab1f180245c331e5657057045b36794d41fe151e6e4fed65035299"
+  },
+  "https://json-schema.org/draft/2020-12/meta/applicator": {
+    "resource": "draft-2020-12-applicator.json",
+    "sha256": "bf273b26f9f735b93ece78f2b61b36676e1d122ce78ab37ad5a2e45dfa1ca2b1"
+  },
+  "https://json-schema.org/draft/2020-12/meta/unevaluated": {
+    "resource": "draft-2020-12-unevaluated.json",
+    "sha256": "fc99f32188da41689a9382af174dd42e8b255e4374965c157b8286556b4ab2bc"
+  },
+  "https://json-schema.org/draft/2020-12/meta/validation": {
+    "resource": "draft-2020-12-validation.json",
+    "sha256": "e921c5b79264d3689af01c1af1ffdf692e09f1c45df90a0f08eb7288c9acdeab"
+  },
+  "https://json-schema.org/draft/2020-12/meta/meta-data": {
+    "resource": "draft-2020-12-meta-data.json",
+    "sha256": "c664d438a84d58889c8edecd248ce2f945a4bc0e3b087323b11303dc136abfbe"
+  },
+  "https://json-schema.org/draft/2020-12/meta/format-annotation": {
+    "resource": "draft-2020-12-format-annotation.json",
+    "sha256": "5c79404f831dd905c0f40fefac7c6f3e51bf3729b4a876a5c2020178d97f3bcc"
+  },
+  "https://json-schema.org/draft/2020-12/meta/content": {
+    "resource": "draft-2020-12-content.json",
+    "sha256": "a10456605b2b5bb12a1b4dcfc0300f02f54d3e8bb3646bed7724583866627682"
+  },
+  "https://spec.openapis.org/oas/3.2/schema/2026-08-30": {
+    "resource": "schema-2026-08-30.json",
+    "sha256": "ec53db6e114b768ff2d273b232bda210f51b70c5e57d57ac8daf7e8496a6e073"
+  },
+  "https://spec.openapis.org/oas/3.2/schema-base/2026-08-30": {
+    "resource": "schema-base-2026-08-30.json",
+    "sha256": "9df52b98a92075a917125364d23a5f70825d6c292c7aeb15c31b822e95f031e9"
+  },
+  "https://spec.openapis.org/oas/3.2/dialect/2026-02-26": {
+    "resource": "dialect-2026-02-26.json",
+    "sha256": "9375b7042aa0b01848403f0a9ebf12a3425e01a9e24337ce12624f10fea73833"
+  },
+  "https://spec.openapis.org/oas/3.2/meta/2026-02-26": {
+    "resource": "meta-2026-02-26.json",
+    "sha256": "f444d02ef7d36f30293983fad8118c823a3c70a49a8e5aa6f1afe21215e35417"
+  }
+}

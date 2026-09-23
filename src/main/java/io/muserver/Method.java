@@ -42,7 +42,11 @@ public enum Method {
     /**
      * The PATCH HTTP method
      */
-    PATCH;
+    PATCH,
+    /**
+     * The QUERY HTTP method
+     */
+    QUERY;
 
     /**
      * Specifies if this method is {@link #HEAD}

@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import java.util.Map;
+
 import org.jspecify.annotations.Nullable;
 
 
@@ -11,11 +13,11 @@ import static io.muserver.Mutils.notNull;
 import static io.muserver.openapi.Jsonizer.append;
 
 /**
- * Provides metadata about the API.
- *
  * @see InfoObjectBuilder
  */
 public class InfoObject implements JsonWriter {
+    private final @Nullable String summary;
+    private final Map<String, Object> extensions;
 
     private final String title;
     private final @Nullable String description;
@@ -25,8 +27,9 @@ public class InfoObject implements JsonWriter {
     private final String version;
 
 
-    InfoObject(String title, @Nullable String description, @Nullable URI termsOfService,
-               @Nullable ContactObject contact, @Nullable LicenseObject license, String version) {
+    InfoObject(String title, @Nullable String description, @Nullable URI termsOfService, @Nullable ContactObject contact, @Nullable LicenseObject license, String version, @Nullable String summary, @Nullable Map<String, Object> extensions) {
+        this.summary = summary;
+        this.extensions = Extensions.copy(extensions);
         notNull("title", title);
         notNull("version", version);
         this.title = title;
@@ -47,12 +50,12 @@ public class InfoObject implements JsonWriter {
         isFirst = append(writer, "contact", contact, isFirst);
         isFirst = append(writer, "license", license, isFirst);
         isFirst = append(writer, "version", version, isFirst);
+        isFirst = Jsonizer.append(writer, "summary", summary, isFirst);
+        isFirst = Extensions.write(writer, extensions, isFirst);
         writer.write('}');
     }
 
     /**
-     * Gets the API title.
-     *
      * @return the value described by {@link InfoObjectBuilder#withTitle}
      */
     public String title() {
@@ -60,47 +63,46 @@ public class InfoObject implements JsonWriter {
     }
 
     /**
-     * Gets the API description.
-     *
-     * @return the value described by {@link InfoObjectBuilder#withDescription}
+      @return the value described by {@link InfoObjectBuilder#withDescription}
      */
     public @Nullable String description() {
         return description;
     }
 
     /**
-     * Gets the terms of service URI.
-     *
-     * @return the value described by {@link InfoObjectBuilder#withTermsOfService}
+      @return the value described by {@link InfoObjectBuilder#withTermsOfService}
      */
     public @Nullable URI termsOfService() {
         return termsOfService;
     }
 
     /**
-     * Gets the API contact details.
-     *
-     * @return the value described by {@link InfoObjectBuilder#withContact}
+      @return the value described by {@link InfoObjectBuilder#withContact}
      */
     public @Nullable ContactObject contact() {
         return contact;
     }
 
     /**
-     * Gets the API license details.
-     *
-     * @return the value described by {@link InfoObjectBuilder#withLicense}
+      @return the value described by {@link InfoObjectBuilder#withLicense}
      */
     public @Nullable LicenseObject license() {
         return license;
     }
 
     /**
-     * Gets the OpenAPI document version.
-     *
-     * @return the value described by {@link InfoObjectBuilder#withVersion}
+      @return the value described by {@link InfoObjectBuilder#withVersion}
      */
     public String version() {
         return version;
+    }
+    /** @return the summary value */
+    public @Nullable String summary() { return summary; }
+    /** @return the extensions value */
+    public Map<String, Object> extensions() { return extensions; }
+    /** @return a builder preserving all fields and extensions */
+    public InfoObjectBuilder toBuilder() {
+        return new InfoObjectBuilder()
+            .withSummary(summary).withExtensions(extensions).withTitle(title).withDescription(description).withTermsOfService(termsOfService).withContact(contact).withLicense(license).withVersion(version);
     }
 }

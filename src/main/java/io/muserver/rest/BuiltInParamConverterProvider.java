@@ -93,6 +93,10 @@ class BuiltInParamConverterProvider implements ParamConverterProvider {
         return smc;
     }
 
+    static boolean isBuiltIn(ParamConverter<?> converter) {
+        return converter.getClass().getEnclosingClass() == BuiltInParamConverterProvider.class;
+    }
+
     private static class UploadedFileConverter implements ParamConverter<UploadedFile> {
         @Override
         public @Nullable UploadedFile fromString(@Nullable String value) {

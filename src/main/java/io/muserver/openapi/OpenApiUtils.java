@@ -8,17 +8,19 @@ class OpenApiUtils {
 
     private OpenApiUtils() {}
 
+    @SuppressWarnings("unchecked")
     static <K, V> @Nullable Map<K, V> immutable(@Nullable Map<K, V> map) {
         if (map == null) {
             return null;
         }
-        return Collections.unmodifiableMap(new HashMap<>(map));
+        return (Map<K, V>) JsonValues.freeze(map);
     }
 
+    @SuppressWarnings("unchecked")
     static <T> @Nullable List<T> immutable(@Nullable List<T> list) {
         if (list == null) {
             return null;
         }
-        return Collections.unmodifiableList(new ArrayList<>(list));
+        return (List<T>) JsonValues.freeze(list);
     }
 }

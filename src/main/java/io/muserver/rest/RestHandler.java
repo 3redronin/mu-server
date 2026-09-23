@@ -1,7 +1,5 @@
 package io.muserver.rest;
 
-import io.muserver.internal.AsyncExecution;
-
 import io.muserver.*;
 import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.NotAllowedException;
@@ -79,6 +77,7 @@ public class RestHandler implements MuHandler {
             return true;
         }
         List<MediaType> acceptHeadersForException = emptyList();
+        Set<RequestMatcher.MatchedMethod> matchedMethodsForPath = Collections.emptySet();
         List<MediaType> producesRef = null;
         List<MediaType> directlyProducesRef = null;
         SecurityContext securityContext = muRequest.uri().getScheme().equals("https") ? MuSecurityContext.notLoggedInHttpsContext : MuSecurityContext.notLoggedInHttpContext;
@@ -115,14 +114,21 @@ public class RestHandler implements MuHandler {
                 }
             };
 
+            matchedMethodsForPath = requestMatcher.getMatchedMethodsForPath(requestContext.relativePath(), subResourceLocator);
+            requestContext.setMatchedMethodsForPath(matchedMethodsForPath);
             RequestMatcher.MatchedMethod mm;
             try {
-                mm = requestMatcher.findResourceMethod(requestContext, requestContext.getMuMethod(), acceptHeaders, subResourceLocator);
+                mm = requestMatcher.stepThreeIdentifyTheMethodThatWillHandleTheRequest(requestContext.getMuMethod(), matchedMethodsForPath, requestContext.getHeaderString("Content-Type"), acceptHeaders);
+            } catch (jakarta.ws.rs.NotSupportedException e) {
+                if (requestContext.getMuMethod() == Method.QUERY) {
+                    AcceptQueryHeader.write(muResponse, matchedMethodsForPath);
+                }
+                throw e;
             } catch (NotAllowedException e) {
                 if (requestContext.getMuMethod() == Method.HEAD) {
-                    mm = requestMatcher.findResourceMethod(requestContext, Method.GET, acceptHeaders, subResourceLocator);
+                    mm = requestMatcher.stepThreeIdentifyTheMethodThatWillHandleTheRequest(Method.GET, matchedMethodsForPath, requestContext.getHeaderString("Content-Type"), acceptHeaders);
                 } else if (requestContext.getMuMethod() == Method.OPTIONS) {
-                    Set<RequestMatcher.MatchedMethod> matchedMethodsForPath = requestMatcher.getMatchedMethodsForPath(requestContext.relativePath(), subResourceLocator);
+                    AcceptQueryHeader.write(muResponse, matchedMethodsForPath);
                     muResponse.headers().set(HeaderNames.ALLOW, getAllowedMethods(matchedMethodsForPath));
                     corsConfig.writeHeadersInternal(muRequest, muResponse, matchedMethodsForPath);
                     return true;
@@ -162,30 +168,21 @@ public class RestHandler implements MuHandler {
                     AsyncHandle asyncHandle = muRequest.handleAsync();
                     CompletionStage<?> cs = (CompletionStage<?>) result;
                     cs.whenComplete((value, failure) -> {
-                        Runnable continuation = () -> {
-                            @Nullable Throwable completionFailure = null;
-                            try {
-                                if (failure == null) {
-                                    sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, value,
-                                        completionStageResultType(methodReturnType));
-                                } else {
-                                    Throwable cause = unwrapCompletionFailure(failure);
-                                    FatalErrors.rethrow(cause);
-                                    dealWithUnhandledException(0, requestContext, muResponse, cause,
-                                        acceptHeaders, produces, directlyProduces);
-                                }
-                            } catch (Throwable e) {
-                                completionFailure = e;
-                                FatalErrors.rethrow(e);
-                            } finally {
-                                completeAsyncResponse(asyncHandle, requestContext, completionFailure);
-                            }
-                        };
+                        @Nullable Throwable completionFailure = null;
                         try {
-                            AsyncExecution.forHandle(asyncHandle).executeApplicationTask(continuation);
-                        } catch (Throwable dispatchFailure) {
-                            completeAsyncResponse(asyncHandle, requestContext, dispatchFailure);
-                            FatalErrors.rethrow(dispatchFailure);
+                            if (failure == null) {
+                                sendResponse(0, requestContext, muResponse, acceptHeaders, produces, directlyProduces, methodAnnotations, value,
+                                    completionStageResultType(methodReturnType));
+                            } else {
+                                Throwable cause = unwrapCompletionFailure(failure);
+                                dealWithUnhandledException(0, requestContext, muResponse, cause,
+                                    acceptHeaders, produces, directlyProduces);
+                            }
+                        } catch (Throwable e) {
+                            // CompletionStage captures callback failures in a dependent future that we do not return.
+                            completionFailure = e;
+                        } finally {
+                            completeAsyncResponse(asyncHandle, requestContext, completionFailure);
                         }
                     });
                 } else {
@@ -235,11 +232,7 @@ public class RestHandler implements MuHandler {
                 failure.addSuppressed(cleanupFailure);
             }
         } finally {
-            // Mu4's transport fallback accepts Exception; preserve nonfatal Error causes after REST mapping.
-            Throwable transportFailure = failure != null && !(failure instanceof Exception)
-                && !(failure instanceof VirtualMachineError) && !(failure instanceof ThreadDeath)
-                ? new MuException("Asynchronous REST response failed", failure) : failure;
-            asyncHandle.complete(transportFailure);
+            asyncHandle.complete(failure);
         }
     }
 
@@ -275,6 +268,9 @@ public class RestHandler implements MuHandler {
                 muResponse.write("<h1>500 Internal Server Error</h1><p>ErrorID=" + errorID + "</p>");
             }
             return;
+        }
+        if (ex instanceof UnsupportedRepresentationException && request.getMuMethod() == Method.QUERY) {
+            AcceptQueryHeader.write(muResponse, request.matchedMethodsForPath());
         }
         if (ex instanceof JaxRSRequest.FilterAbortedException) {
             sendResponse(nestingLevel, request, muResponse, acceptHeaders, producesRef, directlyProducesRef,
@@ -345,6 +341,11 @@ public class RestHandler implements MuHandler {
                             filterManagerThing.onBeforeSendResponse(requestContext, responseToWrite);
                             if (!muResponse.hasStartedSendingData()) {
                                 muResponse.status(responseToWrite.getStatus());
+                            }
+                            // A conditional retrieval has no response body, even if a resource or filter supplied one.
+                            // Do not derive Content-Length from that discarded entity.
+                            if (responseToWrite.getStatus() == 304) {
+                                responseToWrite.setEntity(null);
                             }
                             if (responseToWrite.hasEntity()) {
                                 responseToWrite.executeInterceptors(writerInterceptors,

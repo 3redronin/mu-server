@@ -12,6 +12,20 @@ import static org.junit.jupiter.api.Assertions.fail;
 public class ParameterizedHeaderWithValueTest {
 
     @Test
+    public void emptyParameterEntriesDoNotDiscardRealParametersOrQuotedSemicolons() {
+        List<ParameterizedHeaderWithValue> values = fromString("text/plain;;;, application/json; ;charset=UTF-8;;profile=\"one;two\";;");
+        assertThat(values, hasSize(2));
+        assertThat(values.get(0).value(), is("text/plain"));
+        assertThat(values.get(0).parameters().entrySet(), hasSize(0));
+        assertThat(values.get(1).value(), is("application/json"));
+        assertThat(values.get(1).parameter("charset"), is("UTF-8"));
+        assertThat(values.get(1).parameter("profile"), is("one;two"));
+        assertThat(values.get(1).parameters().entrySet(), hasSize(2));
+        org.junit.Assert.assertThrows(IllegalArgumentException.class, () -> fromString("text/plain;charset;"));
+    }
+
+
+    @Test
     public void valueOnlyIsSupported() {
         List<ParameterizedHeaderWithValue> list = fromString("text/html");
         assertThat(list, hasSize(1));

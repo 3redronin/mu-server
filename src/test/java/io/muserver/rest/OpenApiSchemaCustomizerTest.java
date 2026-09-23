@@ -195,7 +195,7 @@ public class OpenApiSchemaCustomizerTest {
             JSONObject json = new JSONObject(resp.body().string());
             JSONObject props = (JSONObject) json.query("/paths/~1blah/get/requestBody/content/application~1x-www-form-urlencoded/schema/properties");
             assertThat(props.query("/Umm/example"), equalTo("Ummmmmmmmmmmmmmmmm"));
-            assertThat(props.query("/itIsSomeEnum/nullable"), equalTo(false));
+            assertThat(props.getJSONObject("itIsSomeEnum").has("nullable"), equalTo(false));
         }
     }
 

@@ -8,7 +8,7 @@ import org.jspecify.annotations.Nullable;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.net.URI;
-import java.util.Collections;
+import java.util.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -21,12 +21,14 @@ class HtmlDocumentor {
 
     private final BufferedWriter writer;
     private final OpenAPIObject api;
+    private final DocumentationReferences references;
     private final String css;
     private final URI requestUri;
 
     HtmlDocumentor(BufferedWriter writer, OpenAPIObject api, String css, URI requestUri) {
         this.writer = writer;
         this.api = api;
+        this.references = new DocumentationReferences(api);
         this.css = css;
         this.requestUri = requestUri;
     }
@@ -93,11 +95,19 @@ class HtmlDocumentor {
         preamble.close();
 
 
+        for (Map.Entry<String, PathItemObject> entry : pathItems().entrySet()) {
+            if (entry.getValue().ref() != null) render("p", entry.getKey() + " Reference: " + entry.getValue().ref());
+        }
         El nav = new El("ul").open(singletonMap("class", "nav operation"));
-        List<TagObject> tags = api.tags() == null ? Collections.emptyList() : api.tags();
+        List<TagObject> tags = new ArrayList<>(api.tags() == null ? Collections.emptyList() : api.tags());
+        Set<String> tagNames = new HashSet<>();
+        for (TagObject tag : tags) tagNames.add(tag.name());
+        for (PathItemObject item : pathItems().values()) for (OperationObject operation : operations(item).values()) {
+            for (String name : operationTags(operation)) if (tagNames.add(name)) tags.add(TagObjectBuilder.tagObject().withName(name).build());
+        }
         for (TagObject tag : tags) {
             El li = new El("li").open();
-            new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(tag.name()))).content(tag.name()).close();
+            new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(tag.name()))).content(tag.summary() == null ? tag.name() : tag.summary()).close();
 
             El subNav = new El("ul").open(singletonMap("class", "subNav"));
             for (Map.Entry<String, PathItemObject> entry : pathItems().entrySet()) {
@@ -109,7 +119,7 @@ class HtmlDocumentor {
                     if (operationTags(operation).contains(tag.name())) {
 
                         El subNavLi = new El("li").open();
-                        new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(operation.operationId()))).content(method.toUpperCase(Locale.ROOT) + " " + url).close();
+                        new El("a").open(singletonMap("href", "#" + Mutils.htmlEncode(operation.operationId()))).content(method + " " + url).close();
                         subNavLi.close();
 
                     }
@@ -127,7 +137,7 @@ class HtmlDocumentor {
 
         for (TagObject tag : tags) {
             El tagContainer = new El("div").open(singletonMap("class", "tagContainer"));
-            new El("h2").open(singletonMap("id", Mutils.htmlEncode(tag.name()))).content(tag.name()).close();
+            new El("h2").open(singletonMap("id", Mutils.htmlEncode(tag.name()))).content(tag.summary() == null ? tag.name() : tag.summary()).close();
             renderIfValue("p", tag.description());
             renderExternalLinksParagraph(tag.externalDocs());
 
@@ -145,7 +155,7 @@ class HtmlDocumentor {
                         operationAttributes.put("class", "operation");
                         El operationDiv = new El("div").open(operationAttributes);
 
-                        El h3 = new El("h3").open().content(method.toUpperCase(Locale.ROOT) + " ");
+                        El h3 = new El("h3").open().content(method + " ");
                         String urlWithContext = baseUri + url;
                         new El("a").open(Collections.singletonMap("href", urlWithContext)).content(url).close();
                         h3.close();
@@ -160,8 +170,17 @@ class HtmlDocumentor {
                         StringBuilder queryString = new StringBuilder();
                         StringBuilder curlHeaders = new StringBuilder();
 
-                        RequestBodyObject requestBody = operation.requestBody();
-                        List<ParameterObject> parameters = operation.parameters() == null ? Collections.emptyList() : operation.parameters();
+                        RequestBodyObject requestBody = references.resolve(operation.requestBodyOrReferences(), RequestBodyObject.class);
+                        renderReference(operation.requestBodyOrReferences());
+                        Map<String, ParameterObject> effectiveParameters = new LinkedHashMap<>();
+                        for (List<ReferenceOr<ParameterObject>> level : Arrays.asList(item.parametersOrReferences(), operation.parametersOrReferences())) {
+                            if (level != null) for (ReferenceOr<ParameterObject> parameterRef : level) {
+                                renderReference(parameterRef);
+                                ParameterObject parameter = references.resolve(parameterRef, ParameterObject.class);
+                                if (parameter != null) effectiveParameters.put(parameter.in() + "\0" + parameter.name(), parameter);
+                            }
+                        }
+                        Collection<ParameterObject> parameters = effectiveParameters.values();
                         if (!parameters.isEmpty()) {
                             render("h4", "Parameters");
                             El table = new El("table").open(singletonMap("class", "parameterTable"));
@@ -182,20 +201,30 @@ class HtmlDocumentor {
                                 render("td", parameter.name());
                                 String type = parameter.in();
 
-                                if ("query".equals(type)) {
-                                    queryString.append(queryString.length() == 0 ? '?' : '&');
-                                    queryString.append(urlEncode(parameter.name())).append('=')
-                                        .append(urlEncode(bashValue(parameter.example())));
+                                SchemaObject schema = resolvedSchema(parameter.schema());
+                                Object sample = exampleValue(parameter.example(), parameter.examplesOrReferences(), schema);
+                                if ("querystring".equals(type)) {
+                                    sample = querystringExample(parameter);
+                                    if (sample instanceof String && !((String) sample).isEmpty()) {
+                                        queryString.append(queryString.length() == 0 ? '?' : '&').append(sample);
+                                    }
+                                } else if ("query".equals(type)) {
+                                    ExampleObject named = firstExample(parameter.examplesOrReferences());
+                                    if (named != null && named.serializedValue() != null) {
+                                        String serialized = named.serializedValue();
+                                        if (!serialized.isEmpty()) queryString.append(queryString.length() == 0 ? '?' : '&').append(serialized);
+                                    } else appendQuery(queryString, parameter, sample);
                                 } else if ("header".equals(type)) {
-                                    curlHeaders.append(" -H '").append(parameter.name()).append(": ")
-                                        .append(bashValue(parameter.example())).append('\'');
+                                    curlHeaders.append(" -H '").append(bashValue(parameter.name())).append(": ")
+                                        .append(bashValue(sample instanceof Collection ? joinSample((Collection<?>) sample, ",") : sample)).append('\'');
+                                } else if ("cookie".equals(type)) {
+                                    curlHeaders.append(" -H 'Cookie: ").append(bashValue(parameter.name())).append("=").append(bashValue(sample)).append('\'');
                                 }
 
-                                SchemaObject schema = parameter.schema();
                                 @Nullable Object defaultVal = null;
                                 @Nullable ExternalDocumentationObject externalDocs = null;
                                 if (schema != null) {
-                                    type += " - " + schema.type();
+                                    type += " - " + schemaType(schema);
                                     if (schema.format() != null) {
                                         type += " (" + schema.format() + ")";
                                     }
@@ -212,7 +241,7 @@ class HtmlDocumentor {
                                 }
                                 paramDesc.content(parameter.description());
 
-                                renderExamples(parameter.example(), parameter.examples(), defaultVal);
+                                renderExamples(sample, resolvedExamples(parameter.examplesOrReferences()), defaultVal);
                                 renderExternalLinksParagraph(externalDocs);
 
                                 paramDesc.close();
@@ -229,20 +258,27 @@ class HtmlDocumentor {
 
                             renderIfValue("p", requestBody.description());
 
-                            for (Map.Entry<String, MediaTypeObject> bodyEntry : requestBody.content().entrySet()) {
+                            for (Map.Entry<String, MediaTypeObject> bodyEntry : resolvedContent(requestBody.contentOrReferences()).entrySet()) {
                                 String mediaType = bodyEntry.getKey();
-                                MediaTypeObject value = bodyEntry.getValue();
+                                MediaTypeObject original = bodyEntry.getValue();
+                                MediaTypeObject value = original.toBuilder().withSchema(resolvedSchema(original.schema())).build();
+                                boolean curlAlternative = curlBody.length() == 0;
+                                boolean formEncoding = mediaType.equalsIgnoreCase(MediaType.MULTIPART_FORM_DATA) || mediaType.equalsIgnoreCase(MediaType.APPLICATION_FORM_URLENCODED);
                                 render("h5", mediaType);
 
-                                renderExamples(value.example(), value.examples(), value.schema() == null ? null : value.schema().defaultValue());
+                                renderExamples(exampleValue(value.example(), value.examplesOrReferences(), value.schema()), resolvedExamples(value.examplesOrReferences()), value.schema() == null ? null : value.schema().defaultValue());
+                                renderIfValue("p", value.schema() == null ? null : schemaType(value.schema()));
 
-                                String curlFormParam = (mediaType.equalsIgnoreCase(MediaType.MULTIPART_FORM_DATA)) ? "-F" : "-d";
-                                if (curlBody.length() == 0) {
-                                    curlBody = new StringBuilder(" -H 'content-type: " + mediaType + "'");
+                                ExampleObject namedExample = firstExample(value.examplesOrReferences());
+                                String serializedBody = namedExample == null ? null : namedExample.serializedValue();
+                                String curlFormParam = (mediaType.equalsIgnoreCase(MediaType.MULTIPART_FORM_DATA)) ? "-F" : "--data-urlencode";
+                                if (curlAlternative) {
+                                    curlBody = new StringBuilder(" -H 'content-type: " + bashValue(mediaType) + "'");
+                                    if (serializedBody != null) curlBody.append(" --data-binary '").append(bashValue(serializedBody)).append("'");
                                 }
 
-                                if (value.schema() == null || value.schema().properties() == null) {
-                                    curlBody.append(" --data '").append(bashValue(value.example())).append("'");
+                                if (!formEncoding || value.schema() == null || value.schema().properties() == null) {
+                                    if (curlAlternative && serializedBody == null) curlBody.append(" --data-binary '").append(bashValue(exampleValue(value.example(), value.examplesOrReferences(), value.schema()))).append("'");
                                     continue;
                                 }
 
@@ -261,11 +297,11 @@ class HtmlDocumentor {
                                 List<String> requiredParams = value.schema().required();
                                 for (Map.Entry<String, SchemaObject> props : value.schema().properties().entrySet()) {
                                     String formName = props.getKey();
-                                    SchemaObject schema = props.getValue();
+                                    SchemaObject schema = Objects.requireNonNull(resolvedSchema(props.getValue()));
                                     El row = new El("tr").open();
                                     render("td", formName);
 
-                                    @Nullable String type = schema.type();
+                                    @Nullable String type = schemaType(schema);
                                     if (schema.format() != null) {
                                         type += " (" + schema.format() + ")";
                                     }
@@ -279,10 +315,16 @@ class HtmlDocumentor {
                                         render("strong", "REQUIRED. ");
                                     }
                                     paramDesc.content(schema.description());
-                                    renderExamples(schema.example(), null, schema.defaultValue());
+                                    renderExamples(schemaExample(schema), null, schema.defaultValue());
 
 
-                                    curlBody.append(" ").append(curlFormParam).append(" '").append(urlEncode(formName)).append("=").append(bashValue(schema.example())).append("'");
+                                    if (curlAlternative && serializedBody == null) {
+                                        EncodingObject encoding = value.encoding() == null ? null : value.encoding().get(formName);
+                                        Object sample = schemaExample(schema);
+                                        if ("-F".equals(curlFormParam) && encoding != null && "application/octet-stream".equals(encoding.contentType()) && sample == null) sample = "@file.bin";
+                                        Collection<?> samples = sample instanceof Collection ? (Collection<?>) sample : Collections.singletonList(sample);
+                                        for (Object itemSample : samples) curlBody.append(" ").append(curlFormParam).append(" '").append(bashValue(formName)).append("=").append(bashValue(itemSample)).append("'");
+                                    }
 
                                     paramDesc.close();
                                     row.close();
@@ -296,7 +338,18 @@ class HtmlDocumentor {
                         }
 
                         String curlAccept = "";
-                        if (!operation.responses().httpStatusCodes().isEmpty()) {
+                        boolean streaming = false;
+                        Map<String, ResponseObject> responses = new LinkedHashMap<>();
+                        if (operation.responses() != null) {
+                            Map<String, ReferenceOr<ResponseObject>> values = new LinkedHashMap<>(operation.responses().httpStatusCodesOrReferences());
+                            if (operation.responses().defaultValueOrReferences() != null) values.put("default", operation.responses().defaultValueOrReferences());
+                            for (Map.Entry<String, ReferenceOr<ResponseObject>> response : values.entrySet()) {
+                                renderReference(response.getValue());
+                                ResponseObject resolved = references.resolve(response.getValue(), ResponseObject.class);
+                                if (resolved != null) responses.put(response.getKey(), resolved);
+                            }
+                        }
+                        if (!responses.isEmpty()) {
                             render("h4", "Responses");
 
 
@@ -313,16 +366,29 @@ class HtmlDocumentor {
                             El tbody = new El("tbody").open();
 
 
-                            for (Map.Entry<String, ResponseObject> respEntry : operation.responses().httpStatusCodes().entrySet()) {
+                            for (Map.Entry<String, ResponseObject> respEntry : responses.entrySet()) {
                                 El row = new El("tr").open();
                                 String code = respEntry.getKey();
                                 ResponseObject resp = respEntry.getValue();
                                 render("td", code);
-                                String contentTypes = resp.content() == null ? "" : String.join("\n", resp.content().keySet());
+                                String contentTypes = resp.contentOrReferences() == null ? "" : String.join("\n", resp.contentOrReferences().keySet());
                                 render("td", contentTypes);
-                                render("td", resp.description());
+                                El details = new El("td").open();
+                                render("p", resp.summary());
+                                render("p", resp.description());
+                                for (Map.Entry<String, MediaTypeObject> contentEntry : resolvedContent(resp.contentOrReferences()).entrySet()) {
+                                    MediaTypeObject media = contentEntry.getValue();
+                                    render("p", media.description());
+                                    if (media.itemSchema() != null) {
+                                        streaming = true;
+                                        render("p", "Parsed stream item (" + contentEntry.getKey() + ")");
+                                        render("pre", String.valueOf(resolvedSchema(media.itemSchema())));
+                                    }
+                                    renderExamples(media.example(), resolvedExamples(media.examplesOrReferences()), null);
+                                }
+                                details.close();
                                 if (curlAccept.isEmpty() && !contentTypes.isEmpty()) {
-                                    curlAccept = " -H 'accept: " + contentTypes.split("\n", 2)[0] + "'";
+                                    curlAccept = " -H 'accept: " + bashValue(contentTypes.split("\n", 2)[0]) + "'";
                                 }
 
 
@@ -336,8 +402,8 @@ class HtmlDocumentor {
                         render("h4", "Curl");
                         String sampleUrl = urlWithContext.replace("{", "(").replace("}", ")")
                             + queryString;
-                        render("code", "curl -is -X " + method.toUpperCase(Locale.ROOT) + curlHeaders + curlAccept +
-                            curlBody + " '" + requestUri.resolve(sampleUrl) + "'");
+                        render("code", "curl " + (streaming ? "-N " : "") + "-is -X '" + bashValue(method) + "'" + curlHeaders + curlAccept +
+                            curlBody + " '" + bashValue(requestUri.resolve(sampleUrl)) + "'");
 
 
                         operationDiv.close();
@@ -352,22 +418,159 @@ class HtmlDocumentor {
     }
 
     private Map<String, PathItemObject> pathItems() {
-        Map<String, PathItemObject> paths = api.paths().pathItemObjects();
-        return paths == null ? Collections.emptyMap() : paths;
+        Map<String, PathItemObject> paths = api.paths() == null ? null : api.paths().pathItemObjects();
+        Map<String, PathItemObject> resolved = new LinkedHashMap<>();
+        if (paths != null) paths.forEach((key, value) -> {
+            PathItemObject target = references.path(value);
+            resolved.put(key, target == null ? value : target);
+        });
+        return resolved;
     }
 
     private static Map<String, OperationObject> operations(PathItemObject item) {
-        Map<String, OperationObject> operations = item.operations();
-        return operations == null ? Collections.emptyMap() : operations;
+        Map<String, OperationObject> operations = new LinkedHashMap<>();
+        if (item.operations() != null) item.operations().forEach((method, operation) -> operations.put(method.toUpperCase(Locale.ROOT), operation));
+        if (item.additionalOperations() != null) operations.putAll(item.additionalOperations());
+        return operations;
     }
 
     private static List<String> operationTags(OperationObject operation) {
         List<String> tags = operation.tags();
-        return tags == null ? Collections.emptyList() : tags;
+        return tags == null || tags.isEmpty() ? Collections.singletonList("Operations") : tags;
     }
 
     private static String bashValue(@Nullable Object value) {
-        return value == null || "".equals(value) ? "" : value.toString().replace("'", "'\\''");
+        if (value == null || "".equals(value)) return "";
+        String text = value.toString();
+        if (value instanceof Map || value instanceof Collection || value.getClass().isArray() || value == JsonNull.INSTANCE) {
+            java.io.StringWriter writer = new java.io.StringWriter();
+            try { Jsonizer.writeValue(writer, value); } catch (IOException e) { throw new IllegalStateException(e); }
+            text = writer.toString();
+        }
+        return text.replace("'", "'\\''");
+    }
+
+    private @Nullable Object exampleValue(@Nullable Object example,
+                                          @Nullable Map<String, ReferenceOr<ExampleObject>> examples,
+                                          @Nullable SchemaObject schema) throws IOException {
+        if (example != null) return example;
+        ExampleObject candidate = firstExample(examples);
+        if (candidate != null) {
+            if (candidate.serializedValue() != null) return candidate.serializedValue();
+            if (candidate.dataValue() != null) return candidate.dataValue();
+            return candidate.value();
+        }
+        return examples == null ? schemaExample(schema) : null;
+    }
+
+    private @Nullable ExampleObject firstExample(@Nullable Map<String, ReferenceOr<ExampleObject>> examples) throws IOException {
+        Map<String, ExampleObject> resolved = resolvedExamples(examples);
+        if (resolved != null) for (ExampleObject candidate : resolved.values()) {
+            if (candidate.serializedValue() != null || candidate.dataValue() != null || candidate.value() != null) return candidate;
+        }
+        return null;
+    }
+
+    private @Nullable Object querystringExample(ParameterObject parameter) throws IOException {
+        if (parameter.example() != null) return parameter.example();
+        String parameterExample = serializedExample(parameter.examplesOrReferences());
+        if (parameterExample != null) return parameterExample;
+        for (MediaTypeObject media : resolvedContent(parameter.contentOrReferences()).values()) {
+            if (media.example() != null) return media.example();
+            String mediaExample = serializedExample(media.examplesOrReferences());
+            if (mediaExample != null) return mediaExample;
+            return schemaExample(resolvedSchema(media.schema()));
+        }
+        return null;
+    }
+
+    private @Nullable String serializedExample(@Nullable Map<String, ReferenceOr<ExampleObject>> values) throws IOException {
+        Map<String, ExampleObject> examples = resolvedExamples(values);
+        if (examples != null) for (ExampleObject example : examples.values()) {
+            if (example.serializedValue() != null) return example.serializedValue();
+            if (example.value() instanceof String) return (String) example.value();
+            if (example.dataValue() instanceof String) return (String) example.dataValue();
+        }
+        return null;
+    }
+
+    private static void appendQuery(StringBuilder query, ParameterObject parameter, @Nullable Object sample) {
+        String style = parameter.style() == null ? "form" : parameter.style();
+        if (sample instanceof Map && "deepObject".equals(style)) {
+            for (Map.Entry<?, ?> entry : ((Map<?, ?>) sample).entrySet()) appendQueryValue(query, parameter.name() + "[" + entry.getKey() + "]", entry.getValue());
+        } else if (sample instanceof Collection && parameter.explode()) {
+            for (Object item : (Collection<?>) sample) appendQueryValue(query, parameter.name(), item);
+        } else {
+            String delimiter = "spaceDelimited".equals(style) ? " " : "pipeDelimited".equals(style) ? "|" : ",";
+            appendQueryValue(query, parameter.name(), sample instanceof Collection ? joinSample((Collection<?>) sample, delimiter) : sample);
+        }
+    }
+
+    private static String joinSample(Collection<?> sample, String delimiter) {
+        List<String> values = new ArrayList<>();
+        for (Object value : sample) values.add(String.valueOf(value));
+        return String.join(delimiter, values);
+    }
+
+    private static void appendQueryValue(StringBuilder query, String name, @Nullable Object value) {
+        query.append(query.length() == 0 ? '?' : '&').append(urlEncode(name)).append('=')
+            .append(urlEncode(value == null ? "" : value.toString()));
+    }
+
+    private Map<String, MediaTypeObject> resolvedContent(@Nullable Map<String, ReferenceOr<MediaTypeObject>> content) throws IOException {
+        Map<String, MediaTypeObject> result = new LinkedHashMap<>();
+        if (content != null) for (Map.Entry<String, ReferenceOr<MediaTypeObject>> entry : content.entrySet()) {
+            renderReference(entry.getValue());
+            MediaTypeObject value = references.resolve(entry.getValue(), MediaTypeObject.class);
+            if (value != null) result.put(entry.getKey(), value);
+        }
+        return result;
+    }
+
+    private @Nullable SchemaObject resolvedSchema(@Nullable SchemaObject schema) {
+        SchemaObject resolved = references.schema(schema);
+        return resolved == null ? schema : resolved;
+    }
+
+    private static String schemaType(SchemaObject schema) {
+        if (schema.booleanValue() != null) return schema.booleanValue() ? "any value" : "no value";
+        if (schema.ref() != null) return "Reference: " + schema.ref();
+        return schema.types() == null ? "any value" : String.join(" | ", schema.types());
+    }
+
+    private static @Nullable Object schemaExample(@Nullable SchemaObject schema) {
+        if (schema == null) return null;
+        if (schema.examples() != null && !schema.examples().isEmpty()) return schema.examples().get(0);
+        if (schema.example() != null) return schema.example();
+        if (schema.properties() != null) {
+            Map<String, Object> example = new LinkedHashMap<>();
+            schema.properties().forEach((key, value) -> {
+                Object sample = schemaExample(value);
+                if (sample != null) example.put(key, sample);
+            });
+            return example;
+        }
+        return schema.defaultValue();
+    }
+
+    private void renderReference(@Nullable ReferenceOr<?> value) throws IOException {
+        if (value != null && value.isReference()) {
+            ReferenceObject ref = Objects.requireNonNull(value.reference());
+            render("p", "Reference: " + ref.ref());
+            renderIfValue("p", ref.summary());
+            renderIfValue("p", ref.description());
+        }
+    }
+
+    private @Nullable Map<String, ExampleObject> resolvedExamples(@Nullable Map<String, ReferenceOr<ExampleObject>> values) throws IOException {
+        if (values == null) return null;
+        Map<String, ExampleObject> result = new LinkedHashMap<>();
+        for (Map.Entry<String, ReferenceOr<ExampleObject>> entry : values.entrySet()) {
+            renderReference(entry.getValue());
+            ExampleObject example = references.resolve(entry.getValue(), ExampleObject.class);
+            if (example != null) result.put(entry.getKey(), example);
+        }
+        return result;
     }
 
     private void renderExternalLinksParagraph(@Nullable ExternalDocumentationObject externalDocs) throws IOException {
@@ -381,7 +584,7 @@ class HtmlDocumentor {
     }
 
     private void renderExamples(@Nullable Object example, @Nullable Map<String, ExampleObject> examples, @Nullable Object defaultVal) throws IOException {
-        if (example != null) {
+        if (example != null && examples == null) {
             El div = new El("div").open().content("Example: ");
             render("code", example.toString());
             div.close();
@@ -392,6 +595,8 @@ class HtmlDocumentor {
                 new El("code").open().content(exampleEntry.getKey()).close();
                 ExampleObject ex = exampleEntry.getValue();
                 new El("span").open().content(" ", ex.summary(), " ", ex.description()).close();
+                if (ex.dataValue() != null) { render("p", "Parsed value"); render("pre", String.valueOf(ex.dataValue())); }
+                if (ex.serializedValue() != null) { render("p", "Serialized value"); render("pre", ex.serializedValue()); }
                 new El("pre").open().content(ex.value()).close();
 
                 div.close();

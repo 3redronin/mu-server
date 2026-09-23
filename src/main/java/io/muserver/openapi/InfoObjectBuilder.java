@@ -1,5 +1,7 @@
 package io.muserver.openapi;
 
+import java.util.Map;
+
 import org.jspecify.annotations.Nullable;
 
 import java.net.URI;
@@ -9,6 +11,8 @@ import java.net.URI;
  * in editing or documentation generation tools for convenience.
  */
 public class InfoObjectBuilder {
+    private @Nullable String summary;
+    private @Nullable Map<String, Object> extensions;
     private String title = "API Documentation";
     private @Nullable String description;
     private @Nullable URI termsOfService;
@@ -17,15 +21,9 @@ public class InfoObjectBuilder {
     private String version = "1.0";
 
     /**
-     * Creates an empty info object builder.
-     */
-    public InfoObjectBuilder() {
-    }
-
-    /**
-     * Sets the API title.
      *
      * @param title <strong>REQUIRED</strong>. The title of the application. Default value is <code>API Documentation</code>
+     *
      * @return The current builder
      */
     public InfoObjectBuilder withTitle(String title) {
@@ -34,10 +32,10 @@ public class InfoObjectBuilder {
     }
 
     /**
-     * Sets the API description.
      *
      * @param description A short description of the application. <a href="http://spec.commonmark.org/">CommonMark syntax</a>
      *                    MAY be used for rich text representation.
+     *
      * @return The current builder
      */
     public InfoObjectBuilder withDescription(@Nullable String description) {
@@ -46,9 +44,9 @@ public class InfoObjectBuilder {
     }
 
     /**
-     * Sets the terms of service URI.
      *
      * @param termsOfService A URL to the Terms of Service for the API.
+     *
      * @return The current builder
      */
     public InfoObjectBuilder withTermsOfService(@Nullable URI termsOfService) {
@@ -57,9 +55,9 @@ public class InfoObjectBuilder {
     }
 
     /**
-     * Sets the API contact details.
      *
      * @param contact The contact information for the exposed API.
+     *
      * @return The current builder
      */
     public InfoObjectBuilder withContact(@Nullable ContactObject contact) {
@@ -68,9 +66,9 @@ public class InfoObjectBuilder {
     }
 
     /**
-     * Sets the API license details.
      *
      * @param license The license information for the exposed API.
+     *
      * @return The current builder
      */
     public InfoObjectBuilder withLicense(@Nullable LicenseObject license) {
@@ -79,9 +77,9 @@ public class InfoObjectBuilder {
     }
 
     /**
-     * Sets the OpenAPI document version string.
      *
      * @param version <strong>REQUIRED</strong>. The version of the OpenAPI document. Default value is <code>1.0</code>
+     *
      * @return The current builder
      */
     public InfoObjectBuilder withVersion(String version) {
@@ -90,12 +88,10 @@ public class InfoObjectBuilder {
     }
 
     /**
-     * Builds an info object from the configured values.
-     *
      * @return A new object
      */
     public InfoObject build() {
-        return new InfoObject(title, description, termsOfService, contact, license, version);
+        return new InfoObject(title, description, termsOfService, contact, license, version, summary, extensions);
     }
 
     /**
@@ -105,5 +101,24 @@ public class InfoObjectBuilder {
      */
     public static InfoObjectBuilder infoObject() {
         return new InfoObjectBuilder();
+    }
+    /**
+     * @param value the summary value
+     * @return this builder */
+    public InfoObjectBuilder withSummary(@Nullable String value) { this.summary = value; return this; }
+    /**
+     * @param value the extensions value
+     * @return this builder */
+    public InfoObjectBuilder withExtensions(@Nullable Map<String, Object> value) { this.extensions = value; return this; }
+    /**
+     * @param name an x- extension name
+     * @param value its JSON value
+     * @return this builder */
+    public InfoObjectBuilder withExtension(String name, @Nullable Object value) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>();
+        if (extensions != null) copy.putAll(extensions);
+        Extensions.put(copy, name, value);
+        extensions = copy;
+        return this;
     }
 }

@@ -6,7 +6,7 @@
 
     <groupId>io.muserver</groupId>
     <artifactId>mu-server</artifactId>
-    <version>0.0.4-SNAPSHOT</version>
+    <version>0.0.3-SNAPSHOT</version>
 
     <name>mu-server</name>
     <description>A simple but powerful web server library</description>
@@ -15,15 +15,13 @@
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <error-prone.version>2.50.0</error-prone.version>
-        <!-- Unused in mu4; retained so Netty version updates merge cleanly from master. -->
         <netty.version.4.1>4.1.137.Final</netty.version.4.1>
         <netty.version.4.2>4.2.17.Final</netty.version.4.2>
         <netty.version>${netty.version.4.1}</netty.version>
         <netty.codec.artifactId>netty-codec</netty.codec.artifactId>
         <nullaway.version>0.13.8</nullaway.version>
-        <slf4j.version>2.0.16</slf4j.version>
-        <jetty.version>9.4.57.v20241219</jetty.version>
-        <jdk.version>11</jdk.version>
+        <slf4j.version>2.0.18</slf4j.version>
+        <jetty.version>9.4.58.v20250814</jetty.version>
     </properties>
 
     <scm>
@@ -56,6 +54,46 @@
         </dependency>
 
         <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-transport</artifactId>
+            <version>${netty.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-handler</artifactId>
+            <version>${netty.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-http</artifactId>
+            <version>${netty.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-buffer</artifactId>
+            <version>${netty.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
+            <version>${netty.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>${netty.codec.artifactId}</artifactId>
+            <version>${netty.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-http2</artifactId>
+            <version>${netty.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-codec-haproxy</artifactId>
+            <version>${netty.version}</version>
+        </dependency>
+        <dependency>
             <groupId>jakarta.ws.rs</groupId>
             <artifactId>jakarta.ws.rs-api</artifactId>
             <version>3.1.0</version>
@@ -72,24 +110,15 @@
         </dependency>
 
         <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter</artifactId>
-            <version>5.11.0</version>
+            <groupId>com.networknt</groupId>
+            <artifactId>json-schema-validator</artifactId>
+            <version>2.0.7</version>
             <scope>test</scope>
+            <exclusions>
+                <exclusion><groupId>org.slf4j</groupId><artifactId>slf4j-api</artifactId></exclusion>
+                <exclusion><groupId>com.fasterxml.jackson.dataformat</groupId><artifactId>jackson-dataformat-yaml</artifactId></exclusion>
+            </exclusions>
         </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-            <version>5.11.0</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-params</artifactId>
-            <version>5.11.0</version>
-            <scope>test</scope>
-        </dependency>
-
         <dependency>
             <groupId>org.hamcrest</groupId>
             <artifactId>hamcrest</artifactId>
@@ -97,8 +126,26 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.13.2</version>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.hamcrest</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
             <groupId>org.eclipse.jetty</groupId>
             <artifactId>jetty-client</artifactId>
+            <version>${jetty.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-http</artifactId>
             <version>${jetty.version}</version>
             <scope>test</scope>
         </dependency>
@@ -138,25 +185,19 @@
         <dependency>
             <groupId>com.squareup.okio</groupId>
             <artifactId>okio</artifactId>
-            <version>3.9.0</version>
+            <version>3.17.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.squareup.okio</groupId>
             <artifactId>okio-jvm</artifactId>
-            <version>3.9.0</version>
+            <version>3.17.0</version>
             <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
-            <version>20250517</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.yaml</groupId>
-            <artifactId>snakeyaml</artifactId>
-            <version>2.6</version>
+            <version>20251224</version>
             <scope>test</scope>
         </dependency>
         <dependency>
@@ -177,20 +218,13 @@
                 </exclusion>
             </exclusions>
         </dependency>
-        <dependency>
-            <groupId>com.github.luben</groupId>
-            <artifactId>zstd-jni</artifactId>
-            <version>1.5.6-5</version>
-            <scope>test</scope>
-        </dependency>
-
     </dependencies>
 
     <inceptionYear>2017</inceptionYear>
     <licenses>
         <license>
             <name>MIT License</name>
-            <url>https://opensource.org/licenses/mit-license.php</url>
+            <url>https://opensource.org/license/mit</url>
             <distribution>repo</distribution>
         </license>
     </licenses>
@@ -205,37 +239,14 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.6</version>
-                <dependencies>
-                    <dependency>
-                        <groupId>me.fabriciorby</groupId>
-                        <artifactId>maven-surefire-junit5-tree-reporter</artifactId>
-                        <version>1.5.1</version>
-                    </dependency>
-                </dependencies>
-                <configuration>
-                    <consoleOutputReporter>
-                        <disable>true</disable>
-                    </consoleOutputReporter>
-                    <statelessTestsetInfoReporter
-                        implementation="org.apache.maven.plugin.surefire.extensions.junit5.JUnit5StatelessTestsetInfoTreeReporter">
-                        <theme>UNICODE</theme>
-                        <printStacktraceOnError>true</printStacktraceOnError>
-                        <printStacktraceOnFailure>true</printStacktraceOnFailure>
-                        <printStdoutOnError>true</printStdoutOnError>
-                        <printStdoutOnFailure>true</printStdoutOnFailure>
-                        <printStdoutOnSuccess>false</printStdoutOnSuccess>
-                        <printStderrOnError>true</printStderrOnError>
-                        <printStderrOnFailure>true</printStderrOnFailure>
-                        <printStderrOnSuccess>false</printStderrOnSuccess>
-                    </statelessTestsetInfoReporter>
-                </configuration>
             </plugin>
             <plugin>
                 <groupId>com.github.danielflower.mavenplugins</groupId>
                 <artifactId>multi-module-maven-release-plugin</artifactId>
-                <version>3.8.5</version>
+                <version>3.8.4</version>
                 <configuration>
                     <releaseProfiles>
                         <releaseProfile>release</releaseProfile>
@@ -244,8 +255,23 @@
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.15.0</version>
+                <configuration>
+                    <source>11</source>
+                    <target>11</target>
+                    <release>11</release>
+                    <failOnWarning>true</failOnWarning>
+                    <showWarnings>true</showWarnings>
+                    <compilerArgs>
+                        <arg>-Xlint:-options</arg>
+                    </compilerArgs>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
-                <version>3.8.0</version>
+                <version>3.6.1</version>
                 <executions>
                     <execution>
                         <id>analyze</id>
@@ -253,9 +279,13 @@
                             <goal>analyze-only</goal>
                         </goals>
                         <configuration>
-                            <failOnWarning>false</failOnWarning>
+                            <failOnWarning>true</failOnWarning>
                             <ignoreNonCompile>true</ignoreNonCompile>
                             <outputXML>true</outputXML>
+                            <ignoredUsedUndeclaredDependencies>
+                                <!-- Only configures the validator's parser; the validator owns its Jackson version. -->
+                                <ignoredUsedUndeclaredDependency>com.fasterxml.jackson.core:jackson-databind</ignoredUsedUndeclaredDependency>
+                            </ignoredUsedUndeclaredDependencies>
                         </configuration>
                     </execution>
                 </executions>
@@ -263,13 +293,10 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-javadoc-plugin</artifactId>
-                <version>3.12.0</version>
+                <version>3.6.3</version>
                 <configuration>
-                    <source>${jdk.version}</source>
+                    <source>11</source>
                     <detectJavaApiLink>false</detectJavaApiLink>
-                    <doclint>all</doclint>
-                    <excludePackageNames>io.muserver.internal</excludePackageNames>
-                    <failOnWarnings>true</failOnWarnings>
                 </configuration>
                 <executions>
                     <execution>
@@ -277,6 +304,9 @@
                         <goals>
                             <goal>jar</goal>
                         </goals>
+                        <configuration>
+                            <failOnWarnings>false</failOnWarnings>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
@@ -293,78 +323,42 @@
                     </execution>
                 </executions>
             </plugin>
-<!--            <plugin>-->
-<!--                <groupId>org.apache.maven.plugins</groupId>-->
-<!--                <artifactId>maven-enforcer-plugin</artifactId>-->
-<!--                <version>3.4.1</version>-->
-<!--                <executions>-->
-<!--                    <execution>-->
-<!--                        <id>enforce-versions</id>-->
-<!--                        <goals>-->
-<!--                            <goal>enforce</goal>-->
-<!--                        </goals>-->
-<!--                        <configuration>-->
-<!--                            <rules>-->
-<!--                                <bannedDependencies>-->
-<!--                                    <excludes>-->
-<!--                                        <exclude>*:*:*:*:runtime</exclude>-->
-<!--                                        <exclude>*:*:*:*:compile</exclude>-->
-<!--                                    </excludes>-->
-<!--                                    <includes>-->
-<!--                                        <include>org.slf4j:slf4j-api</include>-->
-<!--                                        <include>jakarta.ws.rs:jakarta.ws.rs-api</include>-->
-<!--                                    </includes>-->
-<!--                                </bannedDependencies>-->
-<!--                                <dependencyConvergence/>-->
-<!--                                <requireMavenVersion>-->
-<!--                                    <version>3.0.4</version>-->
-<!--                                </requireMavenVersion>-->
-<!--                                <requireJavaVersion>-->
-<!--                                    <version>1.11.0</version>-->
-<!--                                </requireJavaVersion>-->
-<!--                            </rules>-->
-<!--                        </configuration>-->
-<!--                    </execution>-->
-<!--                </executions>-->
-<!--            </plugin>-->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.15.0</version>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.4.1</version>
                 <executions>
                     <execution>
-                        <id>default-compile</id>
-                        <phase>none</phase>
-                    </execution>
-                    <execution>
-                        <id>default-testCompile</id>
-                        <phase>none</phase>
-                    </execution>
-                    <execution>
-                        <id>compile</id>
-                        <phase>compile</phase>
+                        <id>enforce-versions</id>
                         <goals>
-                            <goal>compile</goal>
+                            <goal>enforce</goal>
                         </goals>
-                    </execution>
-                    <execution>
-                        <id>testCompile</id>
-                        <phase>test-compile</phase>
-                        <goals>
-                            <goal>testCompile</goal>
-                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <excludes>
+                                        <exclude>*:*:*:*:runtime</exclude>
+                                        <exclude>*:*:*:*:compile</exclude>
+                                    </excludes>
+                                    <includes>
+                                        <include>org.slf4j:slf4j-api</include>
+                                        <include>jakarta.ws.rs:jakarta.ws.rs-api</include>
+                                        <include>jakarta.annotation:jakarta.annotation-api</include>
+                                        <include>io.netty:*</include>
+                                        <include>org.jspecify:jspecify</include>
+                                    </includes>
+                                </bannedDependencies>
+                                <dependencyConvergence/>
+                                <requireMavenVersion>
+                                    <version>3.0.4</version>
+                                </requireMavenVersion>
+                                <requireJavaVersion>
+                                    <version>11</version>
+                                </requireJavaVersion>
+                            </rules>
+                        </configuration>
                     </execution>
                 </executions>
-                <configuration>
-                    <source>${jdk.version}</source>
-                    <target>${jdk.version}</target>
-                    <release>${jdk.version}</release>
-                    <failOnWarning>true</failOnWarning>
-                    <showWarnings>true</showWarnings>
-                    <compilerArgs>
-                        <arg>-Xlint:-options</arg>
-                    </compilerArgs>
-                </configuration>
             </plugin>
         </plugins>
     </build>
@@ -379,7 +373,7 @@
                         <artifactId>maven-compiler-plugin</artifactId>
                         <executions>
                             <execution>
-                                <id>testCompile</id>
+                                <id>default-testCompile</id>
                                 <configuration>
                                     <!-- Keep NullAway on production code; tests intentionally exercise null contracts and lifecycle setup. -->
                                     <compilerArgs combine.self="override">
@@ -436,6 +430,20 @@
                     </plugin>
                 </plugins>
             </build>
+        </profile>
+        <profile>
+            <id>netty-4.1</id>
+            <properties>
+                <netty.version>${netty.version.4.1}</netty.version>
+                <netty.codec.artifactId>netty-codec</netty.codec.artifactId>
+            </properties>
+        </profile>
+        <profile>
+            <id>netty-4.2</id>
+            <properties>
+                <netty.version>${netty.version.4.2}</netty.version>
+                <netty.codec.artifactId>netty-codec-base</netty.codec.artifactId>
+            </properties>
         </profile>
         <profile>
             <id>release</id>

@@ -117,6 +117,8 @@ public class ParameterizedHeaderWithValue {
                     if (c == ',' && buffer.length() == 0) {
                         i++; // a semicolon without a parameter, like "something;"
                         break headerValueLoop;
+                    } else if (c == ';' && buffer.length() == 0) {
+                        // Empty parameter entries are permitted by RFC 9110 section 5.6.6.
                     } else if (c == '=') {
                         paramName = buffer.toString();
                         buffer.setLength(0);

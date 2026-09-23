@@ -137,6 +137,13 @@ class Http1Connection extends BaseHttpConnection {
                 URI serverUri = creator.uri().resolve(relativeUrl);
                 URI requestUri = Headtils.getUri(log, request.headers(), relativeUrl, serverUri);
                 Method method = java.util.Objects.requireNonNull(request.getMethod(), "No HTTP method was parsed");
+                if (rejectException == null) {
+                    try {
+                        QueryRequestValidation.validate(method, request.headers());
+                    } catch (InvalidHttpRequestException e) {
+                        rejectException = e;
+                    }
+                }
                 HttpVersion httpVersion = java.util.Objects.requireNonNull(request.getHttpVersion(), "No HTTP version was parsed");
                 BodySize bodySize = java.util.Objects.requireNonNull(request.getBodySize(), "No body size was parsed");
                 InputStream requestBody = BodySize.NONE.equals(bodySize) ? EmptyInputStream.INSTANCE : new Http1BodyStream(requestParser, server.maxRequestBodySize());

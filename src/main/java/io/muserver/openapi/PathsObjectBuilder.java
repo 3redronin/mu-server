@@ -12,16 +12,10 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * ACL constraints.</p>
  */
 public class PathsObjectBuilder {
+    private @Nullable Map<String, Object> extensions;
     private @Nullable Map<String, PathItemObject> pathItemObjects;
 
     /**
-     * Creates an empty paths object builder.
-     */
-    public PathsObjectBuilder() {
-    }
-
-    /**
-     * Sets the path-item mappings for the API.
      *
      * @param pathItemObjects A relative path to an individual endpoint. The field name MUST begin with a slash.
      *                        The path is <strong>appended</strong> (no relative URL resolution) to the expanded
@@ -30,6 +24,7 @@ public class PathsObjectBuilder {
      *                        paths would be matched before their templated counterparts. Templated paths with the
      *                        same hierarchy but different templated names MUST NOT exist as they are identical.
      *                        In case of ambiguous matching, it's up to the tooling to decide which one to use.
+     *
      * @return The current builder
      */
     public PathsObjectBuilder withPathItemObjects(@Nullable Map<String, PathItemObject> pathItemObjects) {
@@ -38,12 +33,10 @@ public class PathsObjectBuilder {
     }
 
     /**
-     * Builds a paths object from the configured mappings.
-     *
      * @return A new object
      */
     public PathsObject build() {
-        return new PathsObject(immutable(pathItemObjects));
+        return new PathsObject(immutable(pathItemObjects), extensions);
     }
 
     /**
@@ -53,5 +46,20 @@ public class PathsObjectBuilder {
      */
     public static PathsObjectBuilder pathsObject() {
         return new PathsObjectBuilder();
+    }
+    /**
+     * @param value the extensions value
+     * @return this builder */
+    public PathsObjectBuilder withExtensions(@Nullable Map<String, Object> value) { this.extensions = value; return this; }
+    /**
+     * @param name an x- extension name
+     * @param value its JSON value
+     * @return this builder */
+    public PathsObjectBuilder withExtension(String name, @Nullable Object value) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>();
+        if (extensions != null) copy.putAll(extensions);
+        Extensions.put(copy, name, value);
+        extensions = copy;
+        return this;
     }
 }

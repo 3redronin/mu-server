@@ -250,16 +250,16 @@ public class OpenApiDocumentorTest {
                 .getJSONObject("properties");
 
             JSONObject oneThing = params.getJSONObject("oneThing");
-            assertThat(oneThing.getString("type"), is("string"));
-            assertThat(oneThing.getString("format"), is("binary"));
+            assertThat(oneThing.has("type"), is(false));
+            assertThat(oneThing.has("format"), is(false));
             assertThat(oneThing.has("description"), is(false));
 
             JSONObject images = params.getJSONObject("images");
             assertThat(images.getString("type"), is("array"));
             assertThat(images.getString("description"), is("The list of images"));
             JSONObject items = images.getJSONObject("items");
-            assertThat(items.getString("type"), is("string"));
-            assertThat(items.getString("format"), is("binary"));
+            assertThat(items.has("type"), is(false));
+            assertThat(items.has("format"), is(false));
         }
     }
 
@@ -304,7 +304,7 @@ public class OpenApiDocumentorTest {
                 JSONObject intNoDefault = params.getJSONObject(0);
                 assertThat(intNoDefault.getString("name"), is("intNoDefault"));
                 assertThat(intNoDefault.getJSONObject("schema").has("default"), is(false));
-                assertThat(intNoDefault.getBoolean("required"), is(true));
+                assertThat(intNoDefault.getBoolean("required"), is(false));
 
                 JSONObject intWithDefault = params.getJSONObject(1);
                 assertThat(intWithDefault.getString("name"), is("intWithDefault"));
@@ -360,7 +360,7 @@ public class OpenApiDocumentorTest {
             JSONObject params = schema
                 .getJSONObject("properties");
 
-            assertThat(schema.getJSONArray("required").toList(), equalTo(Collections.singletonList("intNoDefault")));
+            assertThat(schema.has("required"), is(false));
 
             JSONObject intNoDefault = params.getJSONObject("intNoDefault");
             assertThat(intNoDefault.has("default"), is(false));
@@ -447,15 +447,15 @@ public class OpenApiDocumentorTest {
             assertThat(content.keySet(), hasSize(4));
 
             JSONObject image = content.getJSONObject("image/*").getJSONObject("schema");
-            assertThat(image.keySet(), hasSize(5));
-            assertThat(image.getBoolean("nullable"), is(true));
+            assertThat(image.keySet(), hasSize(2));
+            assertThat(image.has("nullable"), is(false));
             assertThat(image.getString("title"), is("Image"));
             assertThat(image.getString("description"), is("Any kind of image"));
-            assertThat(image.getString("type"), is("string"));
-            assertThat(image.getString("format"), is("binary"));
+            assertThat(image.has("type"), is(false));
+            assertThat(image.has("format"), is(false));
 
             JSONObject appJson = content.getJSONObject("application/json").getJSONObject("schema");
-            assertThat(appJson.keySet(), hasSize(2));
+            assertThat(appJson.keySet(), hasSize(3));
             assertThat(appJson.getString("title"), is("An json in a format"));
             assertThat(appJson.getString("type"), is("string"));
 
@@ -586,7 +586,7 @@ public class OpenApiDocumentorTest {
                 assertThat(id3.keySet(), hasSize(3));
                 assertThat(id3.getString("type"), is("integer"));
                 assertThat(id3.getString("format"), is("int32"));
-                assertThat(id3.getBoolean("nullable"), is(true));
+                assertThat(id3.has("nullable"), is(false));
             }
         }
     }
@@ -639,10 +639,10 @@ public class OpenApiDocumentorTest {
 
                 JSONObject optThing = params.getJSONObject(1);
                 JSONObject optThingSchema = optThing.getJSONObject("schema");
-                assertThat(optThingSchema.getBoolean("nullable"), is(true));
+                assertThat(optThingSchema.has("nullable"), is(false));
                 assertThat(optThingSchema.getString("type"), is("string"));
                 assertThat(optThingSchema.getJSONArray("enum").toList(),
-                    contains(null, Thing.THING_ONE.name(), Thing.THING_TWO.name()));
+                    contains(Thing.THING_ONE.name(), Thing.THING_TWO.name()));
 
                 JSONObject things = params.getJSONObject(2);
                 assertThat(things.getBoolean("required"), is(true));
@@ -658,7 +658,7 @@ public class OpenApiDocumentorTest {
                 assertThat(optThings.getBoolean("required"), is(false));
                 JSONObject optThingsSchema = optThings.getJSONObject("schema");
                 assertThat(optThingsSchema.getString("type"), is("array"));
-                assertThat(optThingsSchema.getBoolean("nullable"), is(true));
+                assertThat(optThingsSchema.has("nullable"), is(false));
                 JSONObject optThingsItems = optThingsSchema.getJSONObject("items");
                 assertThat(optThingsItems.opt("nullable"), is(nullValue()));
                 assertThat(optThingsItems.getString("type"), is("string"));

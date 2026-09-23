@@ -41,4 +41,9 @@ public class SecurityRequirementObject implements JsonWriter {
     public Map<String, List<String>> requirements() {
         return requirements;
     }
+    /** @return a builder preserving all fields and extensions */
+    public SecurityRequirementObjectBuilder toBuilder() {
+        return new SecurityRequirementObjectBuilder()
+            .withRequirements(requirements);
+    }
 }

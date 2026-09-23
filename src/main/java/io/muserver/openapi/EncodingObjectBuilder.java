@@ -10,20 +10,17 @@ import static io.muserver.openapi.OpenApiUtils.immutable;
  * A single encoding definition applied to a single schema property.
  */
 public class EncodingObjectBuilder {
+    private @Nullable Map<String, EncodingObject> encoding;
+    private java.util.@Nullable List<EncodingObject> prefixEncoding;
+    private @Nullable EncodingObject itemEncoding;
+    private @Nullable Map<String, Object> extensions;
     private @Nullable String contentType;
-    private @Nullable Map<String, HeaderObject> headers;
+    private @Nullable Map<String, ReferenceOr<HeaderObject>> headers;
     private @Nullable String style;
     private @Nullable Boolean explode;
     private @Nullable Boolean allowReserved;
 
     /**
-     * Creates an empty encoding builder.
-     */
-    public EncodingObjectBuilder() {
-    }
-
-    /**
-     * Sets the content type used for encoding the property.
      *
      * @param contentType The Content-Type for encoding a specific property. Default value depends on the property type:
      *                    for <code>string</code> with <code>format</code> being <code>binary</code> – <code>application/octet-stream</code>;
@@ -31,6 +28,7 @@ public class EncodingObjectBuilder {
      *                    for <code>array</code> – the default is defined based on the inner type. The value can be a specific media
      *                    type (e.g. <code>application/json</code>), a wildcard media type (e.g. <code>image/*</code>), or a
      *                    comma-separated list of the two types.
+     *
      * @return The current builder
      */
     public EncodingObjectBuilder withContentType(@Nullable String contentType) {
@@ -39,25 +37,25 @@ public class EncodingObjectBuilder {
     }
 
     /**
-     * Sets additional headers for the encoding.
      *
      * @param headers A map allowing additional information to be provided as headers, for example <code>Content-Disposition</code>.
      *                <code>Content-Type</code> is described separately and SHALL be ignored in this section. This property SHALL
      *                be ignored if the request body media type is not a <code>multipart</code>.
+     *
      * @return The current builder
      */
     public EncodingObjectBuilder withHeaders(@Nullable Map<String, HeaderObject> headers) {
-        this.headers = headers;
+        this.headers = ReferenceValues.inline(headers);
         return this;
     }
 
     /**
-     * Sets the serialization style for the property.
      *
      * @param style Describes how a specific property value will be serialized depending on its type.
      *              See {@link ParameterObjectBuilder#withStyle(String)} for details on the <code>style</code> property.
      *              The behavior follows the same values as <code>query</code> parameters, including default values.
      *              This property SHALL be ignored if the request body media type is not <code>application/x-www-form-urlencoded</code>.
+     *
      * @return The current builder
      */
     public EncodingObjectBuilder withStyle(@Nullable String style) {
@@ -66,13 +64,13 @@ public class EncodingObjectBuilder {
     }
 
     /**
-     * Sets whether array or object values are exploded into separate parameters.
      *
      * @param explode When this is true, property values of type <code>array</code> or <code>object</code> generate separate
      *                parameters for each value of the array, or key-value-pair of the map.  For other types of properties this
      *                property has no effect. When <code>style</code> is <code>form</code>, the default value is <code>true</code>.
      *                For all other styles, the default value is <code>false</code>. This property SHALL be ignored if the request
      *                body media type is not <code>application/x-www-form-urlencoded</code>.
+     *
      * @return The current builder
      */
     public EncodingObjectBuilder withExplode(@Nullable Boolean explode) {
@@ -81,12 +79,12 @@ public class EncodingObjectBuilder {
     }
 
     /**
-     * Sets whether reserved characters may remain unencoded.
      *
      * @param allowReserved Determines whether the parameter value SHOULD allow reserved characters, as defined by
      *                      <a href="https://tools.ietf.org/html/rfc3986#section-2.2">RFC3986</a> <code>:/?#[]@!$&amp;'()*+,;=</code>
      *                      to be included without percent-encoding. The default value is <code>false</code>. This property
      *                      SHALL be ignored if the request body media type is not <code>application/x-www-form-urlencoded</code>.
+     *
      * @return The current builder
      */
     public EncodingObjectBuilder withAllowReserved(@Nullable Boolean allowReserved) {
@@ -95,12 +93,10 @@ public class EncodingObjectBuilder {
     }
 
     /**
-     * Builds the encoding object.
-     *
      * @return A new object
      */
     public EncodingObject build() {
-        return new EncodingObject(contentType, immutable(headers), style, explode, allowReserved);
+        return new EncodingObject(contentType, immutable(headers), style, explode, allowReserved, encoding, prefixEncoding, itemEncoding, extensions);
     }
 
     /**
@@ -111,4 +107,51 @@ public class EncodingObjectBuilder {
     public static EncodingObjectBuilder encodingObject() {
         return new EncodingObjectBuilder();
     }
+    /**
+     * @param value the extensions value
+     * @return this builder */
+    public EncodingObjectBuilder withExtensions(@Nullable Map<String, Object> value) { this.extensions = value; return this; }
+    /**
+     * @param name an x- extension name
+     * @param value its JSON value
+     * @return this builder */
+    public EncodingObjectBuilder withExtension(String name, @Nullable Object value) {
+        Map<String, Object> copy = new java.util.LinkedHashMap<>();
+        if (extensions != null) copy.putAll(extensions);
+        Extensions.put(copy, name, value);
+        extensions = copy;
+        return this;
+    }
+    /**
+     * @param value inline values and references for headers
+     * @return this builder */
+    public EncodingObjectBuilder withHeadersOrReferences(@Nullable Map<String, ReferenceOr<HeaderObject>> value) { this.headers = value; return this; }
+    /**
+     * Describes the encoding of named properties within this part when its content is itself
+     * multipart or form-urlencoded. This allows nested multipart descriptions.
+     * Named encodings cannot be combined with positional prefix or item encodings.
+     *
+     * @param value the nested encodings keyed by property name, or null to omit it
+     * @return this builder
+     */
+    public EncodingObjectBuilder withEncoding(@Nullable Map<String, EncodingObject> value) { this.encoding = value; return this; }
+    /**
+     * Describes the initial parts, by position, when this part contains nested multipart content.
+     * Each list entry applies to the nested part at the same index. Remaining parts use
+     * {@link #withItemEncoding(EncodingObject)} or default encoding rules.
+     * This cannot be combined with {@link #withEncoding(Map)}.
+     *
+     * @param value the encodings for the initial nested multipart parts, in order, or null to omit it
+     * @return this builder
+     */
+    public EncodingObjectBuilder withPrefixEncoding(java.util.@Nullable List<EncodingObject> value) { this.prefixEncoding = value; return this; }
+    /**
+     * Describes remaining parts in nested multipart content after those covered by
+     * {@link #withPrefixEncoding(java.util.List)}, or all nested parts when no prefix is given.
+     * This cannot be combined with {@link #withEncoding(Map)}.
+     *
+     * @param value the encoding for remaining nested multipart parts, or null to omit it
+     * @return this builder
+     */
+    public EncodingObjectBuilder withItemEncoding(@Nullable EncodingObject value) { this.itemEncoding = value; return this; }
 }
