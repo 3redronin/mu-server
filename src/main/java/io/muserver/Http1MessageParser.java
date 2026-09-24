@@ -263,13 +263,15 @@ class Http1MessageParser implements Http1MessageReader {
                             try {
                                 body = exc.bodyTransferSize();
                             } catch (IllegalStateException invalidFraming) {
+                                String framingMessage = Objects.requireNonNullElse(
+                                    invalidFraming.getMessage(), "Invalid HTTP message framing");
                                 if (!(exc instanceof HttpRequestTemp)) {
-                                    throw new ParseException(invalidFraming.getMessage(), position);
+                                    throw new ParseException(framingMessage, position);
                                 }
                                 // The body boundary is unknown, so reject the request and
                                 // close instead of trying to parse another message from it.
                                 var request = (HttpRequestTemp) exc;
-                                var rejection = HttpException.badRequest(invalidFraming.getMessage());
+                                var rejection = HttpException.badRequest(framingMessage);
                                 rejection.responseHeaders().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
                                 request.setRejectRequest(rejection);
                                 body = BodySize.NONE;
