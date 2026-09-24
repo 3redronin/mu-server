@@ -259,7 +259,21 @@ class Http1MessageParser implements Http1MessageReader {
                     case HEADERS_ENDING: {
                         if (b == LF) {
                             var exc = exchange;
-                            var body = exc.bodyTransferSize();
+                            BodySize body;
+                            try {
+                                body = exc.bodyTransferSize();
+                            } catch (IllegalStateException invalidFraming) {
+                                if (!(exc instanceof HttpRequestTemp)) {
+                                    throw new ParseException(invalidFraming.getMessage(), position);
+                                }
+                                // The body boundary is unknown, so reject the request and
+                                // close instead of trying to parse another message from it.
+                                var request = (HttpRequestTemp) exc;
+                                var rejection = HttpException.badRequest(invalidFraming.getMessage());
+                                rejection.responseHeaders().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+                                request.setRejectRequest(rejection);
+                                body = BodySize.NONE;
+                            }
                             exc.setBodySize(body);
                             switch (body.type()) {
                                 case FIXED_SIZE: {
@@ -310,7 +324,11 @@ class Http1MessageParser implements Http1MessageReader {
                             } else if (b == CR) {
                                 state = ParseState.CHUNK_HEADER_ENDING;
                             } else throw new ParseException("state=" + state + " b=" + b, position);
-                            remainingBytesToProxy = Long.parseLong(consumeAscii(buffer), 16);
+                            try {
+                                remainingBytesToProxy = Long.parseLong(consumeAscii(buffer), 16);
+                            } catch (NumberFormatException invalidChunkSize) {
+                                throw new ParseException("Invalid chunk size", position);
+                            }
                         }
                         break;
                     }
@@ -506,9 +524,9 @@ class Http1MessageParser implements Http1MessageReader {
         return getClass().getSimpleName() + " "  + this.state;
     }
 
-    private void append(ByteArrayOutputStream baos, byte b) {
+    private void append(ByteArrayOutputStream baos, byte b) throws ParseException {
         baos.write(b);
-        if (baos.size() > maxBufferSize) throw new IllegalStateException("Buffer is " + baos.size() + " bytes");
+        if (baos.size() > maxBufferSize) throw new ParseException("Buffer is " + baos.size() + " bytes", position);
     }
 
     private static boolean isVChar(byte b) { return b >= (byte)0x21 && b <= (byte)0x7E; }

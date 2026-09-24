@@ -15,8 +15,40 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.sameInstance;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class Http1MessageParserTest {
+
+    @Test
+    void oversizedChunkSizeIsAParseError() throws Exception {
+        var raw = ("POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n"
+            + "1555555555555555555\r\n")
+            .getBytes(StandardCharsets.US_ASCII);
+        var parser = new Http1MessageParser(HttpMessageType.REQUEST,
+            new ConcurrentLinkedQueue<>(), new ByteArrayInputStream(raw), 8192, 8192);
+        parser.readNext();
+        assertThrows(ParseException.class, parser::readNext);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "content-length: nope",
+        "content-length: -1",
+        "content-length: 1\r\ncontent-length: 2",
+        "transfer-encoding: chunked\r\ncontent-length: 1"
+    })
+    void invalidRequestFramingIsRejectedWithConnectionClose(String headers) throws Exception {
+        var raw = ("POST / HTTP/1.1\r\n" + headers + "\r\n\r\n")
+            .getBytes(StandardCharsets.US_ASCII);
+        var parser = new Http1MessageParser(HttpMessageType.REQUEST,
+            new ConcurrentLinkedQueue<>(), new ByteArrayInputStream(raw), 8192, 8192);
+
+        var request = (HttpRequestTemp) parser.readNext();
+        var rejection = request.getRejectRequest();
+        assertThat(rejection, notNullValue());
+        assertThat(rejection.status().code(), equalTo(400));
+        assertThat(rejection.responseHeaders().get("connection"), equalTo("close"));
+    }
 
     @Test
     void chunkedOutputStreamSingleByteWriteUsesAsciiChunkSize() throws Exception {

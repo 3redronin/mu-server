@@ -51,7 +51,11 @@ class HuffmanDecoder {
             }
         }
 
-        return HeaderString.valueOf(sb, type);
+        // HPACK can encode an empty string. Let HTTP/2 message validation reject
+        // an empty field name on its stream, just as for an uncompressed string.
+        return sb.length() == 0
+            ? HeaderString.valueOf(new byte[0], type)
+            : HeaderString.valueOf(sb, type);
     }
 
     private HuffmanDecoder() {}
