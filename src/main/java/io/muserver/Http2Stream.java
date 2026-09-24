@@ -243,6 +243,9 @@ class Http2Stream implements ResponseInfo {
         }
         for (FieldLine line : headersFrame.headers().lineIterator()) {
             HeaderString name = line.name();
+            if (name.length() == 0) {
+                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "empty trailer field name", id);
+            }
             if (name.charAt(0) == ':' || RequestTrailers.isForbiddenTrailerField(name)) {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "invalid trailer field", id);
             }
@@ -326,6 +329,9 @@ class Http2Stream implements ResponseInfo {
         while (iter.hasNext()) {
             FieldLine line = iter.next();
             HeaderString n = line.name();
+            if (n.length() == 0) {
+                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "empty field name", id);
+            }
             boolean pseudoHeader = n.charAt(0) == ':';
             if (pseudoHeader) {
                 if (regularHeadersStarted) {

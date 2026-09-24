@@ -20,6 +20,15 @@ class FieldBlockDecoderTest {
     private final FieldBlockDecoder decoder = new FieldBlockDecoder(table, 8192, 4 * 8192);
 
     @Test
+    void truncatedLiteralAfterAnEmptyHuffmanNameIsACompressionError() {
+        // Retained HPACK fuzz input: literal name of zero decoded length,
+        // followed by a value length that exceeds the remaining block.
+        var ex = assertThrows(Http2Exception.class,
+            () -> decoder.decodeFrom(buffed((byte) 0x00, (byte) 0x80, (byte) 0x82)));
+        assertThat(ex.errorCode(), equalTo(Http2ErrorCode.COMPRESSION_ERROR));
+    }
+
+    @Test
     void canDecodeNBitPrefixedValues() throws Http2Exception {
         assertThat(readHpackInt(7, (byte)0b10000001, empty), equalTo(1));
         assertThat(readHpackInt(7, (byte)0b00000001, empty), equalTo(1));

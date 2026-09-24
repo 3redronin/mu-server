@@ -6,6 +6,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
+import java.util.Arrays;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -22,6 +23,34 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class RFC9113_6_2_HeadersTest {
 
     private @Nullable MuServer server;
+
+    @Test
+    void emptyLiteralFieldNamesResetOnlyTheirStreams() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> response.status(202))
+            .start();
+
+        try (var client = new H2Client(); var con = client.connect(server)) {
+            con.handshake();
+            byte[] valid = encodeFieldBlock(getHelloHeaders(getPort()));
+            byte[][] invalid = {
+                {0, 0, 0}, // plain empty name and value
+                {0, (byte) 0x80, 0} // Huffman empty name and plain empty value
+            };
+            for (int i = 0; i < invalid.length; i++) {
+                int streamId = 1 + i * 2;
+                byte[] fieldBlock = Arrays.copyOf(valid, valid.length + invalid[i].length);
+                System.arraycopy(invalid[i], 0, fieldBlock, valid.length, invalid[i].length);
+                con.writeRaw(headersFrame(streamId, true, true, fieldBlock)).flush();
+                var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
+                assertThat(reset.streamId(), equalTo(streamId));
+                assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            }
+            con.writeFrame(new Http2HeadersFrame(5, true, getHelloHeaders(getPort()))).flush();
+            assertThat(con.readLogicalFrame(Http2HeadersFrame.class).headers().get(":status"), equalTo("202"));
+        }
+    }
 
     @Test
     void paddedHeadersFramesCanStartARequest() throws Exception {
@@ -330,6 +359,25 @@ class RFC9113_6_2_HeadersTest {
             var response = con.readLogicalFrame(Http2HeadersFrame.class);
             assertThat(response.streamId(), equalTo(3));
             assertThat(response.headers().get(":status"), equalTo("200"));
+        }
+    }
+
+    @Test
+    void emptyTrailerFieldNameIsAStreamError() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> response.write(request.readBodyAsString()))
+            .start();
+
+        try (var client = new H2Client(); var con = client.connect(server)) {
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .writeRaw(headersFrame(1, true, true, new byte[] {0, (byte) 0x80, 0}))
+                .flush();
+
+            var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
         }
     }
 

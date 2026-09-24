@@ -12,6 +12,13 @@ import static org.hamcrest.Matchers.equalTo;
 class HuffmanDecoderTest {
 
     @Test
+    void emptyHuffmanStringCanBeDecodedAsAFieldName() throws Exception {
+        // HPACK permits an empty string; HTTP/2 rejects it when validating the message.
+        assertThat(HuffmanDecoder.decodeFrom(ByteBuffer.allocate(0), 0,
+            HeaderString.Type.HEADER).length(), equalTo(0));
+    }
+
+    @Test
     void itCanDecode() throws Exception {
         assertThat(HuffmanDecoder.decodeFrom(ByteBuffer.wrap(new byte[] {
             (byte) 0b10011111, (byte) 0b11111110, (byte) 0b10101000, (byte) 0b10100000, (byte) 0b11111111

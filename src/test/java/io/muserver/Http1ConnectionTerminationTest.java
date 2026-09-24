@@ -14,10 +14,24 @@ import java.util.concurrent.TimeUnit;
 import static io.muserver.MuServerBuilder.httpServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.startsWith;
 
 class Http1ConnectionTerminationTest {
 
     private @Nullable MuServer server;
+
+    @Test
+    void invalidContentLengthReceivesBadRequestAndConnectionClose() throws Exception {
+        server = httpServer().start();
+        try (var client = Http1Client.connect(server)) {
+            client.writeRequestLine(Method.POST, "/")
+                .writeHeader("Content-Length", "nope")
+                .endHeaders()
+                .flush();
+            assertThat(client.readLine(), startsWith("HTTP/1.1 400 "));
+            assertThat(client.readHeaders().get("Connection"), equalTo("close"));
+        }
+    }
 
     @Test
     void abortedUploadPublishesClientDisconnectBeforeTheReadFails()
