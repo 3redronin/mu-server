@@ -413,10 +413,7 @@ class Http2Stream implements ResponseInfo {
         if (path.length() == 0) {
             throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "empty :path pseudo-header", id);
         }
-        if (authority == null) {
-            // TODO: use this somehow
-            authority = host;
-        } else {
+        if (authority != null) {
             if (host != null && !sameAuthority(authority, host, scheme)) {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "host differs from :authority", id);
             }
@@ -479,6 +476,8 @@ class Http2Stream implements ResponseInfo {
     }
 
     private static boolean sameAuthority(HeaderString authority, HeaderString host, HeaderString scheme) {
+        // The common case needs no URI parsing or allocations.
+        if (authority.equals(host)) return true;
         try {
             String protocol = scheme.toString().toLowerCase(Locale.ROOT);
             URI target = URI.create(protocol + "://" + authority);
