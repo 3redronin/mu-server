@@ -20,7 +20,8 @@ class Http2AuthorityTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"Alpha.Example,alpha.example,https://Alpha.Example/authority",
+    @CsvSource({"alpha.example,alpha.example,https://alpha.example/authority",
+        "Alpha.Example,alpha.example,https://Alpha.Example/authority",
         "alpha.example:443,alpha.example,https://alpha.example:443/authority"})
     void equivalentHostUsesAuthorityForRequestUri(String authority, String host, String expectedUri) throws Exception {
         server = server();
