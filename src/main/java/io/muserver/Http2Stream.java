@@ -7,9 +7,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.URI;
 import java.util.ArrayList;
-import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
 
@@ -414,7 +412,7 @@ class Http2Stream implements ResponseInfo {
             throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "empty :path pseudo-header", id);
         }
         if (authority != null) {
-            if (host != null && !sameAuthority(authority, host, scheme)) {
+            if (host != null && !authority.contentEquals(host, true)) {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "host differs from :authority", id);
             }
             // Downstream URI construction uses Host; the HTTP/2 request target uses :authority.
@@ -474,65 +472,6 @@ class Http2Stream implements ResponseInfo {
         request.setResponse(stream.response);
         return stream;
     }
-
-    private static boolean sameAuthority(HeaderString authority, HeaderString host, HeaderString scheme) {
-        // The common case needs no URI parsing or allocations.
-        if (authority.equals(host)) return true;
-        try {
-            String protocol = scheme.toString().toLowerCase(Locale.ROOT);
-            URI target = URI.create(protocol + "://" + authority);
-            URI suppliedHost = URI.create(protocol + "://" + host);
-            if (!isAuthorityOnly(target) || !isAuthorityOnly(suppliedHost)) return false;
-            int defaultPort = protocol.equals("https") ? 443 : protocol.equals("http") ? 80 : -1;
-            String targetName = target.getHost();
-            String hostName = suppliedHost.getHost();
-            if (targetName == null || hostName == null) {
-                // URI.getHost rejects some valid RFC 3986 reg-names, such as names with '_' or '~'.
-                if (targetName != null || hostName != null) return false;
-                return sameRegNameAuthority(target.getRawAuthority(), suppliedHost.getRawAuthority(), defaultPort);
-            }
-            int targetPort = target.getPort() < 0 ? defaultPort : target.getPort();
-            int hostPort = suppliedHost.getPort() < 0 ? defaultPort : suppliedHost.getPort();
-            return targetPort == hostPort && targetName.equalsIgnoreCase(hostName);
-        } catch (IllegalArgumentException malformed) {
-            return false;
-        }
-    }
-
-    private static boolean isAuthorityOnly(URI uri) {
-        return uri.getRawAuthority() != null && uri.getRawUserInfo() == null && uri.getPort() <= 65535
-            && (uri.getRawPath() == null || uri.getRawPath().isEmpty())
-            && uri.getRawQuery() == null && uri.getRawFragment() == null;
-    }
-
-    private static boolean sameRegNameAuthority(@Nullable String target, @Nullable String host, int defaultPort) {
-        if (target == null || host == null) return false;
-        int targetColon = target.indexOf(':');
-        int hostColon = host.indexOf(':');
-        int targetNameEnd = targetColon < 0 ? target.length() : targetColon;
-        int hostNameEnd = hostColon < 0 ? host.length() : hostColon;
-        // A bracketed IP literal belongs to URI's host parser, not the reg-name fallback.
-        if (targetNameEnd == 0 || hostNameEnd == 0 || target.indexOf('[') >= 0 || host.indexOf('[') >= 0
-            || target.indexOf(']') >= 0 || host.indexOf(']') >= 0) return false;
-        int targetPort = regNamePort(target, targetColon, defaultPort);
-        int hostPort = regNamePort(host, hostColon, defaultPort);
-        return targetPort != -2 && targetPort == hostPort
-            && target.substring(0, targetNameEnd).equalsIgnoreCase(host.substring(0, hostNameEnd));
-    }
-
-    private static int regNamePort(String value, int colon, int defaultPort) {
-        if (colon < 0) return defaultPort;
-        if (colon == value.length() - 1) return -2;
-        int port = 0;
-        for (int i = colon + 1; i < value.length(); i++) {
-            char digit = value.charAt(i);
-            if (digit < '0' || digit > '9') return -2;
-            port = port * 10 + digit - '0';
-            if (port > 65535) return -2;
-        }
-        return port;
-    }
-
 
     void cleanup() throws IOException, InterruptedException {
         try {
