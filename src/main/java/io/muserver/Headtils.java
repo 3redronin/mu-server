@@ -1,10 +1,12 @@
 package io.muserver;
 
 import jakarta.ws.rs.core.MediaType;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.nio.charset.IllegalCharsetNameException;
 import java.nio.charset.UnsupportedCharsetException;
@@ -18,6 +20,10 @@ import static java.util.Collections.emptyList;
 
 class Headtils {
     static List<ForwardedHeader> getForwardedHeaders(Headers headers) {
+        return getForwardedHeaders(headers, null);
+    }
+
+    private static List<ForwardedHeader> getForwardedHeaders(Headers headers, @Nullable String fallbackHost) {
         List<String> all = headers.getAll(HeaderNames.FORWARDED);
         if (all.isEmpty()) {
 
@@ -35,7 +41,9 @@ class Headtils {
             boolean includeProto = protos.size() == max;
             boolean includeFor = fors.size() == max;
             boolean includePort = ports.size() == max;
-            String curHost = includePort && !includeHost ? headers.get(HeaderNames.HOST) : null;
+            String curHost = includePort && !includeHost
+                ? Mutils.coalesce(fallbackHost, headers.get(HeaderNames.HOST))
+                : null;
 
             for (int i = 0; i < max; i++) {
                 String host = includeHost ? hosts.get(i) : null;
@@ -72,10 +80,24 @@ class Headtils {
     }
 
     static URI getUri(Logger log, Headers h, String requestUri, URI defaultValue) {
+        return getUri(log, h, requestUri, defaultValue, null);
+    }
+
+    static URI getUri(Logger log, Headers h, String requestUri, URI defaultValue,
+                      @Nullable String originalRequestTarget) {
         try {
             String hostHeader = h.get(HeaderNames.HOST);
-            List<ForwardedHeader> forwarded = getForwardedHeaders(h);
+            URI absoluteTarget = absoluteTarget(originalRequestTarget);
+            String absoluteTargetAuthority = absoluteTarget == null ? null : authorityWithoutUserInfo(absoluteTarget);
+            String defaultScheme = absoluteTarget == null ? defaultValue.getScheme() : absoluteTarget.getScheme();
+            List<ForwardedHeader> forwarded = getForwardedHeaders(h, absoluteTargetAuthority);
             if (forwarded.isEmpty()) {
+                if (absoluteTargetAuthority != null) {
+                    if (!Mutils.nullOrEmpty(hostHeader)) {
+                        URI.create(defaultScheme + "://" + hostHeader);
+                    }
+                    return URI.create(defaultScheme + "://" + absoluteTargetAuthority).resolve(requestUri);
+                }
                 if (Mutils.nullOrEmpty(hostHeader) || defaultValue.getHost().equals(hostHeader)
                     || defaultValue.getRawAuthority().equals(hostHeader)) {
                     return defaultValue;
@@ -83,14 +105,29 @@ class Headtils {
                 return URI.create(defaultValue.getScheme() + "://" + hostHeader).resolve(requestUri);
             }
             ForwardedHeader f = forwarded.get(0);
-            String originalScheme = Mutils.coalesce(f.proto(), defaultValue.getScheme());
-            String host = Mutils.coalesce(f.host(), hostHeader, "localhost");
+            String originalScheme = Mutils.coalesce(f.proto(), defaultScheme);
+            String host = Mutils.coalesce(f.host(), absoluteTargetAuthority, hostHeader, "localhost");
             return URI.create(originalScheme + "://" + host).resolve(requestUri);
         } catch (Exception e) {
             if (e instanceof HttpException) throw (HttpException) e;
             log.warn("Could not create a URI object using header values " + h);
             throw HttpException.badRequest("Invalid request authority");
         }
+    }
+
+    private static @Nullable URI absoluteTarget(@Nullable String requestTarget) throws URISyntaxException {
+        if (requestTarget == null) return null;
+        URI uri = new URI(requestTarget);
+        return uri.isAbsolute() && uri.getRawAuthority() != null ? uri : null;
+    }
+
+    private static String authorityWithoutUserInfo(URI uri) throws HttpException {
+        String authority = uri.getRawAuthority();
+        String userInfo = uri.getRawUserInfo();
+        if (authority == null) throw HttpException.badRequest("Invalid request authority");
+        if (userInfo != null) authority = authority.substring(userInfo.length() + 1);
+        if (authority.isEmpty()) throw HttpException.badRequest("Invalid request authority");
+        return authority;
     }
 
     private static final Logger log = LoggerFactory.getLogger(Headtils.class);

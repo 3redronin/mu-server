@@ -137,7 +137,7 @@ class Http1Connection extends BaseHttpConnection {
                 URI serverUri = creator.uri().resolve(relativeUrl);
                 URI requestUri;
                 try {
-                    requestUri = Headtils.getUri(log, request.headers(), relativeUrl, serverUri);
+                    requestUri = Headtils.getUri(log, request.headers(), relativeUrl, serverUri, request.getUrl());
                 } catch (HttpException e) {
                     if (rejectException == null) {
                         // A rejected Expect: 100-continue request may never send its body.
