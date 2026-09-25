@@ -250,11 +250,11 @@ class ProxyProtocolTest {
             int af = family >>> 4, transport = family & 15;
             int size = af == 1 ? 12 : af == 2 ? 36 : af == 3 ? 216 : 0;
             byte[] header = binary(0x21, family, new byte[(af == 0 || transport == 0) ? 0 : size]);
-            if (af > 3 || transport > 2) {
+            if (af > 3 || transport > 2 || (af == 0) != (transport == 0)) {
                 assertThrows(IOException.class, () -> ProxyProtocol.parse(new ByteArrayInputStream(header)));
             } else {
                 ProxiedConnectionInfo info = ProxyProtocol.parse(new ByteArrayInputStream(header));
-                if (af == 0 || transport == 0) assertNull(info.sourceAddress());
+                if (af == 0) assertNull(info.sourceAddress());
                 else {
                     assertEquals(af == 1 ? "0.0.0.0" : af == 2 ? "0:0:0:0:0:0:0:0" : "", info.sourceAddress());
                     for (int length = 0; length < size; length++) {
@@ -268,6 +268,16 @@ class ProxyProtocolTest {
             if (command == 0x20 || command == 0x21) continue;
             byte[] header = binary(command, 0, new byte[0]);
             assertThrows(IOException.class, () -> ProxyProtocol.parse(new ByteArrayInputStream(header)));
+        }
+    }
+
+    @Test void onlyCanonicalUnspecFamilyAndTransportIsAccepted() throws Exception {
+        ProxiedConnectionInfo info = ProxyProtocol.parse(new ByteArrayInputStream(binary(0x21, 0x00, new byte[0])));
+        assertNull(info.sourceAddress());
+        assertNull(info.destinationAddress());
+        for (int mixed : new int[]{0x01, 0x02, 0x10, 0x20, 0x30}) {
+            assertThrows(IOException.class,
+                () -> ProxyProtocol.parse(new ByteArrayInputStream(binary(0x21, mixed, new byte[0]))));
         }
     }
 
