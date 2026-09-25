@@ -89,13 +89,14 @@ class Headtils {
             String hostHeader = h.get(HeaderNames.HOST);
             URI absoluteTarget = absoluteTarget(originalRequestTarget);
             String absoluteTargetAuthority = absoluteTarget == null ? null : authorityWithoutUserInfo(absoluteTarget);
-            String defaultScheme = absoluteTarget == null ? defaultValue.getScheme() : absoluteTarget.getScheme();
+            String defaultScheme = defaultValue.getScheme();
+            if (originalRequestTarget != null) {
+                validateHttp1Host(h);
+                if (absoluteTargetAuthority != null) validateAuthority(absoluteTargetAuthority);
+            }
             List<ForwardedHeader> forwarded = getForwardedHeaders(h, absoluteTargetAuthority);
             if (forwarded.isEmpty()) {
                 if (absoluteTargetAuthority != null) {
-                    if (!Mutils.nullOrEmpty(hostHeader)) {
-                        URI.create(defaultScheme + "://" + hostHeader);
-                    }
                     return URI.create(defaultScheme + "://" + absoluteTargetAuthority).resolve(requestUri);
                 }
                 if (Mutils.nullOrEmpty(hostHeader) || defaultValue.getHost().equals(hostHeader)
@@ -119,6 +120,20 @@ class Headtils {
         if (requestTarget == null) return null;
         URI uri = new URI(requestTarget);
         return uri.isAbsolute() && uri.getRawAuthority() != null ? uri : null;
+    }
+
+    private static void validateHttp1Host(Headers headers) throws URISyntaxException {
+        List<String> hosts = headers.getAll(HeaderNames.HOST);
+        if (hosts.size() > 1) throw HttpException.badRequest("Multiple Host headers");
+        if (hosts.size() == 1) validateAuthority(hosts.get(0));
+    }
+
+    private static void validateAuthority(String authority) throws URISyntaxException {
+        URI parsed = new URI("http://" + authority);
+        if (parsed.getHost() == null || parsed.getRawUserInfo() != null || parsed.getRawPath().length() > 0
+            || parsed.getRawQuery() != null || parsed.getRawFragment() != null) {
+            throw HttpException.badRequest("Invalid request authority");
+        }
     }
 
     private static String authorityWithoutUserInfo(URI uri) throws HttpException {

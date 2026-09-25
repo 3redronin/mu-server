@@ -54,12 +54,12 @@ class HeadtilsUriTest {
     }
 
     @Test
-    void absoluteFormAuthorityAndSchemeOverrideHost() {
+    void absoluteFormAuthorityOverridesHostButUsesTransportScheme() {
         URI uri = Headtils.getUri(LoggerFactory.getLogger(getClass()), Headers.create()
             .set("Host", "attacker.example"),
             "/hello?x=1", URI.create("http://localhost:12345/hello?x=1"),
             "https://trusted.example:8443/hello?x=1");
-        assertEquals(URI.create("https://trusted.example:8443/hello?x=1"), uri);
+        assertEquals(URI.create("http://trusted.example:8443/hello?x=1"), uri);
     }
 
     @Test
