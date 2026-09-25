@@ -72,7 +72,7 @@ public class BasicAuthSecurityFilter implements ContainerRequestFilter {
         }
 
         @Nullable Principal principal = authenticator.authenticate(userPass[0], userPass[1]);
-        boolean isHttps = "https".equalsIgnoreCase(filterContext.getUriInfo().getRequestUri().getScheme());
+        boolean isHttps = filterContext.getSecurityContext().isSecure();
 
         MuSecurityContext securityContext;
         if (principal == null) {

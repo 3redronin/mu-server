@@ -61,6 +61,19 @@ class Http1AbsoluteFormAuthorityTest {
     }
 
     @Test
+    void redirectPreservesRegisteredNameAuthority() throws Exception {
+        server = muServer()
+            .withHttpPort(0)
+            .withHttpsPort(0)
+            .addHandler((request, response) -> HttpsRedirectorBuilder
+                .toHttpsPort(server.httpsUri().getPort()).build().handle(request, response))
+            .start();
+
+        assertThat(requestLocation(server.httpUri(), "http://service_name/absolute-form-authority", "service_name"),
+            equalTo("https://service_name:" + server.httpsUri().getPort() + "/absolute-form-authority"));
+    }
+
+    @Test
     void plaintextAbsoluteHttpsTargetDoesNotMakeSecurityContextSecure() throws Exception {
         @Path("/absolute-form-authority")
         class SecureResource {
