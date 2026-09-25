@@ -103,10 +103,12 @@ final class ProxyProtocol {
         int family = (header[13] & 255) >>> 4;
         int transport = header[13] & 15;
         if (family > 3 || transport > 2) throw invalid();
-        if (family == 0 || transport == 0) {
+        // Accept the canonical UNSPEC byte (0x00), not a mixed UNSPEC family/transport.
+        if (family == 0 && transport == 0) {
             payload.tlvs();
             return new Info(null, 0, null, 0);
         }
+        if (family == 0 || transport == 0) throw invalid();
         int addressSize = family == 1 ? 4 : family == 2 ? 16 : 108;
         int required = 2 * addressSize + (family == 3 ? 0 : 4);
         byte[] addresses = payload.bytes(required);
