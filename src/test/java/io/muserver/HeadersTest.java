@@ -428,6 +428,65 @@ public class HeadersTest {
 
     @ParameterizedTest
     @ArgumentsSource(ServerTypeArgs.class)
+    public void malformedForwardedAuthoritiesAreRejectedBeforeDispatch(String protocol) throws IOException {
+        AtomicBoolean dispatched = new AtomicBoolean();
+        server = ServerUtils.httpsServerForTest(protocol)
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                dispatched.set(true);
+                response.status(200);
+                response.write(request.uri().toString());
+            })
+            .start();
+
+        String[][] forwardedHeaders = {
+            {"Forwarded", "host=\"browser.check#@vulndetector.com\""},
+            {"X-Forwarded-Host", "browser.check#@vulndetector.com"}
+        };
+        int[] responseCodes = new int[forwardedHeaders.length];
+        boolean[] handlerWasDispatched = new boolean[forwardedHeaders.length];
+        for (int i = 0; i < forwardedHeaders.length; i++) {
+            String[] forwardedHeader = forwardedHeaders[i];
+            dispatched.set(false);
+            try (Response resp = call(request(server.uri())
+                .header(HeaderNames.HOST.toString(), server.uri().getRawAuthority())
+                .header(forwardedHeader[0], forwardedHeader[1]))) {
+                responseCodes[i] = resp.code();
+            }
+            handlerWasDispatched[i] = dispatched.get();
+        }
+        assertThat(responseCodes, equalTo(new int[] {400, 400}));
+        assertThat(handlerWasDispatched, equalTo(new boolean[] {false, false}));
+    }
+
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
+    public void validForwardedAuthoritiesStillSetTheRequestUri(String protocol) throws IOException {
+        server = ServerUtils.httpsServerForTest(protocol)
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.status(200);
+                response.write(request.uri().toString());
+            })
+            .start();
+
+        for (String[] forwardedHeader : new String[][] {
+            {"Forwarded", "host=\"external.example:8443\";proto=https"},
+            {"X-Forwarded-Host", "external.example:8443"}
+        }) {
+            Request.Builder forwardedRequest = request(server.uri())
+                .header(HeaderNames.HOST.toString(), server.uri().getRawAuthority())
+                .header(forwardedHeader[0], forwardedHeader[1]);
+            if (forwardedHeader[0].equals("X-Forwarded-Host")) {
+                forwardedRequest.header(HeaderNames.X_FORWARDED_PROTO.toString(), "https");
+            }
+            try (Response resp = call(forwardedRequest)) {
+                assertThat(resp.code(), is(200));
+                assertThat(resp.body().string(), equalTo("https://external.example:8443/"));
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @ArgumentsSource(ServerTypeArgs.class)
     public void aRequestHasIPv6XForwardHostHeaderDontThrowException(String protocol) throws IOException {
         final String host = "[2001:0db8:85a3:08d3:1319:8a2e:0370:7344]:1234";
         server = ServerUtils.httpsServerForTest(protocol)

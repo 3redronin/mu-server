@@ -106,6 +106,7 @@ class Headtils {
                 return URI.create(defaultValue.getScheme() + "://" + hostHeader).resolve(requestUri);
             }
             ForwardedHeader f = forwarded.get(0);
+            if (f.host() != null) validateAuthority(f.host());
             String originalScheme = Mutils.coalesce(f.proto(), defaultScheme);
             String host = Mutils.coalesce(f.host(), absoluteTargetAuthority, hostHeader, "localhost");
             return URI.create(originalScheme + "://" + host).resolve(requestUri);
