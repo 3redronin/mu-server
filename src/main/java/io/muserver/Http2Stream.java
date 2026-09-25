@@ -411,11 +411,12 @@ class Http2Stream implements ResponseInfo {
         if (path.length() == 0) {
             throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "empty :path pseudo-header", id);
         }
-        if (authority == null) {
-            // TODO: use this somehow
-            authority = host;
-        } else if (host == null) {
-            headers.add(HeaderNames.HOST, authority);
+        if (authority != null) {
+            if (host != null && !authority.contentEquals(host, true)) {
+                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "host differs from :authority", id);
+            }
+            // Downstream URI construction uses Host; the HTTP/2 request target uses :authority.
+            headers.set(HeaderNames.HOST, authority);
         }
 
         var cookies = new ArrayList<String>(2);
@@ -471,7 +472,6 @@ class Http2Stream implements ResponseInfo {
         request.setResponse(stream.response);
         return stream;
     }
-
 
     void cleanup() throws IOException, InterruptedException {
         try {
