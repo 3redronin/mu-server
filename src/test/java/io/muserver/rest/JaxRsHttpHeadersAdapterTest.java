@@ -7,6 +7,7 @@ import io.muserver.HeadersFactory;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedHashMap;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 
 import java.util.*;
 
@@ -62,6 +63,27 @@ public class JaxRsHttpHeadersAdapterTest {
         reqHeaders.add(HeaderNames.ACCEPT, "text/plain");
         reqHeaders.add(HeaderNames.ACCEPT, "application/json");
         assertThat(httpHeaders.getAcceptableMediaTypes(), equalTo(asList(MediaType.TEXT_PLAIN_TYPE, MediaType.APPLICATION_JSON_TYPE)));
+    }
+
+    @Test
+    @Timeout(2)
+    public void quotedQualityValuesAreSortedWithinRequestHeaderLimit() {
+        StringBuilder accept = new StringBuilder();
+        for (int i = 0; i < 120; i++) {
+            if (i > 0) accept.append(',');
+            accept.append("text/x-").append(i).append(";q=\"").append(i % 2 == 0 ? "0.1" : "0.9").append('"');
+        }
+        assertThat(accept.length(), lessThan(8192));
+        reqHeaders.set(HeaderNames.ACCEPT, accept.toString());
+
+        List<MediaType> sorted = httpHeaders.getAcceptableMediaTypes();
+
+        assertThat(sorted, hasSize(120));
+        assertThat(sorted.get(0).getSubtype(), is("x-1"));
+        assertThat(sorted.get(119).getSubtype(), is("x-118"));
+        for (int i = 0; i < sorted.size(); i++) {
+            assertThat(sorted.get(i).getParameters().get("q"), is(i < 60 ? "0.9" : "0.1"));
+        }
     }
 
     @Test
