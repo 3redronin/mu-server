@@ -3,18 +3,25 @@ package io.muserver;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.Http1Client;
 import scaffolding.MuAssert;
 
 import java.io.IOException;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.muserver.MuServerBuilder.httpServer;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.startsWith;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class Http1ConnectionTerminationTest {
 
@@ -30,6 +37,40 @@ class Http1ConnectionTerminationTest {
                 .flush();
             assertThat(client.readLine(), startsWith("HTTP/1.1 400 "));
             assertThat(client.readHeaders().get("Connection"), equalTo("close"));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void chunkExtensionLineEndingControlsFollowingRequestDispatch(boolean validCrLf) throws Exception {
+        var markerRequests = new AtomicInteger();
+        server = httpServer()
+            .addHandler(Method.POST, "/", (request, response, pathParams) -> {
+                request.readBodyAsString();
+                response.write("ok");
+            })
+            .addHandler(Method.GET, "/lf-extension-marker", (request, response, pathParams) -> {
+                markerRequests.incrementAndGet();
+                response.write("unexpected");
+            })
+            .start();
+
+        try (var socket = new Socket("127.0.0.1", server.uri().getPort())) {
+            socket.setSoTimeout(3000);
+            var wire = "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n"
+                + "3D;!" + (validCrLf ? "\r\n" : "\n") + "A".repeat(61) + "\r\n0\r\n\r\n"
+                + "GET /lf-extension-marker HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+            socket.getOutputStream().write(wire.getBytes(StandardCharsets.US_ASCII));
+            socket.getOutputStream().flush();
+
+            byte[] response = new byte[4096];
+            int received = 0;
+            int read;
+            while ((read = socket.getInputStream().read(response)) != -1) {
+                received += read;
+                assertTrue(received <= 65536, "Unexpectedly large rejection response");
+            }
+            assertEquals(validCrLf ? 1 : 0, markerRequests.get());
         }
     }
 
