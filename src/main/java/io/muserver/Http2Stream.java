@@ -484,18 +484,53 @@ class Http2Stream implements ResponseInfo {
             URI suppliedHost = URI.create(protocol + "://" + host);
             if (!isAuthorityOnly(target) || !isAuthorityOnly(suppliedHost)) return false;
             int defaultPort = protocol.equals("https") ? 443 : protocol.equals("http") ? 80 : -1;
+            String targetName = target.getHost();
+            String hostName = suppliedHost.getHost();
+            if (targetName == null || hostName == null) {
+                // URI.getHost rejects some valid RFC 3986 reg-names, such as names with '_' or '~'.
+                if (targetName != null || hostName != null) return false;
+                return sameRegNameAuthority(target.getRawAuthority(), suppliedHost.getRawAuthority(), defaultPort);
+            }
             int targetPort = target.getPort() < 0 ? defaultPort : target.getPort();
             int hostPort = suppliedHost.getPort() < 0 ? defaultPort : suppliedHost.getPort();
-            return targetPort == hostPort && target.getHost().equalsIgnoreCase(suppliedHost.getHost());
+            return targetPort == hostPort && targetName.equalsIgnoreCase(hostName);
         } catch (IllegalArgumentException malformed) {
             return false;
         }
     }
 
     private static boolean isAuthorityOnly(URI uri) {
-        return uri.getHost() != null && uri.getRawUserInfo() == null && uri.getPort() <= 65535
+        return uri.getRawAuthority() != null && uri.getRawUserInfo() == null && uri.getPort() <= 65535
             && (uri.getRawPath() == null || uri.getRawPath().isEmpty())
             && uri.getRawQuery() == null && uri.getRawFragment() == null;
+    }
+
+    private static boolean sameRegNameAuthority(@Nullable String target, @Nullable String host, int defaultPort) {
+        if (target == null || host == null) return false;
+        int targetColon = target.indexOf(':');
+        int hostColon = host.indexOf(':');
+        int targetNameEnd = targetColon < 0 ? target.length() : targetColon;
+        int hostNameEnd = hostColon < 0 ? host.length() : hostColon;
+        // A bracketed IP literal belongs to URI's host parser, not the reg-name fallback.
+        if (targetNameEnd == 0 || hostNameEnd == 0 || target.indexOf('[') >= 0 || host.indexOf('[') >= 0
+            || target.indexOf(']') >= 0 || host.indexOf(']') >= 0) return false;
+        int targetPort = regNamePort(target, targetColon, defaultPort);
+        int hostPort = regNamePort(host, hostColon, defaultPort);
+        return targetPort != -2 && targetPort == hostPort
+            && target.substring(0, targetNameEnd).equalsIgnoreCase(host.substring(0, hostNameEnd));
+    }
+
+    private static int regNamePort(String value, int colon, int defaultPort) {
+        if (colon < 0) return defaultPort;
+        if (colon == value.length() - 1) return -2;
+        int port = 0;
+        for (int i = colon + 1; i < value.length(); i++) {
+            char digit = value.charAt(i);
+            if (digit < '0' || digit > '9') return -2;
+            port = port * 10 + digit - '0';
+            if (port > 65535) return -2;
+        }
+        return port;
     }
 
 
