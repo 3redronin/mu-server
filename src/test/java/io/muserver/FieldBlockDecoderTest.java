@@ -29,6 +29,31 @@ class FieldBlockDecoderTest {
     }
 
     @Test
+    void hugeHuffmanNameLengthIsRejectedBeforeDecoding() {
+        var decoder = new FieldBlockDecoder(new HpackTable(4096), 8192, 4 * 8192);
+        // These tiny blocks declare huge Huffman strings and must fail before decoding allocates for them.
+        var block = ByteBuffer.wrap(hexToByteArray("00ffffffffffff02"));
+
+        var ex = assertThrows(Http2Exception.class, () -> decoder.decodeFrom(block));
+
+        assertThat(ex.errorType(), equalTo(Http2Level.CONNECTION));
+        assertThat(ex.errorCode(), equalTo(Http2ErrorCode.COMPRESSION_ERROR));
+        assertThat(ex.getMessage(), equalTo("hpack integer overflow"));
+    }
+
+    @Test
+    void overflowingHuffmanNameLengthIsACompressionError() {
+        var decoder = new FieldBlockDecoder(new HpackTable(4096), 8192, 4 * 8192);
+        var block = ByteBuffer.wrap(hexToByteArray("00ff8080ffff0b"));
+
+        var ex = assertThrows(Http2Exception.class, () -> decoder.decodeFrom(block));
+
+        assertThat(ex.errorType(), equalTo(Http2Level.CONNECTION));
+        assertThat(ex.errorCode(), equalTo(Http2ErrorCode.COMPRESSION_ERROR));
+        assertThat(ex.getMessage(), equalTo("hpack integer overflow"));
+    }
+
+    @Test
     void canDecodeNBitPrefixedValues() throws Http2Exception {
         assertThat(readHpackInt(7, (byte)0b10000001, empty), equalTo(1));
         assertThat(readHpackInt(7, (byte)0b00000001, empty), equalTo(1));

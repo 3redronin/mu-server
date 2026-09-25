@@ -8,7 +8,10 @@ import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.Http1Client;
 import scaffolding.MuAssert;
 
+import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
@@ -105,6 +108,72 @@ class Http1ConnectionTerminationTest {
                 assertTrue(received <= 65536, "Unexpectedly large rejection response");
             }
             assertEquals(validCrLf ? 1 : 0, markerRequests.get());
+        }
+    }
+
+    @Test
+    void oversizedChunkSizeDoesNotDispatchFollowingRequest() throws Exception {
+        var markerRequests = new AtomicInteger();
+        server = httpServer()
+            .withMaxRequestSize(1)
+            .addHandler(Method.POST, "/", (request, response, pathParams) -> {
+                request.readBodyAsString();
+                response.write("unexpected");
+            })
+            .addHandler(Method.GET, "/smuggled", (request, response, pathParams) -> {
+                markerRequests.incrementAndGet();
+                response.write("marker");
+            })
+            .start();
+
+        try (var socket = new Socket("127.0.0.1", server.uri().getPort())) {
+            socket.setSoTimeout(3000);
+            var wire = "POST / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\nTransfer-Encoding: chunked\r\n\r\n"
+                + "100000004\r\n"
+                + "GET /smuggled HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                + "x".repeat(16384);
+            socket.getOutputStream().write(wire.getBytes(StandardCharsets.US_ASCII));
+            socket.getOutputStream().flush();
+
+            var input = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.US_ASCII));
+            assertThat(input.readLine(), startsWith("HTTP/1.1 413 "));
+            assertEquals(0, markerRequests.get());
+        }
+    }
+
+    @Test
+    void whitespaceAfterChunkSizeDoesNotDispatchFollowingRequest() throws Exception {
+        var markerRequests = new AtomicInteger();
+        server = httpServer()
+            .addHandler(Method.POST, "/", (request, response, pathParams) -> {
+                request.readBodyAsString();
+                response.write("unexpected");
+            })
+            .addHandler(Method.GET, "/smuggled", (request, response, pathParams) -> {
+                markerRequests.incrementAndGet();
+                response.write("marker");
+            })
+            .start();
+
+        try (var socket = new Socket("127.0.0.1", server.uri().getPort())) {
+            socket.setSoTimeout(3000);
+            var wire = "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n"
+                + "5 c\r\n"
+                + "GET /smuggled HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            socket.getOutputStream().write(wire.getBytes(StandardCharsets.US_ASCII));
+            socket.getOutputStream().flush();
+
+            byte[] response = new byte[4096];
+            var responseBytes = new ByteArrayOutputStream();
+            int received = 0;
+            int read;
+            while ((read = socket.getInputStream().read(response)) != -1) {
+                received += read;
+                assertTrue(received <= 65536, "Unexpectedly large rejection response");
+                responseBytes.write(response, 0, read);
+            }
+            assertThat(responseBytes.toString(StandardCharsets.US_ASCII), startsWith("HTTP/1.1 500 "));
+            assertEquals(0, markerRequests.get());
         }
     }
 
