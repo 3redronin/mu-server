@@ -271,7 +271,7 @@ public class RestHandler implements MuHandler {
     }
 
     private <T extends Throwable> void dealWithUnhandledException(int nestingLevel, JaxRSRequest request, MuResponse muResponse, T ex, List<MediaType> acceptHeaders, List<MediaType> producesRef, List<MediaType> directlyProducesRef) throws Exception, T {
-        if (ex instanceof HttpException) throw (HttpException) ex;
+        if (ex instanceof HttpException.MultipartPartLimitException) throw (HttpException) ex;
         if (nestingLevel >= 2) {
             if (muResponse.hasStartedSendingData()) {
                 log.warn("An unhandled exception " + ex + " was thrown for " + request.muRequest + ", however a 500 response cannot be sent as some data was already sent.");

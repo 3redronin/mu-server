@@ -55,7 +55,7 @@ class MultipartFormParser {
             int partCount = 0;
             while (headers != null) {
                 if (++partCount > maxParts) {
-                    throw new HttpException(HttpStatus.CONTENT_TOO_LARGE_413);
+                    throw new HttpException.MultipartPartLimitException();
                 }
 
                 String keyName = null;

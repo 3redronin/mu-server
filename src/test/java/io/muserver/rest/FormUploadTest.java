@@ -1,5 +1,7 @@
 package io.muserver.rest;
 
+import io.muserver.HttpException;
+import io.muserver.HttpStatus;
 import io.muserver.MuServer;
 import io.muserver.UploadedFile;
 import jakarta.ws.rs.*;
@@ -87,6 +89,29 @@ public class FormUploadTest {
                 .addFormDataPart("one", "part")
                 .build()))) {
             assertThat(resp.code(), is(413));
+        }
+    }
+
+    @Test
+    public void resourceHttpExceptionsStillReachRegisteredMappers() throws IOException {
+        @Path("/mapped-error")
+        class ErrorResource {
+            @POST
+            public String fail() {
+                throw new HttpException(HttpStatus.BAD_REQUEST_400, "resource failure");
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.restHandler(new ErrorResource())
+                .addExceptionMapper(Throwable.class,
+                    exception -> jakarta.ws.rs.core.Response.status(418).entity("mapped").build()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/mapped-error"))
+            .post(RequestBody.create("", MediaType.parse("text/plain"))))) {
+            assertThat(resp.code(), is(418));
+            assertThat(resp.body().string(), is("mapped"));
         }
     }
 
