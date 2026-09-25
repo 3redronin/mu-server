@@ -7,7 +7,9 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URI;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.CompletableFuture;
 
@@ -414,8 +416,12 @@ class Http2Stream implements ResponseInfo {
         if (authority == null) {
             // TODO: use this somehow
             authority = host;
-        } else if (host == null) {
-            headers.add(HeaderNames.HOST, authority);
+        } else {
+            if (host != null && !sameAuthority(authority, host, scheme)) {
+                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "host differs from :authority", id);
+            }
+            // Downstream URI construction uses Host; the HTTP/2 request target uses :authority.
+            headers.set(HeaderNames.HOST, authority);
         }
 
         var cookies = new ArrayList<String>(2);
@@ -470,6 +476,27 @@ class Http2Stream implements ResponseInfo {
         stream.response = new Http2Response(stream, new FieldBlock(), request);
         request.setResponse(stream.response);
         return stream;
+    }
+
+    private static boolean sameAuthority(HeaderString authority, HeaderString host, HeaderString scheme) {
+        try {
+            String protocol = scheme.toString().toLowerCase(Locale.ROOT);
+            URI target = URI.create(protocol + "://" + authority);
+            URI suppliedHost = URI.create(protocol + "://" + host);
+            if (!isAuthorityOnly(target) || !isAuthorityOnly(suppliedHost)) return false;
+            int defaultPort = protocol.equals("https") ? 443 : protocol.equals("http") ? 80 : -1;
+            int targetPort = target.getPort() < 0 ? defaultPort : target.getPort();
+            int hostPort = suppliedHost.getPort() < 0 ? defaultPort : suppliedHost.getPort();
+            return targetPort == hostPort && target.getHost().equalsIgnoreCase(suppliedHost.getHost());
+        } catch (IllegalArgumentException malformed) {
+            return false;
+        }
+    }
+
+    private static boolean isAuthorityOnly(URI uri) {
+        return uri.getHost() != null && uri.getRawUserInfo() == null && uri.getPort() <= 65535
+            && (uri.getRawPath() == null || uri.getRawPath().isEmpty())
+            && uri.getRawQuery() == null && uri.getRawFragment() == null;
     }
 
 
