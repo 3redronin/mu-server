@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -91,6 +92,109 @@ class RFC9113_8_2_HttpFieldsTest {
             var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
             assertThat(reset.streamId(), equalTo(1));
             assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {" value", "value ", "\tvalue", "value\t", " ", "\t"})
+    void fieldValuesWithLeadingOrTrailingWhitespaceAreMalformed(String value) throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> response.status(200))
+            .start();
+
+        try (var client = new H2Client(); var con = client.connect(server)) {
+            byte[] base = encodeFieldBlock(getHelloHeaders(getPort()));
+            byte[] badHeader = appendLiteralHeader(base, "x-bad", value);
+
+            con.handshake()
+                .writeRaw(headersFrame(1, true, true, badHeader))
+                .flush();
+
+            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"a b", "a\tb"})
+    void fieldValuesWithInteriorWhitespaceRemainValid(String value) throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> response.write(request.headers().get("x-test")))
+            .start();
+
+        try (var client = new H2Client(); var con = client.connect(server)) {
+            byte[] base = encodeFieldBlock(getHelloHeaders(getPort()));
+            byte[] fieldBlock = appendLiteralHeader(base, "x-test", value);
+
+            con.handshake().writeRaw(headersFrame(1, true, true, fieldBlock)).flush();
+
+            var response = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(response.streamId(), equalTo(1));
+            assertThat(response.headers().get(":status"), equalTo("200"));
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).toUTF8(), equalTo(value));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {" value", "value ", "\tvalue", "value\t", " ", "\t"})
+    void trailerValuesWithLeadingOrTrailingWhitespaceAreMalformed(String value) throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                request.readBodyAsString();
+                response.status(204);
+            })
+            .start();
+
+        try (var client = new H2Client(); var con = client.connect(server)) {
+            byte[] trailers = appendLiteralHeader(new byte[0], "x-bad", value);
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .writeRaw(headersFrame(1, true, true, trailers))
+                .flush();
+
+            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\u0000", "\n", "\r"})
+    void invalidFieldValueStreamErrorPreservesHpackStateForFollowingRequest(String forbidden) throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                response.status(200);
+                response.write(request.headers().get("x-bad"));
+            })
+            .start();
+
+        try (var client = new H2Client(); var con = client.connect(server)) {
+            var rejectedFieldBlock = new ByteArrayOutputStream();
+            rejectedFieldBlock.write(encodeFieldBlock(getHelloHeaders(getPort())));
+            rejectedFieldBlock.write(literalWithIncrementalIndexing("x-bad", "a" + forbidden + "b"));
+
+            con.handshake()
+                .writeRaw(headersFrame(1, true, true, rejectedFieldBlock.toByteArray()))
+                .flush();
+
+            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+
+            var nextFieldBlock = new ByteArrayOutputStream();
+            nextFieldBlock.write(encodeFieldBlock(getHelloHeaders(getPort())));
+            nextFieldBlock.write(literalUsingIndexedName(62, "ok"));
+            con.writeRaw(headersFrame(3, true, true, nextFieldBlock.toByteArray())).flush();
+
+            var response = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
+            assertThat(response.streamId(), equalTo(3));
+            assertThat(response.headers().get(":status"), equalTo("200"));
+            assertThat(readIgnoringWindowUpdates(con, Http2DataFrame.class).toUTF8(), equalTo("ok"));
         }
     }
 
@@ -420,6 +524,29 @@ class RFC9113_8_2_HttpFieldsTest {
         byte[] result = new byte[base.length + extra.length];
         System.arraycopy(base, 0, result, 0, base.length);
         System.arraycopy(extra, 0, result, base.length, extra.length);
+        return result;
+    }
+
+    private static byte[] literalWithIncrementalIndexing(String name, String value) {
+        byte[] nameBytes = name.getBytes(StandardCharsets.US_ASCII);
+        byte[] valueBytes = value.getBytes(StandardCharsets.US_ASCII);
+        byte[] result = new byte[1 + 1 + nameBytes.length + 1 + valueBytes.length];
+        result[0] = 0x40;
+        result[1] = (byte) nameBytes.length;
+        System.arraycopy(nameBytes, 0, result, 2, nameBytes.length);
+        result[2 + nameBytes.length] = (byte) valueBytes.length;
+        System.arraycopy(valueBytes, 0, result, 3 + nameBytes.length, valueBytes.length);
+        return result;
+    }
+
+    private static byte[] literalUsingIndexedName(int index, String value) {
+        byte[] valueBytes = value.getBytes(StandardCharsets.US_ASCII);
+        if (index < 15 || index > 127) throw new IllegalArgumentException("Test helper supports index 15..127");
+        byte[] result = new byte[2 + 1 + valueBytes.length];
+        result[0] = 0x0f; // Literal without indexing; 4-bit prefix saturated.
+        result[1] = (byte) (index - 15);
+        result[2] = (byte) valueBytes.length;
+        System.arraycopy(valueBytes, 0, result, 3, valueBytes.length);
         return result;
     }
 

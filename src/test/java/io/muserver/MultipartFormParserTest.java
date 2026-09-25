@@ -109,6 +109,29 @@ class MultipartFormParserTest {
     }
 
     @ParameterizedTest
+    @ValueSource(strings = {"full", "one-by-one"})
+    void defaultMultipartPartLimitRejectsPart1025(String type) throws IOException {
+        var body = new StringBuilder();
+        for (int i = 0; i < 1025; i++) {
+            body.append("--boundary\r\n")
+                .append("Content-Disposition: form-data; name=\"field")
+                .append(i)
+                .append("\"\r\n\r\nx\r\n");
+        }
+        body.append("--boundary--\r\n");
+
+        var directory = Files.createTempDirectory("multipart-default-part-limit-test");
+        try {
+            var parser = new MultipartFormParser(directory, "boundary", getInput(type, body.toString()), 8192,
+                StandardCharsets.UTF_8);
+            var failure = assertThrows(HttpException.class, parser::parseFully);
+            assertThat(failure.status(), equalTo(HttpStatus.CONTENT_TOO_LARGE_413));
+        } finally {
+            Files.delete(directory);
+        }
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"one-by-one", "full"})
     public void emptyBodiesSupported(String type) throws IOException {
         var inputStream = getInput(type,

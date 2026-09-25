@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.Queue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.assertNothingToRead;
@@ -211,6 +212,43 @@ class RFC9113_6_5_SettingsTest {
                 .flush();
 
             assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+        }
+    }
+
+    @Test
+    void peerMaxHeaderListSizeIsAdvisoryAndDoesNotBreakResponses() throws Exception {
+        var handlerCalls = new AtomicInteger();
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
+                handlerCalls.incrementAndGet();
+                response.headers().set("x-response-header", "a".repeat(100));
+                response.status(204);
+            })
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+
+            con.handshake()
+                .writeRaw(settingsFrame(6, 1))
+                .flush();
+
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+
+            con.writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+            var firstResponse = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(firstResponse.streamId(), equalTo(1));
+            assertThat(firstResponse.headers().get(":status"), equalTo("204"));
+            assertThat(firstResponse.headers().get("x-response-header"), equalTo("a".repeat(100)));
+
+            con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders(getPort())))
+                .flush();
+            var secondResponse = con.readLogicalFrame(Http2HeadersFrame.class);
+            assertThat(secondResponse.streamId(), equalTo(3));
+            assertThat(secondResponse.headers().get(":status"), equalTo("204"));
+            assertThat(handlerCalls.get(), equalTo(2));
         }
     }
 
