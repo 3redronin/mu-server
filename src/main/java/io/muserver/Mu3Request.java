@@ -226,7 +226,7 @@ class Mu3Request implements MuRequest {
                     int bufferSize = (int) min(8192, declaredSize != null ? declaredSize : 8192);
                     try (InputStream b = body) {
                         MultipartFormParser formParser = new MultipartFormParser(server().tempDir(),
-                            Objects.requireNonNull(boundary), b, bufferSize, charset);
+                            Objects.requireNonNull(boundary), b, bufferSize, charset, server().maxMultipartParts());
                         this.form = formParser.parseFully();
                     }
                 } else {

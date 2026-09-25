@@ -21,6 +21,15 @@ public class HttpException extends RuntimeException {
     private final FieldBlock headers = FieldBlock.newWithDate();
 
     /**
+     * Internal marker for rejection by the configured multipart part-count limit.
+     */
+    public static final class MultipartPartLimitException extends HttpException {
+        MultipartPartLimitException() {
+            super(HttpStatus.CONTENT_TOO_LARGE_413);
+        }
+    }
+
+    /**
      * Creates an HTTP exception with the given status and a default message derived from that status.
      *
      * @param status The HTTP status to send.

@@ -1,5 +1,7 @@
 package io.muserver.rest;
 
+import io.muserver.HttpException;
+import io.muserver.HttpStatus;
 import io.muserver.MuServer;
 import io.muserver.UploadedFile;
 import jakarta.ws.rs.*;
@@ -28,6 +30,90 @@ import static scaffolding.ClientUtils.request;
 public class FormUploadTest {
 
     private MuServer server;
+
+    @Test
+    public void configuredMultipartPartLimitReachesRequestParsing() throws IOException {
+        @Path("/limited")
+        class LimitedResource {
+            @POST
+            @Consumes(jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            public String submit(@FormParam("kept") String kept) {
+                return kept;
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .withMaxMultipartParts(1)
+            .addHandler(RestHandlerBuilder.restHandler(new LimitedResource()))
+            .start();
+        assertThat(server.maxMultipartParts(), is(1));
+
+        try (Response resp = call(request(server.uri().resolve("/limited"))
+            .post(new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("kept", "yes")
+                .build()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("yes"));
+        }
+
+        try (Response resp = call(request(server.uri().resolve("/limited"))
+            .post(new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("kept", "yes")
+                .addFormDataPart("extra", "no")
+                .build()))) {
+            assertThat(resp.code(), is(413));
+        }
+    }
+
+    @Test
+    public void zeroMultipartPartLimitRejectsAnyPart() throws IOException {
+        @Path("/empty-only")
+        class EmptyOnlyResource {
+            @POST
+            @Consumes(jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            public String submit(@FormParam("one") String one) {
+                return one;
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .withMaxMultipartParts(0)
+            .addHandler(RestHandlerBuilder.restHandler(new EmptyOnlyResource()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/empty-only"))
+            .post(new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("one", "part")
+                .build()))) {
+            assertThat(resp.code(), is(413));
+        }
+    }
+
+    @Test
+    public void resourceHttpExceptionsStillReachRegisteredMappers() throws IOException {
+        @Path("/mapped-error")
+        class ErrorResource {
+            @POST
+            public String fail() {
+                throw new HttpException(HttpStatus.BAD_REQUEST_400, "resource failure");
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(RestHandlerBuilder.restHandler(new ErrorResource())
+                .addExceptionMapper(Throwable.class,
+                    exception -> jakarta.ws.rs.core.Response.status(418).entity("mapped").build()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/mapped-error"))
+            .post(RequestBody.create("", MediaType.parse("text/plain"))))) {
+            assertThat(resp.code(), is(418));
+            assertThat(resp.body().string(), is("mapped"));
+        }
+    }
 
     @Test
     public void formParamsCanBeUploads() throws IOException {

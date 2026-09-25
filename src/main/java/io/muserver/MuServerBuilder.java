@@ -42,6 +42,7 @@ public class MuServerBuilder {
     private int maxConcurrentRequests = 1000;
     ExecutionResources.Factory executionResourcesFactory = ExecutionResources::create;
     private long maxRequestSize = 24 * 1024 * 1024;
+    private int maxMultipartParts = 1024;
     private @Nullable List<ResponseCompleteListener> responseCompleteListeners;
     private @Nullable List<RequestRejectListener> requestRejectListeners;
     @Nullable List<RateLimiterImpl> rateLimiters;
@@ -349,6 +350,21 @@ public class MuServerBuilder {
      */
     public MuServerBuilder withMaxRequestSize(long maxSizeInBytes) {
         this.maxRequestSize = maxSizeInBytes;
+        return this;
+    }
+
+    /**
+     * Sets the maximum number of parts accepted in a multipart form-data request. Every part counts,
+     * including parts that are ignored because they do not have a form field name. Exceeding the
+     * limit returns a 413 response. The default is 1024.
+     *
+     * @param maxParts the maximum number of multipart parts; zero rejects any request containing a part
+     * @return this builder
+     * @throws IllegalArgumentException if maxParts is negative
+     */
+    public MuServerBuilder withMaxMultipartParts(int maxParts) {
+        if (maxParts < 0) throw new IllegalArgumentException("The maximum number of multipart parts cannot be negative");
+        this.maxMultipartParts = maxParts;
         return this;
     }
 
@@ -706,6 +722,15 @@ public class MuServerBuilder {
     }
 
     /**
+     * Gets the maximum number of multipart form-data parts.
+     *
+     * @return the configured multipart part limit
+     */
+    public int maxMultipartParts() {
+        return maxMultipartParts;
+    }
+
+    /**
      * Gets the listeners notified after responses complete.
      *
      * @return An unmodifiable list of configured response-complete listeners, or an empty list if none were added.
@@ -805,6 +830,7 @@ public class MuServerBuilder {
             ", idleTimeoutMills=" + idleTimeoutMills +
             ", executor=" + executor +
             ", maxRequestSize=" + maxRequestSize +
+            ", maxMultipartParts=" + maxMultipartParts +
             ", responseCompleteListeners=" + responseCompleteListeners +
             ", requestRejectListeners=" + requestRejectListeners +
             ", rateLimiters=" + rateLimiters +

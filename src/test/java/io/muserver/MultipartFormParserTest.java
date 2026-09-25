@@ -50,6 +50,65 @@ class MultipartFormParserTest {
     }
 
     @ParameterizedTest
+    @ValueSource(strings = {"full", "one-by-one"})
+    void multipartPartLimitAcceptsBoundaryAndCountsIgnoredParts(String type) throws IOException {
+        var directory = Files.createTempDirectory("multipart-part-limit-test");
+        var body = "--boundary\r\n"
+            + "Content-Disposition: form-data; name=\"upload\"; filename=\"one.txt\"\r\n"
+            + "Content-Type: text/plain\r\n\r\none\r\n"
+            + "--boundary\r\n"
+            + "Content-Disposition: form-data; filename=\"ignored.txt\"\r\n"
+            + "Content-Type: text/plain\r\n\r\nignored\r\n"
+            + "--boundary\r\n"
+            + "Content-Disposition: form-data; name=\"field\"\r\n\r\nvalue\r\n"
+            + "--boundary--\r\n";
+        try {
+            var parser = new MultipartFormParser(directory, "boundary", getInput(type, body), 8192,
+                StandardCharsets.UTF_8, 3);
+            var form = parser.parseFully();
+            assertThat(form.getAll("field"), contains("value"));
+            assertThat(form.uploadedFiles().keySet(), contains("upload"));
+            assertThat(form.uploadedFile("upload").asString(), equalTo("one"));
+            try (var files = Files.list(directory)) {
+                assertThat(files.count(), equalTo(1L));
+            }
+            form.cleanup();
+            try (var files = Files.list(directory)) {
+                assertThat(files.count(), equalTo(0L));
+            }
+        } finally {
+            Files.delete(directory);
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"full", "one-by-one"})
+    void multipartPartLimitRejectsNPlusOneAndCleansEarlierUploads(String type) throws IOException {
+        var directory = Files.createTempDirectory("multipart-part-limit-reject-test");
+        var body = "--boundary\r\n"
+            + "Content-Disposition: form-data; name=\"upload\"; filename=\"one.txt\"\r\n"
+            + "Content-Type: text/plain\r\n\r\none\r\n"
+            + "--boundary\r\n"
+            + "Content-Disposition: form-data; filename=\"ignored.txt\"\r\n"
+            + "Content-Type: text/plain\r\n\r\nignored\r\n"
+            + "--boundary\r\n"
+            + "Content-Disposition: form-data; name=\"second-upload\"; filename=\"two.txt\"\r\n"
+            + "Content-Type: text/plain\r\n\r\ntwo\r\n"
+            + "--boundary--\r\n";
+        try {
+            var parser = new MultipartFormParser(directory, "boundary", getInput(type, body), 8192,
+                StandardCharsets.UTF_8, 2);
+            var failure = assertThrows(HttpException.class, parser::parseFully);
+            assertThat(failure.status(), equalTo(HttpStatus.CONTENT_TOO_LARGE_413));
+            try (var files = Files.list(directory)) {
+                assertThat(files.count(), equalTo(0L));
+            }
+        } finally {
+            Files.delete(directory);
+        }
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"one-by-one", "full"})
     public void emptyBodiesSupported(String type) throws IOException {
         var inputStream = getInput(type,
