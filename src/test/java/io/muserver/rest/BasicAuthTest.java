@@ -14,11 +14,13 @@ import okhttp3.Response;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import scaffolding.Http1Client;
 import scaffolding.MuAssert;
 import scaffolding.ServerUtils;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.net.Socket;
 import java.security.Principal;
 import java.util.Base64;
 import java.util.HashMap;
@@ -33,6 +35,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.startsWith;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 
@@ -131,6 +134,28 @@ public class BasicAuthTest {
         )) {
             assertThat(resp.code(), is(200));
             assertThat(resp.body().string(), is("Reading stuff securely? true"));
+        }
+    }
+
+    @Test
+    public void basicAuthDoesNotTreatAbsoluteHttpsTargetAsSecureOnPlainHttp() throws Exception {
+        MuAssert.stopAndCheck(server);
+        server = io.muserver.MuServerBuilder.httpServer()
+            .addHandler(RestHandlerBuilder.restHandler(new Thing())
+                .addRequestFilter(new BasicAuthSecurityFilter("My-App", authenticator, authorizer)))
+            .start();
+
+        try (var socket = new Socket("127.0.0.1", server.uri().getPort())) {
+            socket.setSoTimeout(3000);
+            var client = new Http1Client(socket, socket.getInputStream(), socket.getOutputStream(), server.uri());
+            client.writeAscii("GET https://trusted.example/things/read HTTP/1.1\r\n")
+                .writeHeader("Host", "trusted.example")
+                .writeHeader(HttpHeaders.AUTHORIZATION, "Basic " + base64Encode("Frank:password123"))
+                .writeHeader("Connection", "close")
+                .endHeaders()
+                .flush();
+            assertThat(client.readLine(), startsWith("HTTP/1.1 200 "));
+            assertThat(client.readBody(client.readHeaders()), is("Reading stuff securely? false"));
         }
     }
 

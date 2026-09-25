@@ -54,6 +54,93 @@ class HeadtilsUriTest {
     }
 
     @Test
+    void forwardedProtoOverridesTransportSecurity() {
+        assertEquals(true, Headtils.isSecure(Headers.create().set("Forwarded", "proto=https"), false));
+        assertEquals(false, Headtils.isSecure(Headers.create().set("Forwarded", "proto=http"), true));
+        assertEquals(false, Headtils.isSecure(Headers.create(), false));
+    }
+
+    @Test
+    void absoluteFormAuthorityAndSchemeOverrideHost() {
+        URI uri = Headtils.getUri(LoggerFactory.getLogger(getClass()), Headers.create()
+            .set("Host", "attacker.example"),
+            "/hello?x=1", URI.create("http://localhost:12345/hello?x=1"),
+            "https://trusted.example:8443/hello?x=1");
+        assertEquals(URI.create("https://trusted.example:8443/hello?x=1"), uri);
+    }
+
+    @Test
+    void validRegisteredNameWithUnderscoreIsAccepted() {
+        URI uri = Headtils.getUri(LoggerFactory.getLogger(getClass()), Headers.create()
+            .set("Host", "service_name"),
+            "/hello", URI.create("http://localhost:12345/hello"));
+        assertEquals(URI.create("http://service_name/hello"), uri);
+    }
+
+    @Test
+    void absoluteFormAuthorityAllowsValidRegisteredNameWithUnderscore() {
+        URI uri = Headtils.getUri(LoggerFactory.getLogger(getClass()), Headers.create()
+            .set("Host", "service_name"),
+            "/hello", URI.create("http://localhost:12345/hello"),
+            "http://service_name/hello");
+        assertEquals(URI.create("http://service_name/hello"), uri);
+    }
+
+    @Test
+    void forwardedAuthorityStillOverridesAbsoluteFormAuthority() {
+        URI uri = Headtils.getUri(LoggerFactory.getLogger(getClass()), Headers.create()
+            .set("Host", "attacker.example")
+            .set("Forwarded", "host=external.example;proto=https"),
+            "/hello?x=1", URI.create("http://localhost:12345/hello?x=1"),
+            "http://trusted.example/hello?x=1");
+        assertEquals(URI.create("https://external.example/hello?x=1"), uri);
+    }
+
+    @Test
+    void forwardedPortWithoutForwardedHostUsesAbsoluteFormAuthority() {
+        URI uri = Headtils.getUri(LoggerFactory.getLogger(getClass()), Headers.create()
+            .set("Host", "attacker.example")
+            .set("X-Forwarded-Port", "8443"),
+            "/hello", URI.create("http://localhost:12345/hello"),
+            "http://trusted.example/hello");
+        assertEquals(URI.create("http://trusted.example:8443/hello"), uri);
+    }
+
+    @Test
+    void absoluteFormAuthorityWithUserInfoIsRejected() {
+        HttpException ex = assertThrows(HttpException.class, () -> Headtils.getUri(LoggerFactory.getLogger(getClass()),
+            Headers.create().set("Host", "trusted.example"),
+            "/hello", URI.create("http://localhost:12345/hello"),
+            "http://user:password@trusted.example/hello"));
+        assertEquals(400, ex.status().code());
+    }
+
+    @Test
+    void absoluteFormAuthorityWithFragmentIsRejected() {
+        HttpException ex = assertThrows(HttpException.class, () -> Headtils.getUri(LoggerFactory.getLogger(getClass()),
+            Headers.create().set("Host", "trusted.example"),
+            "/hello", URI.create("http://localhost:12345/hello"),
+            "http://trusted.example/hello#fragment"));
+        assertEquals(400, ex.status().code());
+    }
+
+    @Test
+    void invalidAbsoluteFormTargetAuthorityIsRejected() {
+        HttpException ex = assertThrows(HttpException.class, () -> Headtils.getUri(LoggerFactory.getLogger(getClass()),
+            Headers.create().set("Host", "attacker.example"), "/hello",
+            URI.create("http://localhost:12345/hello"), "http://bad^host/hello"));
+        assertEquals(400, ex.status().code());
+    }
+
+    @Test
+    void invalidHostIsStillRejectedWithAbsoluteFormTarget() {
+        HttpException ex = assertThrows(HttpException.class, () -> Headtils.getUri(LoggerFactory.getLogger(getClass()),
+            Headers.create().set("Host", "bad<host>"), "/hello",
+            URI.create("http://localhost:12345/hello"), "http://trusted.example/hello"));
+        assertEquals(400, ex.status().code());
+    }
+
+    @Test
     void legacyForwardedAuthorityStillOverridesAMatchingHost() {
         URI uri = Headtils.getUri(LoggerFactory.getLogger(getClass()), Headers.create()
             .set("Host", "localhost:12345")
