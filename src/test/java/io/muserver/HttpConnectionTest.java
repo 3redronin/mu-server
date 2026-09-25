@@ -9,6 +9,7 @@ import scaffolding.ServerUtils;
 import java.net.InetAddress;
 import java.time.Instant;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpServer;
@@ -16,6 +17,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
 import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
+import static scaffolding.MuAssert.assertEventually;
 
 public class HttpConnectionTest {
 
@@ -107,12 +109,15 @@ public class HttpConnectionTest {
         boolean http2
     ) throws Exception {
         AtomicReference<BaseHttpConnection> connectionRef = new AtomicReference<>();
+        AtomicLong staleIONanos = new AtomicLong();
+        AtomicLong sentBeforeWrite = new AtomicLong();
         server = ServerUtils.httpsServerForTest(http2 ? "h2" : "http")
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 var connection = (BaseHttpConnection) request.connection();
-                connection.lastIONanos.set(
-                    System.nanoTime() - TimeUnit.SECONDS.toNanos(2)
-                );
+                long stale = System.nanoTime() - TimeUnit.SECONDS.toNanos(2);
+                connection.lastIONanos.set(stale);
+                staleIONanos.set(stale);
+                sentBeforeWrite.set(request.server().stats().bytesSent());
                 connectionRef.set(connection);
 
                 response.write("written");
@@ -129,8 +134,10 @@ public class HttpConnectionTest {
             connection.httpVersion(),
             is(http2 ? HttpVersion.HTTP_2 : HttpVersion.HTTP_1_1)
         );
-        assertThat(connection.idleTimeMillis(), lessThan(1000L));
-        assertThat(server.stats().bytesSent(), greaterThan(0L));
+        // A client can read the response before the server thread finishes its
+        // post-write bookkeeping. Observe that bookkeeping before checking it.
+        assertEventually(() -> server.stats().bytesSent(), greaterThan(sentBeforeWrite.get()));
+        assertThat(MonotonicTime.isAfter(connection.lastIONanos.get(), staleIONanos.get()), is(true));
     }
 
     @AfterEach
