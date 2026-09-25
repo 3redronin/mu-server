@@ -34,6 +34,7 @@ class Mu3ServerImpl implements MuServer {
     private final Long idleTimeoutMillis;
     private final int maxUrlSize;
     private final int maxHeadersSize;
+    private final int maxMultipartParts;
     final List<RateLimiterImpl> rateLimiters;
     final Path tempDir;
     final @Nullable HAProxyProtocolConfig haProxyProtocolConfig;
@@ -45,7 +46,7 @@ class Mu3ServerImpl implements MuServer {
         new ThreadLocal<>();
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
 
-    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutionResources executionResources, int maxConcurrentRequests, @Nullable HAProxyProtocolConfig haProxyProtocolConfig) {
+    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, int maxMultipartParts, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutionResources executionResources, int maxConcurrentRequests, @Nullable HAProxyProtocolConfig haProxyProtocolConfig) {
         this.acceptors = acceptors;
         this.handlers = handlers;
         this.responseCompleteListeners = responseCompleteListeners;
@@ -57,6 +58,7 @@ class Mu3ServerImpl implements MuServer {
         this.idleTimeoutMillis = idleTimeoutMillis;
         this.maxUrlSize = maxUrlSize;
         this.maxHeadersSize = maxHeadersSize;
+        this.maxMultipartParts = maxMultipartParts;
         this.rateLimiters = rateLimiters;
         this.tempDir = tempDir;
         this.executionResources = executionResources;
@@ -379,6 +381,11 @@ class Mu3ServerImpl implements MuServer {
     }
 
     @Override
+    public int maxMultipartParts() {
+        return maxMultipartParts;
+    }
+
+    @Override
     public int maxUrlSize() {
         return maxUrlSize;
     }
@@ -543,6 +550,7 @@ class Mu3ServerImpl implements MuServer {
             builder.idleTimeoutMills(),
             builder.maxUrlSize(),
             builder.maxHeadersSize(),
+            builder.maxMultipartParts(),
             limiters,
             tempDir,
             resources,
