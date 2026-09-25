@@ -186,6 +186,7 @@ class ClasspathCache implements ResourceProviderFactory {
 class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, Object> {
     private static final Logger log = LoggerFactory.getLogger(AsyncFileProvider.class);
     private final Path localPath;
+    private final boolean allowedPath;
     private @Nullable AsynchronousFileChannel channel;
     private long curPos = 0;
     private @Nullable ByteBuffer buf;
@@ -197,17 +198,20 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
         if (relativePath.startsWith("/")) {
             relativePath = "." + relativePath;
         }
-        this.localPath = baseDirectory.resolve(relativePath);
+        Path base = baseDirectory.toAbsolutePath().normalize();
+        Path resolved = base.resolve(Paths.get(relativePath).normalize()).normalize();
+        this.allowedPath = resolved.startsWith(base);
+        this.localPath = allowedPath ? resolved : base.resolve("__mu_invalid_resource_path__");
     }
 
     @Override
     public boolean exists() {
-        return Files.exists(localPath);
+        return allowedPath && Files.exists(localPath);
     }
 
     @Override
     public boolean isDirectory() {
-        return Files.isDirectory(localPath);
+        return allowedPath && Files.isDirectory(localPath);
     }
 
     @Override
@@ -252,6 +256,9 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
 
     @Override
     public Stream<Path> listFiles() throws IOException {
+        if (!allowedPath) {
+            return Stream.empty();
+        }
         return Files.list(localPath);
     }
 

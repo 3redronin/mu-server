@@ -389,7 +389,7 @@ public class HeadersTest {
 
     @ParameterizedTest
     @ArgumentsSource(ServerTypeArgs.class)
-    public void aRquestWithErrorXForwardHostHeaderDontThrowException(String protocol) throws IOException {
+    public void invalidXForwardedHostIsRejected(String protocol) throws IOException {
         server = ServerUtils.httpsServerForTest(protocol)
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
                 response.status(200);
@@ -399,8 +399,8 @@ public class HeadersTest {
         try (Response resp = call(request(server.uri())
             .header(HeaderNames.X_FORWARDED_HOST.toString(), "mu-server-io<error>:1234")
         )) {
-            assertThat(resp.code(), is(200));
-            assertThat(resp.body().string(), equalTo(server.uri().toString() + "/"));
+            assertThat(resp.code(), is(400));
+            assertThat(resp.body().string(), equalTo("Invalid request authority"));
         }
     }
 

@@ -13,6 +13,7 @@ import java.util.List;
 import static io.muserver.FieldBlockEncoder.writeHpackInt;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FieldBlockEncoderTest {
 
@@ -42,6 +43,17 @@ class FieldBlockEncoderTest {
         encoder.changeTableSize(4096);
 
         assertThat(toHex(new FieldBlock()), equalTo(""));
+    }
+
+    @Test
+    void outgoingHttp2FieldValuesCannotContainCrLfOrNul() {
+        FieldBlock block = new FieldBlock();
+        block.add(new FieldLine(HeaderString.valueOf("x-bad", HeaderString.Type.HEADER), new HeaderString("one\ntwo")));
+
+        assertThat(
+            assertThrows(IOException.class, () -> toHex(block)).getMessage(),
+            equalTo("Invalid HTTP/2 field value")
+        );
     }
 
     @Test

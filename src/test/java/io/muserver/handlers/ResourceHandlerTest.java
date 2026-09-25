@@ -16,6 +16,7 @@ import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +41,43 @@ import static scaffolding.FileUtils.readResource;
 public class ResourceHandlerTest {
 
     private MuServer server;
+
+    @Test
+    public void fileHandlerDoesNotServeEncodedDotSegmentTraversalOutsideBaseDirectory() throws Exception {
+        Path root = Files.createTempDirectory("mu-resource-root");
+        try {
+            Path publicRoot = Files.createDirectory(root.resolve("public"));
+            Files.writeString(publicRoot.resolve("index.txt"), "public");
+            Files.writeString(root.resolve("secret.txt"), "secret");
+
+            server = ServerUtils.httpsServerForTest()
+                .withGzipEnabled(false)
+                .addHandler(fileHandler(publicRoot))
+                .start();
+
+            try (Response response = call(request(server.uri().resolve("/%2e%2e/secret.txt")))) {
+                assertThat(response.code(), equalTo(404));
+            }
+            try (Response response = call(request(server.uri().resolve("/index.txt")))) {
+                assertThat(response.code(), equalTo(200));
+                assertThat(response.body().string(), equalTo("public"));
+            }
+        } finally {
+            if (server != null) {
+                server.stop();
+                server = null;
+            }
+            try (var walk = Files.walk(root)) {
+                walk.sorted(Comparator.reverseOrder()).forEach(path -> {
+                    try {
+                        Files.deleteIfExists(path);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+            }
+        }
+    }
 
     @Test
     public void literalPlusInAResourcePathSelectsThePlusFilename() throws IOException {

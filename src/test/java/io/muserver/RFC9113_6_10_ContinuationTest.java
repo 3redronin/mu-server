@@ -113,6 +113,28 @@ class RFC9113_6_10_ContinuationTest {
     }
 
     @Test
+    void continuationSequencesHaveABoundedFrameCount() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .start();
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            con.handshake()
+                .writeRaw(headersFrame(1, true, false, encodeFieldBlock(getHelloHeaders(getPort()))));
+            for (int i = 0; i < 129; i++) {
+                con.writeRaw(continuationFrame(1, i == 128, new byte[0]));
+            }
+            con.flush();
+
+            assertThat(
+                con.readLogicalFrame(),
+                equalTo(goAway(0, Http2ErrorCode.COMPRESSION_ERROR))
+            );
+            assertThrows(IOException.class, con::readFrameHeader);
+        }
+    }
+
+    @Test
     void http2HeaderLimitCanExceedTheServerWideLimit() throws Exception {
         server = httpsServer()
             .withMaxHeadersSize(128)

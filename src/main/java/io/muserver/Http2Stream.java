@@ -242,6 +242,9 @@ class Http2Stream implements ResponseInfo {
             throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Trailing headers must end the stream", id);
         }
         for (FieldLine line : headersFrame.headers().lineIterator()) {
+            if (line.value().containsForbiddenHttp2ValueOctet()) {
+                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "invalid trailer value", id);
+            }
             HeaderString name = line.name();
             if (name.length() == 0) {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "empty trailer field name", id);
@@ -329,6 +332,9 @@ class Http2Stream implements ResponseInfo {
         while (iter.hasNext()) {
             FieldLine line = iter.next();
             HeaderString n = line.name();
+            if (line.value().containsForbiddenHttp2ValueOctet()) {
+                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "invalid field value", id);
+            }
             if (n.length() == 0) {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "empty field name", id);
             }
@@ -371,13 +377,7 @@ class Http2Stream implements ResponseInfo {
                 if (host != null) throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "double host", id);
                 host = line.value();
             } else if (HeaderNames.CONTENT_LENGTH.equals(n)) {
-                long len;
-                try {
-                    len = Long.parseLong(line.value().toString());
-                } catch (NumberFormatException e) {
-                    throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "content-length invalid", id);
-                }
-                if (len < 0) throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "content-length negative", id);
+                long len = parseContentLength(line.value().toString(), id);
                 if (cl != null && len != cl) {
                     throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "multiple content-length lines", id);
                 }
@@ -471,6 +471,23 @@ class Http2Stream implements ResponseInfo {
         stream.response = new Http2Response(stream, new FieldBlock(), request);
         request.setResponse(stream.response);
         return stream;
+    }
+
+    private static long parseContentLength(String value, int streamId) throws Http2Exception {
+        if (value.isEmpty()) {
+            throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "content-length invalid", streamId);
+        }
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c < '0' || c > '9') {
+                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "content-length invalid", streamId);
+            }
+        }
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException e) {
+            throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "content-length invalid", streamId);
+        }
     }
 
     void cleanup() throws IOException, InterruptedException {

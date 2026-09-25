@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Queue;
@@ -233,6 +234,31 @@ class RFC9113_6_5_SettingsTest {
             assertThat(header.frameType(), equalTo(Http2FrameType.HEADERS));
             byte[] payload = con.readRawPayload(header);
             assertThat(payload[0], equalTo((byte) 0x20));
+        }
+    }
+
+    @Test
+    void advertisedHeaderTableSizesAreCappedForTheResponseEncoder() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> response.status(204))
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            HpackTable decoderTable = new HpackTable(65536);
+            FieldBlockDecoder decoder = new FieldBlockDecoder(decoderTable, 8192, 8192);
+
+            con.handshake(new Http2Settings(false, Integer.MAX_VALUE, 100, 65535, 16384, 32768))
+                .writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+
+            var header = con.readFrameHeader();
+            assertThat(header.frameType(), equalTo(Http2FrameType.HEADERS));
+            byte[] payload = con.readRawPayload(header);
+            FieldBlock fields = decoder.decodeFrom(ByteBuffer.wrap(payload));
+            assertThat(fields.get(":status"), equalTo("204"));
+            assertThat(decoderTable.maxSize(), equalTo(65536));
         }
     }
 

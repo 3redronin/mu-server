@@ -38,6 +38,26 @@ public class CORSHandlerTest {
         }
     }
 
+
+    @Test
+    public void corsAddsOriginToExistingVaryWithoutOverwriting() throws java.io.IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler((request, response) -> {
+                response.headers().set("Vary", "accept-language");
+                return false;
+            })
+            .addHandler(corsHandler()
+                .withCORSConfig(CORSHandlerBuilder.config().withAllOriginsAllowed())
+            )
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> response.write("ok"))
+            .start();
+        try (Response resp = call(request(server.uri()).header("Origin", "http://example.org"))) {
+            assertThat(resp.header("Vary"), is("accept-language, origin, accept-encoding"));
+            assertThat(resp.header("Access-Control-Allow-Origin"), is("http://example.org"));
+            assertThat(resp.body().string(), is("ok"));
+        }
+    }
+
     @Test
     public void aHandlerCanBeCreatedFromConfig() {
         server = ServerUtils.httpsServerForTest()

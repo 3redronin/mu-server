@@ -14,6 +14,7 @@ import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.core.IsEqual.equalTo;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 public class Http1AndHttp2HeadersTest {
 
@@ -38,6 +39,18 @@ public class Http1AndHttp2HeadersTest {
             for (Map.Entry<String, String> header : headers) {
                 assertThat(header.getKey().toLowerCase(), is("header"));
             }
+        }
+    }
+
+
+    @Test
+    public void invalidHeaderNamesAndValuesAreRejected() {
+        for (Headers headers : impls) {
+            assertThrows(IllegalArgumentException.class, () -> headers.set("Bad Header", "value"));
+            assertThrows(IllegalArgumentException.class, () -> headers.add("bad:header", "value"));
+            assertThrows(IllegalArgumentException.class, () -> headers.set("x-test", "ok\r\nInjected: yes"));
+            assertThrows(IllegalArgumentException.class, () -> headers.add("x-test", asList("ok", "bad\nvalue")));
+            assertThrows(IllegalArgumentException.class, () -> headers.set("x-test", asList("ok", "bad\u0000value")));
         }
     }
 

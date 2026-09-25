@@ -55,9 +55,10 @@ public class CookieBuilder {
     public CookieBuilder withValue(String value) {
         Mutils.notNull("value", value);
 
-        boolean matches = value.matches("^[\\x20-\\x7E]*|%(?:[0-9A-Fa-f]{2})$");
-        if (!matches) {
-            throw new IllegalArgumentException("A cookie value can only be ASCII characters excluding control characters, whitespace, quotes, commas, semicolons and backslashes. Consider using CookieBuilder.withUrlEncodedValue instead.");
+        for (int i = 0; i < value.length(); i++) {
+            if (!isCookieOctet(value.charAt(i))) {
+                throw new IllegalArgumentException("A cookie value can only be ASCII characters excluding control characters, whitespace, quotes, commas, semicolons and backslashes. Consider using CookieBuilder.withUrlEncodedValue instead.");
+            }
         }
 
         this.value = value;
@@ -241,6 +242,7 @@ public class CookieBuilder {
             String value = null;
             State state = State.NAME;
             boolean isQuotedString = false;
+            boolean quotedValueClosed = false;
 
             headerValueLoop:
             for (; i < input.length(); i++) {
@@ -268,13 +270,23 @@ public class CookieBuilder {
                         isQuotedString = true;
                     } else {
 
-                        if (isQuotedString) {
+                        if (quotedValueClosed) {
+                            if (ParseUtils.isOWS(c)) {
+                                // ignore it
+                            } else if (c == ';') {
+                                i++;
+                                break headerValueLoop;
+                            } else {
+                                throw new IllegalArgumentException("Got character code " + ((int) c) + " (" + c + ") after quoted cookie value");
+                            }
+                        } else if (isQuotedString) {
                             char lastChar = input.charAt(i - 1);
                             if (c == '\\' && lastChar != '\\') {
                                 // don't append
                             } else if (c == '"') {
                                 // this is the end, but we'll update on the next go
                                 isQuotedString = false;
+                                quotedValueClosed = true;
                             } else if (isCookieOctet(c)) {
                                 buffer.append(c);
                             } else {
@@ -294,6 +306,9 @@ public class CookieBuilder {
                         }
                     }
                 }
+            }
+            if (isQuotedString) {
+                throw new IllegalArgumentException("Unterminated quoted cookie value");
             }
             switch (state) {
                 case NAME:

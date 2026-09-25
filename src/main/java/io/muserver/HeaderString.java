@@ -51,7 +51,9 @@ class HeaderString implements CharSequence {
                 s = ((String) s).toLowerCase(Locale.ROOT);
             }
         }
-        return new HeaderString(s);
+        HeaderString headerString = new HeaderString(s);
+        validate(headerString, type);
+        return headerString;
     }
     static HeaderString valueOf(byte[] ascii, Type type) {
         if (ascii.length == 0) return EMPTY_VALUE;
@@ -63,6 +65,22 @@ class HeaderString implements CharSequence {
             }
         }
         return new HeaderString(s, ascii);
+    }
+
+    private static void validate(HeaderString value, Type type) {
+        if (type == Type.HEADER) {
+            for (byte b : value.bytes) {
+                if (!Http1MessageParser.isTChar(b)) {
+                    throw new IllegalArgumentException("Invalid HTTP header name");
+                }
+            }
+        } else {
+            for (byte b : value.bytes) {
+                if (b != '\t' && (b < 0x20 || b == 0x7F)) {
+                    throw new IllegalArgumentException("Invalid HTTP header value");
+                }
+            }
+        }
     }
 
     @Override
@@ -141,6 +159,10 @@ class HeaderString implements CharSequence {
             if (b == c) return true;
         }
         return false;
+    }
+
+    boolean containsForbiddenHttp2ValueOctet() {
+        return containsChar((byte) 0) || containsChar((byte) 10) || containsChar((byte) 13);
     }
 
     static HeaderString EMPTY_VALUE = new HeaderString("");

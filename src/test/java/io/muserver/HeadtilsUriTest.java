@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import java.net.URI;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class HeadtilsUriTest {
     @ParameterizedTest
@@ -27,6 +28,20 @@ class HeadtilsUriTest {
         URI actual = Headtils.getUri(LoggerFactory.getLogger(getClass()),
             Headers.create().set("Host", host), target, defaultUri);
         assertEquals(expected, actual.toString());
+    }
+
+
+    @ParameterizedTest
+    @CsvSource({
+        "Host, bad<host>:1234",
+        "X-Forwarded-Host, bad<host>:1234",
+        "Forwarded, host=bad<host>:1234"
+    })
+    void invalidAuthorityIsRejected(String header, String value) {
+        Headers headers = Headers.create().set("Host", "localhost:12345").set(header, value);
+        HttpException ex = assertThrows(HttpException.class, () -> Headtils.getUri(LoggerFactory.getLogger(getClass()),
+            headers, "/hello", URI.create("http://localhost:12345/hello")));
+        assertEquals(400, ex.status().code());
     }
 
     @Test

@@ -4,7 +4,10 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -57,6 +60,29 @@ class RFC9113_8_2_HttpFieldsTest {
             //   value bytes
             byte[] base = encodeFieldBlock(getHelloHeaders(getPort()));
             byte[] badHeader = appendLiteralHeader(base, "X-FOO", "bar");
+
+            con.handshake()
+                .writeRaw(headersFrame(1, true, true, badHeader))
+                .flush();
+
+            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\u0000", "\n", "\r"})
+    void fieldValuesWithForbiddenOctetsAreMalformed(String forbidden) throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> response.status(200))
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            byte[] base = encodeFieldBlock(getHelloHeaders(getPort()));
+            byte[] badHeader = appendLiteralHeader(base, "x-bad", "a" + forbidden + "b");
 
             con.handshake()
                 .writeRaw(headersFrame(1, true, true, badHeader))
@@ -358,8 +384,8 @@ class RFC9113_8_2_HttpFieldsTest {
      * reject or transform (e.g. uppercase names).
      */
     static byte[] appendLiteralHeader(byte[] base, String name, String value) {
-        byte[] nameBytes = name.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
-        byte[] valueBytes = value.getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        byte[] nameBytes = name.getBytes(StandardCharsets.US_ASCII);
+        byte[] valueBytes = value.getBytes(StandardCharsets.US_ASCII);
         // 1 byte type (0x00) + 1 byte name length + name + 1 byte value length + value
         byte[] extra = new byte[1 + 1 + nameBytes.length + 1 + valueBytes.length];
         extra[0] = 0x00; // literal without indexing, new name

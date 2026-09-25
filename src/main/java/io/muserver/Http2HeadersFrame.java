@@ -11,6 +11,8 @@ import java.util.Objects;
  */
 class Http2HeadersFrame implements LogicalHttp2Frame {
 
+    private static final int MAX_CONTINUATION_FRAMES = 128;
+
     private final int streamId;
     private final boolean endStream;
     private final FieldBlock headers;
@@ -144,7 +146,12 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
 
         if (baos != null) {
             var ended = false;
+            int continuationCount = 0;
             while (!ended) {
+                if (++continuationCount > MAX_CONTINUATION_FRAMES) {
+                    throw Http2Exception.connection(Http2ErrorCode.COMPRESSION_ERROR,
+                        "Too many CONTINUATION frames in one field block");
+                }
                 Mutils.readAtLeast(buffer, clientIn, Http2FrameHeader.FRAME_HEADER_LENGTH);
                 var hf = Http2FrameHeader.readFrom(buffer);
                 if (hf.frameType() != Http2FrameType.CONTINUATION) {

@@ -26,6 +26,7 @@ import java.util.stream.Collectors;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
 
@@ -281,6 +282,24 @@ public class CookieTest {
         okhttp3.Cookie actual = cookies.get(0);
         assertThat(actual.name(), equalTo("A-thing"));
         assertThat(actual.value(), equalTo("Some%20value%20%26%20another%20thing%3Dumm"));
+    }
+
+    @Test
+    public void quotedCookieValuesCannotConsumeOtherCookies() {
+        assertThrows(IllegalArgumentException.class, () -> CookieBuilder.fromCookieHeader("a=\"one; b=two\""));
+        assertThrows(IllegalArgumentException.class, () -> CookieBuilder.fromCookieHeader("a=\"one\"two; b=three"));
+        assertThrows(IllegalArgumentException.class, () -> CookieBuilder.fromCookieHeader("a=\"one"));
+
+        List<CookieBuilder> cookies = CookieBuilder.fromCookieHeader("a=\"one\"; b=two");
+        assertThat(cookies.stream().map(CookieBuilder::build).map(Cookie::toString).collect(Collectors.toList()),
+            contains("a=one", "b=two"));
+    }
+
+    @Test
+    public void generatedCookieValuesCannotContainDelimiters() {
+        for (String value : new String[]{"has space", "has;semicolon", "has,comma", "has\"quote", "has\\backslash"}) {
+            assertThrows(IllegalArgumentException.class, () -> CookieBuilder.newCookie().withName("a").withValue(value));
+        }
     }
 
     @Test

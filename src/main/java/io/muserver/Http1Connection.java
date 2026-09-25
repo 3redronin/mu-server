@@ -135,7 +135,15 @@ class Http1Connection extends BaseHttpConnection {
                 }
 
                 URI serverUri = creator.uri().resolve(relativeUrl);
-                URI requestUri = Headtils.getUri(log, request.headers(), relativeUrl, serverUri);
+                URI requestUri;
+                try {
+                    requestUri = Headtils.getUri(log, request.headers(), relativeUrl, serverUri);
+                } catch (HttpException e) {
+                    if (rejectException == null) {
+                        rejectException = e;
+                    }
+                    requestUri = serverUri;
+                }
                 Method method = java.util.Objects.requireNonNull(request.getMethod(), "No HTTP method was parsed");
                 if (rejectException == null) {
                     try {

@@ -32,8 +32,33 @@ class Http1MessageParserTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
+        "1 \r\nx\r\n0\r\n\r\n",
+        "1\t\r\nx\r\n0\r\n\r\n",
+        "1;bad=\r\nx\r\n0\r\n\r\n",
+        "1;bad=\"unterminated\r\nx\r\n0\r\n\r\n",
+        "1;bad=\"has\\\u0001control\"\r\nx\r\n0\r\n\r\n",
+        "1;bad=\"has\u007fdel\"\r\nx\r\n0\r\n\r\n",
+        "1;bad\nextension\r\nx\r\n0\r\n\r\n"
+    })
+    void invalidChunkExtensionLinesAreParseErrors(String chunks) throws Exception {
+        var raw = ("POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\n\r\n" + chunks)
+            .getBytes(StandardCharsets.ISO_8859_1);
+        var parser = new Http1MessageParser(HttpMessageType.REQUEST,
+            new ConcurrentLinkedQueue<>(), new ByteArrayInputStream(raw), 8192, 8192);
+
+        parser.readNext();
+        assertThrows(ParseException.class, parser::readNext);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
         "content-length: nope",
+        "content-length: +1",
         "content-length: -1",
+        "content-length: 1x",
+        "transfer-encoding: chunked, identity",
+        "transfer-encoding: chunked\r\ntransfer-encoding: gzip",
+        "transfer-encoding: gzip\r\ncontent-length: 1",
         "content-length: 1\r\ncontent-length: 2",
         "transfer-encoding: chunked\r\ncontent-length: 1"
     })
@@ -48,6 +73,33 @@ class Http1MessageParserTest {
         assertThat(rejection, notNullValue());
         assertThat(rejection.status().code(), equalTo(400));
         assertThat(rejection.responseHeaders().get("connection"), equalTo("close"));
+    }
+
+
+    @Test
+    void http10RequestWithTransferEncodingAndContentLengthIsRejectedWithConnectionClose() throws Exception {
+        var raw = ("POST / HTTP/1.0\r\n"
+            + "transfer-encoding: chunked\r\n"
+            + "content-length: 1\r\n"
+            + "\r\n")
+            .getBytes(StandardCharsets.US_ASCII);
+        var parser = new Http1MessageParser(HttpMessageType.REQUEST,
+            new ConcurrentLinkedQueue<>(), new ByteArrayInputStream(raw), 8192, 8192);
+
+        var request = (HttpRequestTemp) parser.readNext();
+        var rejection = request.getRejectRequest();
+        assertThat(rejection, notNullValue());
+        assertThat(rejection.status().code(), equalTo(400));
+        assertThat(rejection.responseHeaders().get("connection"), equalTo("close"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"GET / HTTP/1.1\r\nBad Header: x\r\n\r\n", "GET / HTTP/1.1\r\nName: has\nlf\r\n\r\n"})
+    void invalidHeaderOctetsAreParseErrors(String request) {
+        var parser = new Http1MessageParser(HttpMessageType.REQUEST,
+            new ConcurrentLinkedQueue<>(), new ByteArrayInputStream(request.getBytes(StandardCharsets.ISO_8859_1)), 8192, 8192);
+
+        assertThrows(ParseException.class, parser::readNext);
     }
 
     @Test

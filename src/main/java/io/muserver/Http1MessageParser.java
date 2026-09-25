@@ -208,7 +208,7 @@ class Http1MessageParser implements Http1MessageReader {
                             headerName = consumeAscii(buffer);
                             if (headerName.isEmpty() && isOkay) throw new ParseException("Empty header name", position);
                             state = ParseState.HEADER_NAME_ENDED;
-                        }
+                        } else throw new ParseException("Invalid header name " + b, position);
                         break;
                     }
 
@@ -238,7 +238,7 @@ class Http1MessageParser implements Http1MessageReader {
                             }
                         } else if (b == CR) {
                             state = ParseState.HEADER_VALUE_ENDING;
-                        }
+                        } else throw new ParseException("Invalid header value " + b, position);
                         break;
                     }
 
@@ -337,8 +337,9 @@ class Http1MessageParser implements Http1MessageReader {
 
                     case CHUNK_EXTENSIONS: {
                         if (isVChar(b) || isOWS(b)) {
-                            // todo: only allow valid extension characters
+                            append(buffer, b);
                         } else if (b == CR) {
+                            validateChunkExtensions(consumeAscii(buffer), position);
                             state = ParseState.CHUNK_HEADER_ENDING;
                         } else throw new ParseException("state=" + state + " b=" + b, position);
                         break;
@@ -555,6 +556,72 @@ class Http1MessageParser implements Http1MessageReader {
     }
     private static boolean isDigit(byte b) { return b >= ZERO && b <= NINE; }
     private static boolean isHexDigit(byte b) { return (b >= A && b <= F) || (b >= ZERO && b <= NINE) || (b >= A_LOWER && b <= F_LOWER); }
+
+    private static void validateChunkExtensions(String extensions, int position) throws ParseException {
+        int i = 0;
+        while (true) {
+            i = skipOWS(extensions, i);
+            i = readToken(extensions, i, position, "chunk extension name");
+            i = skipOWS(extensions, i);
+            if (i < extensions.length() && extensions.charAt(i) == '=') {
+                i = skipOWS(extensions, i + 1);
+                if (i >= extensions.length()) throw new ParseException("Missing chunk extension value", position);
+                if (extensions.charAt(i) == '"') {
+                    i = readQuotedString(extensions, i + 1, position);
+                } else {
+                    i = readToken(extensions, i, position, "chunk extension value");
+                }
+                i = skipOWS(extensions, i);
+            }
+            if (i == extensions.length()) return;
+            if (extensions.charAt(i) != ';') throw new ParseException("Invalid chunk extension separator", position);
+            i++;
+        }
+    }
+
+    private static int skipOWS(String value, int offset) {
+        while (offset < value.length()) {
+            char c = value.charAt(offset);
+            if (c != ' ' && c != '\t') return offset;
+            offset++;
+        }
+        return offset;
+    }
+
+    private static int readToken(String value, int offset, int position, String name) throws ParseException {
+        int start = offset;
+        while (offset < value.length() && ParseUtils.isTChar(value.charAt(offset))) {
+            offset++;
+        }
+        if (offset == start) throw new ParseException("Missing " + name, position);
+        return offset;
+    }
+
+    private static int readQuotedString(String value, int offset, int position) throws ParseException {
+        boolean escaped = false;
+        while (offset < value.length()) {
+            char c = value.charAt(offset++);
+            if (escaped) {
+                if (!isQuotedPairChar(c)) throw new ParseException("Invalid quoted-pair in chunk extension", position);
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '"') {
+                return offset;
+            } else if (!isQuotedText(c)) {
+                throw new ParseException("Invalid quoted text in chunk extension", position);
+            }
+        }
+        throw new ParseException("Unterminated chunk extension quoted-string", position);
+    }
+
+    private static boolean isQuotedText(char c) {
+        return c == '\t' || c == ' ' || c == 0x21 || (c >= 0x23 && c <= 0x5B) || (c >= 0x5D && c <= 0x7E);
+    }
+
+    private static boolean isQuotedPairChar(char c) {
+        return c == '\t' || c == ' ' || (c >= 0x21 && c <= 0x7E);
+    }
 
 
     private static String consumeAscii(ByteArrayOutputStream baos) {
