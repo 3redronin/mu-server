@@ -94,6 +94,29 @@ class RFC9113_8_2_HttpFieldsTest {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"\u0000", "\n", "\r"})
+    void trailerValuesWithForbiddenOctetsAreMalformed(String forbidden) throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
+                request.readBodyAsString();
+                response.status(204);
+            })
+            .start();
+
+        try (var client = new H2Client(); var con = client.connect(server)) {
+            byte[] trailers = appendLiteralHeader(new byte[0], "x-bad", "a" + forbidden + "b");
+            con.handshake()
+                .writeFrame(new Http2HeadersFrame(1, false, postHelloHeaders(getPort())))
+                .writeRaw(headersFrame(1, true, true, trailers)).flush();
+
+            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
+            assertThat(reset.streamId(), equalTo(1));
+            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+        }
+    }
+
     // -------------------------------------------------------------------------
     // §8.2.2 Connection-Specific Header Fields
     // -------------------------------------------------------------------------

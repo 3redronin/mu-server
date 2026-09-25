@@ -3,6 +3,8 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import java.io.IOException;
 import java.util.Arrays;
 import static io.muserver.MuServerBuilder.httpsServer;
@@ -112,20 +114,26 @@ class RFC9113_6_10_ContinuationTest {
         }
     }
 
-    @Test
-    void continuationSequencesHaveABoundedFrameCount() throws Exception {
+    @ParameterizedTest
+    @ValueSource(ints = {128, 129})
+    void continuationSequencesHaveABoundedEmptyFrameCount(int count) throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, params) -> response.status(204))
             .start();
         try (var client = new H2Client();
              var con = client.connect(server)) {
             con.handshake()
                 .writeRaw(headersFrame(1, true, false, encodeFieldBlock(getHelloHeaders(getPort()))));
-            for (int i = 0; i < 129; i++) {
-                con.writeRaw(continuationFrame(1, i == 128, new byte[0]));
+            for (int i = 0; i < count; i++) {
+                con.writeRaw(continuationFrame(1, i == count - 1, new byte[0]));
             }
             con.flush();
 
+            if (count == 128) {
+                assertThat(con.readLogicalFrame(Http2HeadersFrame.class).headers().get(":status"), equalTo("204"));
+                return;
+            }
             assertThat(
                 con.readLogicalFrame(),
                 equalTo(goAway(0, Http2ErrorCode.COMPRESSION_ERROR))

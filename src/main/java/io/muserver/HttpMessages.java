@@ -5,7 +5,6 @@ import org.jspecify.annotations.Nullable;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 
 import static io.muserver.ParseUtils.CRLF;
@@ -32,19 +31,12 @@ interface HttpMessageTemp extends Http1ConnectionMsg {
             throw new IllegalStateException("Multiple content-length headers");
         }
         // 6.3.5
-        String value = cl.get(0);
-        if (value.isEmpty()) throw new IllegalStateException("Invalid content-length");
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            if (c < '0' || c > '9') throw new IllegalStateException("Invalid content-length");
-        }
         long len;
         try {
-            len = Long.parseLong(value);
+            len = ParseUtils.parseContentLength(cl.get(0));
         } catch (NumberFormatException e){
             throw new IllegalStateException("Invalid content-length");
         }
-        if (len < 0L) throw new IllegalStateException("Negative content length " + len);
         // 6.3.6
         return (len == 0L) ? BodySize.NONE : new BodySize(BodyType.FIXED_SIZE, len);
     }
@@ -53,12 +45,12 @@ interface HttpMessageTemp extends Http1ConnectionMsg {
         List<String> values = headers.getAll(HeaderNames.TRANSFER_ENCODING);
         if (values.isEmpty()) return false;
 
-        List<String> codings = new ArrayList<>();
+        boolean chunked = false;
         for (String value : values) {
             String[] split = value.split(",", -1);
             for (String item : split) {
                 String coding = item.trim();
-                if (coding.isEmpty() || coding.indexOf(';') >= 0) {
+                if (coding.isEmpty() || chunked) {
                     throw new IllegalStateException("Invalid transfer-encoding");
                 }
                 for (int i = 0; i < coding.length(); i++) {
@@ -66,15 +58,10 @@ interface HttpMessageTemp extends Http1ConnectionMsg {
                         throw new IllegalStateException("Invalid transfer-encoding");
                     }
                 }
-                codings.add(coding);
+                chunked = coding.equalsIgnoreCase("chunked");
             }
         }
-
-        int chunkedCount = 0;
-        for (String coding : codings) {
-            if (coding.equalsIgnoreCase("chunked")) chunkedCount++;
-        }
-        if (chunkedCount != 1 || !codings.get(codings.size() - 1).equalsIgnoreCase("chunked")) {
+        if (!chunked) {
             throw new IllegalStateException("The final transfer coding must be chunked");
         }
         return true;
@@ -154,10 +141,9 @@ class HttpRequestTemp implements HttpMessageTemp {
     public BodySize bodyTransferSize() {
         // numbers referring to sections in https://httpwg.org/specs/rfc9112.html#message.body.length
         var cl = headers.getAll(HeaderNames.CONTENT_LENGTH);
-        var hasTransferEncoding = headers.contains(HeaderNames.TRANSFER_ENCODING);
         var isChunked = HttpMessageTemp.hasFinalChunkedTransferCoding(headers);
         // 6.3.3
-        if (hasTransferEncoding && !cl.isEmpty())
+        if (isChunked && !cl.isEmpty())
             throw new IllegalStateException("A request has transfer-encoding and content-length " + cl);
         // 6.3.4
         if (isChunked) return BodySize.CHUNKED;

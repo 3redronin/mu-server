@@ -34,6 +34,10 @@ class Http1MessageParserTest {
     @ValueSource(strings = {
         "1 \r\nx\r\n0\r\n\r\n",
         "1\t\r\nx\r\n0\r\n\r\n",
+        "1;\r\nx\r\n0\r\n\r\n",
+        "1;name;\r\nx\r\n0\r\n\r\n",
+        "1;name=value extra\r\nx\r\n0\r\n\r\n",
+        "1;name=\"ok\"extra\r\nx\r\n0\r\n\r\n",
         "1;bad=\r\nx\r\n0\r\n\r\n",
         "1;bad=\"unterminated\r\nx\r\n0\r\n\r\n",
         "1;bad=\"has\\\u0001control\"\r\nx\r\n0\r\n\r\n",
@@ -54,9 +58,14 @@ class Http1MessageParserTest {
     @ValueSource(strings = {
         "content-length: nope",
         "content-length: +1",
+        "content-length: -0",
         "content-length: -1",
         "content-length: 1x",
         "transfer-encoding: chunked, identity",
+        "transfer-encoding: chunked, chunked",
+        "transfer-encoding: chunked,",
+        "transfer-encoding: chunked;param=value",
+        "transfer-encoding: gzip",
         "transfer-encoding: chunked\r\ntransfer-encoding: gzip",
         "transfer-encoding: gzip\r\ncontent-length: 1",
         "content-length: 1\r\ncontent-length: 2",
@@ -73,6 +82,18 @@ class Http1MessageParserTest {
         assertThat(rejection, notNullValue());
         assertThat(rejection.status().code(), equalTo(400));
         assertThat(rejection.responseHeaders().get("connection"), equalTo("close"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"chunked", "CHUNKED", "gzip, chunked", "gzip\r\nTransfer-Encoding: chunked"})
+    void finalChunkedCodingIsRecognisedAcrossFieldLines(String value) throws Exception {
+        String wire = "POST / HTTP/1.1\r\nTransfer-Encoding: " + value + "\r\n\r\n0\r\n\r\n";
+        var parser = new Http1MessageParser(HttpMessageType.REQUEST, new ConcurrentLinkedQueue<>(),
+            new ByteArrayInputStream(wire.getBytes(StandardCharsets.US_ASCII)), 8192, 8192);
+        var request = (HttpRequestTemp) parser.readNext();
+        assertThat(request.getRejectRequest(), nullValue());
+        assertThat(request.getBodySize(), equalTo(BodySize.CHUNKED));
+        assertThat(((MessageBodyBit) parser.readNext()).isLast(), equalTo(true));
     }
 
 

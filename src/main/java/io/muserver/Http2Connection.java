@@ -18,7 +18,6 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 class Http2Connection extends BaseHttpConnection implements Http2Peer {
-    private static final int MAX_PEER_ENCODER_TABLE_SIZE = 65536;
     private static final int MAX_POSSIBLE_STREAM_ID = 0x7fffffff;
     static final long GO_AWAY_GRACE_PERIOD_MILLIS = 200;
     private static final Http2GoAway GO_AWAY_WARNING = new Http2GoAway(MAX_POSSIBLE_STREAM_ID, Http2ErrorCode.NO_ERROR.code(), null);
@@ -536,7 +535,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             if (lifecycle.writeState.canSendFrames) {
                 writeCoordinator.applyPeerSettingsChange(
                     newSettings.initialWindowSize - oldSettings.initialWindowSize,
-                    cappedPeerEncoderTableSize(newSettings.headerTableSize),
+                    newSettings.headerTableSize,
                     new WriteTask(Http2Settings.ACK, false),
                     lifecycle.lastStreamId
                 );
@@ -553,11 +552,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             throw new IllegalStateException("The HTTP/2 writer has already started");
         }
         clientSettings = settings;
-        writeCoordinator.initializePeerHeaderTableSize(cappedPeerEncoderTableSize(settings.headerTableSize));
-    }
-
-    private static int cappedPeerEncoderTableSize(int advertisedSize) {
-        return Math.min(advertisedSize, MAX_PEER_ENCODER_TABLE_SIZE);
+        writeCoordinator.initializePeerHeaderTableSize(settings.headerTableSize);
     }
 
     private void failConnection(WriteTask goAway, IOException reason) {

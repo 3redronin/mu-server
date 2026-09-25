@@ -219,7 +219,7 @@ class RFC9113_8_1_HttpMessageFramingTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"", "x", "-1", "+1", "1x", "9223372036854775808"})
+    @ValueSource(strings = {"", "x", "-1", "-0", "+0", "+1", "1x", "9223372036854775808"})
     void invalidContentLengthValuesAreMalformed(String contentLength) throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())

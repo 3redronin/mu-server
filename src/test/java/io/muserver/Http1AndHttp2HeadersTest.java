@@ -2,6 +2,8 @@ package io.muserver;
 
 import jakarta.ws.rs.core.MediaType;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Collections;
 import java.util.Map;
@@ -44,14 +46,28 @@ public class Http1AndHttp2HeadersTest {
 
 
     @Test
-    public void invalidHeaderNamesAndValuesAreRejected() {
+    public void invalidHeaderNamesAreRejected() {
         for (Headers headers : impls) {
             assertThrows(IllegalArgumentException.class, () -> headers.set("Bad Header", "value"));
             assertThrows(IllegalArgumentException.class, () -> headers.add("bad:header", "value"));
-            assertThrows(IllegalArgumentException.class, () -> headers.set("x-test", "ok\r\nInjected: yes"));
-            assertThrows(IllegalArgumentException.class, () -> headers.add("x-test", asList("ok", "bad\nvalue")));
-            assertThrows(IllegalArgumentException.class, () -> headers.set("x-test", asList("ok", "bad\u0000value")));
         }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\r", "\n", "\u0000", "\u0001", "\u007f"})
+    public void invalidHeaderValuesAreRejected(String forbidden) {
+        for (Headers headers : impls) {
+            String value = "a" + forbidden + "b";
+            assertThrows(IllegalArgumentException.class, () -> headers.set("x-test", value));
+            assertThrows(IllegalArgumentException.class, () -> headers.add("x-test", asList("ok", value)));
+            assertThrows(IllegalArgumentException.class, () -> headers.set("x-test", asList("ok", value)));
+        }
+    }
+
+    @Test
+    public void horizontalTabsAreAllowedInFieldValues() {
+        Headers headers = Headers.create().set("x-test", "a\tb");
+        assertThat(headers.get("x-test"), equalTo("a\tb"));
     }
 
     @Test

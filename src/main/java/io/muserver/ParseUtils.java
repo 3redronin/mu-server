@@ -21,6 +21,14 @@ class ParseUtils {
     static final byte[] COLON_SP = new byte[] { COLON, SP };
     static final byte[] CRLF = new byte[] { CR, LF };
 
+    static long parseContentLength(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c < '0' || c > '9') throw new NumberFormatException("Invalid content-length");
+        }
+        return Long.parseLong(value);
+    }
+
     static boolean isTChar(char c) {
         return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || ((c >= '0' && c <= '9') || c == '!' ||
             c == '#' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '*' || c == '+' ||

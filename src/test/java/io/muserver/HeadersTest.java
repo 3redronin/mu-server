@@ -4,6 +4,7 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ArgumentsSource;
 import scaffolding.ClientUtils;
@@ -14,7 +15,9 @@ import scaffolding.ServerUtils;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.net.InetAddress;
+import java.net.Socket;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +40,25 @@ import static scaffolding.StringUtils.randomAsciiStringOfLength;
 public class HeadersTest {
 
     private MuServer server;
+
+    @Test
+    public void invalidAuthorityDoesNotWaitForAnExpectedBody() throws Exception {
+        AtomicBoolean dispatched = new AtomicBoolean();
+        CompletableFuture<RejectedRequest> rejected = new CompletableFuture<>();
+        server = MuServerBuilder.httpServer()
+            .addRequestRejectListener(rejected::complete)
+            .addHandler((request, response) -> { dispatched.set(true); return true; }).start();
+        try (Socket socket = new Socket(server.uri().getHost(), server.uri().getPort())) {
+            socket.setSoTimeout(2000);
+            socket.getOutputStream().write(("POST / HTTP/1.1\r\nHost: bad<host>\r\n"
+                + "Content-Length: 20\r\nExpect: 100-continue\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+            String response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            assertThat(response, startsWith("HTTP/1.1 400"));
+            assertThat(response, not(containsString("100 Continue")));
+        }
+        assertThat(dispatched.get(), is(false));
+        assertThat(rejected.get(2, TimeUnit.SECONDS).status(), is(400));
+    }
 
     @AfterEach
     public void stopIt() {

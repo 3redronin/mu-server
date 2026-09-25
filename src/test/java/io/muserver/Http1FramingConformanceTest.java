@@ -57,7 +57,7 @@ class Http1FramingConformanceTest {
     @ValueSource(ints = {1, 2, 3, 7, 8192})
     void chunkExtensionsAndMixedCaseHexPreserveMessageBoundary(int readSize) throws Exception {
         Http1MessageParser parser = parser("POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n"
-            + "a;name=value\r\n0123456789\r\nA;quoted=\"hello world\"\r\nabcdefghij\r\n0\r\n\r\n"
+            + "a;name=value;flag\r\n0123456789\r\nA; quoted = \"hello \\\"world\\\"\"; empty=\"\"\r\nabcdefghij\r\n0;final=yes\r\n\r\n"
             + "GET /next HTTP/1.1\r\nHost: localhost\r\n\r\n", readSize);
         parser.readNext();
         assertEquals("0123456789abcdefghij", body(parser));

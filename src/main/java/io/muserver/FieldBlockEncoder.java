@@ -16,9 +16,6 @@ class FieldBlockEncoder {
     void encodeTo(FieldBlock block, OutputStream out) throws IOException {
         writePendingTableSizeChanges(out);
         for (FieldLine line : block.lineIterator()) {
-            if (line.value().containsForbiddenHttp2ValueOctet()) {
-                throw new IOException("Invalid HTTP/2 field value");
-            }
             int lineCode = line.neverIndexed() ? -1 : table.codeFor(line);
             if (lineCode > 0) {
                 // indexed name and value

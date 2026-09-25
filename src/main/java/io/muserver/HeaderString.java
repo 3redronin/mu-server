@@ -70,7 +70,7 @@ class HeaderString implements CharSequence {
     private static void validate(HeaderString value, Type type) {
         if (type == Type.HEADER) {
             for (byte b : value.bytes) {
-                if (!Http1MessageParser.isTChar(b)) {
+                if (!ParseUtils.isTChar(b)) {
                     throw new IllegalArgumentException("Invalid HTTP header name");
                 }
             }

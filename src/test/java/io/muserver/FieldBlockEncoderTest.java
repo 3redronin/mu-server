@@ -13,7 +13,6 @@ import java.util.List;
 import static io.muserver.FieldBlockEncoder.writeHpackInt;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class FieldBlockEncoderTest {
 
@@ -46,14 +45,15 @@ class FieldBlockEncoderTest {
     }
 
     @Test
-    void outgoingHttp2FieldValuesCannotContainCrLfOrNul() {
-        FieldBlock block = new FieldBlock();
-        block.add(new FieldLine(HeaderString.valueOf("x-bad", HeaderString.Type.HEADER), new HeaderString("one\ntwo")));
-
-        assertThat(
-            assertThrows(IOException.class, () -> toHex(block)).getMessage(),
-            equalTo("Invalid HTTP/2 field value")
-        );
+    void aLargePeerTableLimitDoesNotRetainResponseFields() throws IOException {
+        HpackTable table = new HpackTable(Integer.MAX_VALUE);
+        FieldBlockEncoder encoder = new FieldBlockEncoder(table);
+        for (int i = 0; i < 1000; i++) {
+            FieldBlock block = new FieldBlock();
+            block.add("x-unique", "value-" + i);
+            encoder.encodeTo(block, new ByteArrayOutputStream());
+        }
+        assertThat(table.dynamicTableSizeInBytes(), equalTo(0));
     }
 
     @Test

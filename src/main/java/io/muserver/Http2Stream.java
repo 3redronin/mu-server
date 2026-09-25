@@ -377,7 +377,12 @@ class Http2Stream implements ResponseInfo {
                 if (host != null) throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "double host", id);
                 host = line.value();
             } else if (HeaderNames.CONTENT_LENGTH.equals(n)) {
-                long len = parseContentLength(line.value().toString(), id);
+                long len;
+                try {
+                    len = ParseUtils.parseContentLength(line.value().toString());
+                } catch (NumberFormatException e) {
+                    throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "content-length invalid", id);
+                }
                 if (cl != null && len != cl) {
                     throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "multiple content-length lines", id);
                 }
@@ -471,23 +476,6 @@ class Http2Stream implements ResponseInfo {
         stream.response = new Http2Response(stream, new FieldBlock(), request);
         request.setResponse(stream.response);
         return stream;
-    }
-
-    private static long parseContentLength(String value, int streamId) throws Http2Exception {
-        if (value.isEmpty()) {
-            throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "content-length invalid", streamId);
-        }
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            if (c < '0' || c > '9') {
-                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "content-length invalid", streamId);
-            }
-        }
-        try {
-            return Long.parseLong(value);
-        } catch (NumberFormatException e) {
-            throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "content-length invalid", streamId);
-        }
     }
 
     void cleanup() throws IOException, InterruptedException {

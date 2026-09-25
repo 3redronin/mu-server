@@ -42,10 +42,13 @@ interface ResourceProviderFactory {
         if (!Files.isDirectory(baseDirectory, LinkOption.NOFOLLOW_LINKS)) {
             throw new MuException(baseDirectory + " is not a directory");
         }
+        Path base = baseDirectory.toAbsolutePath().normalize();
         return new ResourceProviderFactory() {
             @Override
             public ResourceProvider get(String relativePath) {
-                return new AsyncFileProvider(baseDirectory, relativePath);
+                if (relativePath.startsWith("/")) relativePath = "." + relativePath;
+                Path resolved = base.resolve(relativePath).normalize();
+                return resolved.startsWith(base) ? new AsyncFileProvider(resolved) : NotFoundResourceProvider.INSTANCE;
             }
 
             @Override
@@ -133,7 +136,7 @@ class ClasspathCache implements ResourceProviderFactory {
         relativePath = Mutils.trim(relativePath, "/");
         ClasspathResourceProvider cur = all.get(relativePath);
         if (cur == null) {
-            return nullProvider;
+            return NotFoundResourceProvider.INSTANCE;
         }
         return cur.newWithInputStream();
     }
@@ -145,7 +148,12 @@ class ClasspathCache implements ResourceProviderFactory {
             '}';
     }
 
-    private static final ResourceProvider nullProvider = new ResourceProvider() {
+}
+
+final class NotFoundResourceProvider {
+    private NotFoundResourceProvider() { }
+
+    static final ResourceProvider INSTANCE = new ResourceProvider() {
         @Override
         public boolean exists() {
             return false;
@@ -186,7 +194,6 @@ class ClasspathCache implements ResourceProviderFactory {
 class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, Object> {
     private static final Logger log = LoggerFactory.getLogger(AsyncFileProvider.class);
     private final Path localPath;
-    private final boolean allowedPath;
     private @Nullable AsynchronousFileChannel channel;
     private long curPos = 0;
     private @Nullable ByteBuffer buf;
@@ -194,24 +201,18 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
     private long maxLen;
     private long bytesSent = 0;
 
-    AsyncFileProvider(Path baseDirectory, String relativePath) {
-        if (relativePath.startsWith("/")) {
-            relativePath = "." + relativePath;
-        }
-        Path base = baseDirectory.toAbsolutePath().normalize();
-        Path resolved = base.resolve(Paths.get(relativePath).normalize()).normalize();
-        this.allowedPath = resolved.startsWith(base);
-        this.localPath = allowedPath ? resolved : base.resolve("__mu_invalid_resource_path__");
+    AsyncFileProvider(Path localPath) {
+        this.localPath = localPath;
     }
 
     @Override
     public boolean exists() {
-        return allowedPath && Files.exists(localPath);
+        return Files.exists(localPath);
     }
 
     @Override
     public boolean isDirectory() {
-        return allowedPath && Files.isDirectory(localPath);
+        return Files.isDirectory(localPath);
     }
 
     @Override
@@ -256,9 +257,6 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
 
     @Override
     public Stream<Path> listFiles() throws IOException {
-        if (!allowedPath) {
-            return Stream.empty();
-        }
         return Files.list(localPath);
     }
 

@@ -12,6 +12,14 @@ public class NewCookieHeaderDelegateTest {
     private final NewCookieHeaderDelegate delegate = new NewCookieHeaderDelegate();
 
     @Test
+    public void cookieValuesMustBeEncodedBeforeSerialization() {
+        NewCookie invalid = new NewCookie.Builder("name").value("some value").build();
+        assertThrows(IllegalArgumentException.class, () -> delegate.toString(invalid));
+        NewCookie encoded = new NewCookie.Builder("name").value("some%20value").build();
+        assertThat(delegate.fromString(delegate.toString(encoded)).getValue(), is("some%20value"));
+    }
+
+    @Test
     public void canRoundTrip() {
         NewCookie newCookie = new NewCookie.Builder("Blah")
             .value("ha%20ha")
