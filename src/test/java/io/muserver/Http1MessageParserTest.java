@@ -32,6 +32,7 @@ class Http1MessageParserTest {
 
     @ParameterizedTest
     @ValueSource(strings = {
+        "0\r X\r\n\r\nGET /smuggled HTTP/1.1\r\nHost: localhost\r\n\r\n",
         "1 \r\nx\r\n0\r\n\r\n",
         "1\t\r\nx\r\n0\r\n\r\n",
         "1;\r\nx\r\n0\r\n\r\n",

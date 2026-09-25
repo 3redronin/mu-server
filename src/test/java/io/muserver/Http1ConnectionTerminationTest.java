@@ -74,6 +74,40 @@ class Http1ConnectionTerminationTest {
         }
     }
 
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void chunkSizeLineControlsFollowingRequestDispatch(boolean validCrLf) throws Exception {
+        var markerRequests = new AtomicInteger();
+        server = httpServer()
+            .addHandler(Method.POST, "/", (request, response, pathParams) -> {
+                request.readBodyAsString();
+                response.write("ok");
+            })
+            .addHandler(Method.GET, "/smuggled", (request, response, pathParams) -> {
+                markerRequests.incrementAndGet();
+                response.write("marker");
+            })
+            .start();
+
+        try (var socket = new Socket("127.0.0.1", server.uri().getPort())) {
+            socket.setSoTimeout(3000);
+            var wire = "POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n"
+                + (validCrLf ? "0\r\n\r\n" : "0\r X\r\n\r\n")
+                + "GET /smuggled HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            socket.getOutputStream().write(wire.getBytes(StandardCharsets.US_ASCII));
+            socket.getOutputStream().flush();
+
+            byte[] response = new byte[4096];
+            int received = 0;
+            int read;
+            while ((read = socket.getInputStream().read(response)) != -1) {
+                received += read;
+                assertTrue(received <= 65536, "Unexpectedly large rejection response");
+            }
+            assertEquals(validCrLf ? 1 : 0, markerRequests.get());
+        }
+    }
+
     @Test
     void abortedUploadPublishesClientDisconnectBeforeTheReadFails()
         throws Exception {
