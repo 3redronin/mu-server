@@ -26,9 +26,9 @@ class Http2AuthorityTest {
         "foo~bar,foo~bar,https://foo~bar/authority",
         "Service_Name.Example,service_name.example,https://Service_Name.Example/authority",
         "Foo~Bar,foo~bar,https://Foo~Bar/authority",
-        "Service_Name.Example:443,service_name.example,https://Service_Name.Example:443/authority",
+        "Service_Name.Example:443,service_name.example:443,https://Service_Name.Example:443/authority",
         "Alpha.Example,alpha.example,https://Alpha.Example/authority",
-        "alpha.example:443,alpha.example,https://alpha.example:443/authority"})
+        "Alpha.Example:443,alpha.example:443,https://Alpha.Example:443/authority"})
     void equivalentHostUsesAuthorityForRequestUri(String authority, String host, String expectedUri) throws Exception {
         server = server();
         try (var client = new H2Client(); var con = client.connect(server)) {
@@ -41,8 +41,9 @@ class Http2AuthorityTest {
 
     @ParameterizedTest
     @CsvSource({"alpha.example,beta.example", "alpha.example:443,alpha.example:444",
-        "foo~bar:443,foo~bar:444"})
-    void conflictingHostResetsOnlyTheStream(String authority, String host) throws Exception {
+        "alpha.example:443,alpha.example", "foo~bar:443,foo~bar:444",
+        "foo%2Dbar,foo-bar"})
+    void nonMatchingHostResetsOnlyTheStream(String authority, String host) throws Exception {
         server = server();
         try (var client = new H2Client(); var con = client.connect(server)) {
             con.handshake().writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers(authority, host)))).flush();
