@@ -30,6 +30,67 @@ public class FormUploadTest {
     private MuServer server;
 
     @Test
+    public void configuredMultipartPartLimitReachesRequestParsing() throws IOException {
+        @Path("/limited")
+        class LimitedResource {
+            @POST
+            @Consumes(jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            public String submit(@FormParam("kept") String kept) {
+                return kept;
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .withMaxMultipartParts(1)
+            .addHandler(RestHandlerBuilder.restHandler(new LimitedResource()))
+            .start();
+        assertThat(server.maxMultipartParts(), is(1));
+
+        try (Response resp = call(request(server.uri().resolve("/limited"))
+            .post(new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("kept", "yes")
+                .build()))) {
+            assertThat(resp.code(), is(200));
+            assertThat(resp.body().string(), is("yes"));
+        }
+
+        try (Response resp = call(request(server.uri().resolve("/limited"))
+            .post(new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("kept", "yes")
+                .addFormDataPart("extra", "no")
+                .build()))) {
+            assertThat(resp.code(), is(413));
+        }
+    }
+
+    @Test
+    public void zeroMultipartPartLimitRejectsAnyPart() throws IOException {
+        @Path("/empty-only")
+        class EmptyOnlyResource {
+            @POST
+            @Consumes(jakarta.ws.rs.core.MediaType.MULTIPART_FORM_DATA)
+            public String submit(@FormParam("one") String one) {
+                return one;
+            }
+        }
+
+        server = ServerUtils.httpsServerForTest()
+            .withMaxMultipartParts(0)
+            .addHandler(RestHandlerBuilder.restHandler(new EmptyOnlyResource()))
+            .start();
+
+        try (Response resp = call(request(server.uri().resolve("/empty-only"))
+            .post(new MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("one", "part")
+                .build()))) {
+            assertThat(resp.code(), is(413));
+        }
+    }
+
+    @Test
     public void formParamsCanBeUploads() throws IOException {
 
         @Path("/images")
