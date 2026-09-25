@@ -47,6 +47,7 @@ class Http2Response extends BaseResponse {
             throw new IllegalStateException("Cannot write headers multiple times");
         }
         prepareBodylessResponseHeaders();
+        preserveReflectedOriginVary();
         setState(ResponseState.WRITING_HEADERS);
         fields.add(0, new FieldLine(HeaderNames.PSEUDO_STATUS, HeaderString.valueOf(Integer.toString(status().code()), HeaderString.Type.VALUE)));
 

@@ -27,6 +27,7 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
             throw new IllegalStateException("Cannot write headers multiple times");
         }
         prepareBodylessResponseHeaders();
+        preserveReflectedOriginVary();
         setState(ResponseState.WRITING_HEADERS);
 
         ByteArrayOutputStream headerBytes = new ByteArrayOutputStream(256);
