@@ -88,8 +88,8 @@ class Headtils {
         try {
             String hostHeader = h.get(HeaderNames.HOST);
             URI absoluteTarget = absoluteTarget(originalRequestTarget);
-            String absoluteTargetAuthority = absoluteTarget == null ? null : authorityWithoutUserInfo(absoluteTarget);
-            String defaultScheme = defaultValue.getScheme();
+            String absoluteTargetAuthority = absoluteTarget == null ? null : authorityFromAbsoluteTarget(absoluteTarget);
+            String defaultScheme = absoluteTarget == null ? defaultValue.getScheme() : absoluteTarget.getScheme();
             if (originalRequestTarget != null) {
                 validateHttp1Host(h);
                 if (absoluteTargetAuthority != null) validateAuthority(absoluteTargetAuthority);
@@ -116,9 +116,22 @@ class Headtils {
         }
     }
 
+    static boolean isSecure(Headers headers, boolean transportIsSecure) {
+        List<ForwardedHeader> forwarded = getForwardedHeaders(headers);
+        if (forwarded.isEmpty() || forwarded.get(0).proto() == null) return transportIsSecure;
+        return "https".equalsIgnoreCase(forwarded.get(0).proto());
+    }
+
     private static @Nullable URI absoluteTarget(@Nullable String requestTarget) throws URISyntaxException {
         if (requestTarget == null) return null;
         URI uri = new URI(requestTarget);
+        if (uri.isAbsolute() && (uri.getRawUserInfo() != null || uri.getRawFragment() != null)) {
+            throw HttpException.badRequest("Invalid request target");
+        }
+        if (uri.isAbsolute() && ("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme()))
+            && uri.getRawAuthority() == null) {
+            throw HttpException.badRequest("Invalid request target");
+        }
         return uri.isAbsolute() && uri.getRawAuthority() != null ? uri : null;
     }
 
@@ -130,17 +143,67 @@ class Headtils {
 
     private static void validateAuthority(String authority) throws URISyntaxException {
         URI parsed = new URI("http://" + authority);
-        if (parsed.getHost() == null || parsed.getRawUserInfo() != null || parsed.getRawPath().length() > 0
+        if (parsed.getRawAuthority() == null || parsed.getRawUserInfo() != null
+            || (parsed.getRawPath() != null && !parsed.getRawPath().isEmpty())
             || parsed.getRawQuery() != null || parsed.getRawFragment() != null) {
+            throw HttpException.badRequest("Invalid request authority");
+        }
+
+        // URI#getHost only recognizes server-style names; reg-name also permits valid registered names such as service_name.
+        String host = authority;
+        String port = null;
+        if (authority.startsWith("[")) {
+            int closeBracket = authority.indexOf(']');
+            if (closeBracket < 0) {
+                throw HttpException.badRequest("Invalid request authority");
+            }
+            host = authority.substring(0, closeBracket + 1);
+            if (closeBracket + 1 < authority.length()) {
+                if (authority.charAt(closeBracket + 1) != ':') {
+                    throw HttpException.badRequest("Invalid request authority");
+                }
+                port = authority.substring(closeBracket + 2);
+            }
+        } else {
+            int colon = authority.lastIndexOf(':');
+            if (colon >= 0) {
+                if (authority.indexOf(':') != colon) throw HttpException.badRequest("Invalid request authority");
+                host = authority.substring(0, colon);
+                port = authority.substring(colon + 1);
+            }
+            if (!isValidRegName(host)) throw HttpException.badRequest("Invalid request authority");
+        }
+        if (port != null && !port.chars().allMatch(c -> c >= '0' && c <= '9')) {
             throw HttpException.badRequest("Invalid request authority");
         }
     }
 
-    private static String authorityWithoutUserInfo(URI uri) throws HttpException {
+    private static boolean isValidRegName(String host) {
+        if (host.isEmpty()) return false;
+        for (int i = 0; i < host.length(); i++) {
+            char c = host.charAt(i);
+            if (isUnreserved(c) || "!$&'()*+,;=".indexOf(c) >= 0) continue;
+            if (c == '%' && i + 2 < host.length() && isHex(host.charAt(i + 1)) && isHex(host.charAt(i + 2))) {
+                i += 2;
+                continue;
+            }
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean isUnreserved(char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+            || c == '-' || c == '.' || c == '_' || c == '~';
+    }
+
+    private static boolean isHex(char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    }
+
+    private static String authorityFromAbsoluteTarget(URI uri) throws HttpException {
         String authority = uri.getRawAuthority();
-        String userInfo = uri.getRawUserInfo();
         if (authority == null) throw HttpException.badRequest("Invalid request authority");
-        if (userInfo != null) authority = authority.substring(userInfo.length() + 1);
         if (authority.isEmpty()) throw HttpException.badRequest("Invalid request authority");
         return authority;
     }

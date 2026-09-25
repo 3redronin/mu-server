@@ -27,8 +27,7 @@ public class HttpsRedirector implements MuHandler {
     @Override
     public boolean handle(MuRequest request, MuResponse response) throws Exception {
         URI uri = request.uri();
-        boolean isHttp = uri.getScheme().equals("http");
-        if (!isHttp) {
+        if (request.isSecure()) {
             // Note: clients should ignore HSTS headers on non-HTTPS requests
             if (expireTimeInSeconds > 0) {
                 String val = "max-age=" + expireTimeInSeconds;

@@ -11,6 +11,7 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.SecurityContext;
+import jakarta.ws.rs.core.UriInfo;
 import scaffolding.Http1Client;
 import scaffolding.MuAssert;
 
@@ -64,15 +65,38 @@ class Http1AbsoluteFormAuthorityTest {
         @Path("/absolute-form-authority")
         class SecureResource {
             @GET
-            public String get(@Context SecurityContext securityContext) {
-                return Boolean.toString(securityContext.isSecure());
+            public String get(@Context SecurityContext securityContext, @Context UriInfo uriInfo) {
+                return uriInfo.getRequestUri().getScheme() + "|" + securityContext.isSecure();
             }
         }
         server = httpServer()
             .addHandler(RestHandlerBuilder.restHandler(new SecureResource()))
             .start();
 
-        assertThat(requestBody("https://trusted.example/absolute-form-authority", "trusted.example"), equalTo("false"));
+        assertThat(requestBody("https://trusted.example/absolute-form-authority", "trusted.example"), equalTo("https|false"));
+    }
+
+    @Test
+    void forwardedHttpsSchemeStillMarksPlainTransportSecure() throws Exception {
+        @Path("/absolute-form-authority")
+        class SecureResource {
+            @GET
+            public String get(@Context SecurityContext securityContext, @Context UriInfo uriInfo) {
+                return uriInfo.getRequestUri().getScheme() + "|" + securityContext.isSecure();
+            }
+        }
+        server = httpServer()
+            .addHandler(RestHandlerBuilder.restHandler(new SecureResource()))
+            .start();
+
+        assertThat(requestBody("http://trusted.example/absolute-form-authority", "trusted.example",
+            "Forwarded: proto=https"), equalTo("https|true"));
+    }
+
+    @Test
+    void registeredNameHostWithUnderscoreIsAccepted() throws Exception {
+        startAuthorityServer();
+        assertThat(requestBody("/absolute-form-authority", "service_name"), equalTo("service_name"));
     }
 
     @ParameterizedTest
@@ -105,6 +129,27 @@ class Http1AbsoluteFormAuthorityTest {
             startsWith("HTTP/1.1 400 "));
     }
 
+    @Test
+    void absoluteTargetFragmentIsRejected() throws Exception {
+        startAuthorityServer();
+        assertThat(requestStatus("http://trusted.example/absolute-form-authority#fragment", "Host: trusted.example"),
+            startsWith("HTTP/1.1 400 "));
+    }
+
+    @Test
+    void absoluteTargetUserInfoIsRejected() throws Exception {
+        startAuthorityServer();
+        assertThat(requestStatus("http://user@trusted.example/absolute-form-authority", "Host: trusted.example"),
+            startsWith("HTTP/1.1 400 "));
+    }
+
+    @Test
+    void absoluteHttpTargetWithoutAuthorityIsRejected() throws Exception {
+        startAuthorityServer();
+        assertThat(requestStatus("http:/absolute-form-authority", "Host: trusted.example"),
+            startsWith("HTTP/1.1 400 "));
+    }
+
     private void startAuthorityServer() {
         server = httpServer().addHandler((request, response) -> {
             response.write(request.uri().getAuthority());
@@ -116,15 +161,14 @@ class Http1AbsoluteFormAuthorityTest {
         return requestBody(target, host);
     }
 
-    private String requestBody(String target, String host) throws Exception {
+    private String requestBody(String target, String host, String... extraHeaders) throws Exception {
         try (var socket = new Socket("127.0.0.1", server.uri().getPort())) {
             socket.setSoTimeout(3000);
             var client = new Http1Client(socket, socket.getInputStream(), socket.getOutputStream(), server.uri());
             client.writeAscii("GET " + target + " HTTP/1.1\r\n")
-                .writeHeader("Host", host)
-                .writeHeader("Connection", "close")
-                .endHeaders()
-                .flush();
+                .writeHeader("Host", host);
+            for (String header : extraHeaders) client.writeAscii(header + "\r\n");
+            client.writeHeader("Connection", "close").endHeaders().flush();
             assertThat(client.readLine(), startsWith("HTTP/1.1 200 "));
             return client.readBody(client.readHeaders());
         }

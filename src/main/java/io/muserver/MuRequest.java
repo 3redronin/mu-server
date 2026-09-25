@@ -57,6 +57,17 @@ public interface MuRequest {
     URI uri();
 
     /**
+     * Indicates whether this request was received over a secure connection. If the server is behind a proxy,
+     * forwarded protocol metadata used to reconstruct {@link #uri()} is also considered.
+     * This is independent of the scheme in an absolute-form HTTP/1 request-target.
+     *
+     * @return true if the transport or applicable forwarding metadata indicates HTTPS
+     */
+    default boolean isSecure() {
+        return connection().isHttps();
+    }
+
+    /**
      * The URI of the request for this server.
      * <p>
      * If behind a reverse proxy, this will be different from {@link #uri()} as it is the actual server URI rather
