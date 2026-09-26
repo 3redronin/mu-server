@@ -60,6 +60,25 @@ public class HeadersTest {
         assertThat(rejected.get(2, TimeUnit.SECONDS).status(), is(400));
     }
 
+    @Test
+    public void invalidAuthorityAfterUnknownMethodDoesNotWaitForAnExpectedBody() throws Exception {
+        AtomicBoolean dispatched = new AtomicBoolean();
+        CompletableFuture<RejectedRequest> rejected = new CompletableFuture<>();
+        server = MuServerBuilder.httpServer()
+            .addRequestRejectListener(rejected::complete)
+            .addHandler((request, response) -> { dispatched.set(true); return true; }).start();
+        try (Socket socket = new Socket(server.uri().getHost(), server.uri().getPort())) {
+            socket.setSoTimeout(2000);
+            socket.getOutputStream().write(("UNKNOWN / HTTP/1.1\r\nHost: bad<host>\r\n"
+                + "Content-Length: 20\r\nExpect: 100-continue\r\n\r\n").getBytes(StandardCharsets.US_ASCII));
+            String response = new String(socket.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+            assertThat(response, startsWith("HTTP/1.1 405"));
+            assertThat(response, not(containsString("100 Continue")));
+        }
+        assertThat(dispatched.get(), is(false));
+        assertThat(rejected.get(2, TimeUnit.SECONDS).status(), is(405));
+    }
+
     @AfterEach
     public void stopIt() {
         MuAssert.stopAndCheck(server);
