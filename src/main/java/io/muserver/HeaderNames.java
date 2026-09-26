@@ -4,20 +4,20 @@ package io.muserver;
 import org.jspecify.annotations.Nullable;
 
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 
 /**
  * <p>Standard HTTP header names.</p>
  * <p>These are all defined as lowercase to support HTTP/2 requirements while also not
- * violating HTTP/1.x requirements.  New header names should always be lowercase.</p>
+ * violating HTTP/1.x requirements. Application-supplied names may use any ASCII
+ * HTTP token characters; {@link Headers} normalizes their letters to lowercase. Non-ASCII names are rejected.</p>
  */
 public final class HeaderNames {
 
-    static final Map<CharSequence, HeaderString> builtIn = new HashMap<>();
+    static final Map<String, ValidatedHeaderName> builtIn = new HashMap<>();
 
-    private static HeaderString builtInHeader(String name) {
-        var hs = new HeaderString(name);
+    private static ValidatedHeaderName builtInHeader(String name) {
+        var hs = ValidatedHeaderName.builtIn(name);
         builtIn.put(hs.toString(), hs);
         return hs;
     }
@@ -389,17 +389,16 @@ public final class HeaderNames {
     public static final CharSequence X_FRAME_OPTIONS = builtInHeader("x-frame-options");
 
 
-    static HeaderString PSEUDO_AUTHORITY = builtInHeader(":authority");
-    static HeaderString PSEUDO_METHOD = builtInHeader(":method");
-    static HeaderString PSEUDO_PATH = builtInHeader(":path");
-    static HeaderString PSEUDO_SCHEME = builtInHeader(":scheme");
-    static HeaderString PSEUDO_STATUS = builtInHeader(":status");
+    static ValidatedHeaderName PSEUDO_AUTHORITY = builtInHeader(":authority");
+    static ValidatedHeaderName PSEUDO_METHOD = builtInHeader(":method");
+    static ValidatedHeaderName PSEUDO_PATH = builtInHeader(":path");
+    static ValidatedHeaderName PSEUDO_SCHEME = builtInHeader(":scheme");
+    static ValidatedHeaderName PSEUDO_STATUS = builtInHeader(":status");
 
     private HeaderNames() {
     }
 
-    static @Nullable HeaderString findBuiltIn(CharSequence name) {
-        CharSequence search = name instanceof HeaderString ? name :  name.toString().toLowerCase(Locale.ROOT);
-        return builtIn.get(search);
+    static @Nullable ValidatedHeaderName findBuiltIn(String normalizedName) {
+        return builtIn.get(normalizedName);
     }
 }

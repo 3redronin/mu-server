@@ -4,6 +4,7 @@ import io.muserver.MuRequest;
 import io.muserver.MuServer;
 import io.muserver.StatusLogger;
 import org.hamcrest.Matcher;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Assertions;
 
 import java.io.IOException;
@@ -63,6 +64,9 @@ public class MuAssert {
     }
 
     public static <T> void assertEventually(Func<T> actual, Matcher<? super T> matcher) {
+        assertEventually(null, actual, matcher);
+    }
+    public static <T> void assertEventually(@Nullable Func<String> message, Func<T> actual, Matcher<? super T> matcher) {
         for (int i = 0; i < 100; i++) {
             try {
                 T val = actual.apply();
@@ -78,7 +82,11 @@ public class MuAssert {
             }
         }
         try {
-            assertThat(actual.apply(), matcher);
+            if (message != null) {
+                assertThat(message.apply(), actual.apply(), matcher);
+            } else {
+                assertThat(actual.apply(), matcher);
+            }
         } catch (Exception e) {
             Assertions.fail("Lambda threw exception: " + e);
         }

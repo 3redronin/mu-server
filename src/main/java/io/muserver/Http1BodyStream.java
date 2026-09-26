@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicReference;
 class Http1BodyStream extends InputStream implements RequestTrailersAccessor {
 
     enum State {
-        READING, EOF, IO_EXCEPTION, TIMED_OUT
+        READING, DISCARDING, EOF, IO_EXCEPTION, TIMED_OUT
     }
 
     private final Http1MessageReader parser;
@@ -61,6 +61,8 @@ class Http1BodyStream extends InputStream implements RequestTrailersAccessor {
                 return -1;
             case IO_EXCEPTION:
                 throw new IOException("Read on a broken stream");
+            case DISCARDING:
+                throw new IOException("Request body is being discarded");
             case TIMED_OUT:
                 throw HttpException.requestTimeout();
         }
@@ -106,12 +108,18 @@ class Http1BodyStream extends InputStream implements RequestTrailersAccessor {
                         } catch (IOException | ParseException pe) {
                             status.set(State.IO_EXCEPTION);
                             throw (pe instanceof IOException) ? (IOException) pe : new IOException("Parse error in request body", pe);
+                        } catch (HttpException | IllegalArgumentException invalidBody) {
+                            status.set(State.IO_EXCEPTION);
+                            throw invalidBody;
                         }
                         if (MessageBodyBit.isEndOfBody(next)) {
                             trailers = parser instanceof Http1MessageParser ? ((Http1MessageParser) parser).takeTrailers() : null;
                             bb = null;
                             status.set(State.EOF);
                             ready = true;
+                        } else if (MessageBodyBit.isEof(next)) {
+                            status.set(State.IO_EXCEPTION);
+                            throw new IOException("Incomplete request body");
                         } else if (next instanceof MessageBodyBit) {
                             var mbb = (MessageBodyBit) next;
                             // we have more body data
@@ -168,13 +176,13 @@ class Http1BodyStream extends InputStream implements RequestTrailersAccessor {
      * <p>This can be called multiple times</p>
      */
     State discardRemaining(boolean throwIfTooBig) {
-        if (status.compareAndSet(State.READING, State.EOF)) {
+        if (status.compareAndSet(State.READING, State.DISCARDING)) {
             var drained = lastBitReceived;
             while (!drained) {
                 Http1ConnectionMsg last;
                 try {
                     last = parser.readNext();
-                } catch (IOException | ParseException e) {
+                } catch (IOException | ParseException | HttpException | IllegalArgumentException e) {
                     status.set(State.IO_EXCEPTION);
                     break;
                 }
@@ -189,6 +197,7 @@ class Http1BodyStream extends InputStream implements RequestTrailersAccessor {
                     drained = mbb.isLast();
                     bytesReceived += mbb.length();
                     if (throwIfTooBig && tooBig()) {
+                        status.set(State.IO_EXCEPTION);
                         throw new HttpException(HttpStatus.CONTENT_TOO_LARGE_413);
                     }
                 } else {
@@ -196,6 +205,8 @@ class Http1BodyStream extends InputStream implements RequestTrailersAccessor {
                     break;
                 }
             }
+            bb = null;
+            status.compareAndSet(State.DISCARDING, State.EOF);
         }
         return state();
     }

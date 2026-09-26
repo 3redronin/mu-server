@@ -202,6 +202,24 @@ final class Http2InboundFlowControl {
         }
     }
 
+    /** DATA on streams beyond final GOAWAY still consumes connection credit. */
+    Result discard(int amount) {
+        if (amount < 0) {
+            throw new IllegalArgumentException("Inbound flow-control size cannot be negative");
+        }
+        lock.lock();
+        try {
+            if (!connectionWindow.reserve(amount)) {
+                return new Result(0, 0, 0, Http2Exception.connection(
+                    Http2ErrorCode.FLOW_CONTROL_ERROR, "Connection flow control credit breach"
+                ));
+            }
+            return new Result(0, returnReservedConnectionCredit(amount), 0, null);
+        } finally {
+            lock.unlock();
+        }
+    }
+
     Result returnCredit(int streamId, int amount, boolean includeStream) {
         if (streamId <= 0) {
             throw new IllegalArgumentException("Returned inbound credit requires a positive stream ID");

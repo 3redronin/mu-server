@@ -8,6 +8,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.text.ParseException;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.stream.IntStream;
@@ -18,6 +19,20 @@ import static org.junit.jupiter.api.Assertions.*;
 /** RFC 9112 section 6.3: response boundaries and request/response association. */
 class Http1ResponseBoundaryTest {
     private static final String NEXT = "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n\r\nnext";
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "Content-Length:", "Content-Length: \t ", "Content-Length:\r\nContent-Length: 0",
+        "Transfer-Encoding:", "Transfer-Encoding: \t ",
+        "Transfer-Encoding:\r\nTransfer-Encoding: chunked"
+    })
+    void emptyResponseFramingFieldsFailRatherThanYieldAValidLookingResponse(String headers) {
+        Queue<HttpRequestTemp> requests = new ConcurrentLinkedQueue<>();
+        requests.add(request(Method.GET));
+        requests.add(request(Method.GET));
+        Http1MessageParser parser = parser("HTTP/1.1 200 OK\r\n" + headers + "\r\n\r\n" + NEXT, 1, requests);
+        assertThrows(ParseException.class, parser::readNext);
+    }
 
     static Stream<Arguments> bodylessResponses() {
         return IntStream.of(1, 2, 3, 7, 8192).boxed().flatMap(readSize -> Stream.of(

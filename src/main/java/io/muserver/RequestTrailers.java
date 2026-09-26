@@ -19,6 +19,8 @@ final class RequestTrailers {
 
     static boolean isForbiddenTrailerField(HeaderString name) {
         return HeaderNames.CONNECTION.equals(name)
+            || HeaderNames.KEEP_ALIVE.equals(name)
+            || HeaderNames.PROXY_CONNECTION.equals(name)
             || HeaderNames.TRANSFER_ENCODING.equals(name)
             || HeaderNames.CONTENT_LENGTH.equals(name)
             || HeaderNames.HOST.equals(name)
@@ -31,4 +33,3 @@ final class RequestTrailers {
             || HeaderNames.PROXY_AUTHORIZATION.equals(name);
     }
 }
-

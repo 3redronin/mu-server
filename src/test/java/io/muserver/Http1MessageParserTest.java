@@ -135,7 +135,7 @@ class Http1MessageParserTest {
     }
 
     @Test
-    void emptyHeaderValuesAreIgnored() throws IOException, ParseException {
+    void emptyHeaderValuesAreRetained() throws IOException, ParseException {
         String requestString = "GET /blah HTTP/1.1\r\n" +
             "accept-encoding:\r\n" +
             "accept-encoding-2: \r\n" +
@@ -146,7 +146,10 @@ class Http1MessageParserTest {
         var bais = new ByteArrayInputStream(requestString.getBytes(StandardCharsets.UTF_8));
         var parser = new Http1MessageParser(HttpMessageType.REQUEST, new ConcurrentLinkedQueue<>(), bais, 8192, 8192);
         var req = (HttpRequestTemp)parser.readNext();
-        assertThat(req.headers().toString(), req.headers().size(), equalTo(1));
+        assertThat(req.headers().toString(), req.headers().size(), equalTo(4));
+        assertThat(req.headers().getAll("accept-encoding"), Matchers.contains(""));
+        assertThat(req.headers().getAll("accept-encoding-2"), Matchers.contains(""));
+        assertThat(req.headers().getAll("accept-encoding-3"), Matchers.contains(""));
         assertThat(req.headers().getAll("content-length"), Matchers.contains("0"));
     }
 

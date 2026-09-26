@@ -7,7 +7,16 @@ import org.jspecify.annotations.Nullable;
 import java.util.*;
 
 /**
- * HTTP headers
+ * HTTP headers.
+ * <p>Application-supplied regular field names must be nonempty ASCII HTTP tokens.
+ * Names are case-insensitive and stored in lowercase, regardless of the
+ * {@link CharSequence} implementation supplied.</p>
+ * <p>When adding or setting values, leading and trailing ASCII space and tab
+ * characters are removed. Empty values are retained, and case and interior
+ * whitespace are preserved. Values may contain HTAB, printable ASCII, and
+ * U+0080 through U+00FF, which map directly to their corresponding octets.
+ * Invalid characters are rejected with
+ * {@link IllegalArgumentException}.</p>
  */
 public interface Headers extends Iterable<Map.Entry<String, String>> {
     /**

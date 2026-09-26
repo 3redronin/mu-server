@@ -18,10 +18,12 @@ class HeaderString implements CharSequence {
 
     HeaderString(CharSequence value) {
         this.s = value.toString();
-        this.bytes = s.getBytes(StandardCharsets.US_ASCII);
-        if (s.length() != bytes.length) {
-            throw new IllegalArgumentException("Non ascii characters");
+        for (int i = 0; i < s.length(); i++) {
+            if (s.charAt(i) > 0xFF) {
+                throw new IllegalArgumentException("Header characters must fit in one octet");
+            }
         }
+        this.bytes = s.getBytes(StandardCharsets.ISO_8859_1);
     }
 
     private HeaderString(String s, byte[] bytes) {
@@ -30,57 +32,68 @@ class HeaderString implements CharSequence {
     }
 
     static HeaderString valueOf(Object value, Type type) {
-        if (value instanceof HeaderString) {
-            return (HeaderString) value;
+        if (type == Type.HEADER && value instanceof ValidatedHeaderName) {
+            return (ValidatedHeaderName) value;
         }
-        CharSequence s = value instanceof CharSequence
-            ? (CharSequence) value
-            : value instanceof Date
-                ? Mutils.toHttpDate((Date)value)
-                : value.toString();
-        if (s.length() == 0) {
+        if (type == Type.VALUE && value instanceof ValidatedHeaderValue) {
+            return (ValidatedHeaderValue) value;
+        }
+        String s = value instanceof Date ? Mutils.toHttpDate((Date)value) : value.toString();
+        if (s.isEmpty()) {
             if (type == Type.HEADER) throw new IllegalArgumentException("Empty header names not allowed");
-            return EMPTY_VALUE;
+            return ValidatedHeaderValue.EMPTY_VALUE;
         }
         if (type == Type.HEADER) {
             var builtIn = HeaderNames.findBuiltIn(s);
             if (builtIn != null) {
                 return builtIn;
             }
-            if (s instanceof String) {
-                s = ((String) s).toLowerCase(Locale.ROOT);
+            // Known pseudo-fields are used internally; all other names are ASCII tokens.
+            int start = s.charAt(0) == ':' ? 1 : 0;
+            for (int i = start; i < s.length(); i++) {
+                if (!ParseUtils.isTChar(s.charAt(i))) {
+                    throw new IllegalArgumentException("Invalid HTTP header name");
+                }
             }
+            String original = s;
+            s = s.toLowerCase(Locale.ROOT);
+            if (!s.equals(original)) {
+                builtIn = HeaderNames.findBuiltIn(s);
+                if (builtIn != null) {
+                    return builtIn;
+                }
+            }
+            if (start != 0) throw new IllegalArgumentException("Invalid HTTP header name");
+        } else {
+            for (int i = 0; i < s.length(); i++) {
+                char c = s.charAt(i);
+                if (c > 0xFF || (c != '\t' && (c < 0x20 || c == 0x7F))) {
+                    throw new IllegalArgumentException("Invalid HTTP header value");
+                }
+            }
+            int start = 0;
+            int end = s.length();
+            while (start < end && ParseUtils.isOWS(s.charAt(start))) {
+                start++;
+            }
+            while (end > start && ParseUtils.isOWS(s.charAt(end - 1))) {
+                end--;
+            }
+            if (start == end) return ValidatedHeaderValue.EMPTY_VALUE;
+            s = s.substring(start, end);
         }
-        HeaderString headerString = new HeaderString(s);
-        validate(headerString, type);
-        return headerString;
+        return type == Type.HEADER ? ValidatedHeaderName.custom(s) : ValidatedHeaderValue.normalized(s);
     }
-    static HeaderString valueOf(byte[] ascii, Type type) {
-        if (ascii.length == 0) return EMPTY_VALUE;
-        var s = new String(ascii, StandardCharsets.US_ASCII);
+    static HeaderString valueOf(byte[] octets, Type type) {
+        if (octets.length == 0) return ValidatedHeaderValue.EMPTY_VALUE;
+        var s = new String(octets, StandardCharsets.ISO_8859_1);
         if (type != Type.VALUE) {
             var builtIn = HeaderNames.findBuiltIn(s);
             if (builtIn != null) {
                 return builtIn;
             }
         }
-        return new HeaderString(s, ascii);
-    }
-
-    private static void validate(HeaderString value, Type type) {
-        if (type == Type.HEADER) {
-            for (byte b : value.bytes) {
-                if (!ParseUtils.isTChar(b)) {
-                    throw new IllegalArgumentException("Invalid HTTP header name");
-                }
-            }
-        } else {
-            for (byte b : value.bytes) {
-                if (b != '\t' && (b < 0x20 || b == 0x7F)) {
-                    throw new IllegalArgumentException("Invalid HTTP header value");
-                }
-            }
-        }
+        return new HeaderString(s, octets);
     }
 
     @Override
@@ -90,7 +103,7 @@ class HeaderString implements CharSequence {
 
     @Override
     public char charAt(int index) {
-        return (char)bytes[index];
+        return (char)(bytes[index] & 0xFF);
     }
 
     @Override
@@ -161,9 +174,4 @@ class HeaderString implements CharSequence {
         return false;
     }
 
-    boolean containsForbiddenHttp2ValueOctet() {
-        return containsChar((byte) 0) || containsChar((byte) 10) || containsChar((byte) 13);
-    }
-
-    static HeaderString EMPTY_VALUE = new HeaderString("");
 }

@@ -99,6 +99,14 @@ final class Http2WriteCoordinator {
     private interface Command {
     }
 
+    private static final class ResetAfterPendingWrites implements Command {
+        private final Http2ResetStreamFrame frame;
+
+        private ResetAfterPendingWrites(Http2ResetStreamFrame frame) {
+            this.frame = frame;
+        }
+    }
+
     private static final class QueueWrite implements Command {
         private final WriteTask task;
         private final ResetRetention retainResetState;
@@ -262,6 +270,11 @@ final class Http2WriteCoordinator {
 
     void submit(WriteTask task, ResetRetention retainResetState) {
         enqueue(new QueueWrite(task, retainResetState));
+    }
+
+    /** Finish a rejection response before resetting, without bypassing DATA flow control. */
+    void resetAfterPendingWrites(Http2ResetStreamFrame frame) {
+        enqueue(new ResetAfterPendingWrites(frame));
     }
 
     void resetStream(Http2ResetStreamFrame resetFrame, IOException reason, @Nullable Http2Stream stream) {
@@ -498,6 +511,16 @@ final class Http2WriteCoordinator {
         if (command instanceof QueueWrite) {
             QueueWrite write = (QueueWrite) command;
             queue(write.task, false, write.retainResetState);
+        } else if (command instanceof ResetAfterPendingWrites) {
+            Http2ResetStreamFrame frame = ((ResetAfterPendingWrites) command).frame;
+            if (connectionFailureReason == null && streamStates.containsKey(frame.streamId())
+                && !peerResetStreams.contains(frame.streamId())) {
+                // Unlike an immediate reset, keep earlier response writes and their
+                // credit. The scheduler preserves order within this stream.
+                localResetsPendingWrite.add(frame.streamId());
+                streamsPendingRemoval.add(frame.streamId());
+                addPending(new WriteTask(frame, false), false, null);
+            }
         } else if (command instanceof ResetStream) {
             ResetStream reset = (ResetStream) command;
             // Retirement may already have run before this reset command. A retired
@@ -782,6 +805,10 @@ final class Http2WriteCoordinator {
 
     private void onWriteCompleted(LogicalHttp2Frame frame) {
         int streamId = frame.streamId();
+        if (frame instanceof Http2ResetStreamFrame) {
+            applyResetState(streamId);
+            streamCredits.remove(streamId);
+        }
         if (frame.endStream()) {
             Http2Stream stream = applicationStreams.get(streamId);
             if (stream != null) {

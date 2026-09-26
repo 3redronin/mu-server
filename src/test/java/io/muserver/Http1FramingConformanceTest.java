@@ -14,6 +14,26 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** RFC 9112 sections 5, 6.3 and 7.1: deterministic reads at message boundaries. */
 class Http1FramingConformanceTest {
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "Content-Length:", "Content-Length: \t ",
+        "Content-Length:\r\nTransfer-Encoding: chunked",
+        "Content-Length: \t\r\nTransfer-Encoding: chunked",
+        "Transfer-Encoding:\r\nContent-Length: 0",
+        "Transfer-Encoding: \t \r\nContent-Length: 0",
+        "Transfer-Encoding:\r\nTransfer-Encoding: chunked",
+        "Content-Length:\r\nContent-Length: 0"
+    })
+    void emptyFramingFieldsCannotDisappearBeforeValidation(String headers) throws Exception {
+        Http1MessageParser parser = parser("POST /first HTTP/1.1\r\nHost: localhost\r\n" + headers
+            + "\r\n\r\nGET /next HTTP/1.1\r\nHost: localhost\r\n\r\n", 1);
+        HttpRequestTemp request = (HttpRequestTemp) parser.readNext();
+        HttpException rejection = request.getRejectRequest();
+        assertNotNull(rejection, "Empty framing fields must not be ignored");
+        assertEquals(400, rejection.status().code());
+        assertEquals("close", rejection.responseHeaders().get("connection"));
+    }
+
     private static Http1MessageParser parser(String wire, int readSize) {
         ByteArrayInputStream input = new ByteArrayInputStream(wire.getBytes(StandardCharsets.ISO_8859_1)) {
             @Override public synchronized int read(byte[] bytes, int offset, int length) {
