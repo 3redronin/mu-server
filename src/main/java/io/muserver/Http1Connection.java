@@ -11,6 +11,7 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.security.cert.Certificate;
+import java.text.ParseException;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -106,6 +107,8 @@ class Http1Connection extends BaseHttpConnection {
                     msg = requestParser.readNext();
                 } catch (SocketTimeoutException ste) {
                     throw HttpException.requestTimeout();
+                } catch (ParseException malformedRequest) {
+                    msg = requestParser.rejectInvalidRequest(malformedRequest);
                 } catch (IOException e) {
                     log.info("Error reading from client input stream " + e.getClass() + " " + e.getMessage());
                     break;
@@ -121,7 +124,7 @@ class Http1Connection extends BaseHttpConnection {
                 // The shared parser queues requests for response parsing. The server writes
                 // responses directly, so consume the entry when we take ownership of the
                 // request; otherwise every completed request lives as long as the connection.
-                requestPipeline.remove();
+                requestPipeline.remove(request);
 
                 var rejectException = request.getRejectRequest();
                 String relativeUrl;
@@ -135,7 +138,18 @@ class Http1Connection extends BaseHttpConnection {
                 }
 
                 URI serverUri = creator.uri().resolve(relativeUrl);
-                URI requestUri = Headtils.getUri(log, request.headers(), relativeUrl, serverUri);
+                URI requestUri;
+                try {
+                    requestUri = Headtils.getUri(log, request.headers(), relativeUrl, serverUri);
+                } catch (HttpException e) {
+                    if (rejectException == null) {
+                        rejectException = e;
+                    }
+                    // A rejected Expect: 100-continue request may never send its body,
+                    // including when an earlier rejection determined the response status.
+                    rejectException.responseHeaders().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+                    requestUri = serverUri;
+                }
                 Method method = java.util.Objects.requireNonNull(request.getMethod(), "No HTTP method was parsed");
                 if (rejectException == null) {
                     try {
@@ -336,6 +350,12 @@ class Http1Connection extends BaseHttpConnection {
         try {
             if (!muRequest.cleanup()) {
                 reallyClose = true;
+                if (!muRequest.completedSuccessfully() && muResponse.hasStartedSendingData()) {
+                    // A malformed upload cannot turn an already-started response into
+                    // a clean chunked/fixed-length completion.
+                    muResponse.setState(ResponseState.ERRORED);
+                    return true;
+                }
             }
         } catch (Exception e) {
             reallyClose = true;

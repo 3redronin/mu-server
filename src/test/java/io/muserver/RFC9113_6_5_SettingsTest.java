@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Queue;
@@ -233,6 +234,44 @@ class RFC9113_6_5_SettingsTest {
             assertThat(header.frameType(), equalTo(Http2FrameType.HEADERS));
             byte[] payload = con.readRawPayload(header);
             assertThat(payload[0], equalTo((byte) 0x20));
+        }
+    }
+
+    @Test
+    void largeAdvertisedHeaderTableSizesWorkAtHandshakeAndAfterSettingsChanges() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.GET, "/hello", (request, response, pathParams) -> response.status(204))
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            HpackTable decoderTable = new HpackTable(Integer.MAX_VALUE);
+            FieldBlockDecoder decoder = new FieldBlockDecoder(decoderTable, 8192, 8192);
+
+            con.handshake(new Http2Settings(false, Integer.MAX_VALUE, 100, 65535, 16384, 32768))
+                .writeFrame(new Http2HeadersFrame(1, true, getHelloHeaders(getPort())))
+                .flush();
+
+            var header = con.readFrameHeader();
+            assertThat(header.frameType(), equalTo(Http2FrameType.HEADERS));
+            byte[] payload = con.readRawPayload(header);
+            FieldBlock fields = decoder.decodeFrom(ByteBuffer.wrap(payload));
+            assertThat(fields.get(":status"), equalTo("204"));
+            assertThat(decoderTable.maxSize(), equalTo(Integer.MAX_VALUE));
+
+            con.writeRaw(settingsFrame(1, 0)).flush();
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+            con.writeRaw(settingsFrame(1, Integer.MAX_VALUE)).flush();
+            assertThat(con.readLogicalFrame(), equalTo(Http2Settings.ACK));
+            con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders(getPort()))).flush();
+
+            header = con.readFrameHeader();
+            assertThat(header.frameType(), equalTo(Http2FrameType.HEADERS));
+            assertThat(header.streamId(), equalTo(3));
+            fields = decoder.decodeFrom(ByteBuffer.wrap(con.readRawPayload(header)));
+            assertThat(fields.get(":status"), equalTo("204"));
+            assertThat(decoderTable.maxSize(), equalTo(Integer.MAX_VALUE));
         }
     }
 

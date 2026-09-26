@@ -2,11 +2,23 @@ package io.muserver;
 
 import jakarta.ws.rs.core.MediaType;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
+import static io.muserver.FieldConformanceFixtures.TOKEN;
+import static io.muserver.FieldConformanceFixtures.octets;
 import static io.muserver.ForwardedHeaderTest.fwd;
+import static io.muserver.HeaderNamesTest.sequences;
 import static java.util.Arrays.asList;
 import static java.util.Collections.*;
 import static org.hamcrest.CoreMatchers.is;
@@ -14,6 +26,7 @@ import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.core.IsEqual.equalTo;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class Http1AndHttp2HeadersTest {
 
@@ -39,6 +52,264 @@ public class Http1AndHttp2HeadersTest {
                 assertThat(header.getKey().toLowerCase(), is("header"));
             }
         }
+    }
+
+
+    @Test
+    public void invalidHeaderNamesAreRejected() {
+        for (Headers headers : impls) {
+            assertThrows(IllegalArgumentException.class, () -> headers.set("Bad Header", "value"));
+            assertThrows(IllegalArgumentException.class, () -> headers.add("bad:header", "value"));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\r", "\n", "\u0000", "\u0001", "\u007f"})
+    public void invalidHeaderValuesAreRejected(String forbidden) {
+        for (Headers headers : impls) {
+            String value = "a" + forbidden + "b";
+            assertThrows(IllegalArgumentException.class, () -> headers.set("x-test", value));
+            assertThrows(IllegalArgumentException.class, () -> headers.add("x-test", asList("ok", value)));
+            assertThrows(IllegalArgumentException.class, () -> headers.set("x-test", asList("ok", value)));
+        }
+    }
+
+    @Test
+    public void horizontalTabsAreAllowedInFieldValues() {
+        Headers headers = Headers.create().set("x-test", "a\tb");
+        assertThat(headers.get("x-test"), equalTo("a\tb"));
+    }
+
+    @Test
+    void publicNamesUseTheFullAsciiTokenGrammar() {
+        for (int code = 0; code < 256; code++) {
+            int octet = code;
+            assertAll("public name octet " + octet, () -> assertPublicNameOctet(octet));
+        }
+    }
+
+    private static void assertPublicNameOctet(int code) {
+        String character = Character.toString((char) code);
+        assertAll(Stream.of(character, character + "Name", "Na" + character + "me", "Name" + character)
+            .map(name -> () -> {
+                if (TOKEN.indexOf(code) >= 0) {
+                    Headers headers = Headers.create().add(name, "First").add(name, List.of("Second", "Third"));
+                    String expected = name.toLowerCase(Locale.ROOT);
+                    assertEquals(List.of("First", "Second", "Third"), headers.getAll(expected));
+                    assertEquals(Set.of(expected), headers.names());
+                    headers.set(name, "Replacement");
+                    assertEquals(List.of("Replacement"), headers.getAll(expected));
+                } else {
+                    assertInvalidName(name);
+                }
+            }));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", " name", "name ", "\tname", "name\t", "\u0100", "\u0130",
+        "\u017f", "\u212a", "lin\u212a", "\u212aey", "\u4e2d", "\ud83d\ude00", "\ud800", "\udc00",
+        "x\ud800y", "x\udc00y"})
+    void allPublicNameEntryPointsRejectInvalidNames(String name) {
+        assertAll(sequences(name).stream().map(input -> () -> assertInvalidName(input)));
+    }
+
+    private static void assertInvalidName(CharSequence name) {
+        Headers headers = Headers.create().set("link", "Original");
+        assertAll(
+            () -> assertThrows(IllegalArgumentException.class, () -> headers.add(name, "value")),
+            () -> assertThrows(IllegalArgumentException.class, () -> headers.set(name, "value")),
+            () -> assertThrows(IllegalArgumentException.class, () -> headers.add(name, List.of("value"))),
+            () -> assertThrows(IllegalArgumentException.class, () -> headers.set(name, List.of("value"))),
+            () -> assertThrows(IllegalArgumentException.class, () -> headers.get(name)),
+            () -> assertThrows(IllegalArgumentException.class, () -> headers.getAll(name)),
+            () -> assertThrows(IllegalArgumentException.class, () -> headers.contains(name)),
+            () -> assertThrows(IllegalArgumentException.class, () -> headers.contains(name, "Original", false)),
+            () -> assertThrows(IllegalArgumentException.class, () -> headers.containsValue(name, "Original", false)),
+            () -> assertThrows(IllegalArgumentException.class, () -> headers.remove(name))
+        );
+    }
+
+    @ParameterizedTest(name = "{0} via {1}")
+    @MethodSource("nameSpellings")
+    void allCharSequencesNormalizeAcrossMutationLookupAndRemoval(String spelling, String kind) {
+        String expected = spelling.toLowerCase(Locale.ROOT);
+        Headers headers = Headers.create();
+        CharSequence input = sequence(spelling, kind);
+        headers.add(input, "First");
+        headers.add(input, List.of("Second", "Third"));
+        assertAll(
+            () -> assertEquals(Set.of(expected), headers.names()),
+            () -> assertEquals(List.of(expected, expected, expected),
+                headers.entries().stream().map(Map.Entry::getKey).collect(java.util.stream.Collectors.toList())),
+            () -> assertAll(sequences(spelling.toUpperCase(Locale.ROOT)).stream().map(query -> () -> {
+                assertEquals("First", headers.get(query));
+                assertEquals("First", headers.get(query, "Fallback"));
+                assertEquals(List.of("First", "Second", "Third"), headers.getAll(query));
+                assertTrue(headers.contains(query));
+                assertTrue(headers.contains(query, "First", false));
+                assertFalse(headers.contains(query, "first", false));
+                assertTrue(headers.contains(query, "first", true));
+                assertTrue(headers.containsValue(query, "Second", false));
+            }))
+        );
+        headers.set(input, "Replacement");
+        assertEquals(List.of("Replacement"), headers.getAll(expected));
+        headers.set(input, List.of("Fourth", "Fifth"));
+        assertEquals(List.of("Fourth", "Fifth"), headers.getAll(expected));
+        headers.remove(sequence(spelling.toUpperCase(Locale.ROOT), kind));
+        assertTrue(headers.isEmpty());
+        assertFalse(headers.contains(input));
+        assertNull(headers.get(input));
+        assertEquals("Fallback", headers.get(input, "Fallback"));
+        assertEquals(List.of(), headers.getAll(input));
+        headers.set(input, "Removed by null").set(input, (Object) null);
+        assertTrue(headers.isEmpty());
+    }
+
+    static Stream<Arguments> nameSpellings() {
+        return Stream.of("content-type", "ConTent-Type", "CONTENT-TYPE",
+            "x-custom-token", "X-Custom-Token", "X-CUSTOM-TOKEN")
+            .flatMap(name -> Stream.of("String", "StringBuilder", "CharBuffer")
+                .map(kind -> Arguments.of(name, kind)));
+    }
+
+    private static CharSequence sequence(String value, String kind) {
+        switch (kind) {
+            case "StringBuilder": return new StringBuilder(value);
+            case "CharBuffer": return java.nio.CharBuffer.wrap(value);
+            default: return value;
+        }
+    }
+
+    @Test
+    void valuesClassifyEveryOctetAtEdgesAndInTheInterior() {
+        for (int code = 0; code < 256; code++) {
+            int octet = code;
+            assertAll("value octet " + octet, () -> assertValueOctet(octet));
+        }
+    }
+
+    private static void assertValueOctet(int code) {
+        String c = Character.toString((char) code);
+        if ((code < 32 && code != 9) || code == 127) {
+            // Selected strict policy: only HTAB is allowed among control octets.
+            assertAll(Stream.of(c, c + "Value", "Va" + c + "lue", "Value" + c,
+                " \t" + c + "Value\t ", " \tValue" + c + "\t ", "Value \t" + c + "\t Text",
+                " \t" + c + "\t ").map(value -> () -> assertRejectedValue(value)));
+        } else {
+            String edge = code == 9 || code == 32 ? "" : c;
+            assertAll(
+                () -> assertAcceptedValue(c, edge),
+                () -> assertAcceptedValue(c + "Value", edge + "Value"),
+                () -> assertAcceptedValue("Value" + c, "Value" + edge),
+                () -> assertAcceptedValue("Va" + c + "lue", "Va" + c + "lue"),
+                () -> assertAcceptedValue(" \t" + c + "Value" + c + "\t ", edge + "Value" + edge)
+            );
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("whitespaceValues")
+    void onlyOuterSpaceAndHorizontalTabAreTrimmed(String input, String expected) {
+        assertAcceptedValue(input, expected);
+    }
+
+    static Stream<Arguments> whitespaceValues() {
+        // Selected API policy; wire decoders must not apply this trimming.
+        return Stream.of(
+            Arguments.of("", ""), Arguments.of(" ", ""), Arguments.of("\t", ""),
+            Arguments.of(" \t \t", ""), Arguments.of(" \tMiXeD: !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~\t ",
+                "MiXeD: !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~"),
+            Arguments.of(" \tOne  Two\t\tThree \tFour\t ", "One  Two\t\tThree \tFour"),
+            Arguments.of("\u0085Value\u0085", "\u0085Value\u0085"),
+            Arguments.of("\u00a0Value\u00a0", "\u00a0Value\u00a0"),
+            Arguments.of(" \t\u0085\u00a0Value\u00a0\u0085\t ", "\u0085\u00a0Value\u00a0\u0085"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"\u0100", "\u0130", "\u017f", "\u212a", "\u2003", "\u2028",
+        "\u4e2d", "\uffff", "\ud83d\ude00", "\ud800", "\udc00", "\ud800x", "x\udc00"})
+    void valuesOutsideLatin1CannotBeSilentlyReplaced(String invalid) {
+        assertAll(Stream.of(invalid, invalid + "Value", "Va" + invalid + "lue", "Value" + invalid,
+            " \t" + invalid + "\t ").map(value -> () -> assertRejectedValue(value)));
+    }
+
+    private static List<Object> valueInputs(String value) {
+        return List.of(value, new StringBuilder(value), java.nio.CharBuffer.wrap(value), new Object() {
+            @Override
+            public String toString() {
+                return value;
+            }
+        });
+    }
+
+    private static void assertRejectedValue(String value) {
+        assertAll(valueInputs(value).stream().map(input -> () -> assertAll(
+            () -> assertThrows(IllegalArgumentException.class, () -> Headers.create().add("x-value", input)),
+            () -> assertThrows(IllegalArgumentException.class, () -> Headers.create().set("x-value", input)),
+            () -> assertThrows(IllegalArgumentException.class,
+                () -> Headers.create().add("x-value", List.of("Valid", input))),
+            () -> assertThrows(IllegalArgumentException.class,
+                () -> Headers.create().set("x-value", List.of("Valid", input)))
+        )));
+    }
+
+    private static void assertAcceptedValue(String input, String expected) {
+        assertAll(valueInputs(input).stream().map(value -> () -> {
+            Headers added = Headers.create().add("X-Value", value);
+            Headers set = Headers.create().set("X-Value", value);
+            Headers bulkAdded = Headers.create().add("X-Value", List.of(value, "Second"));
+            Headers bulkSet = Headers.create().set("X-Value", List.of(value, "Second"));
+            assertAll(
+                () -> assertStoredValues(added, List.of(expected)),
+                () -> assertStoredValues(set, List.of(expected)),
+                () -> assertStoredValues(bulkAdded, List.of(expected, "Second")),
+                () -> assertStoredValues(bulkSet, List.of(expected, "Second"))
+            );
+        }));
+    }
+
+    private static void assertStoredValues(Headers headers, List<String> expected) {
+        assertTrue(headers.contains("x-value"), "Even empty values must remain present");
+        assertEquals(expected.size(), headers.size());
+        assertAll(
+            () -> assertEquals(expected.get(0), headers.get("x-value")),
+            () -> assertEquals(expected, headers.getAll("x-value")),
+            () -> assertAll(IntStream.range(0, expected.size()).mapToObj(i -> () ->
+                assertArrayEquals(octets(expected.get(i)), ((FieldLine) headers.entries().get(i)).value().bytes)))
+        );
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"add", "set", "setAll"})
+    void copyingPreservesNormalizedNamesValueOrderEmptyAndOpaqueValues(String operation) {
+        String opaque = IntStream.range(128, 256).collect(StringBuilder::new,
+            (builder, code) -> builder.append((char) code), StringBuilder::append).toString();
+        Headers source = Headers.create()
+            .add("X-Value", List.of(" \tMiXeD\t ", "", opaque, "Second"))
+            .set("CONTENT-TYPE", "Application/Example");
+        Headers target = Headers.create().set("x-value", "Old").set("x-retained", "Keep");
+        switch (operation) {
+            case "add": target.add(source); break;
+            case "set": target.set(source); break;
+            default: target.setAll(source);
+        }
+        List<String> expected = operation.equals("add")
+            ? List.of("Old", "MiXeD", "", opaque, "Second") : List.of("MiXeD", "", opaque, "Second");
+        assertAll(
+            () -> assertEquals(expected, target.getAll("X-VALUE")),
+            () -> assertEquals("Application/Example", target.get("Content-Type")),
+            () -> assertEquals(operation.equals("set") ? null : "Keep", target.get("x-retained")),
+            () -> assertEquals(operation.equals("set") ? Set.of("x-value", "content-type")
+                : Set.of("x-value", "content-type", "x-retained"), target.names()),
+            () -> assertEquals(List.of("MiXeD", "", opaque, "Second"), source.getAll("x-value")),
+            () -> assertArrayEquals(octets(opaque), ((FieldLine) target.entries().stream()
+                .filter(entry -> entry.getKey().equals("x-value"))
+                .skip(operation.equals("add") ? 3 : 2).findFirst().orElseThrow()).value().bytes)
+        );
+        target.remove(new StringBuilder("X-VALUE"));
+        assertFalse(target.contains("x-value"));
+        assertEquals(List.of("MiXeD", "", opaque, "Second"), source.getAll("x-value"));
     }
 
     @Test

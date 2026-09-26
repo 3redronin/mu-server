@@ -6,6 +6,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.text.ParseException;
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -13,6 +14,26 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /** RFC 9112 sections 5, 6.3 and 7.1: deterministic reads at message boundaries. */
 class Http1FramingConformanceTest {
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "Content-Length:", "Content-Length: \t ",
+        "Content-Length:\r\nTransfer-Encoding: chunked",
+        "Content-Length: \t\r\nTransfer-Encoding: chunked",
+        "Transfer-Encoding:\r\nContent-Length: 0",
+        "Transfer-Encoding: \t \r\nContent-Length: 0",
+        "Transfer-Encoding:\r\nTransfer-Encoding: chunked",
+        "Content-Length:\r\nContent-Length: 0"
+    })
+    void emptyFramingFieldsCannotDisappearBeforeValidation(String headers) throws Exception {
+        Http1MessageParser parser = parser("POST /first HTTP/1.1\r\nHost: localhost\r\n" + headers
+            + "\r\n\r\nGET /next HTTP/1.1\r\nHost: localhost\r\n\r\n", 1);
+        HttpRequestTemp request = (HttpRequestTemp) parser.readNext();
+        HttpException rejection = request.getRejectRequest();
+        assertNotNull(rejection, "Empty framing fields must not be ignored");
+        assertEquals(400, rejection.status().code());
+        assertEquals("close", rejection.responseHeaders().get("connection"));
+    }
+
     private static Http1MessageParser parser(String wire, int readSize) {
         ByteArrayInputStream input = new ByteArrayInputStream(wire.getBytes(StandardCharsets.ISO_8859_1)) {
             @Override public synchronized int read(byte[] bytes, int offset, int length) {
@@ -57,11 +78,22 @@ class Http1FramingConformanceTest {
     @ValueSource(ints = {1, 2, 3, 7, 8192})
     void chunkExtensionsAndMixedCaseHexPreserveMessageBoundary(int readSize) throws Exception {
         Http1MessageParser parser = parser("POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n"
-            + "a;name=value\r\n0123456789\r\nA;quoted=\"hello world\"\r\nabcdefghij\r\n0\r\n\r\n"
+            + "1;!\r\nx\r\na;name=value;flag\r\n0123456789\r\nA; quoted = \"hello \\\"world\\\"\"; empty=\"\"\r\nabcdefghij\r\n0;final=yes\r\n\r\n"
             + "GET /next HTTP/1.1\r\nHost: localhost\r\n\r\n", readSize);
         parser.readNext();
-        assertEquals("0123456789abcdefghij", body(parser));
+        assertEquals("x0123456789abcdefghij", body(parser));
         nextRequest(parser);
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2, 3, 7, 8192})
+    void bareLfInChunkExtensionDoesNotTerminateTheChunkLine(int readSize) throws Exception {
+        Http1MessageParser parser = parser("POST / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n"
+            + "3D;!\n" + "A".repeat(61) + "\r\n0\r\n\r\n"
+            + "GET /next HTTP/1.1\r\nHost: localhost\r\n\r\n", readSize);
+
+        assertEquals(Method.POST, ((HttpRequestTemp) parser.readNext()).getMethod());
+        assertThrows(ParseException.class, parser::readNext);
     }
 
     @ParameterizedTest

@@ -33,13 +33,38 @@ interface HttpMessageTemp extends Http1ConnectionMsg {
         // 6.3.5
         long len;
         try {
-            len = Long.parseLong(cl.get(0));
+            len = ParseUtils.parseContentLength(cl.get(0));
         } catch (NumberFormatException e){
             throw new IllegalStateException("Invalid content-length");
         }
-        if (len < 0L) throw new IllegalStateException("Negative content length " + len);
         // 6.3.6
         return (len == 0L) ? BodySize.NONE : new BodySize(BodyType.FIXED_SIZE, len);
+    }
+
+    static boolean hasFinalChunkedTransferCoding(FieldBlock headers) {
+        List<String> values = headers.getAll(HeaderNames.TRANSFER_ENCODING);
+        if (values.isEmpty()) return false;
+
+        boolean chunked = false;
+        for (String value : values) {
+            String[] split = value.split(",", -1);
+            for (String item : split) {
+                String coding = item.trim();
+                if (coding.isEmpty() || chunked) {
+                    throw new IllegalStateException("Invalid transfer-encoding");
+                }
+                for (int i = 0; i < coding.length(); i++) {
+                    if (!ParseUtils.isTChar((byte) coding.charAt(i))) {
+                        throw new IllegalStateException("Invalid transfer-encoding");
+                    }
+                }
+                chunked = coding.equalsIgnoreCase("chunked");
+            }
+        }
+        if (!chunked) {
+            throw new IllegalStateException("The final transfer coding must be chunked");
+        }
+        return true;
     }
 
 }
@@ -116,11 +141,11 @@ class HttpRequestTemp implements HttpMessageTemp {
     public BodySize bodyTransferSize() {
         // numbers referring to sections in https://httpwg.org/specs/rfc9112.html#message.body.length
         var cl = headers.getAll(HeaderNames.CONTENT_LENGTH);
-        var isChunked = headers.hasChunkedBody();
+        var isChunked = HttpMessageTemp.hasFinalChunkedTransferCoding(headers);
         // 6.3.3
         if (isChunked && !cl.isEmpty())
-            throw new IllegalStateException("A request has chunked encoding and content-length " + cl);
-        // 6.3.4, except this assumes only a single transfer-encoding value
+            throw new IllegalStateException("A request has transfer-encoding and content-length " + cl);
+        // 6.3.4
         if (isChunked) return BodySize.CHUNKED;
 
         if (cl.isEmpty()) {

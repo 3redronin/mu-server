@@ -4,6 +4,8 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -202,10 +204,8 @@ class RFC9113_8_1_HttpMessageFramingTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(malformedHeaders)))
                 .flush();
 
-            // Server should send RST_STREAM(PROTOCOL_ERROR) and keep the connection open
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            // Selected policy: send HTTP 400 before the required stream error.
+            FieldConformanceFixtures.assertInitialRejection(FieldConformanceFixtures.untilReset(con, 1), 1);
 
             // Connection remains usable for subsequent well-formed requests
             con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders(getPort())))
@@ -213,6 +213,48 @@ class RFC9113_8_1_HttpMessageFramingTest {
             var response = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
             assertThat(response.streamId(), equalTo(3));
             assertThat(response.headers().get(":status"), equalTo("200"));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "x", "-1", "-0", "+0", "+1", "1x", "9223372036854775808"})
+    void invalidContentLengthValuesAreMalformed(String contentLength) throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> response.status(200))
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            var headers = postHelloHeaders(getPort());
+            headers.add("content-length", contentLength);
+
+            con.handshake()
+                .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
+                .flush();
+
+            FieldConformanceFixtures.assertInitialRejection(FieldConformanceFixtures.untilReset(con, 1), 1);
+        }
+    }
+
+    @Test
+    void conflictingContentLengthValuesAreMalformed() throws Exception {
+        server = httpsServer()
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled())
+            .addHandler(Method.POST, "/hello", (request, response, pathParams) -> response.status(200))
+            .start();
+
+        try (var client = new H2Client();
+             var con = client.connect(server)) {
+            var headers = postHelloHeaders(getPort());
+            headers.add("content-length", "1");
+            headers.add("content-length", "2");
+
+            con.handshake()
+                .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
+                .flush();
+
+            FieldConformanceFixtures.assertInitialRejection(FieldConformanceFixtures.untilReset(con, 1), 1);
         }
     }
 

@@ -42,10 +42,13 @@ interface ResourceProviderFactory {
         if (!Files.isDirectory(baseDirectory, LinkOption.NOFOLLOW_LINKS)) {
             throw new MuException(baseDirectory + " is not a directory");
         }
+        Path base = baseDirectory.toAbsolutePath().normalize();
         return new ResourceProviderFactory() {
             @Override
             public ResourceProvider get(String relativePath) {
-                return new AsyncFileProvider(baseDirectory, relativePath);
+                if (relativePath.startsWith("/")) relativePath = "." + relativePath;
+                Path resolved = base.resolve(relativePath).normalize();
+                return resolved.startsWith(base) ? new AsyncFileProvider(resolved) : NotFoundResourceProvider.INSTANCE;
             }
 
             @Override
@@ -133,7 +136,7 @@ class ClasspathCache implements ResourceProviderFactory {
         relativePath = Mutils.trim(relativePath, "/");
         ClasspathResourceProvider cur = all.get(relativePath);
         if (cur == null) {
-            return nullProvider;
+            return NotFoundResourceProvider.INSTANCE;
         }
         return cur.newWithInputStream();
     }
@@ -145,7 +148,12 @@ class ClasspathCache implements ResourceProviderFactory {
             '}';
     }
 
-    private static final ResourceProvider nullProvider = new ResourceProvider() {
+}
+
+final class NotFoundResourceProvider {
+    private NotFoundResourceProvider() { }
+
+    static final ResourceProvider INSTANCE = new ResourceProvider() {
         @Override
         public boolean exists() {
             return false;
@@ -193,11 +201,8 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
     private long maxLen;
     private long bytesSent = 0;
 
-    AsyncFileProvider(Path baseDirectory, String relativePath) {
-        if (relativePath.startsWith("/")) {
-            relativePath = "." + relativePath;
-        }
-        this.localPath = baseDirectory.resolve(relativePath);
+    AsyncFileProvider(Path localPath) {
+        this.localPath = localPath;
     }
 
     @Override

@@ -45,6 +45,18 @@ class FieldBlockEncoderTest {
     }
 
     @Test
+    void aLargePeerTableLimitDoesNotRetainResponseFields() throws IOException {
+        HpackTable table = new HpackTable(Integer.MAX_VALUE);
+        FieldBlockEncoder encoder = new FieldBlockEncoder(table);
+        for (int i = 0; i < 1000; i++) {
+            FieldBlock block = new FieldBlock();
+            block.add("x-unique", "value-" + i);
+            encoder.encodeTo(block, new ByteArrayOutputStream());
+        }
+        assertThat(table.dynamicTableSizeInBytes(), equalTo(0));
+    }
+
+    @Test
     public void rfc7541ExampleC_2_1_literalHeaderWithIndexing() throws IOException, Http2Exception {
         byte[] array = hexToByteArray("400a637573746f6d2d6b65790d637573746f6d2d686561646572");
         var decoded = decoder.decodeFrom(ByteBuffer.wrap(array));

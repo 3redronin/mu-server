@@ -541,6 +541,25 @@ class ProxyProtocolTest {
         assertThrows(IOException.class, () -> ProxyProtocol.parse(new ByteArrayInputStream(tlv)));
     }
 
+    @Test void deeplyNestedSslTlvsDoNotRecurseOrReadApplicationBytes() throws Exception {
+        int depth = 4096;
+        ByteBuffer payload = ByteBuffer.allocate(depth * 8);
+        for (int i = 0; i < depth; i++) {
+            payload.put((byte) 0x20).putShort((short) ((depth - i) * 8 - 3));
+            payload.put(new byte[5]); // SSL client flag and verification status.
+        }
+        byte[] addressAndTlvs = ByteBuffer.allocate(12 + payload.capacity())
+            .put(preamble(2), 16, 12).put(payload.array()).array();
+        byte[] header = binary(0x21, 0x11, addressAndTlvs);
+        byte[] inputBytes = java.util.Arrays.copyOf(header, header.length + 1);
+        inputBytes[header.length] = 42;
+        ByteArrayInputStream input = new ByteArrayInputStream(inputBytes);
+
+        assertEquals("192.0.2.1", ProxyProtocol.parse(input).sourceAddress());
+        assertEquals(42, input.read());
+        assertEquals(-1, input.read());
+    }
+
     @Test void oversizedAndTruncatedInputsFail() {
         assertThrows(IOException.class, () -> ProxyProtocol.parse(new ByteArrayInputStream(("PROXY UNKNOWN " + "a".repeat(108)).getBytes(StandardCharsets.US_ASCII))));
         byte[] valid = preamble(2);

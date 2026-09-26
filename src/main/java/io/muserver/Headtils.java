@@ -87,9 +87,9 @@ class Headtils {
             String host = Mutils.coalesce(f.host(), hostHeader, "localhost");
             return URI.create(originalScheme + "://" + host).resolve(requestUri);
         } catch (Exception e) {
-            log.warn("Could not create a URI object using header values " + h
-                + " so using local server URI. URL generation (including in redirects) may be incorrect.");
-            return defaultValue;
+            if (e instanceof HttpException) throw (HttpException) e;
+            log.warn("Could not create a URI object using header values " + h);
+            throw HttpException.badRequest("Invalid request authority");
         }
     }
 

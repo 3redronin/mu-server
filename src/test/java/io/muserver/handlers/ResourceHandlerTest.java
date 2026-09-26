@@ -6,6 +6,7 @@ import okhttp3.Response;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import scaffolding.ClientUtils;
+import scaffolding.RawClient;
 import scaffolding.ServerUtils;
 
 import java.io.IOException;
@@ -16,6 +17,7 @@ import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +42,49 @@ import static scaffolding.FileUtils.readResource;
 public class ResourceHandlerTest {
 
     private MuServer server;
+
+    @Test
+    public void fileHandlerDoesNotServeEncodedDotSegmentTraversalOutsideBaseDirectory() throws Exception {
+        Path root = Files.createTempDirectory("mu-resource-root");
+        try {
+            Path publicRoot = Files.createDirectory(root.resolve("public"));
+            Files.writeString(publicRoot.resolve("index.txt"), "public");
+            Files.writeString(root.resolve("secret.txt"), "secret");
+
+            server = ServerUtils.httpsServerForTest("http")
+                .withGzipEnabled(false)
+                .addHandler(fileHandler(publicRoot))
+                .start();
+
+            for (String path : new String[]{"/%2e%2e/secret.txt", "/..%2fsecret.txt", "/%2e%2e%2fsecret.txt"}) {
+                try (RawClient client = RawClient.create(server.uri())) {
+                    client.sendStartLine("GET", path).sendHeader("Host", "localhost")
+                        .sendHeader("Connection", "close").endHeaders().flushRequest();
+                    client.waitForFullResponse();
+                    assertThat(path, client.responseString(), startsWith("HTTP/1.1 404 "));
+                    assertThat(client.responseString(), not(containsString("secret")));
+                }
+            }
+            try (Response response = call(request(server.uri().resolve("/index.txt")))) {
+                assertThat(response.code(), equalTo(200));
+                assertThat(response.body().string(), equalTo("public"));
+            }
+        } finally {
+            if (server != null) {
+                server.stop();
+                server = null;
+            }
+            try (var walk = Files.walk(root)) {
+                walk.sorted(Comparator.reverseOrder()).forEach(path -> {
+                    try {
+                        Files.deleteIfExists(path);
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+            }
+        }
+    }
 
     @Test
     public void literalPlusInAResourcePathSelectsThePlusFilename() throws IOException {

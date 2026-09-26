@@ -11,6 +11,8 @@ import java.util.Objects;
  */
 class Http2HeadersFrame implements LogicalHttp2Frame {
 
+    private static final int MAX_EMPTY_CONTINUATION_FRAMES = 128;
+
     private final int streamId;
     private final boolean endStream;
     private final FieldBlock headers;
@@ -144,6 +146,7 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
 
         if (baos != null) {
             var ended = false;
+            int emptyContinuationCount = 0;
             while (!ended) {
                 Mutils.readAtLeast(buffer, clientIn, Http2FrameHeader.FRAME_HEADER_LENGTH);
                 var hf = Http2FrameHeader.readFrom(buffer);
@@ -152,6 +155,11 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
                 }
                 if (hf.streamId() != frameHeader.streamId()) {
                     throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "stream id mismatch");
+                }
+                // Data-bearing fragments are bounded by maxBufferedFieldBlockSize; empty ones are not.
+                if (hf.length() == 0 && ++emptyContinuationCount > MAX_EMPTY_CONTINUATION_FRAMES) {
+                    throw Http2Exception.connection(Http2ErrorCode.COMPRESSION_ERROR,
+                        "Too many empty CONTINUATION frames in one field block");
                 }
                 requireFieldBlockCapacity(
                     baos.size(),

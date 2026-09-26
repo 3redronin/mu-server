@@ -410,7 +410,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         Http2StreamState initialState,
         Http2HeadersFrame headers,
         Http2DataFrame body,
-        @Nullable Http2Stream replacedApplicationStream
+        @Nullable Http2Stream replacedApplicationStream,
+        boolean resetAfterResponse
     ) {
         stateLock.lock();
         try {
@@ -440,6 +441,11 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 );
                 writeCoordinator.submit(new WriteTask(headers, false));
                 writeCoordinator.submit(new WriteTask(body, false));
+                if (resetAfterResponse) {
+                    writeCoordinator.resetAfterPendingWrites(
+                        new Http2ResetStreamFrame(streamId, Http2ErrorCode.PROTOCOL_ERROR.code())
+                    );
+                }
                 if (!initialState.canReceiveEndStream()) {
                     inboundFlowControl.closeStream(streamId);
                     writeCoordinator.forgetStream(streamId);
@@ -703,6 +709,17 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     lifecycle.recordInitialGoAwayWritten();
                 }
                 candidate.complete();
+                if (frame instanceof Http2ResetStreamFrame) {
+                    stateLock.lock();
+                    try {
+                        if (streamRegistry.removeRejectedRequestBody(frame.streamId())) {
+                            inboundFlowControl.closeStream(frame.streamId());
+                            writeCoordinator.forgetStream(frame.streamId());
+                        }
+                    } finally {
+                        stateLock.unlock();
+                    }
+                }
                 if (protocolError != null && protocolError.errorType() == Http2Level.CONNECTION) {
                     return true;
                 }
@@ -777,11 +794,17 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     log.info("read fh = " + fh);
 
                     if (fh.streamId() > lifecycle.maxAllowedStreamId) {
-                        // we've told the client we have stopped, but this is a new stream ID
-                        log.info("Discarding " + fh.streamId() + " because we told the client the last stream ID is " + lifecycle.lastStreamId);
-                        discardPayload(buffer, clientIn, len);
+                        // Refused streams still share HPACK and connection flow control
+                        // with the lower-numbered requests finishing graceful shutdown.
                         if (fh.frameType() == Http2FrameType.HEADERS) {
-                            write(new Http2ResetStreamFrame(fh.streamId(), Http2ErrorCode.REFUSED_STREAM.code()));
+                            readHeaders(clientIn, fh, fieldBlockDecoder);
+                        } else if (fh.frameType() == Http2FrameType.DATA) {
+                            Http2DataFrame.readFrom(fh, buffer);
+                            applyInboundFlowResult(inboundFlowControl.discard(len));
+                        } else if (fh.frameType() == Http2FrameType.CONTINUATION) {
+                            throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Out of order continuation frame");
+                        } else {
+                            discardPayload(buffer, clientIn, len);
                         }
                     } else {
                         switch (fh.frameType()) {
@@ -1082,6 +1105,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     serverSettings.maxFrameSize
                 )
             );
+            if (fh.streamId() > lifecycle.maxAllowedStreamId) {
+                write(new Http2ResetStreamFrame(fh.streamId(), Http2ErrorCode.REFUSED_STREAM.code()));
+                return;
+            }
             log.info("Got headers " + headerFragment);
             Http2StreamRegistry.Lookup registered =
                 streamRegistry.lookup(headerFragment.streamId());
@@ -1121,24 +1148,25 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             if (fh.streamId() <= lifecycle.lastStreamId) {
                 throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID " + fh.streamId());
             }
-            String methodName = headerFragment.headers().get(HeaderNames.PSEUDO_METHOD);
-            if (methodName != null) {
-                if (methodName.isEmpty() || !methodName.chars().allMatch(c -> ParseUtils.isTChar((char) c))) {
-                    throw Http2Exception.stream(Http2ErrorCode.PROTOCOL_ERROR, "invalid method", fh.streamId());
+            try {
+                if (acceptNewStream(headerFragment.streamId())) {
+                    newStreamAdmitted = true;
+                    startRequest(headerFragment);
                 }
-                Method method;
-                try {
-                    method = Method.valueOf(methodName);
-                } catch (IllegalArgumentException unknownMethod) {
-                    throw new HttpException(HttpStatus.METHOD_NOT_ALLOWED_405);
+            } catch (Http2Exception malformedRequest) {
+                if (malformedRequest.errorType() != Http2Level.STREAM
+                    || malformedRequest.errorCode() != Http2ErrorCode.PROTOCOL_ERROR) {
+                    throw malformedRequest;
                 }
-                QueryRequestValidation.validate(method, headerFragment.headers());
-            }
-            if (acceptNewStream(headerFragment.streamId())) {
-                newStreamAdmitted = true;
-                startRequest(headerFragment);
+                throw new HttpException(HttpStatus.BAD_REQUEST_400, malformedRequest.getMessage(), malformedRequest);
             }
         } catch (HttpException e) {
+            if (fh.streamId() > lifecycle.maxAllowedStreamId) {
+                // Decoder limits are reported only after the entire bounded block
+                // has updated HPACK. A refused request needs no HTTP response.
+                write(new Http2ResetStreamFrame(fh.streamId(), Http2ErrorCode.REFUSED_STREAM.code()));
+                return;
+            }
             // return an http response
             // The header block could not be decoded (for example a 431 rejected during HPACK
             // decoding), so the method and target are not available here.
@@ -1186,7 +1214,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             FieldBlock errorHeaders = new FieldBlock();
             errorHeaders.add(HeaderNames.PSEUDO_STATUS, Integer.toString(e.status().code()));
             errorHeaders.add(e.responseHeaders());
-            byte[] message = rejectReason.getBytes(StandardCharsets.UTF_8);
+            boolean resetAfterResponse = e.getCause() instanceof Http2Exception;
+            // The optional HTTP response must not hold the mandatory reset hostage
+            // to peer DATA credit. A bodyless 400 works even with a zero window.
+            byte[] message = resetAfterResponse ? new byte[0] : rejectReason.getBytes(StandardCharsets.UTF_8);
             errorHeaders.set(HeaderNames.CONTENT_TYPE, "text/plain;charset=utf-8");
             errorHeaders.set(HeaderNames.CONTENT_LENGTH, message.length);
             server.getStatsImpl().onInvalidRequest();
@@ -1199,7 +1230,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 initialState,
                 new Http2HeadersFrame(fh.streamId(), false, errorHeaders),
                 new Http2DataFrame(fh.streamId(), true, message, 0, message.length),
-                null
+                null,
+                resetAfterResponse
             );
             server.onRequestRejected(rejectedRequest);
         }
@@ -1557,7 +1589,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             initialState,
             new Http2HeadersFrame(frame.streamId(), false, headers),
             new Http2DataFrame(frame.streamId(), true, message, 0, message.length),
-            stream
+            stream,
+            false
         );
         // Queue the response before invoking application code so the independent writer can
         // make progress even if a reject listener is slow.

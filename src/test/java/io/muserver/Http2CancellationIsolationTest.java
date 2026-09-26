@@ -1,6 +1,7 @@
 package io.muserver;
 
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
@@ -17,6 +18,59 @@ import static scaffolding.ServerUtils.httpsServerForTest;
 
 @Timeout(20)
 class Http2CancellationIsolationTest {
+
+    @Test
+    void rapidResetStormDoesNotRetainStreamStateAndConnectionRemainsUsable() throws Exception {
+        CompletableFuture<Http2Connection> serverConnection = new CompletableFuture<>();
+        try (MuServer server = httpsServerForTest("http")
+            .withInterface("localhost")
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled().withMaxConcurrentStreams(100))
+            .withGzipEnabled(false)
+            .addHandler(Method.POST, "/cancelled", (request, response, params) -> {
+                serverConnection.complete((Http2Connection) request.connection());
+                try {
+                    request.inputStream().orElseThrow().readAllBytes();
+                    response.status(204);
+                } catch (Exception ignored) {
+                    // Peer reset released the blocked body read; do not write a response for this stream.
+                }
+            })
+            .addHandler(Method.GET, "/hello", (request, response, params) -> {
+                serverConnection.complete((Http2Connection) request.connection());
+                response.status(204);
+            })
+            .start();
+             H2Client client = new H2Client();
+             H2ClientConnection connection = client.connectClearText(server)) {
+            connection.socket().setSoTimeout(5000);
+            connection.handshake();
+
+            int streamId = 1;
+            for (int i = 0; i < 40; i++, streamId += 2) {
+                FieldBlock cancelled = postHeaders(server.uri().getPort(), "/cancelled");
+                connection.writeFrame(new Http2HeadersFrame(streamId, false, cancelled))
+                    .writeFrame(new Http2ResetStreamFrame(streamId, Http2ErrorCode.CANCEL.code()));
+            }
+            connection.flush();
+
+            int healthyStream = streamId;
+            connection.writeFrame(new Http2HeadersFrame(healthyStream, true,
+                getHelloHeaders("http", server.uri().getPort()))).flush();
+            Http2HeadersFrame response = readIgnoringWindowUpdates(connection, Http2HeadersFrame.class);
+            assertEquals(healthyStream, response.streamId());
+            assertEquals("204", response.headers().get(":status"));
+            assertTrue(response.endStream());
+
+            Http2Connection serverSide = serverConnection.get(5, TimeUnit.SECONDS);
+            assertEventually(() -> serverSide.testProbe().coordinator().resetRecordCount(), is(0));
+            assertEventually(() -> serverSide.testProbe().streams().isEmpty(), is(true));
+
+            byte[] ping = ByteBuffer.allocate(8).putLong(99).array();
+            connection.writeFrame(new Http2Ping(false, ping)).flush();
+            assertEquals(new Http2Ping(true, ping), readIgnoringWindowUpdates(connection, Http2Ping.class));
+        }
+    }
+
     @ParameterizedTest
     @CsvSource({"false,1", "true,1", "false,16385", "true,16385"})
     void resetSettlesBlockedWriteOnceAndConnectionServesOtherStreams(boolean tls, int payloadSize) throws Exception {

@@ -13,6 +13,8 @@ import okhttp3.Response;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.ClientUtils;
 import scaffolding.MuAssert;
 import scaffolding.RawClient;
@@ -26,6 +28,7 @@ import java.util.stream.Collectors;
 import static io.muserver.rest.RestHandlerBuilder.restHandler;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.*;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
 
@@ -281,6 +284,33 @@ public class CookieTest {
         okhttp3.Cookie actual = cookies.get(0);
         assertThat(actual.name(), equalTo("A-thing"));
         assertThat(actual.value(), equalTo("Some%20value%20%26%20another%20thing%3Dumm"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"a=\"one; b=two\"", "a=\"one\"two; b=three", "a=\"one"})
+    public void malformedQuotedCookieValuesAreRejected(String header) {
+        assertThrows(IllegalArgumentException.class, () -> CookieBuilder.fromCookieHeader(header));
+    }
+
+    @Test
+    public void quotedCookieValuesCannotConsumeOtherCookies() {
+        List<CookieBuilder> cookies = CookieBuilder.fromCookieHeader("a=\"one\"; b=two");
+        assertThat(cookies.stream().map(CookieBuilder::build).map(Cookie::toString).collect(Collectors.toList()),
+            contains("a=one", "b=two"));
+    }
+
+    @Test
+    public void emptyQuotedCookieCannotBeReopened() {
+        assertThrows(IllegalArgumentException.class, () -> CookieBuilder.fromCookieHeader("a=\"\"\"one\"; b=two"));
+        List<CookieBuilder> cookies = CookieBuilder.fromCookieHeader("a=\"\"; b=two");
+        assertThat(cookies.stream().map(CookieBuilder::build).map(Cookie::toString).collect(Collectors.toList()),
+            contains("a=", "b=two"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"has space", "has;semicolon", "has,comma", "has\"quote", "has\\backslash"})
+    public void generatedCookieValuesCannotContainDelimiters(String value) {
+        assertThrows(IllegalArgumentException.class, () -> CookieBuilder.newCookie().withName("a").withValue(value));
     }
 
     @Test

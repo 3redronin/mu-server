@@ -1,13 +1,36 @@
 package io.muserver.handlers;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 
 import static org.hamcrest.CoreMatchers.is;
+import static org.hamcrest.CoreMatchers.nullValue;
 import static org.hamcrest.MatcherAssert.assertThat;
 
 public class ResourceProviderTest {
+
+    @Test
+    public void pathsOutsideTheBaseHaveNoResourceOrMetadata(@TempDir Path root) throws Exception {
+        Path base = Files.createDirectory(root.resolve("public"));
+        Files.writeString(root.resolve("secret.txt"), "secret");
+        Files.writeString(base.resolve("__mu_invalid_resource_path__"), "ordinary file");
+        ResourceProviderFactory factory = ResourceProviderFactory.fileBased(base);
+        for (String path : new String[]{"../secret.txt", "/../secret.txt", "../", "../public-other"}) {
+            ResourceProvider provider = factory.get(path);
+            assertThat(path, provider.exists(), is(false));
+            assertThat(path, provider.isDirectory(), is(false));
+            assertThat(path, provider.fileSize(), nullValue());
+            assertThat(path, provider.lastModified(), nullValue());
+            try (var files = provider.listFiles()) {
+                assertThat(path, files.count(), is(0L));
+            }
+        }
+        assertThat(factory.get("__mu_invalid_resource_path__").exists(), is(true));
+    }
 
 
     private final ResourceProviderFactory classpathBased = ResourceProviderFactory.classpathBased("/sample-static");

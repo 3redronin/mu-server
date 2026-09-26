@@ -25,6 +25,24 @@ public class ParameterizedHeaderWithValueTest {
     }
 
 
+
+    @Test
+    public void quotedQualityHeaderParsingIsBounded() {
+        StringBuilder header = new StringBuilder();
+        for (int i = 0; i < 2000; i++) {
+            if (i > 0) header.append(", ");
+            header.append("text/plain;q=\"").append(i % 10).append("\"");
+        }
+
+        List<ParameterizedHeaderWithValue> values = fromString(header.toString());
+
+        assertThat(values, hasSize(2000));
+        assertThat(values.get(0).value(), equalTo("text/plain"));
+        assertThat(values.get(0).parameter("q"), equalTo("0"));
+        assertThat(values.get(1999).value(), equalTo("text/plain"));
+        assertThat(values.get(1999).parameter("q"), equalTo("9"));
+    }
+
     @Test
     public void valueOnlyIsSupported() {
         List<ParameterizedHeaderWithValue> list = fromString("text/html");

@@ -265,7 +265,7 @@ public class JaxRSResponseTest {
 
     @Test
     public void usesHeaderDelegatesIfAvailable() {
-        NewCookie newCookie = new NewCookie("some-name", "some value", "/path", "example.org", "comment", 32, true, true);
+        NewCookie newCookie = new NewCookie("some-name", "some%20value", "/path", "example.org", "comment", 32, true, true);
         Response resp = JaxRSResponse.ok()
             .header("cache", cacheControl())
             .header("string-val", "A string val")

@@ -12,6 +12,20 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class Http2InboundFlowControlTest {
 
     @Test
+    void discardedGoAwayDataUsesOnlyConnectionCreditAndWaitsForAdvertisement() {
+        var flow = new Http2InboundFlowControl(4);
+        flow.openStream(1, 4);
+        var discarded = flow.discard(4);
+        assertThat(discarded.error(), nullValue());
+        assertThat(discarded.connectionUpdate(), equalTo(4));
+        assertThat(discarded.streamUpdate(), equalTo(0));
+        assertThat(error(flow.discard(1)).errorCode(), equalTo(Http2ErrorCode.FLOW_CONTROL_ERROR));
+        assertThat(error(flow.reserve(1, 1)).errorType(), equalTo(Http2Level.CONNECTION));
+        flow.windowUpdateWriting(0, 4);
+        assertThat(flow.reserve(1, 4).error(), nullValue());
+    }
+
+    @Test
     void reservesConnectionAndStreamCreditAtomically() {
         var flow = new Http2InboundFlowControl(10);
         flow.openStream(1, 4);

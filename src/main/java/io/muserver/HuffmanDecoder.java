@@ -2,6 +2,7 @@ package io.muserver;
 
 import org.jspecify.annotations.Nullable;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 
 class HuffmanDecoder {
@@ -13,7 +14,7 @@ class HuffmanDecoder {
                 "Huffman string exceeds the field block"
             );
         }
-        var sb = new StringBuilder();
+        var octets = new ByteArrayOutputStream();
         var node = root;
         int bitsSinceLastSymbol = 0;
         boolean tailBitsAreAllOnes = true;
@@ -33,8 +34,7 @@ class HuffmanDecoder {
                     if (node.c > 255) {
                         throw new Http2Exception(Http2ErrorCode.COMPRESSION_ERROR, "EOS must not appear in a huffman encoded string");
                     }
-                    char c = node.c;
-                    sb.append(c);
+                    octets.write(node.c);
                     node = root;
                     bitsSinceLastSymbol = 0;
                     tailBitsAreAllOnes = true;
@@ -51,11 +51,8 @@ class HuffmanDecoder {
             }
         }
 
-        // HPACK can encode an empty string. Let HTTP/2 message validation reject
-        // an empty field name on its stream, just as for an uncompressed string.
-        return sb.length() == 0
-            ? HeaderString.valueOf(new byte[0], type)
-            : HeaderString.valueOf(sb, type);
+        // HTTP validation happens after decompression and dynamic-table updates.
+        return HeaderString.valueOf(octets.toByteArray(), type);
     }
 
     private HuffmanDecoder() {}
