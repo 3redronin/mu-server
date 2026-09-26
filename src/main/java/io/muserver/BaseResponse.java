@@ -181,6 +181,16 @@ abstract class BaseResponse implements MuResponse {
         // A 304 may retain the length of the selected representation.
     }
 
+    protected final void preserveReflectedOriginVary() {
+        String origin = request.headers().get(HeaderNames.ORIGIN);
+        if (origin != null && origin.equals(headers.get(HeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN))) {
+            TokenListHeader vary = headers.vary();
+            if (vary.addIfMissing(HeaderNames.ORIGIN.toString(), true)) {
+                headers.set(HeaderNames.VARY, vary);
+            }
+        }
+    }
+
 
     @Override
     public PrintWriter writer() {

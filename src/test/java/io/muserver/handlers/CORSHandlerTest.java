@@ -59,6 +59,24 @@ public class CORSHandlerTest {
     }
 
     @Test
+    public void corsOriginRemainsInVaryWhenRouteSetsVary() throws java.io.IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(corsHandler()
+                .withCORSConfig(CORSHandlerBuilder.config().withAllOriginsAllowed())
+            )
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.headers().set("Vary", "Authorization");
+                response.write("ok");
+            })
+            .start();
+        try (Response resp = call(request(server.uri()).header("Origin", "http://example.org"))) {
+            assertThat(resp.header("Vary"), containsString("Authorization"));
+            assertThat(resp.header("Vary"), containsString("origin"));
+            assertThat(resp.header("Access-Control-Allow-Origin"), is("http://example.org"));
+        }
+    }
+
+    @Test
     public void aHandlerCanBeCreatedFromConfig() {
         server = ServerUtils.httpsServerForTest()
             .addHandler(CORSHandlerBuilder.config().withAllOriginsAllowed().toHandler(Method.GET, Method.HEAD))
