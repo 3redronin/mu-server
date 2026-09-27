@@ -128,19 +128,26 @@ class Http1Connection extends BaseHttpConnection {
 
                 var rejectException = request.getRejectRequest();
                 String relativeUrl;
+                URI target;
                 try {
-                    relativeUrl = request.normalisedUri();
+                    target = request.requestTarget();
+                    relativeUrl = Mutils.getRelativeUrl(target);
                 } catch (HttpException e) {
                     if (rejectException == null) {
                         rejectException = e;
                     }
+                    rejectException.responseHeaders().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+                    target = null;
                     relativeUrl = "/";
                 }
 
                 URI serverUri = creator.uri().resolve(relativeUrl);
                 URI requestUri;
                 try {
-                    requestUri = Headtils.getUri(log, request.headers(), relativeUrl, serverUri);
+                    URI defaultUri = target != null && target.isAbsolute()
+                        ? URI.create(target.getScheme() + "://" + target.getRawAuthority() + relativeUrl)
+                        : serverUri;
+                    requestUri = Headtils.getUri(log, request.headers(), relativeUrl, defaultUri);
                 } catch (HttpException e) {
                     if (rejectException == null) {
                         rejectException = e;

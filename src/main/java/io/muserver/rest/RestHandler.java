@@ -81,7 +81,7 @@ public class RestHandler implements MuHandler {
         Set<RequestMatcher.MatchedMethod> matchedMethodsForPath = Collections.emptySet();
         List<MediaType> producesRef = null;
         List<MediaType> directlyProducesRef = null;
-        SecurityContext securityContext = muRequest.uri().getScheme().equals("https") ? MuSecurityContext.notLoggedInHttpsContext : MuSecurityContext.notLoggedInHttpContext;
+        SecurityContext securityContext = muRequest.isSecure() ? MuSecurityContext.notLoggedInHttpsContext : MuSecurityContext.notLoggedInHttpContext;
 
         JaxRSRequest requestContext = new JaxRSRequest(muRequest, muResponse, new LazyAccessInputStream(muRequest), Mutils.trim(muRequest.relativePath(), "/"), securityContext, readerInterceptors, providers);
         try {

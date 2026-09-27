@@ -3,12 +3,12 @@ package io.muserver;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.slf4j.LoggerFactory;
 
 import java.net.URI;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 class HeadtilsUriTest {
     @ParameterizedTest
@@ -51,6 +51,28 @@ class HeadtilsUriTest {
             .set("Forwarded", "host=external.example;proto=https"),
             "/hello?x=1", URI.create("http://localhost:12345/hello?x=1"));
         assertEquals(URI.create("https://external.example/hello?x=1"), uri);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"example.com", "service_name", "foo%2Dbar:", "foo~bar:443", "[::1]", "[::1]:8443",
+        "[::1]:", "127.0.0.1:80", "a!$&'()*+,;=b"})
+    void acceptsHttpAuthorities(String authority) {
+        assertDoesNotThrow(() -> Headtils.validateAuthority(authority));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", "user@host", "host/path", "host?query", "host#fragment", "host:abc", ":80",
+        "host:1:2", "host%", "host%GG", "host name", "höst", "bad^host", "[not-ipv6]", "[v1.foo]", "[::1]:abc"})
+    void rejectsInvalidOrUnrepresentableHttpAuthorities(String authority) {
+        assertEquals(400, assertThrows(HttpException.class, () -> Headtils.validateAuthority(authority)).status().code());
+    }
+
+    @Test
+    void matchingRegisteredNameReusesTheDefaultUri() {
+        URI defaultUri = URI.create("http://service_name/hello");
+        URI actual = Headtils.getUri(LoggerFactory.getLogger(getClass()), Headers.create().set("Host", "service_name"),
+            "/hello", defaultUri);
+        assertSame(defaultUri, actual);
     }
 
     @Test

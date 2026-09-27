@@ -7,7 +7,6 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.SecurityContext;
-import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -71,8 +70,8 @@ public class BasicAuthSecurityFilter implements ContainerRequestFilter {
             return;
         }
 
-        @Nullable Principal principal = authenticator.authenticate(userPass[0], userPass[1]);
-        boolean isHttps = "https".equalsIgnoreCase(filterContext.getUriInfo().getRequestUri().getScheme());
+        Principal principal = authenticator.authenticate(userPass[0], userPass[1]);
+        boolean isHttps = filterContext.getSecurityContext().isSecure();
 
         MuSecurityContext securityContext;
         if (principal == null) {

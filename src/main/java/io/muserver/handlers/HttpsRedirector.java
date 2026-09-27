@@ -3,6 +3,7 @@ package io.muserver.handlers;
 import io.muserver.*;
 
 import java.net.URI;
+import java.net.URISyntaxException;
 
 /**
  * <p>Sends any HTTP requests to the same HTTPS address at the supplied port and optionally enables
@@ -27,8 +28,7 @@ public class HttpsRedirector implements MuHandler {
     @Override
     public boolean handle(MuRequest request, MuResponse response) throws Exception {
         URI uri = request.uri();
-        boolean isHttp = uri.getScheme().equals("http");
-        if (!isHttp) {
+        if (request.isSecure()) {
             // Note: clients should ignore HSTS headers on non-HTTPS requests
             if (expireTimeInSeconds > 0) {
                 String val = "max-age=" + expireTimeInSeconds;
@@ -43,8 +43,7 @@ public class HttpsRedirector implements MuHandler {
             return false;
         }
 
-        int port = httpsPort == 443 ? -1 : httpsPort;
-        URI newURI = new URI("https", uri.getUserInfo(), uri.getHost(), port, uri.getPath(), uri.getQuery(), uri.getFragment());
+        URI newURI = httpsUri(uri);
         if (request.method() == Method.GET || request.method() == Method.HEAD) {
             response.status(301);
             response.redirect(newURI);
@@ -54,6 +53,20 @@ public class HttpsRedirector implements MuHandler {
             response.write("HTTP is not supported for this endpoint. Please use the HTTPS endpoint at " + newURI.resolve("/"));
         }
         return true;
+    }
+
+    private URI httpsUri(URI uri) throws URISyntaxException {
+        String rawAuthority = uri.getRawAuthority();
+        if (rawAuthority == null) throw new IllegalArgumentException("Request URI has no authority");
+
+        // A port can only trail the authority; IPv6 literals end in ']' and remain intact.
+        String host = rawAuthority.replaceFirst(":[0-9]*$", "");
+        StringBuilder target = new StringBuilder("https://").append(host);
+        if (httpsPort != 443) target.append(':').append(httpsPort);
+        if (uri.getRawPath() != null) target.append(uri.getRawPath());
+        if (uri.getRawQuery() != null) target.append('?').append(uri.getRawQuery());
+        if (uri.getRawFragment() != null) target.append('#').append(uri.getRawFragment());
+        return new URI(target.toString());
     }
 
     @Override

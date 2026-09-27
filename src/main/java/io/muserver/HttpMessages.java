@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
@@ -124,8 +125,27 @@ class HttpRequestTemp implements HttpMessageTemp {
         this.rejectRequest = rejectRequest;
     }
 
-    String normalisedUri() {
-        return Mutils.getRelativeUrl(url);
+    URI requestTarget() {
+        List<String> hosts = headers.getAll(HeaderNames.HOST);
+        if (hosts.size() > 1) throw HttpException.badRequest("Multiple Host headers");
+        if (hosts.isEmpty() && httpVersion != HttpVersion.HTTP_1_0) throw HttpException.badRequest("No host header");
+        if (!hosts.isEmpty()) Headtils.validateAuthority(hosts.get(0));
+
+        URI target;
+        try {
+            target = URI.create(url);
+        } catch (IllegalArgumentException e) {
+            throw HttpException.badRequest("Invalid request URL");
+        }
+        if (target.getRawFragment() != null) throw HttpException.badRequest("Invalid request target");
+        if (target.isAbsolute()) {
+            String authority = target.getRawAuthority();
+            if (authority == null) throw HttpException.badRequest("Invalid request target");
+            Headtils.validateAuthority(authority);
+            // Validate the received Host first; then use the target authority throughout request handling.
+            headers.set(HeaderNames.HOST, authority);
+        }
+        return target;
     }
 
     boolean isWebsocketUpgrade() {

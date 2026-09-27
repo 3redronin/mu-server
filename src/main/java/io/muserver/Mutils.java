@@ -297,9 +297,18 @@ public class Mutils {
 
     static String getRelativeUrl(String requestLineUrl) throws HttpException {
         try {
-            URI requestUri = new URI(requestLineUrl).normalize();
+            return getRelativeUrl(URI.create(requestLineUrl));
+        } catch (IllegalArgumentException e) {
+            throw new HttpException(HttpStatus.BAD_REQUEST_400, "Invalid request URL");
+        }
+    }
+
+    static String getRelativeUrl(URI requestUri) throws HttpException {
+        try {
+            requestUri = requestUri.normalize();
             if (requestUri.getScheme() == null && requestUri.getHost() != null) {
-                throw HttpException.redirect(new URI(requestLineUrl.substring(1)).normalize());
+                // for a URL starting with //some/path redirect to /some/path
+                throw HttpException.redirect(new URI(requestUri.toString().substring(1)).normalize());
             }
 
             String s = requestUri.getRawPath();

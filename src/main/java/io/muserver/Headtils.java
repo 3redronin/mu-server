@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.regex.Pattern;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.util.Collections.emptyList;
@@ -76,7 +77,7 @@ class Headtils {
             String hostHeader = h.get(HeaderNames.HOST);
             List<ForwardedHeader> forwarded = getForwardedHeaders(h);
             if (forwarded.isEmpty()) {
-                if (Mutils.nullOrEmpty(hostHeader) || defaultValue.getHost().equals(hostHeader)
+                if (hostHeader == null || hostHeader.isEmpty() || hostHeader.equals(defaultValue.getHost())
                     || defaultValue.getRawAuthority().equals(hostHeader)) {
                     return defaultValue;
                 }
@@ -88,7 +89,22 @@ class Headtils {
             return URI.create(originalScheme + "://" + host).resolve(requestUri);
         } catch (Exception e) {
             if (e instanceof HttpException) throw (HttpException) e;
-            log.warn("Could not create a URI object using header values " + h);
+            log.warn("Could not create a URI object using header values {}", h);
+            throw HttpException.badRequest("Invalid request authority");
+        }
+    }
+
+    // URI validates escapes and IPv6; this restricts its broader authority syntax to HTTP host[:port].
+    private static final Pattern HTTP_AUTHORITY = Pattern.compile(
+            "(?:[a-zA-Z0-9._~!$&'()*+,;=%-]+|\\[[^]]+])(?::[0-9]*)?");
+
+    static void validateAuthority(String authority) {
+        if (!HTTP_AUTHORITY.matcher(authority).matches()) {
+            throw HttpException.badRequest("Invalid request authority");
+        }
+        try {
+            URI.create("http://" + authority);
+        } catch (IllegalArgumentException e) {
             throw HttpException.badRequest("Invalid request authority");
         }
     }
