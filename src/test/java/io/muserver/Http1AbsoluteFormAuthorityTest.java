@@ -33,6 +33,36 @@ class Http1AbsoluteFormAuthorityTest {
 
     private @Nullable MuServer server;
 
+    @ParameterizedTest
+    @CsvSource(delimiter = '|', value = {
+        "Forwarded: for=192.0.2.1|trusted.example",
+        "Forwarded: host=external.example|external.example",
+        "X-Forwarded-For: 192.0.2.1|trusted.example",
+        "X-Forwarded-Host: external.example|external.example",
+        "X-Forwarded-Port: 8443|trusted.example:8443"
+    })
+    void doubleSlashAbsolutePathCannotReplaceAuthority(String forwarded, String authority) throws Exception {
+        server = httpServer().addHandler((request, response) -> {
+            response.write(request.uri().toString());
+            return true;
+        }).start();
+        assertThat(requestBody("http://trusted.example//evil.example/path?x=%26", "other.example", forwarded),
+            equalTo("http://" + authority + "/evil.example/path?x=%26"));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"Forwarded: for=192.0.2.1", "X-Forwarded-For: 192.0.2.1"})
+    void doubleSlashAbsolutePathCannotRedirectToItsFirstSegment(String forwarded) throws Exception {
+        server = httpServer().addHandler(HttpsRedirectorBuilder.toHttpsPort(443)).start();
+        try (var client = Http1Client.connect(server)) {
+            client.writeAscii("GET http://trusted.example//evil.example/path?x=%26 HTTP/1.1\r\n")
+                .writeHeader("Host", "other.example").writeAscii(forwarded + "\r\n")
+                .writeHeader("Connection", "close").endHeaders().flush();
+            assertThat(client.readLine(), startsWith("HTTP/1.1 301 "));
+            assertThat(client.readHeaders().get("Location"), equalTo("https://trusted.example/evil.example/path?x=%26"));
+        }
+    }
+
     @Test
     void absoluteFormRequestTargetAuthorityTakesPrecedenceOverHost() throws Exception {
         server = httpServer()
