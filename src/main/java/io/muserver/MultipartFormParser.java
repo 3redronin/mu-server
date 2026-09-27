@@ -10,7 +10,6 @@ import java.nio.charset.CharsetDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Locale;
 
 import static io.muserver.ParseUtils.CR;
 import static io.muserver.ParseUtils.LF;
@@ -29,10 +28,6 @@ class MultipartFormParser {
 
     public State state() {
         return state;
-    }
-
-    MultipartFormParser(Path fileUploadDir, String boundary, InputStream body, int bufferSize, Charset formCharset) {
-        this(fileUploadDir, boundary, body, bufferSize, formCharset, 1024);
     }
 
     MultipartFormParser(Path fileUploadDir, String boundary, InputStream body, int bufferSize, Charset formCharset, int maxParts) {
@@ -55,14 +50,17 @@ class MultipartFormParser {
             int partCount = 0;
             while (headers != null) {
                 if (++partCount > maxParts) {
-                    throw new HttpException.MultipartPartLimitException();
+                    throw new HttpException(HttpStatus.CONTENT_TOO_LARGE_413,  "Multipart form exceeds the maximum of " + maxParts + " parts");
                 }
 
                 String keyName = null;
                 String filename = null;
                 var cdv = headers.get(HeaderNames.CONTENT_DISPOSITION);
                 if (cdv != null) {
-                    var cds = ParameterizedHeaderWithValue.fromString(cdv);
+                    // Multipart form names and filenames use UTF-8, while Headers
+                    // retains the original field octets rather than Unicode text.
+                    String disposition = new String(cdv.getBytes(StandardCharsets.ISO_8859_1), StandardCharsets.UTF_8);
+                    var cds = ParameterizedHeaderWithValue.fromString(disposition);
                     if (cds.size() == 1) {
                         var cd = cds.get(0);
                         if ("form-data".equals(cd.value())) {
@@ -256,7 +254,7 @@ class MultipartFormParser {
                 if (colon == start) {
                     throw HttpException.badRequest("Empty multipart header name");
                 }
-                var headerName = new String(bb.array(), start, colon - start, StandardCharsets.US_ASCII).toLowerCase(Locale.ROOT);
+                var headerName = new String(bb.array(), start, colon - start, StandardCharsets.ISO_8859_1);
                 bb.position(colon + 1);
 
                 var cr = indexOf(bb, CR);
@@ -268,7 +266,7 @@ class MultipartFormParser {
                 }
 
                 start = bb.arrayOffset() + bb.position();
-                var headerValue = new String(bb.array(), start, cr - start, StandardCharsets.UTF_8).trim();
+                var headerValue = new String(bb.array(), start, cr - start, StandardCharsets.ISO_8859_1);
                 headers.add(headerName, headerValue);
                 bb.position(lf + 1);
                 state = State.HEADER_NAME;

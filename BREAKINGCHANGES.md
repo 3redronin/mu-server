@@ -28,10 +28,44 @@ semicolon-separated query parameters such as `?one=1;two=2` must change them to 
 Forwarded request authorities
 -----------------------------
 
-Mu 4 returns `400 Bad Request` when a parsed `Forwarded` or `X-Forwarded-Host` value contains an invalid authority.
+Mu 4 returns `400 Bad Request` when the forwarded authority selected for the request URI is invalid. This applies to
+`Forwarded` and `X-Forwarded-Host` values, including ports supplied by `X-Forwarded-Port`.
 Previously, such values could be used to construct the request URI, including values whose extra URI components changed
 how the apparent host was interpreted. Valid forwarded authorities continue to be used as before. Applications or
 proxies that send malformed forwarded host values must correct them before upgrading.
+
+HTTP/1 absolute request targets
+------------------------------
+
+For an absolute-form request such as `GET http://example.com/path HTTP/1.1`, the target's scheme and authority
+now determine `MuRequest.uri()` before forwarding headers are applied. The application-visible `Host` is replaced
+with the target authority, matching HTTP/2's use of `:authority`. Missing HTTP/1.1 Host, duplicate or malformed Host,
+and malformed targets are rejected before replacement, even when forwarding headers are present.
+
+Use `MuRequest.isSecure()` for request security: it considers forwarding protocol metadata, then connection security.
+An `https` scheme in a plaintext absolute request target does not make the request secure. `serverURI()` continues
+to describe the local listener. Forwarding header trust and precedence are unchanged.
+
+Authorities support URI registered names (including underscores and percent escapes) and IPv6. IPvFuture literals
+remain unsupported because `java.net.URI`, the request URI representation, cannot represent them.
+
+Multipart form limits
+---------------------
+
+Mu's built-in `multipart/form-data` parser now accepts at most 1,024 parts per request by default. Each field or
+file counts as a part, including repeated field names and parts ignored because they have no form field name.
+Exceeding the limit returns HTTP 413 (Content Too Large), and any temporary uploads already created are deleted.
+For REST resources, the default exception mapper returns a 413 problem-details response. Application-provided
+exception mappers can customize the response.
+
+Applications that need larger multipart forms can set `MuServerBuilder.withMaxMultipartParts(int)` when creating
+the server. For example, `withMaxMultipartParts(4096)` allows up to 4,096 parts. Zero rejects any form containing
+a part; negative values are not allowed. This limit is separate from the request body size limit and does not
+apply to JSON or `application/x-www-form-urlencoded` bodies.
+
+The default REST exception mapper now preserves the status and applicable response headers of `HttpException`,
+instead of treating it as an unexpected 500 error. For 4xx/5xx statuses it generates a problem-details body;
+headers describing an old representation are removed, and 5xx exception messages are not exposed to clients.
 
 SSE
 ---

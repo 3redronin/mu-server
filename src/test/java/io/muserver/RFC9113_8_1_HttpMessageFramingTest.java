@@ -204,10 +204,8 @@ class RFC9113_8_1_HttpMessageFramingTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(malformedHeaders)))
                 .flush();
 
-            // Server should send RST_STREAM(PROTOCOL_ERROR) and keep the connection open
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            // Selected policy: send HTTP 400 before the required stream error.
+            FieldConformanceFixtures.assertInitialRejection(FieldConformanceFixtures.untilReset(con, 1), 1);
 
             // Connection remains usable for subsequent well-formed requests
             con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders(getPort())))
@@ -235,9 +233,7 @@ class RFC9113_8_1_HttpMessageFramingTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            FieldConformanceFixtures.assertInitialRejection(FieldConformanceFixtures.untilReset(con, 1), 1);
         }
     }
 
@@ -258,9 +254,7 @@ class RFC9113_8_1_HttpMessageFramingTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            FieldConformanceFixtures.assertInitialRejection(FieldConformanceFixtures.untilReset(con, 1), 1);
         }
     }
 

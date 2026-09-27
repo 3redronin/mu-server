@@ -86,9 +86,7 @@ public interface ContentEncoder {
         boolean mimeTypeOk = mimeTypesToEncode.contains(mime);
         if (!mimeTypeOk) return false;
 
-        var varyHeader = headers.vary();
-        varyHeader.addIfMissing(HeaderNames.ACCEPT_ENCODING.toString(), true);
-        headers.set(HeaderNames.VARY, varyHeader);
+        response.varyOn(HeaderNames.ACCEPT_ENCODING);
 
         if (headers.contains(HeaderNames.CONTENT_ENCODING)) return false; // don't re-encode something
 

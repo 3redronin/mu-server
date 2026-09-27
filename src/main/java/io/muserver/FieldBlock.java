@@ -21,7 +21,7 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
 
     @Override
     public @Nullable String get(CharSequence name) {
-        var header = HeaderString.valueOf(name, HeaderString.Type.HEADER);
+        var header = ValidatedHeaderName.from(name);
         for (FieldLine line : lines) {
             if (line.name().equals(header)) {
                 return line.value().toString();
@@ -32,7 +32,7 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
 
     @Override
     public List<String> getAll(CharSequence name) {
-        var header = HeaderString.valueOf(name, HeaderString.Type.HEADER);
+        var header = ValidatedHeaderName.from(name);
         List<String> values = new ArrayList<>();
         for (FieldLine line : lines) {
             if (line.name().equals(header)) {
@@ -53,7 +53,7 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
 
     @Override
     public boolean contains(CharSequence name) {
-        var header = HeaderString.valueOf(name, HeaderString.Type.HEADER);
+        var header = ValidatedHeaderName.from(name);
         for (FieldLine line : lines) {
             if (line.name().equals(header)) {
                 return true;
@@ -86,17 +86,17 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
     public Headers add(CharSequence name, Object value) {
         Objects.requireNonNull(name, "name is null");
         Objects.requireNonNull(value, "value is null");
-        return add(HeaderString.valueOf(name, HeaderString.Type.HEADER), value);
+        return add(ValidatedHeaderName.from(name), value);
     }
 
-    public Headers add(HeaderString name, Object value) {
+    Headers add(ValidatedHeaderName name, Object value) {
         lines.add(new FieldLine(name, HeaderString.valueOf(value, HeaderString.Type.VALUE)));
         return this;
     }
 
     @Override
     public Headers add(CharSequence name, Iterable<?> values) {
-        var header = HeaderString.valueOf(name, HeaderString.Type.HEADER);
+        var header = ValidatedHeaderName.from(name);
         for (Object value : values) {
             add(header, value);
         }
@@ -105,12 +105,12 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
 
     @Override
     public Headers add(Headers headers) {
-        if (headers instanceof FieldBlock) {
-            for (FieldLine line : ((FieldBlock)headers).lines) {
-                add(line);
-            }
-        } else {
-            for (Map.Entry<String, String> header : headers) {
+        for (Map.Entry<String, String> header : headers) {
+            if (header instanceof FieldLine) {
+                FieldLine line = (FieldLine) header;
+                add(new FieldLine(ValidatedHeaderName.from(line.name()),
+                    HeaderString.valueOf(line.value(), HeaderString.Type.VALUE), line.neverIndexed()));
+            } else {
                 add(header.getKey(), header.getValue());
             }
         }
@@ -120,7 +120,7 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
     @Override
     public Headers set(CharSequence name, @Nullable Object value) {
         Objects.requireNonNull(name, "name is null");
-        var header = HeaderString.valueOf(name, HeaderString.Type.HEADER);
+        var header = ValidatedHeaderName.from(name);
         if (value == null) {
             remove(header);
         } else {
@@ -135,7 +135,7 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
     public Headers set(CharSequence name, Iterable<?> values) {
         Objects.requireNonNull(name, "name is null");
         Objects.requireNonNull(values, "values is null");
-        var header = HeaderString.valueOf(name, HeaderString.Type.HEADER);
+        var header = ValidatedHeaderName.from(name);
         remove(header);
         for (Object value : values) {
             add(header, value);
@@ -159,7 +159,7 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
     @Override
     public Headers remove(CharSequence name) {
         Objects.requireNonNull(name, "name is null");
-        var header = HeaderString.valueOf(name, HeaderString.Type.HEADER);
+        var header = ValidatedHeaderName.from(name);
         remove(header);
         return this;
     }
@@ -177,7 +177,7 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
 
     @Override
     public boolean contains(CharSequence name, CharSequence value, boolean ignoreCase) {
-        var header = HeaderString.valueOf(name, HeaderString.Type.HEADER);
+        var header = ValidatedHeaderName.from(name);
         for (FieldLine line : lines) {
             boolean nameMatches = line.name().equals(header);
             if (nameMatches && line.value().contentEquals(value, ignoreCase)) {
@@ -189,7 +189,7 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
 
     @Override
     public boolean containsValue(CharSequence name, CharSequence value, boolean ignoreCase) {
-        var header = HeaderString.valueOf(name, HeaderString.Type.HEADER);
+        var header = ValidatedHeaderName.from(name);
         for (FieldLine line : lines) {
             boolean headerMatches = line.name().equals(header);
             if (headerMatches) {

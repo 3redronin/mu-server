@@ -358,6 +358,14 @@ public class MuServerBuilder {
      * including parts that are ignored because they do not have a form field name. Exceeding the
      * limit returns a 413 response. The default is 1024.
      *
+     * <p>This limit bounds the processing, memory, and temporary-file overhead of requests containing many
+     * small parts, which can be expensive even when the total body size is small. Choose a value that accommodates
+     * the largest legitimate form your application accepts, allowing for optional fields and files: each field
+     * value or file sent as a separate part counts, including repeated field names. For example, a spreadsheet UI
+     * sending each cell as a separate multipart field may need a higher limit, whereas uploading a CSV file uses
+     * only one part for the file. Keep {@link #withMaxRequestSize(long)} configured as well, since the part-count
+     * limit does not bound the size of individual parts or the total request body.</p>
+     *
      * @param maxParts the maximum number of multipart parts; zero rejects any request containing a part
      * @return this builder
      * @throws IllegalArgumentException if maxParts is negative
