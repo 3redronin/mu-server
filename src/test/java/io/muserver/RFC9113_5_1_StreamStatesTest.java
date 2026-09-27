@@ -355,12 +355,14 @@ class RFC9113_5_1_StreamStatesTest {
     public void whenMaxConcurrentStreamsIsExceededStreamIsRefused() throws Exception {
 
         var okayLatch = new CountDownLatch(1);
+        var completed = new CountDownLatch(2);
 
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder
                 .http2Enabled()
                 .withMaxConcurrentStreams(2)
             )
+            .addResponseCompleteListener(info -> completed.countDown())
             .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
                 response.status(202);
                 okayLatch.await(1, TimeUnit.MINUTES);
@@ -392,6 +394,7 @@ class RFC9113_5_1_StreamStatesTest {
                 con.readLogicalFrame(Http2HeadersFrame.class).streamId(),
                 con.readLogicalFrame(Http2HeadersFrame.class).streamId()),
                 containsInAnyOrder(1, 3));
+            assertThat(completed.await(5, TimeUnit.SECONDS), equalTo(true));
 
             // now can re-write the third one
             con.writeFrame(new Http2HeadersFrame(5, true, getHelloHeaders()))
