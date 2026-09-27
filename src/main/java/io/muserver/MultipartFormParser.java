@@ -24,14 +24,16 @@ class MultipartFormParser {
     private static final ByteBuffer emptyBuffer = ByteBuffer.allocate(0);
     private State state = State.PREAMBLE_SOL;
     private Charset formCharset;
+    private final int maxParts;
 
     public State state() {
         return state;
     }
 
-    MultipartFormParser(Path fileUploadDir, String boundary, InputStream body, int bufferSize, Charset formCharset) {
+    MultipartFormParser(Path fileUploadDir, String boundary, InputStream body, int bufferSize, Charset formCharset, int maxParts) {
         this.formCharset = formCharset;
         this.fileUploadDir = fileUploadDir;
+        this.maxParts = maxParts;
         this.array = new byte[bufferSize];
         this.body = body;
         this.crlfDashDashBoundary = ByteBuffer.wrap(("\r\n--" + boundary).getBytes(StandardCharsets.US_ASCII));
@@ -45,7 +47,11 @@ class MultipartFormParser {
             discardPreamble();
 
             Headers headers = readPartHeaders();
+            int partCount = 0;
             while (headers != null) {
+                if (++partCount > maxParts) {
+                    throw new HttpException(HttpStatus.CONTENT_TOO_LARGE_413,  "Multipart form exceeds the maximum of " + maxParts + " parts");
+                }
 
                 String keyName = null;
                 String filename = null;

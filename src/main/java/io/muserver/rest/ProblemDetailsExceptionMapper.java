@@ -1,5 +1,6 @@
 package io.muserver.rest;
 
+import io.muserver.HttpException;
 import io.muserver.openapi.Jsonizer;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
@@ -31,6 +32,7 @@ import java.util.UUID;
  *     <li>{@link ProblemDetailsException}: values are taken from the exception.</li>
  *     <li>{@link UriParameterConversionException}: a 400 Bad Request problem-details body with parameter metadata is created.</li>
  *     <li>{@link WebApplicationException} with no response entity and a 4xx/5xx status: a problem-details body is created.</li>
+ *     <li>{@link HttpException}: the status and non-representation headers are preserved, with a problem-details body for 4xx/5xx responses.</li>
  *     <li>Any other exception: a generic 500 problem-details response is created.</li>
  * </ul>
  * <p>
@@ -91,36 +93,49 @@ public class ProblemDetailsExceptionMapper <E extends Throwable> implements Exce
             return uriParameterConversionError((UriParameterConversionException) exception);
         }
 
+        if (exception instanceof HttpException) {
+            HttpException httpException = (HttpException) exception;
+            Response.ResponseBuilder builder = Response.status(httpException.status().code());
+            for (Map.Entry<String, String> header : httpException.responseHeaders()) {
+                builder.header(header.getKey(), header.getValue());
+            }
+            return httpErrorResponse(exception, builder.build());
+        }
+
         if (exception instanceof WebApplicationException) {
             WebApplicationException webApplicationException = (WebApplicationException) exception;
             Response response = webApplicationException.getResponse();
             if (response == null) {
                 return serverError(exception);
             }
-            if (response.getEntity() != null) {
-                return response;
-            }
-            Response.Status.Family family = Response.Status.Family.familyOf(response.getStatus());
-            if (family != Response.Status.Family.CLIENT_ERROR && family != Response.Status.Family.SERVER_ERROR) {
-                return response;
-            }
-            String message = webApplicationException.getMessage();
-            boolean serverError = family == Response.Status.Family.SERVER_ERROR;
-            String title = serverError || message == null || message.isEmpty()
-                ? defaultTitle(response.getStatus())
-                : message;
-            String detail = serverError ? "An unexpected error occurred" : null;
-            URI instance = newInstance();
-            if (shouldLogInstance(response.getStatus())) {
-                log.error("Sending a problem details response with instance={}", instance, exception);
-            }
-            Response.ResponseBuilder responseBuilder = Response.fromResponse(response);
-            removeReplacedRepresentationHeaders(response, responseBuilder);
-            return toResponse(responseBuilder, response.getStatus(), title, detail, null, instance, null,
-                shouldAddNoStoreHeader(response.getStatus()) && response.getHeaderString("Cache-Control") == null && response.getHeaderString("Pragma") == null && response.getHeaderString("Expires") == null);
+            return httpErrorResponse(exception, response);
         }
 
         return serverError(exception);
+    }
+
+    private Response httpErrorResponse(Throwable exception, Response response) {
+        if (response.getEntity() != null) {
+            return response;
+        }
+        Response.Status.Family family = Response.Status.Family.familyOf(response.getStatus());
+        if (family != Response.Status.Family.CLIENT_ERROR && family != Response.Status.Family.SERVER_ERROR) {
+            return response;
+        }
+        String message = exception.getMessage();
+        boolean serverError = family == Response.Status.Family.SERVER_ERROR;
+        String title = serverError || message == null || message.isEmpty()
+            ? defaultTitle(response.getStatus())
+            : message;
+        String detail = serverError ? "An unexpected error occurred" : null;
+        URI instance = newInstance();
+        if (shouldLogInstance(response.getStatus())) {
+            log.error("Sending a problem details response with instance={}", instance, exception);
+        }
+        Response.ResponseBuilder responseBuilder = Response.fromResponse(response);
+        removeReplacedRepresentationHeaders(response, responseBuilder);
+        return toResponse(responseBuilder, response.getStatus(), title, detail, null, instance, null,
+            shouldAddNoStoreHeader(response.getStatus()) && response.getHeaderString("Cache-Control") == null && response.getHeaderString("Pragma") == null && response.getHeaderString("Expires") == null);
     }
 
     private static void removeReplacedRepresentationHeaders(Response originalResponse, Response.ResponseBuilder responseBuilder) {

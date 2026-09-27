@@ -40,6 +40,24 @@ to describe the local listener. Forwarding header trust and precedence are uncha
 Authorities support URI registered names (including underscores and percent escapes) and IPv6. IPvFuture literals
 remain unsupported because `java.net.URI`, the request URI representation, cannot represent them.
 
+Multipart form limits
+---------------------
+
+Mu's built-in `multipart/form-data` parser now accepts at most 1,024 parts per request by default. Each field or
+file counts as a part, including repeated field names and parts ignored because they have no form field name.
+Exceeding the limit returns HTTP 413 (Content Too Large), and any temporary uploads already created are deleted.
+For REST resources, the default exception mapper returns a 413 problem-details response. Application-provided
+exception mappers can customize the response.
+
+Applications that need larger multipart forms can set `MuServerBuilder.withMaxMultipartParts(int)` when creating
+the server. For example, `withMaxMultipartParts(4096)` allows up to 4,096 parts. Zero rejects any form containing
+a part; negative values are not allowed. This limit is separate from the request body size limit and does not
+apply to JSON or `application/x-www-form-urlencoded` bodies.
+
+The default REST exception mapper now preserves the status and applicable response headers of `HttpException`,
+instead of treating it as an unexpected 500 error. For 4xx/5xx statuses it generates a problem-details body;
+headers describing an old representation are removed, and 5xx exception messages are not exposed to clients.
+
 SSE
 ---
 
