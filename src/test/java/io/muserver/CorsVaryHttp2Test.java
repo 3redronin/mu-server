@@ -2,7 +2,8 @@ package io.muserver;
 
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.encodeFieldBlock;
@@ -21,13 +22,14 @@ class CorsVaryHttp2Test {
         if (server != null) server.stop();
     }
 
-    @Test
-    void reflectedOriginRemainsInVaryWhenRouteSetsVary() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void originRemainsInVaryWhenRouteAddsVary(boolean sendOrigin) throws Exception {
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .addHandler(corsHandler().withCORSConfig(config().withAllOriginsAllowed()))
             .addHandler(Method.GET, "/", (request, response, pathParams) -> {
-                response.headers().set(HeaderNames.VARY, "Authorization");
+                response.varyOn(HeaderNames.AUTHORIZATION);
                 response.write("ok");
             })
             .start();
@@ -37,7 +39,7 @@ class CorsVaryHttp2Test {
         requestHeaders.add(":scheme", "https");
         requestHeaders.add(":path", "/");
         requestHeaders.add(":authority", "localhost");
-        requestHeaders.add("origin", "http://example.org");
+        if (sendOrigin) requestHeaders.add("origin", "http://example.org");
 
         try (var client = new H2Client(); var connection = client.connect(server)) {
             connection.handshake()
@@ -45,7 +47,8 @@ class CorsVaryHttp2Test {
                 .flush();
             Headers responseHeaders = readIgnoringWindowUpdates(connection, Http2HeadersFrame.class).headers();
             assertEquals("200", responseHeaders.get(":status"));
-            assertEquals("http://example.org", responseHeaders.get(HeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN));
+            assertEquals(sendOrigin ? "http://example.org" : null,
+                responseHeaders.get(HeaderNames.ACCESS_CONTROL_ALLOW_ORIGIN));
             assertTrue(responseHeaders.vary().contains("Authorization", true));
             assertTrue(responseHeaders.vary().contains("Origin", true));
         }
