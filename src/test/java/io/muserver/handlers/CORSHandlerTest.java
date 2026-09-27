@@ -59,6 +59,46 @@ public class CORSHandlerTest {
     }
 
     @Test
+    public void corsOriginRemainsInVaryWhenRouteAddsVary() throws java.io.IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(corsHandler()
+                .withCORSConfig(CORSHandlerBuilder.config().withAllOriginsAllowed())
+            )
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.varyOn("Authorization");
+                response.write("ok");
+            })
+            .start();
+        try (Response resp = call(request(server.uri()).header("Origin", "http://example.org"))) {
+            assertThat(resp.header("Vary"), containsString("authorization"));
+            assertThat(resp.header("Vary"), containsString("origin"));
+            assertThat(resp.header("Access-Control-Allow-Origin"), is("http://example.org"));
+        }
+    }
+
+    @Test
+    public void corsOriginRemainsInVaryWhenRouteAddsVaryWithoutAnAllowedOrigin() throws java.io.IOException {
+        server = ServerUtils.httpsServerForTest()
+            .addHandler(corsHandler()
+                .withCORSConfig(CORSHandlerBuilder.config().withAllowedOrigins("http://allowed.example"))
+            )
+            .addHandler(Method.GET, "/", (request, response, pathParams) -> {
+                response.varyOn("Authorization");
+                response.write("ok");
+            })
+            .start();
+        for (String origin : new String[]{null, "http://denied.example"}) {
+            var req = request(server.uri());
+            if (origin != null) req.header("Origin", origin);
+            try (Response resp = call(req)) {
+                assertThat(resp.header("Vary"), containsString("authorization"));
+                assertThat(resp.header("Vary"), containsString("origin"));
+                assertThat(resp.header("Access-Control-Allow-Origin"), is(nullValue()));
+            }
+        }
+    }
+
+    @Test
     public void aHandlerCanBeCreatedFromConfig() {
         server = ServerUtils.httpsServerForTest()
             .addHandler(CORSHandlerBuilder.config().withAllOriginsAllowed().toHandler(Method.GET, Method.HEAD))
