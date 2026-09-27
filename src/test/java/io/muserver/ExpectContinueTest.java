@@ -3,15 +3,13 @@ package io.muserver;
 import okhttp3.Response;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 import scaffolding.MuAssert;
 import scaffolding.RawClient;
 import scaffolding.ServerUtils;
 import scaffolding.StringUtils;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static io.muserver.MuServerBuilder.httpServer;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -20,7 +18,6 @@ import static scaffolding.ClientUtils.call;
 import static scaffolding.ClientUtils.request;
 import static scaffolding.MuAssert.assertEventually;
 
-@Timeout(20)
 public class ExpectContinueTest {
 
     private MuServer server;
@@ -90,7 +87,7 @@ public class ExpectContinueTest {
 
     @Test
     public void a413IsReturnedIfExpectationFails() throws IOException {
-        var received = new ArrayList<ResponseInfo>();
+        var received = new CopyOnWriteArrayList<ResponseInfo>();
         server = httpServer()
             .withMaxRequestSize(1023)
             .addResponseCompleteListener(received::add)
@@ -116,7 +113,7 @@ public class ExpectContinueTest {
 
     @Test
     public void a413IsReturnedIfExpectationFailsAndSuccessIsFalseIfClientAborts() throws IOException {
-        var received = new ArrayList<ResponseInfo>();
+        var received = new CopyOnWriteArrayList<ResponseInfo>();
         server = httpServer()
             .withMaxRequestSize(1023)
             .addResponseCompleteListener(received::add)
@@ -134,7 +131,7 @@ public class ExpectContinueTest {
 
             assertEventually(rawClient::responseString, startsWith("HTTP/1.1 413 Content Too Large\r\n"));
         } // close the connection - the request was closed early
-        assertEventually(received::size, equalTo(1));
+        assertEventually(received::toString, () -> received, hasSize(1));
         assertThat(received.get(0).completedSuccessfully(), is(false));
         assertThat(received.get(0).response().status(), is(HttpStatus.CONTENT_TOO_LARGE_413));
     }

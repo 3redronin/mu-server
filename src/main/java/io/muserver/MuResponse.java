@@ -82,6 +82,27 @@ public interface MuResponse {
     Headers headers();
 
     /**
+     * Adds request header names to the response's {@code Vary} field if missing.
+     * Existing values are preserved.
+     *
+     * <p>Note: a later change setting the `vary` header on [headers()] will overwrite
+     * any values added here.</p>
+     *
+     * @param requestHeaders the request header names that select the response
+     */
+    default void varyOn(CharSequence... requestHeaders) {
+        if (requestHeaders.length == 0) return;
+        TokenListHeader vary = headers().vary();
+        boolean changed = false;
+        for (CharSequence requestHeader : requestHeaders) {
+            changed |= vary.addIfMissing(ValidatedHeaderName.from(requestHeader).toString(), true);
+        }
+        if (changed) {
+            headers().set(HeaderNames.VARY, vary);
+        }
+    }
+
+    /**
      * Sets the Content-Type response header, for example <code>application/json</code>.
      * @see ContentTypes
      * @param contentType The content type of the response or <code>null</code> to have no content type.

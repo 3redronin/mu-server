@@ -268,7 +268,7 @@ public class MuServerTest {
                 return true;
             })
             .start();
-        runUriTest("localhost:443", server.uri().resolve("/") + " path=/ and query=null");
+        runUriTest("http://example.com", "http://example.com/ path=/ and query=null");
     }
 
     @Test
@@ -324,7 +324,8 @@ public class MuServerTest {
             rawClient.flushRequest();
             assertEventually(rawClient::responseString, startsWith("HTTP/1.1 400 Bad Request\r\n"));
         }
-        assertEventually(() -> server.stats().completedRequests(), is(1L));
+        assertEventually(() -> server.stats().invalidHttpRequests(), is(1L));
+        assertThat(server.stats().completedRequests(), is(0L));
     }
 
     @Test

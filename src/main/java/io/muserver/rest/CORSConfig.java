@@ -55,9 +55,7 @@ public class CORSConfig {
                                  @Nullable Set<RequestMatcher.MatchedMethod> matchedMethodsForPath) {
 
         Headers respHeaders = response.headers();
-        if (!respHeaders.containsValue(HeaderNames.VARY, HeaderNames.ORIGIN, true)) {
-            respHeaders.add(HeaderNames.VARY, HeaderNames.ORIGIN);
-        }
+        response.varyOn(HeaderNames.ORIGIN);
 
         String origin = request.headers().get(HeaderNames.ORIGIN);
         if (origin == null || origin.isEmpty()) {

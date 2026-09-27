@@ -189,23 +189,19 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         if (variants == null) {
             throw new IllegalArgumentException("variants is null");
         }
+        Set<CharSequence> varyingOn = new LinkedHashSet<>();
         for (Variant variant : variants) {
             if (variant.getMediaType() != null) {
-                if (!muResponse.headers().contains(HeaderNames.VARY, HeaderNames.ACCEPT, true)) {
-                    muResponse.headers().add(HeaderNames.VARY, HttpHeaders.ACCEPT);
-                }
+                varyingOn.add(HeaderNames.ACCEPT);
             }
             if (variant.getEncoding() != null) {
-                if (!muResponse.headers().contains(HeaderNames.VARY, HeaderNames.ACCEPT_ENCODING, true)) {
-                    muResponse.headers().add(HeaderNames.VARY, HttpHeaders.ACCEPT_ENCODING);
-                }
+                varyingOn.add(HeaderNames.ACCEPT_ENCODING);
             }
             if (variant.getLanguage() != null) {
-                if (!muResponse.headers().contains(HeaderNames.VARY, HeaderNames.ACCEPT_LANGUAGE, true)) {
-                    muResponse.headers().add(HeaderNames.VARY, HttpHeaders.ACCEPT_LANGUAGE);
-                }
+                varyingOn.add(HeaderNames.ACCEPT_LANGUAGE);
             }
         }
+        muResponse.varyOn(varyingOn.toArray(new CharSequence[0]));
         String acceptLang = jaxHeaders.getHeaderString("accept-language");
         List<Locale.LanguageRange> ranges = Locale.LanguageRange.parse(acceptLang == null ? "*" : acceptLang);
         return MuVariantListBuilder.selectVariant(variants, ranges, getAcceptableMediaTypes(), muRequest.headers().acceptEncoding());

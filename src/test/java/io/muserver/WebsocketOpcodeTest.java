@@ -6,6 +6,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.Arguments;
 
+import java.io.ByteArrayOutputStream;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;
@@ -45,9 +46,13 @@ class WebsocketOpcodeTest {
         try (WebSocketWireTestSupport client = new WebSocketWireTestSupport(server)) {
             // Queue a valid message after the unknown frame (and its continuation).
             // Ignoring the reserved opcode would incorrectly deliver and echo that message.
-            client.output.write(WebSocketWireTestSupport.frame(fin, opcode, new byte[]{42}));
-            if (!fin) client.output.write(WebSocketWireTestSupport.frame(true, 0, new byte[]{43}));
-            client.output.write(WebSocketWireTestSupport.frame(true, 1, new byte[]{'o', 'k'}));
+            // Send all frames in one write: the server may close as soon as it reads
+            // the reserved opcode, before a later client write can complete.
+            ByteArrayOutputStream frames = new ByteArrayOutputStream();
+            frames.write(WebSocketWireTestSupport.frame(fin, opcode, new byte[]{42}));
+            if (!fin) frames.write(WebSocketWireTestSupport.frame(true, 0, new byte[]{43}));
+            frames.write(WebSocketWireTestSupport.frame(true, 1, new byte[]{'o', 'k'}));
+            client.output.write(frames.toByteArray());
             client.output.flush();
             byte[] close = client.readFrame(8);
             assertEquals(1002, ((close[0] & 255) << 8) | (close[1] & 255));

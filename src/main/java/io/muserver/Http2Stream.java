@@ -242,13 +242,8 @@ class Http2Stream implements ResponseInfo {
             throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "Trailing headers must end the stream", id);
         }
         for (FieldLine line : headersFrame.headers().lineIterator()) {
-            if (line.value().containsForbiddenHttp2ValueOctet()) {
-                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "invalid trailer value", id);
-            }
+            validateField(line, id);
             HeaderString name = line.name();
-            if (name.length() == 0) {
-                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "empty trailer field name", id);
-            }
             if (name.charAt(0) == ':' || RequestTrailers.isForbiddenTrailerField(name)) {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "invalid trailer field", id);
             }
@@ -317,6 +312,38 @@ class Http2Stream implements ResponseInfo {
         return requiredResponse();
     }
 
+    // Only called after complete HPACK decoding: invalid HTTP fields still belong
+    // in the compression table, and a corrupt suffix takes connection-error precedence.
+    private static void validateField(FieldLine line, int id) throws Http2Exception {
+        HeaderString name = line.name();
+        if (name.length() == 0) {
+            throw Http2Exception.stream(Http2ErrorCode.PROTOCOL_ERROR, "empty field name", id);
+        }
+        int start = name.charAt(0) == ':' ? 1 : 0;
+        if (start == name.length()) {
+            throw Http2Exception.stream(Http2ErrorCode.PROTOCOL_ERROR, "empty pseudo field name", id);
+        }
+        for (int i = start; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (!ParseUtils.isTChar(c) || (c >= 'A' && c <= 'Z')) {
+                throw Http2Exception.stream(Http2ErrorCode.PROTOCOL_ERROR, "invalid HTTP/2 field name", id);
+            }
+        }
+        HeaderString value = line.value();
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if ((c < 0x20 && c != '\t') || c == 0x7F
+                || ((i == 0 || i == value.length() - 1) && ParseUtils.isOWS(c))) {
+                throw Http2Exception.stream(Http2ErrorCode.PROTOCOL_ERROR, "invalid HTTP/2 field value", id);
+            }
+        }
+        if (HeaderNames.CONNECTION.equals(name) || HeaderNames.TRANSFER_ENCODING.equals(name)
+            || HeaderNames.KEEP_ALIVE.equals(name) || HeaderNames.PROXY_CONNECTION.equals(name)
+            || HeaderNames.UPGRADE.equals(name)) {
+            throw Http2Exception.stream(Http2ErrorCode.PROTOCOL_ERROR, "connection-specific field", id);
+        }
+    }
+
     static Http2Stream start(Http2Connection connection, Http2HeadersFrame headerFrame) throws Http2Exception {
         var id = headerFrame.streamId();
         FieldBlock headers = headerFrame.headers();
@@ -332,12 +359,7 @@ class Http2Stream implements ResponseInfo {
         while (iter.hasNext()) {
             FieldLine line = iter.next();
             HeaderString n = line.name();
-            if (line.value().containsForbiddenHttp2ValueOctet()) {
-                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "invalid field value", id);
-            }
-            if (n.length() == 0) {
-                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "empty field name", id);
-            }
+            validateField(line, id);
             boolean pseudoHeader = n.charAt(0) == ':';
             if (pseudoHeader) {
                 if (regularHeadersStarted) {
@@ -345,13 +367,6 @@ class Http2Stream implements ResponseInfo {
                 }
             } else {
                 regularHeadersStarted = true;
-                // RFC 9113 §8.2.1: field names MUST be lowercase in HTTP/2
-                for (int i = 0; i < n.length(); i++) {
-                    char c = n.charAt(i);
-                    if (c >= 'A' && c <= 'Z') {
-                        throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "uppercase field name in HTTP/2 request", id);
-                    }
-                }
             }
             if (HeaderNames.PSEUDO_AUTHORITY.equals(n)) {
                 if (authority != null) throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "double :authority", id);
@@ -359,10 +374,14 @@ class Http2Stream implements ResponseInfo {
                 iter.remove();
             } else if (HeaderNames.PSEUDO_METHOD.equals(n)) {
                 if (method != null) throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "double :method", id);
+                String methodName = line.getValue();
+                if (methodName.isEmpty() || !methodName.chars().allMatch(c -> ParseUtils.isTChar((char) c))) {
+                    throw Http2Exception.stream(Http2ErrorCode.PROTOCOL_ERROR, "invalid method", id);
+                }
                 try {
-                    method = Method.valueOf(line.getValue());
+                    method = Method.valueOf(methodName);
                 } catch (IllegalArgumentException e) {
-                    throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "invalid method", id);
+                    throw new HttpException(HttpStatus.METHOD_NOT_ALLOWED_405);
                 }
                 iter.remove();
             } else if (HeaderNames.PSEUDO_PATH.equals(n)) {
@@ -387,19 +406,6 @@ class Http2Stream implements ResponseInfo {
                     throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "multiple content-length lines", id);
                 }
                 cl = len;
-            } else if (HeaderNames.CONNECTION.equals(n)) {
-                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "connection", id);
-            } else if (HeaderNames.TRANSFER_ENCODING.equals(n)) {
-                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "transfer-encoding", id);
-            } else if (HeaderNames.KEEP_ALIVE.equals(n)) {
-                // RFC 9113 §8.2.2: connection-specific header fields MUST NOT be used in HTTP/2
-                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "keep-alive", id);
-            } else if (HeaderNames.PROXY_CONNECTION.equals(n)) {
-                // RFC 9113 §8.2.2: connection-specific header fields MUST NOT be used in HTTP/2
-                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "proxy-connection", id);
-            } else if (HeaderNames.UPGRADE.equals(n)) {
-                // RFC 9113 §8.2.2: connection-specific header fields MUST NOT be used in HTTP/2
-                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "upgrade", id);
             } else if (HeaderNames.TE.equals(n)) {
                 // RFC 9113 §8.2.2: TE header MAY appear but MUST NOT contain any value other than "trailers"
                 if (!"trailers".equalsIgnoreCase(line.value().toString())) {
@@ -416,6 +422,7 @@ class Http2Stream implements ResponseInfo {
         if (path.length() == 0) {
             throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "empty :path pseudo-header", id);
         }
+        QueryRequestValidation.validate(method, headers);
         if (authority != null) {
             if (host != null && !authority.contentEquals(host, true)) {
                 throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "host differs from :authority", id);

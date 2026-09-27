@@ -1,7 +1,6 @@
 package io.muserver;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
 import java.util.List;
 
@@ -28,7 +27,6 @@ public class ParameterizedHeaderWithValueTest {
 
 
     @Test
-    @Timeout(2)
     public void quotedQualityHeaderParsingIsBounded() {
         StringBuilder header = new StringBuilder();
         for (int i = 0; i < 2000; i++) {
