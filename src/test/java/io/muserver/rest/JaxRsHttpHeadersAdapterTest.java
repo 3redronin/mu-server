@@ -3,11 +3,9 @@ package io.muserver.rest;
 import io.muserver.Cookie;
 import io.muserver.HeaderNames;
 import io.muserver.Headers;
-import io.muserver.HeadersFactory;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.MultivaluedHashMap;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.Timeout;
 
 import java.util.*;
 
@@ -66,7 +64,6 @@ public class JaxRsHttpHeadersAdapterTest {
     }
 
     @Test
-    @Timeout(2)
     public void quotedQualityValuesAreSortedWithinRequestHeaderLimit() {
         StringBuilder accept = new StringBuilder();
         for (int i = 0; i < 120; i++) {

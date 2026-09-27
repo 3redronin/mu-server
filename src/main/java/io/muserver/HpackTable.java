@@ -103,7 +103,7 @@ class HpackTable {
     }
 
     private static FieldLine line(HeaderString name) {
-        return new FieldLine(name, HeaderString.EMPTY_VALUE);
+        return new FieldLine(name, ValidatedHeaderValue.EMPTY_VALUE);
     }
 
     private static FieldLine line(HeaderString name, String value) {

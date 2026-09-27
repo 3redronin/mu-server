@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
+import static io.muserver.FieldConformanceFixtures.assertInitialRejection;
+import static io.muserver.FieldConformanceFixtures.untilReset;
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.encodeFieldBlock;
 import static io.muserver.RFCTestUtils.headersFrame;
@@ -47,9 +49,7 @@ class Http2AuthorityTest {
         server = server();
         try (var client = new H2Client(); var con = client.connect(server)) {
             con.handshake().writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers(authority, host)))).flush();
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
 
             con.writeRaw(headersFrame(3, true, true, encodeFieldBlock(headers("alpha.example", "alpha.example")))).flush();
             assertThat(readIgnoringWindowUpdates(con, Http2HeadersFrame.class).headers().get(":status"), equalTo("200"));
