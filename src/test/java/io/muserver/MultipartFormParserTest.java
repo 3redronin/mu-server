@@ -2,7 +2,6 @@ package io.muserver;
 
 import jakarta.ws.rs.core.MediaType;
 import org.jspecify.annotations.NonNull;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -167,13 +166,6 @@ class MultipartFormParserTest {
         parser.discardEpilogue();
     }
 
-    /*
-    TODO alternative empty part
-    --boundary\r\n
---boundary--\r\n
-     */
-
-
     @ParameterizedTest
     @ValueSource(strings = {"full", "one-by-one"})
     public void simpleBodiesSupported(String type) throws IOException {
@@ -251,16 +243,6 @@ class MultipartFormParserTest {
     public void aSinglePartWithNoHeadersAndEmptyBodyReturnsEmptyForm(String type) throws IOException {
         var boundary = UUID.randomUUID().toString();
         var inputStream = getInput(type, "--" + boundary + "\r\n\r\n\r\n--" + boundary + "--");
-        var form = new MultipartFormParser(tempDir(),boundary, inputStream, 8192, StandardCharsets.UTF_8, 1024).parseFully();
-        assertThat(form.all().entrySet(), empty());
-    }
-
-    @ParameterizedTest
-    @ValueSource(strings = {"full", "one-by-one"})
-    @Disabled("Not yet supported")
-    public void partWithNoBodyReturnsEmptyForm(String type) throws IOException {
-        var boundary = UUID.randomUUID().toString();
-        var inputStream = getInput(type, "--" + boundary + "\r\n\r\n--" + boundary + "--");
         var form = new MultipartFormParser(tempDir(),boundary, inputStream, 8192, StandardCharsets.UTF_8, 1024).parseFully();
         assertThat(form.all().entrySet(), empty());
     }
