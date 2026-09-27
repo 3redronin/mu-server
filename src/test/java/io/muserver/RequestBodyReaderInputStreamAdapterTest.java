@@ -222,7 +222,6 @@ public class RequestBodyReaderInputStreamAdapterTest {
 
         try (var client = Http1Client.connect(server.uri())) {
             client.writeRequestLine(Method.POST, "/")
-                .writeHeader("host", server.uri().getAuthority())
                 .writeHeader("content-type", "text/plain")
                 .writeHeader("transfer-encoding", "chunked")
                 .endHeaders()

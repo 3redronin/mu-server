@@ -391,7 +391,7 @@ class ProxyProtocolTest {
             socket.setSoTimeout(3000);
             socket.getOutputStream().write(preamble(2));
             try (Http1Client client = new Http1Client(socket, socket.getInputStream(), socket.getOutputStream(), server.uri())) {
-                client.writeRequestLine(Method.GET, "/").writeHeader("Host", "localhost")
+                client.writeRequestLine(Method.GET, "/")
                     .writeHeader("Upgrade", "websocket").writeHeader("Connection", "Upgrade")
                     .writeHeader("Sec-WebSocket-Version", "13").writeHeader("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
                     .endHeaders().flush();

@@ -25,6 +25,21 @@ query parameters are decoded with HTML form compatibility. For example, `?value=
 This differs from Mu 2's Netty query decoder, which treats both `&` and `;` as separators. Applications that used
 semicolon-separated query parameters such as `?one=1;two=2` must change them to `?one=1&two=2` when upgrading to Mu 4.
 
+HTTP/1 absolute request targets
+------------------------------
+
+For an absolute-form request such as `GET http://example.com/path HTTP/1.1`, the target's scheme and authority
+now determine `MuRequest.uri()` before forwarding headers are applied. The application-visible `Host` is replaced
+with the target authority, matching HTTP/2's use of `:authority`. Missing HTTP/1.1 Host, duplicate or malformed Host,
+and malformed targets are rejected before replacement, even when forwarding headers are present.
+
+Use `MuRequest.isSecure()` for request security: it considers forwarding protocol metadata, then connection security.
+An `https` scheme in a plaintext absolute request target does not make the request secure. `serverURI()` continues
+to describe the local listener. Forwarding header trust and precedence are unchanged.
+
+Authorities support URI registered names (including underscores and percent escapes) and IPv6. IPvFuture literals
+remain unsupported because `java.net.URI`, the request URI representation, cannot represent them.
+
 SSE
 ---
 

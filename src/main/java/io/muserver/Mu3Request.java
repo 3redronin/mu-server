@@ -117,11 +117,6 @@ class Mu3Request implements MuRequest {
     }
 
     @Override
-    public boolean isSecure() {
-        return Headtils.isSecure(mu3Headers, connection.isHttps());
-    }
-
-    @Override
     public URI serverURI() {
         return serverUri;
     }

@@ -57,14 +57,18 @@ public interface MuRequest {
     URI uri();
 
     /**
-     * Indicates whether this request was received over a secure connection. If the server is behind a proxy,
-     * forwarded protocol metadata used to reconstruct {@link #uri()} is also considered.
+     * Indicates whether this request was received over a secure connection. The first applicable forwarded
+     * protocol used to reconstruct {@link #uri()} takes precedence; otherwise, uses {@link HttpConnection#isHttps()}.
      * This is independent of the scheme in an absolute-form HTTP/1 request-target.
      *
-     * @return true if the transport or applicable forwarding metadata indicates HTTPS
+     * <p>To check the current connection is over HTTPS, ignoring any reverse proxies, use {@link HttpConnection#isHttps()} instead.</p>
+     *
+     * @return true if the applicable forwarded protocol, or otherwise the connection, indicates HTTPS
      */
     default boolean isSecure() {
-        return connection().isHttps();
+        List<ForwardedHeader> forwarded = Headtils.getForwardedHeaders(headers());
+        String proto = forwarded.isEmpty() ? null : forwarded.get(0).proto();
+        return proto == null ? connection().isHttps() : "https".equalsIgnoreCase(proto);
     }
 
     /**
