@@ -10,6 +10,7 @@ import scaffolding.ServerUtils;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.hamcrest.CoreMatchers.is;
@@ -133,6 +134,40 @@ public class UploadTest {
                     RequestBody.create(guangzhou, MediaType.parse("image/jpeg")))
                 .build())
         )) {
+            assertThat(resp.code(), is(413));
+            assertThat(resp.body().string(), containsString("413 Content Too Large"));
+        }
+    }
+
+    @Test
+    public void filenameLessFormFieldsAreBoundedByMaxRequestSize() throws IOException {
+        server = ServerUtils.httpsServerForTest()
+            .withMaxRequestSize(512)
+            .addHandler(Method.POST, "/upload", (request, response, pathParams) -> {
+                request.form();
+                response.write("unexpected");
+            }).start();
+
+        byte[] body = ("--boundary\r\n"
+            + "Content-Disposition: form-data; name=field\r\n\r\n"
+            + "x".repeat(1024)
+            + "\r\n--boundary--\r\n").getBytes(StandardCharsets.UTF_8);
+        var chunkedBody = new RequestBody() {
+            @Override
+            public MediaType contentType() {
+                return MediaType.parse("multipart/form-data; boundary=boundary");
+            }
+
+            @Override
+            public void writeTo(okio.BufferedSink sink) throws IOException {
+                for (int offset = 0; offset < body.length; offset += 64) {
+                    sink.write(body, offset, Math.min(64, body.length - offset));
+                    sink.flush();
+                }
+            }
+        };
+
+        try (Response resp = call(request(server.uri().resolve("/upload")).post(chunkedBody))) {
             assertThat(resp.code(), is(413));
             assertThat(resp.body().string(), containsString("413 Content Too Large"));
         }

@@ -179,7 +179,8 @@ class Http2Stream implements ResponseInfo {
         return protocolStateClosed;
     }
 
-    boolean countsTowardsMaxConcurrentStreams() {
+    /** Whether the protocol stream still occupies a concurrency slot. */
+    boolean countsAsConcurrentProtocolStream() {
         return !protocolStateClosed
             && !peerResetRead
             && !(remoteEndStreamRead && localEndStreamPublished);

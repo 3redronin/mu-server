@@ -1246,8 +1246,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 writeLocked(new Http2ResetStreamFrame(streamId, Http2ErrorCode.REFUSED_STREAM.code()));
                 return false;
             }
-            long activeStreams = streamRegistry.concurrentStreamCount();
-            if (activeStreams >= serverSettings.maxConcurrentStreams) {
+            long admissionCapacityUsed = streamRegistry.admissionCapacityUsed();
+            if (admissionCapacityUsed >= serverSettings.maxConcurrentStreams) {
                 log.info("Max concurrent streams reached");
                 writeLocked(new Http2ResetStreamFrame(streamId, Http2ErrorCode.REFUSED_STREAM.code()));
                 return false;

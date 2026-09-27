@@ -96,7 +96,8 @@ public class Http2ConfigBuilder {
     }
 
     /**
-     * Gets the maximum number concurrent streams (HTTP requests) on a single HTTP2 connection.
+     * Gets the maximum number of open streams and unfinished application exchanges
+     * on a single HTTP2 connection.
      *
      * @return the maximum number of concurrent streams allowed. Default is 200.
      */
@@ -109,9 +110,11 @@ public class Http2ConfigBuilder {
      *
      * <p>The default is 200.</p>
      *
-     * <p>This setting controls the maximum number of concurrent requests
-     * that can be initiated by the client for a single HTTP2 connection. A higher value can improve
-     * concurrency but may also lead to increased resource consumption.</p>
+     * <p>This setting limits a connection's open streams and unfinished application
+     * exchanges. A reset stream continues to occupy one slot until its handler or
+     * asynchronous exchange finishes. Requests above the limit are refused before
+     * application work starts. The server-wide
+     * {@link MuServerBuilder#withMaxConcurrentRequests(int)} limit is separate.</p>
      *
      * <p>Limits:</p>
      * <ul>

@@ -78,7 +78,7 @@ class Http2FinalWriteCompletionTest {
                 writer.startWriteLoop(output);
                 assertTrue(entered.await(5, TimeUnit.SECONDS));
                 assertTrue(wire.size() >= 9, "END_STREAM bytes reached output before closure");
-                assertEquals(!duringFlush, stream.countsTowardsMaxConcurrentStreams(),
+                assertEquals(!duringFlush, stream.countsAsConcurrentProtocolStream(),
                     "Connection completion must not move the stream-admission publication boundary");
                 assertFalse(writer.testProbe().streams().hasActiveConnectionWork());
                 stream.onPeerInputClosed(new IOException("Peer closed after reading END_STREAM"));

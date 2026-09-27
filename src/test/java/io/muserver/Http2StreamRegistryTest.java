@@ -18,7 +18,7 @@ class Http2StreamRegistryTest {
         var registered = registry.lookup(1);
         assertThat(registered.applicationStream(), nullValue());
         assertThat(registered.rejectedRequestBody(), equalTo(true));
-        assertThat(registry.concurrentStreamCount(), equalTo(1L));
+        assertThat(registry.admissionCapacityUsed(), equalTo(1L));
         assertThat(registry.isEmpty(), equalTo(false));
 
         assertThat(registry.removeRejectedRequestBody(1), equalTo(true));

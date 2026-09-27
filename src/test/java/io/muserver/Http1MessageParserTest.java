@@ -116,12 +116,29 @@ class Http1MessageParserTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"GET / HTTP/1.1\r\nBad Header: x\r\n\r\n", "GET / HTTP/1.1\r\nName: has\nlf\r\n\r\n"})
+    @ValueSource(strings = {
+        "GET / HTTP/1.1\r\nBad Header: x\r\n\r\n",
+        "GET / HTTP/1.1\r\nName: has\u0000nul\r\n\r\n",
+        "GET / HTTP/1.1\r\nName: has\nlf\r\n\r\n",
+        "GET / HTTP/1.1\r\nName: has\rcr\r\n\r\n",
+        "GET / HTTP/1.1\r\nName: has\u0001control\r\n\r\n",
+        "GET / HTTP/1.1\r\nName: has\u007fdel\r\n\r\n"
+    })
     void invalidHeaderOctetsAreParseErrors(String request) {
         var parser = new Http1MessageParser(HttpMessageType.REQUEST,
             new ConcurrentLinkedQueue<>(), new ByteArrayInputStream(request.getBytes(StandardCharsets.ISO_8859_1)), 8192, 8192);
 
         assertThrows(ParseException.class, parser::readNext);
+    }
+
+    @Test
+    void optionalWhitespaceAroundHttp1FieldValueIsTrimmed() throws Exception {
+        var raw = "GET / HTTP/1.1\r\nHost: localhost\r\nX-Value: \tvalue\t \r\n\r\n";
+        var parser = new Http1MessageParser(HttpMessageType.REQUEST,
+            new ConcurrentLinkedQueue<>(), new ByteArrayInputStream(raw.getBytes(StandardCharsets.US_ASCII)), 8192, 8192);
+
+        var request = (HttpRequestTemp) parser.readNext();
+        assertThat(request.headers().get("x-value"), equalTo("value"));
     }
 
     @Test

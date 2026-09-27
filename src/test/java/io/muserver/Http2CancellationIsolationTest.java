@@ -123,7 +123,7 @@ class Http2CancellationIsolationTest {
             Http2StreamRegistry registry = serverConnection.get(5, TimeUnit.SECONDS).testProbe().streams();
             assertEventually(() -> registry.containsApplicationStream(1), is(false));
             assertEventually(registry::isEmpty, is(true));
-            assertEquals(0, registry.concurrentStreamCount());
+            assertEquals(0, registry.admissionCapacityUsed());
 
             byte[] ping = ByteBuffer.allocate(8).putLong(42).array();
             connection.writeFrame(new Http2Ping(false, ping)).flush();

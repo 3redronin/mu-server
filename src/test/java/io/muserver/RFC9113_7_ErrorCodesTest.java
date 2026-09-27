@@ -96,9 +96,11 @@ class RFC9113_7_ErrorCodesTest {
     void refusedStreamErrorsCanBeRetriedOnANewStream() throws Exception {
         var firstStarted = new CountDownLatch(1);
         var letFirstFinish = new CountDownLatch(1);
+        var firstCompleted = new CountDownLatch(1);
 
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder.http2Enabled().withMaxConcurrentStreams(1))
+            .addResponseCompleteListener(info -> firstCompleted.countDown())
             .addHandler(Method.GET, "/hello", (request, response, pathParams) -> {
                 firstStarted.countDown();
                 assertThat(letFirstFinish.await(5, TimeUnit.SECONDS), equalTo(true));
@@ -125,6 +127,7 @@ class RFC9113_7_ErrorCodesTest {
             var firstResponse = con.readLogicalFrame(Http2HeadersFrame.class);
             assertThat(firstResponse.streamId(), equalTo(1));
             assertThat(firstResponse.headers().get(":status"), equalTo("202"));
+            assertThat(firstCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
 
             con.writeFrame(new Http2HeadersFrame(5, true, getHelloHeaders(getPort())))
                 .flush();
@@ -183,6 +186,5 @@ class RFC9113_7_ErrorCodesTest {
         if (server != null) server.stop();
     }
 }
-
 
 

@@ -87,6 +87,7 @@ Legend:
  * 10.3. [ ] Intermediary Encapsulation Attacks
  * 10.4. [ ] Cacheability of Pushed Responses
  * 10.5. [~] Denial-of-Service Considerations
+  * [ ] Implement per-connection reset-abuse protection covering received resets and client-triggered server resets, with configurable burst/rate limits, connection termination, diagnostics, and tests for legitimate cancellation bursts.
  * 10.5.1. [~] Limits on Field Block Size
  * 10.5.2. [ ] CONNECT Issues
  * 10.6. [~] Use of Compression

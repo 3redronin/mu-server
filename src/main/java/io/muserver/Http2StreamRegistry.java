@@ -168,13 +168,15 @@ final class Http2StreamRegistry {
         }
     }
 
-    long concurrentStreamCount() {
+    /** Counts each stream once while its protocol or application exchange is active. */
+    long admissionCapacityUsed() {
         lock.lock();
         try {
             long result = 0;
             for (Lookup entry : entries.values()) {
                 Http2Stream stream = entry.applicationStream();
-                if (stream == null || stream.countsTowardsMaxConcurrentStreams()) {
+                if (stream == null || stream.countsAsConcurrentProtocolStream()
+                    || !stream.applicationExchangeEnded()) {
                     result++;
                 }
             }
@@ -191,7 +193,7 @@ final class Http2StreamRegistry {
                 Http2Stream stream = entry.applicationStream();
                 if (stream == null
                     || (!stream.canFinishAfterPeerClose()
-                        && (stream.countsTowardsMaxConcurrentStreams()
+                        && (stream.countsAsConcurrentProtocolStream()
                             || stream.applicationExchangeNeedsTermination()))) {
                     return true;
                 }
