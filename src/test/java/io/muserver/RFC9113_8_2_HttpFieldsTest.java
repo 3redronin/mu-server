@@ -109,9 +109,7 @@ class RFC9113_8_2_HttpFieldsTest {
                 .writeRaw(headersFrame(1, true, true, badHeader))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -180,9 +178,7 @@ class RFC9113_8_2_HttpFieldsTest {
                 .writeRaw(headersFrame(1, true, true, rejectedFieldBlock.toByteArray()))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
 
             var nextFieldBlock = new ByteArrayOutputStream();
             nextFieldBlock.write(encodeFieldBlock(getHelloHeaders(getPort())));

@@ -123,7 +123,7 @@ class MultipartFormParserTest {
         var directory = Files.createTempDirectory("multipart-default-part-limit-test");
         try {
             var parser = new MultipartFormParser(directory, "boundary", getInput(type, body.toString()), 8192,
-                StandardCharsets.UTF_8);
+                StandardCharsets.UTF_8, new MuServerBuilder().maxMultipartParts());
             var failure = assertThrows(HttpException.class, parser::parseFully);
             assertThat(failure.status(), equalTo(HttpStatus.CONTENT_TOO_LARGE_413));
         } finally {

@@ -87,7 +87,7 @@ class RFC9113_5_1_StreamStatesTest {
                     new Http2HeadersFrame(1, true, new FieldBlock())
                 );
 
-                assertThat(stream.countsTowardsMaxConcurrentStreams(), equalTo(true));
+                assertThat(stream.countsAsConcurrentProtocolStream(), equalTo(true));
                 var countedDuringFirstWrite = new AtomicReference<Boolean>();
                 var flushEntered = new CountDownLatch(1);
                 var countedDuringFlush = new AtomicReference<Boolean>();
@@ -96,7 +96,7 @@ class RFC9113_5_1_StreamStatesTest {
                     public synchronized void write(byte[] data, int offset, int length) {
                         countedDuringFirstWrite.compareAndSet(
                             null,
-                            stream.countsTowardsMaxConcurrentStreams()
+                            stream.countsAsConcurrentProtocolStream()
                         );
                         super.write(data, offset, length);
                     }
@@ -104,7 +104,7 @@ class RFC9113_5_1_StreamStatesTest {
                     @Override
                     public void flush() {
                         countedDuringFlush.set(
-                            stream.countsTowardsMaxConcurrentStreams()
+                            stream.countsAsConcurrentProtocolStream()
                         );
                         flushEntered.countDown();
                     }
@@ -523,7 +523,7 @@ class RFC9113_5_1_StreamStatesTest {
                     Thread.sleep(1);
                 }
                 assertThat("The reader did not observe stream closure", stream.canReceiveData(), equalTo(false));
-                assertThat(stream.countsTowardsMaxConcurrentStreams(), equalTo(false));
+                assertThat(stream.countsAsConcurrentProtocolStream(), equalTo(false));
             } finally {
                 stateLock.unlock();
             }
@@ -535,15 +535,17 @@ class RFC9113_5_1_StreamStatesTest {
     }
 
     @Test
-    public void closedStreamsDoNotCountTowardsMaxConcurrentStreamsWhileTheirHandlerFinishes() throws Exception {
+    public void clientResetStreamsCountUntilTheirHandlerFinishes() throws Exception {
         var handlerStarted = new CountDownLatch(1);
         var releaseHandler = new CountDownLatch(1);
+        var exchangeCompleted = new CountDownLatch(1);
 
         server = httpsServer()
             .withHttp2Config(Http2ConfigBuilder
                 .http2Enabled()
                 .withMaxConcurrentStreams(1)
             )
+            .addResponseCompleteListener(info -> exchangeCompleted.countDown())
             .addHandler(Method.POST, "/hello", (request, response, pathParams) -> {
                 handlerStarted.countDown();
                 releaseHandler.await(5, TimeUnit.SECONDS);
@@ -569,8 +571,15 @@ class RFC9113_5_1_StreamStatesTest {
 
             con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders()))
                 .flush();
+            var refused = con.readLogicalFrame(Http2ResetStreamFrame.class);
+            assertThat(refused.streamId(), equalTo(3));
+            assertThat(refused.errorCodeEnum(), equalTo(Http2ErrorCode.REFUSED_STREAM));
+
+            releaseHandler.countDown();
+            assertThat(exchangeCompleted.await(5, TimeUnit.SECONDS), equalTo(true));
+            con.writeFrame(new Http2HeadersFrame(5, true, getHelloHeaders())).flush();
             var accepted = con.readLogicalFrame(Http2HeadersFrame.class);
-            assertThat(accepted.streamId(), equalTo(3));
+            assertThat(accepted.streamId(), equalTo(5));
             assertThat(accepted.headers().get(":status"), equalTo("202"));
         } finally {
             releaseHandler.countDown();
