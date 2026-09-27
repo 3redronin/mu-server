@@ -59,22 +59,9 @@ public class HttpsRedirector implements MuHandler {
         String rawAuthority = uri.getRawAuthority();
         if (rawAuthority == null) throw new IllegalArgumentException("Request URI has no authority");
 
-        String rawUserInfo = uri.getRawUserInfo();
-        String userInfo = rawUserInfo == null ? "" : rawUserInfo + "@";
-        String hostAndPort = rawAuthority.substring(userInfo.length());
-        int hostEnd;
-        if (hostAndPort.startsWith("[")) {
-            int closeBracket = hostAndPort.indexOf(']');
-            if (closeBracket < 0) throw new URISyntaxException(uri.toString(), "Invalid IP-literal authority");
-            hostEnd = closeBracket + 1;
-        } else {
-            int colon = hostAndPort.lastIndexOf(':');
-            hostEnd = colon < 0 ? hostAndPort.length() : colon;
-        }
-
-        StringBuilder target = new StringBuilder("https://")
-            .append(userInfo)
-            .append(hostAndPort, 0, hostEnd);
+        // A port can only trail the authority; IPv6 literals end in ']' and remain intact.
+        String host = rawAuthority.replaceFirst(":[0-9]*$", "");
+        StringBuilder target = new StringBuilder("https://").append(host);
         if (httpsPort != 443) target.append(':').append(httpsPort);
         if (uri.getRawPath() != null) target.append(uri.getRawPath());
         if (uri.getRawQuery() != null) target.append('?').append(uri.getRawQuery());

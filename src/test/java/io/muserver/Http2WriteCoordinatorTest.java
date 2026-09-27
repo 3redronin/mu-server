@@ -17,6 +17,61 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class Http2WriteCoordinatorTest {
 
     @Test
+    void rejectionResetWaitsForFlowControlledResponseAndRetiresItsState() throws Exception {
+        var coordinator = coordinator(2, 1, 2, 3, 100);
+        var responseHeaders = task(headers(1));
+        var body = task(new Http2DataFrame(1, true, new byte[4], 0, 4));
+        var reset = new Http2ResetStreamFrame(1, Http2ErrorCode.PROTOCOL_ERROR.code());
+        coordinator.submit(responseHeaders);
+        coordinator.submit(body);
+        coordinator.resetAfterPendingWrites(reset);
+        coordinator.submit(task(headers(3)));
+        coordinator.processAvailableCommands();
+
+        var writable = coordinator.pollWritable();
+        assertThat(writable.frame(), is(responseHeaders.frame()));
+        writable.complete();
+        writable = coordinator.pollWritable();
+        assertThat(writable.frame().flowControlSize(), is(2));
+        assertThat(writable.frame().endStream(), is(false));
+        writable.complete();
+        writable = coordinator.pollWritable();
+        assertThat(writable.frame().streamId(), is(3));
+        writable.complete();
+        assertThat(coordinator.pollWritable(), nullValue());
+
+        coordinator.applyConnectionWindowUpdate(2, 3);
+        coordinator.applyStreamWindowUpdate(1, 2);
+        coordinator.processAvailableCommands();
+        writable = coordinator.pollWritable();
+        assertThat(writable.frame().flowControlSize(), is(2));
+        assertThat(writable.frame().endStream(), is(true));
+        writable.complete();
+        body.await(1, TimeUnit.SECONDS);
+        writable = coordinator.pollWritable();
+        assertThat(writable.frame(), is(reset));
+        writable.complete();
+        assertThat(coordinator.streamState(1), nullValue());
+        assertThat(coordinator.resetRecordCount(), is(0));
+        assertThat(coordinator.pollWritable(), nullValue());
+    }
+
+    @Test
+    void peerResetCancelsBlockedRejectionAndItsOrderedReset() {
+        var coordinator = coordinator(0, 1, 100);
+        var body = task(new Http2DataFrame(1, true, new byte[4], 0, 4));
+        coordinator.submit(body);
+        coordinator.resetAfterPendingWrites(new Http2ResetStreamFrame(1, Http2ErrorCode.PROTOCOL_ERROR.code()));
+        coordinator.resetStream(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()),
+            new IOException("peer reset"), null);
+        coordinator.processAvailableCommands();
+        assertThrows(IOException.class, () -> body.await(1, TimeUnit.SECONDS));
+        assertThat(coordinator.pollWritable(), nullValue());
+        assertThat(coordinator.streamState(1), nullValue());
+        assertThat(coordinator.resetRecordCount(), is(0));
+    }
+
+    @Test
     void latePeerResetsDoNotAccumulateRecordsForRetiredStreams() {
         var coordinator = new Http2WriteCoordinator(100);
         for (int id = 1; id < 2000; id += 2) {

@@ -8,6 +8,9 @@ import jakarta.ws.rs.*;
 import okhttp3.*;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.json.JSONObject;
 import scaffolding.ServerUtils;
 
 import java.io.File;
@@ -64,6 +67,38 @@ public class FormUploadTest {
                 .addFormDataPart("extra", "no")
                 .build()))) {
             assertThat(resp.code(), is(413));
+            assertThat(resp.header("Content-Type"), is("application/problem+json"));
+            assertThat(new JSONObject(resp.body().string()).getInt("status"), is(413));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"http-exception", "throwable", "no-mapper"})
+    public void multipartOverflowUsesNormalExceptionMapping(String mapping) throws IOException {
+        @Path("/limited")
+        class LimitedResource {
+            @POST
+            public String submit(@FormParam("field") String field) {
+                throw new AssertionError("An oversized form must not reach the resource method");
+            }
+        }
+        var handler = RestHandlerBuilder.restHandler(new LimitedResource());
+        if (mapping.equals("no-mapper")) {
+            handler.removeExceptionMapper(Throwable.class);
+        } else if (mapping.equals("http-exception")) {
+            handler.addExceptionMapper(HttpException.class, exception ->
+                jakarta.ws.rs.core.Response.status(exception.status().code()).entity("custom upload error").build());
+        } else {
+            handler.addExceptionMapper(Throwable.class, exception ->
+                jakarta.ws.rs.core.Response.status(422).entity("custom upload error").build());
+        }
+        server = ServerUtils.httpsServerForTest().withMaxMultipartParts(0).addHandler(handler).start();
+        try (Response response = call(request(server.uri().resolve("/limited"))
+            .post(new MultipartBody.Builder().setType(MultipartBody.FORM).addFormDataPart("field", "value").build()))) {
+            assertThat(response.code(), is(mapping.equals("throwable") ? 422 : 413));
+            if (!mapping.equals("no-mapper")) {
+                assertThat(response.body().string(), is("custom upload error"));
+            }
         }
     }
 

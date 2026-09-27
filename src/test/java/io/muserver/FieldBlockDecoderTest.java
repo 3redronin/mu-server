@@ -33,18 +33,30 @@ class FieldBlockDecoderTest {
         // GHSA-wgh7-54f2-x98r scenario 1 declares 805306494 encoded bytes.
         // The complete field block is only seven bytes long.
         var block = ByteBuffer.wrap(hexToByteArray("00ffffffffff02"));
-
         var ex = assertThrows(Http2Exception.class, () -> decoder.decodeFrom(block));
-
         assertThat(ex.errorType(), equalTo(Http2Level.CONNECTION));
         assertThat(ex.errorCode(), equalTo(Http2ErrorCode.COMPRESSION_ERROR));
         assertThat(ex.getMessage(), equalTo("HPACK string exceeds the field block"));
     }
 
     @Test
+    void hugeHuffmanNameLengthIsRejectedBeforeDecoding() {
+        var decoder = new FieldBlockDecoder(new HpackTable(4096), 8192, 4 * 8192);
+        // These tiny blocks declare huge Huffman strings and must fail before decoding allocates for them.
+        var block = ByteBuffer.wrap(hexToByteArray("00ffffffffffff02"));
+
+        var ex = assertThrows(Http2Exception.class, () -> decoder.decodeFrom(block));
+
+        assertThat(ex.errorType(), equalTo(Http2Level.CONNECTION));
+        assertThat(ex.errorCode(), equalTo(Http2ErrorCode.COMPRESSION_ERROR));
+        assertThat(ex.getMessage(), equalTo("hpack integer overflow"));
+    }
+
+    @Test
     void advisoryOverflowingHuffmanNameLengthIsRejectedBeforeDecoding() {
         // GHSA-wgh7-54f2-x98r scenario 2 overflows a signed 32-bit length in
         // the affected implementation. This decoder detects it while parsing.
+        var decoder = new FieldBlockDecoder(new HpackTable(4096), 8192, 4 * 8192);
         var block = ByteBuffer.wrap(hexToByteArray("00ff8080ffff0b"));
 
         var ex = assertThrows(Http2Exception.class, () -> decoder.decodeFrom(block));

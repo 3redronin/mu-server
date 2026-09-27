@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.*;
+import static io.muserver.FieldConformanceFixtures.*;
 import static io.muserver.FieldBlockEncoderTest.hexToByteArray;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -43,9 +44,7 @@ class RFC9113_6_2_HeadersTest {
                 byte[] fieldBlock = Arrays.copyOf(valid, valid.length + invalid[i].length);
                 System.arraycopy(invalid[i], 0, fieldBlock, valid.length, invalid[i].length);
                 con.writeRaw(headersFrame(streamId, true, true, fieldBlock)).flush();
-                var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
-                assertThat(reset.streamId(), equalTo(streamId));
-                assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+                assertInitialRejection(untilReset(con, streamId), streamId);
             }
             con.writeFrame(new Http2HeadersFrame(5, true, getHelloHeaders(getPort()))).flush();
             assertThat(con.readLogicalFrame(Http2HeadersFrame.class).headers().get(":status"), equalTo("202"));
@@ -222,9 +221,7 @@ class RFC9113_6_2_HeadersTest {
                 .writeFrame(new Http2HeadersFrame(1, true, invalid))
                 .flush();
 
-            var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
 
             con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders(getPort()))).flush();
             var response = con.readLogicalFrame(Http2HeadersFrame.class);
@@ -254,9 +251,7 @@ class RFC9113_6_2_HeadersTest {
                 .writeFrame(new Http2HeadersFrame(1, true, invalid))
                 .flush();
 
-            var reset = con.readLogicalFrame(Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
 
             con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders(getPort()))).flush();
             var response = con.readLogicalFrame(Http2HeadersFrame.class);

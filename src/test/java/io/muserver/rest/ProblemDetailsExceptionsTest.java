@@ -1,5 +1,7 @@
 package io.muserver.rest;
 
+import io.muserver.HttpException;
+import io.muserver.HttpStatus;
 import io.muserver.MuServer;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.ClientErrorException;
@@ -14,6 +16,8 @@ import okhttp3.Response;
 import org.json.JSONObject;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.ServerUtils;
 
 import java.net.URI;
@@ -36,6 +40,41 @@ import static scaffolding.ClientUtils.request;
 
 public class ProblemDetailsExceptionsTest {
     private MuServer server;
+
+    @Test
+    public void muHttpExceptionsPreserveStatusWithoutExposingServerErrorMessages() {
+        var mapper = problemDetailsExceptionMapper().build();
+        var exception = new HttpException(HttpStatus.SERVICE_UNAVAILABLE_503, "secret database credentials");
+        exception.responseHeaders().set("Retry-After", "30");
+        try (var response = mapper.toResponse(exception)) {
+            var body = response.getEntity().toString();
+            var json = new JSONObject(body);
+            assertThat(response.getStatus(), is(503));
+            assertThat(response.getHeaderString("Retry-After"), is("30"));
+            assertThat(response.getHeaderString("Cache-Control"), is("no-store"));
+            assertThat(json.getInt("status"), is(503));
+            assertThat(json.getString("title"), is("Service Unavailable"));
+            assertThat(body, not(containsString("secret database credentials")));
+        }
+        exception.responseHeaders().set("Cache-Control", "private");
+        try (var response = mapper.toResponse(exception)) {
+            assertThat(response.getHeaderString("Cache-Control"), is("private"));
+        }
+        try (var response = mapper.toResponse(HttpException.badRequest("Invalid upload"))) {
+            assertThat(response.getStatus(), is(400));
+            assertThat(new JSONObject(response.getEntity().toString()).getString("title"), is("Invalid upload"));
+        }
+    }
+
+    @Test
+    public void muRedirectExceptionsPreserveLocationWithoutAddingAProblemBody() {
+        var location = URI.create("https://example.org/next");
+        try (var response = problemDetailsExceptionMapper().build().toResponse(HttpException.redirect(location))) {
+            assertThat(response.getStatus(), is(302));
+            assertThat(response.getLocation(), is(location));
+            assertThat(response.hasEntity(), is(false));
+        }
+    }
 
     @Test
     public void uriParameterConversionFailuresBecomeBadRequestProblems() throws Exception {
@@ -456,13 +495,14 @@ public class ProblemDetailsExceptionsTest {
         }
     }
 
-    @Test
-    public void generatedProblemsReplaceRepresentationHeadersAndPreserveOtherHeaders() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    public void generatedProblemsReplaceRepresentationHeadersAndPreserveOtherHeaders(boolean muException) throws Exception {
         @Path("samples")
         class Sample {
             @GET
             public String get() {
-                throw new WebApplicationException(jakarta.ws.rs.core.Response.status(429)
+                var response = jakarta.ws.rs.core.Response.status(429)
                     .header("Content-Type", "text/plain")
                     .header("Content-Length", "1")
                     .header("Content-Encoding", "gzip")
@@ -485,7 +525,14 @@ public class ProblemDetailsExceptionsTest {
                     .header("Set-Cookie", "two=2; Path=/")
                     .header("X-Test", "one")
                     .header("X-Test", "two")
-                    .build());
+                    .build();
+                if (muException) {
+                    var exception = new HttpException(HttpStatus.TOO_MANY_REQUESTS_429, "Too many uploads");
+                    response.getStringHeaders().forEach((name, values) ->
+                        values.forEach(value -> exception.responseHeaders().add(name, value)));
+                    throw exception;
+                }
+                throw new WebApplicationException(response);
             }
         }
 

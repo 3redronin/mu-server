@@ -7,11 +7,11 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
+import static io.muserver.FieldConformanceFixtures.*;
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Tests for RFC 9113 §8.3 HTTP Control Data.
@@ -62,9 +62,7 @@ class RFC9113_8_3_HttpControlDataTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -88,9 +86,7 @@ class RFC9113_8_3_HttpControlDataTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -114,9 +110,7 @@ class RFC9113_8_3_HttpControlDataTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -132,23 +126,13 @@ class RFC9113_8_3_HttpControlDataTest {
         try (var client = new H2Client();
              var con = client.connect(server)) {
 
-            // Encode :path="" manually in HPACK because the standard encoder
-            // would prevent encoding an empty :path value via FieldBlock.
-            // The HPACK encoding for an indexed name (:path = static table index 4)
-            // with a literal value "":
-            //   0x44  = literal without indexing, name index = 4 (:path)
-            //   0x00  = empty value (length 0, Huffman bit = 0)
-            byte[] base = encodeFieldBlock(getHelloHeaders(getPort()));
-            // Strip the original :path value and use a raw HPACK block instead.
             byte[] rawBlock = buildRequestWithEmptyPath(getPort());
 
             con.handshake()
                 .writeRaw(headersFrame(1, true, true, rawBlock))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -173,9 +157,7 @@ class RFC9113_8_3_HttpControlDataTest {
                 .writeRaw(headersFrame(1, true, true, badBlock))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -203,9 +185,7 @@ class RFC9113_8_3_HttpControlDataTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -231,9 +211,7 @@ class RFC9113_8_3_HttpControlDataTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -259,9 +237,7 @@ class RFC9113_8_3_HttpControlDataTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -295,37 +271,9 @@ class RFC9113_8_3_HttpControlDataTest {
     // Helper
     // -------------------------------------------------------------------------
 
-    /**
-     * Builds a raw HPACK field block for a GET /hello request where :path is
-     * present but has an empty value.  This cannot be expressed through the normal
-     * FieldBlock API because the encoder would reject an empty path.
-     *
-     * <p>The encoding uses:
-     * <ul>
-     *   <li>0x82 – indexed :method GET (static table index 2)</li>
-     *   <li>0x87 – indexed :scheme https (static table index 7)</li>
-     *   <li>0x44 – literal without indexing, name index 4 (:path), then empty value</li>
-     *   <li>Literal :authority header with the given port</li>
-     * </ul>
-     */
-    private byte[] buildRequestWithEmptyPath(int port) throws java.io.IOException {
-        var out = new java.io.ByteArrayOutputStream();
-        // :method: GET (static index 2) → indexed representation 0x82
-        out.write(0x82);
-        // :scheme: https (static index 7) → indexed representation 0x87
-        out.write(0x87);
-        // :path: "" (static index 4 for :path name, empty literal value)
-        // Literal without indexing, indexed name 4: 0b0000_0100 = 0x04
-        out.write(0x04);
-        // Value: empty string, length = 0, no Huffman
-        out.write(0x00);
-        // :authority: localhost:<port>  (static index 1 for :authority name)
-        // Literal without indexing, indexed name 1: 0b0000_0001 = 0x01
-        out.write(0x01);
-        var authority = ("localhost:" + port).getBytes(java.nio.charset.StandardCharsets.US_ASCII);
-        out.write(authority.length); // length, no Huffman
-        out.write(authority);
-        return out.toByteArray();
+    private byte[] buildRequestWithEmptyPath(int port) throws IOException {
+        return concat(indexed(2), indexed(7), named(4, "", false, false),
+            named(1, "localhost:" + port, false, false));
     }
 
     private int getPort() {

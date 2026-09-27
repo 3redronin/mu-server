@@ -3,11 +3,11 @@ package io.muserver.rest;
 import io.muserver.ContentTypes;
 import io.muserver.HeaderNames;
 import io.muserver.MuServer;
+import io.muserver.TokenListHeader;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Context;
-import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Request;
 import jakarta.ws.rs.core.Variant;
@@ -84,7 +84,8 @@ public class VariantTest {
             assertThat(resp.header("content-type"), equalTo("application/json"));
             assertThat(resp.header("content-encoding"), equalTo("identity"));
             assertThat(resp.header("content-language"), equalTo("es"));
-            assertThat(resp.headers("vary"), hasItems(HttpHeaders.ACCEPT_LANGUAGE, HttpHeaders.ACCEPT, HttpHeaders.ACCEPT_ENCODING));
+            assertThat(TokenListHeader.parse(resp.headers("vary"), false).tokens(),
+                hasItems(HeaderNames.ACCEPT_LANGUAGE.toString(), HeaderNames.ACCEPT.toString(), HeaderNames.ACCEPT_ENCODING.toString()));
             assertThat(resp.body().string(), equalTo("{}"));
         }
 
@@ -96,7 +97,8 @@ public class VariantTest {
             assertThat(resp.header("content-type"), equalTo("application/json"));
             assertThat(resp.header("content-encoding"), equalTo("identity"));
             assertThat(resp.header("content-language"), oneOf("es", "en"));
-            assertThat(resp.headers("vary"), hasItems(HttpHeaders.ACCEPT_LANGUAGE, HttpHeaders.ACCEPT, HttpHeaders.ACCEPT_ENCODING));
+            assertThat(TokenListHeader.parse(resp.headers("vary"), false).tokens(),
+                hasItems(HeaderNames.ACCEPT_LANGUAGE.toString(), HeaderNames.ACCEPT.toString(), HeaderNames.ACCEPT_ENCODING.toString()));
             assertThat(resp.body().string(), equalTo("{}"));
         }
 
@@ -194,11 +196,13 @@ public class VariantTest {
             .addHandler(restHandler(new Sample())).start();
         try (Response resp = call(request(server.uri().resolve("/samples")))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.headers("vary").toString(), resp.headers("vary"), containsInAnyOrder("origin", "content-type", "content-language", "x-something"));
+            assertThat(TokenListHeader.parse(resp.headers("vary"), false).tokens(),
+                containsInAnyOrder("origin", "content-type", "content-language", "x-something"));
         }
         try (Response resp = call(request(server.uri().resolve("/samples/encoding")))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.headers("vary").toString(), resp.headers("vary"), containsInAnyOrder("origin", "content-encoding", "x-something"));
+            assertThat(TokenListHeader.parse(resp.headers("vary"), false).tokens(),
+                containsInAnyOrder("origin", "content-encoding", "x-something"));
         }
     }
 

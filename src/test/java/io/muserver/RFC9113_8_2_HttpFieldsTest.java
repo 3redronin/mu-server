@@ -8,12 +8,14 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.*;
+import static io.muserver.FieldConformanceFixtures.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 
@@ -66,9 +68,7 @@ class RFC9113_8_2_HttpFieldsTest {
                 .writeRaw(headersFrame(1, true, true, badHeader))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -89,9 +89,7 @@ class RFC9113_8_2_HttpFieldsTest {
                 .writeRaw(headersFrame(1, true, true, badHeader))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -244,9 +242,7 @@ class RFC9113_8_2_HttpFieldsTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -268,9 +264,7 @@ class RFC9113_8_2_HttpFieldsTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -292,9 +286,7 @@ class RFC9113_8_2_HttpFieldsTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -316,9 +308,7 @@ class RFC9113_8_2_HttpFieldsTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -340,9 +330,7 @@ class RFC9113_8_2_HttpFieldsTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -390,9 +378,7 @@ class RFC9113_8_2_HttpFieldsTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers)))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
         }
     }
 
@@ -416,9 +402,7 @@ class RFC9113_8_2_HttpFieldsTest {
                 .writeRaw(headersFrame(1, true, true, encodeFieldBlock(badHeaders)))
                 .flush();
 
-            var reset = readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class);
-            assertThat(reset.streamId(), equalTo(1));
-            assertThat(reset.errorCodeEnum(), equalTo(Http2ErrorCode.PROTOCOL_ERROR));
+            assertInitialRejection(untilReset(con, 1), 1);
 
             // Connection still usable on new stream
             con.writeFrame(new Http2HeadersFrame(3, true, getHelloHeaders(getPort())))
@@ -510,21 +494,8 @@ class RFC9113_8_2_HttpFieldsTest {
      * encoding.  This allows injecting header names that the normal encoder would
      * reject or transform (e.g. uppercase names).
      */
-    static byte[] appendLiteralHeader(byte[] base, String name, String value) {
-        byte[] nameBytes = name.getBytes(StandardCharsets.US_ASCII);
-        byte[] valueBytes = value.getBytes(StandardCharsets.US_ASCII);
-        // 1 byte type (0x00) + 1 byte name length + name + 1 byte value length + value
-        byte[] extra = new byte[1 + 1 + nameBytes.length + 1 + valueBytes.length];
-        extra[0] = 0x00; // literal without indexing, new name
-        extra[1] = (byte) nameBytes.length; // name length, Huffman bit = 0
-        System.arraycopy(nameBytes, 0, extra, 2, nameBytes.length);
-        extra[2 + nameBytes.length] = (byte) valueBytes.length;
-        System.arraycopy(valueBytes, 0, extra, 3 + nameBytes.length, valueBytes.length);
-
-        byte[] result = new byte[base.length + extra.length];
-        System.arraycopy(base, 0, result, 0, base.length);
-        System.arraycopy(extra, 0, result, base.length, extra.length);
-        return result;
+    static byte[] appendLiteralHeader(byte[] base, String name, String value) throws IOException {
+        return concat(base, literal(name, value, false, false));
     }
 
     private static byte[] literalWithIncrementalIndexing(String name, String value) {

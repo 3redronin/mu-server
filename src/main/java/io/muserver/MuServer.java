@@ -154,12 +154,9 @@ public interface MuServer extends Closeable {
     /**
      * The maximum number of parts accepted in a multipart form-data request.
      * <p>This can only be set at point of server creation with {@link MuServerBuilder#withMaxMultipartParts(int)}.</p>
-     * <p>Implementations that do not override this method use 1024.</p>
      * @return Maximum number of parts.
      */
-    default int maxMultipartParts() {
-        return 1024;
-    }
+    int maxMultipartParts();
 
     /**
      * The maximum allowed size of the URI sent in a request line.
