@@ -25,6 +25,15 @@ query parameters are decoded with HTML form compatibility. For example, `?value=
 This differs from Mu 2's Netty query decoder, which treats both `&` and `;` as separators. Applications that used
 semicolon-separated query parameters such as `?one=1;two=2` must change them to `?one=1&two=2` when upgrading to Mu 4.
 
+Forwarded request authorities
+-----------------------------
+
+Mu 4 returns `400 Bad Request` when the forwarded authority selected for the request URI is invalid. This applies to
+`Forwarded` and `X-Forwarded-Host` values, including ports supplied by `X-Forwarded-Port`.
+Previously, such values could be used to construct the request URI, including values whose extra URI components changed
+how the apparent host was interpreted. Valid forwarded authorities continue to be used as before. Applications or
+proxies that send malformed forwarded host values must correct them before upgrading.
+
 HTTP/1 absolute request targets
 ------------------------------
 
