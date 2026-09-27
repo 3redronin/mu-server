@@ -30,10 +30,6 @@ class MultipartFormParser {
         return state;
     }
 
-    MultipartFormParser(Path fileUploadDir, String boundary, InputStream body, int bufferSize, Charset formCharset) {
-        this(fileUploadDir, boundary, body, bufferSize, formCharset, 1024);
-    }
-
     MultipartFormParser(Path fileUploadDir, String boundary, InputStream body, int bufferSize, Charset formCharset, int maxParts) {
         this.formCharset = formCharset;
         this.fileUploadDir = fileUploadDir;
@@ -54,7 +50,7 @@ class MultipartFormParser {
             int partCount = 0;
             while (headers != null) {
                 if (++partCount > maxParts) {
-                    throw new HttpException.MultipartPartLimitException();
+                    throw new HttpException(HttpStatus.CONTENT_TOO_LARGE_413,  "Multipart form exceeds the maximum of " + maxParts + " parts");
                 }
 
                 String keyName = null;
