@@ -7,7 +7,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
-import java.util.Date;
 
 class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
     private final OutputStream socketOut;
@@ -32,7 +31,7 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
         ByteArrayOutputStream headerBytes = new ByteArrayOutputStream(256);
         headerBytes.write(status().http11ResponseLine());
         if (!headers().contains(HeaderNames.DATE)) {
-            headers().set("date", Mutils.toHttpDate(new Date()));
+            headers().set("date", HttpDateCache.now());
         }
         headers.writeAsHttp1(headerBytes);
         headerBytes.write(ParseUtils.CRLF, 0, 2);

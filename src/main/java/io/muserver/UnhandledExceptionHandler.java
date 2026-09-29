@@ -75,7 +75,7 @@ class BuiltInExceptionHandler implements UnhandledExceptionHandler {
             // do not render any errors - just send a redirect
             response.status(httpException.status());
             response.headers().set(httpException.responseHeaders());
-            response.headers().set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
+            response.headers().set(HeaderNames.DATE, HttpDateCache.now());
             var originalLocation = response.headers().get(HeaderNames.LOCATION);
             if (Mutils.nullOrEmpty(originalLocation)) {
                 throw new IllegalStateException("Redirect exception has no location", httpException);
@@ -114,7 +114,7 @@ class BuiltInExceptionHandler implements UnhandledExceptionHandler {
                 }
                 HttpStatus newStatus = response.status();
                 String encodedTitle = Mutils.htmlEncode(newStatus.toString());
-                response.headers().set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
+                response.headers().set(HeaderNames.DATE, HttpDateCache.now());
                 if (newStatus.canHaveContent()) {
                     response.contentType(ContentTypes.TEXT_HTML_UTF8);
                     var bodyEl = body == null ? "" : "<p>" + Mutils.htmlEncode(body) + "</p>";

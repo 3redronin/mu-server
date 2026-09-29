@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.InterruptedIOException;
 import java.io.UncheckedIOException;
-import java.util.Date;
 
 class Http2Response extends BaseResponse {
 
@@ -52,7 +51,7 @@ class Http2Response extends BaseResponse {
 
         if (!headers().contains(HeaderNames.DATE)) {
             fields.add(1, new FieldLine((HeaderString) HeaderNames.DATE,
-                HeaderString.valueOf(Mutils.toHttpDate(new Date()), HeaderString.Type.VALUE)));
+                HttpDateCache.now()));
         }
 
         var headerFragment = new Http2HeadersFrame(
