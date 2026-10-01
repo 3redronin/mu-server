@@ -4,11 +4,13 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayOutputStream;
+import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -23,7 +25,7 @@ class ResponseOutputCloseTest {
                 super.write(bytes, offset, length);
             }
         };
-        var out = new CloseGuardedBufferedOutputStream(wire, 4);
+        var out = new CloseGuardedOutputStream(new BufferedOutputStream(wire, 4));
         out.write('a');
         out.write("bc".getBytes(StandardCharsets.US_ASCII));
         assertTrue(writes.isEmpty());
@@ -51,7 +53,7 @@ class ResponseOutputCloseTest {
             case "chunk": out = new ChunkedOutputStream(wire); break;
             case "delimited": out = new CloseDelimitedOutputStream(wire); break;
             case "discard": out = new DiscardingOutputStream(); break;
-            case "buffered": out = new CloseGuardedBufferedOutputStream(wire, 32); break;
+            case "buffered": out = new CloseGuardedOutputStream(new BufferedOutputStream(wire, 32)); break;
             default: out = new CloseGuardedOutputStream(wire);
         }
         out.write('x');
@@ -74,7 +76,7 @@ class ResponseOutputCloseTest {
             @Override public void write(int value) {}
             @Override public void close() throws IOException { throw new IOException("close failed"); }
         };
-        OutputStream out = buffered ? new CloseGuardedBufferedOutputStream(delegate, 32)
+        OutputStream out = buffered ? new CloseGuardedOutputStream(new BufferedOutputStream(delegate, 32))
             : new CloseGuardedOutputStream(delegate);
         assertThrows(IOException.class, out::close);
         assertThrows(IOException.class, () -> out.write('x'));
@@ -99,7 +101,7 @@ class ResponseOutputCloseTest {
                 assertFalse(Thread.holdsLock(outer.get()), "A blocking H2 close must not gain a monitor that pins virtual threads");
             }
         };
-        var out = buffered ? new CloseGuardedBufferedOutputStream(delegate, 32)
+        var out = buffered ? new CloseGuardedOutputStream(new BufferedOutputStream(delegate, 32))
             : new CloseGuardedOutputStream(delegate);
         outer.set(out);
         out.write('x');
@@ -110,17 +112,25 @@ class ResponseOutputCloseTest {
 
     @ParameterizedTest
     @ValueSource(booleans = {false, true})
-    void flushFailureRemainsPrimaryAndCloseStillRuns(boolean sameFailure) throws Exception {
+    void bufferedClosePreservesJdkFailureSemanticsAndStillCloses(boolean sameFailure) throws Exception {
         var flushFailure = new IOException("flush failed");
         var closeFailure = sameFailure ? flushFailure : new IOException("close failed");
+        var closes = new AtomicInteger();
         var delegate = new OutputStream() {
             @Override public void write(int value) {}
             @Override public void flush() throws IOException { throw flushFailure; }
-            @Override public void close() throws IOException { throw closeFailure; }
+            @Override public void close() throws IOException {
+                closes.incrementAndGet();
+                throw closeFailure;
+            }
         };
-        var out = new CloseGuardedBufferedOutputStream(delegate, 32);
-        assertSame(flushFailure, assertThrows(IOException.class, out::close));
-        assertEquals(sameFailure ? 0 : 1, flushFailure.getSuppressed().length);
+        var out = new CloseGuardedOutputStream(new BufferedOutputStream(delegate, 32));
+        assertSame(closeFailure, assertThrows(IOException.class, out::close));
+        assertEquals(sameFailure ? 0 : 1, closeFailure.getSuppressed().length);
+        if (!sameFailure) assertSame(flushFailure, closeFailure.getSuppressed()[0]);
+        assertThrows(IOException.class, () -> out.write('x'));
+        assertThrows(IOException.class, out::flush);
         out.close();
+        assertEquals(1, closes.get());
     }
 }

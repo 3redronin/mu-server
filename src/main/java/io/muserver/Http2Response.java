@@ -2,6 +2,7 @@ package io.muserver;
 
 import org.jspecify.annotations.Nullable;
 
+import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.InterruptedIOException;
@@ -151,12 +152,17 @@ class Http2Response extends BaseResponse {
         }
         OutputStream os = suppressContent() ? new DiscardingOutputStream()
             : new Http2DataFrameOutputStream(stream);
-        if (!suppressContent() && bufferSize > 0) {
-            os = new CloseGuardedBufferedOutputStream(os, bufferSize);
+        boolean buffered = !suppressContent() && bufferSize > 0;
+        if (buffered) {
+            os = new BufferedOutputStream(os, bufferSize);
         }
         try {
             OutputStream encoded = responseEncoder == null ? os : responseEncoder.wrapStream(request, this, os);
-            wrappedOut = encoded == null ? null : responseEncoder == null ? encoded : new CloseGuardedOutputStream(encoded);
+            // Guard the outermost buffer/encoder without subclassing the JDK buffer.
+            if (encoded != null && (buffered || responseEncoder != null)) {
+                encoded = new CloseGuardedOutputStream(encoded);
+            }
+            wrappedOut = encoded;
         } catch (IOException e) {
             throw new UncheckedIOException("Error while setting up output stream", e);
         }
