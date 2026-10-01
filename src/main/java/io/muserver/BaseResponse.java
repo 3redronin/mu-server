@@ -92,12 +92,16 @@ abstract class BaseResponse implements MuResponse {
         var charset = ensureCharsetSet();
         var bytes = text.getBytes(charset);
         headers.set("content-length", bytes.length);
+        writeCompleteResponse(bytes);
+        setState(ResponseState.FULL_SENT);
+    }
+
+    protected void writeCompleteResponse(byte[] bytes) {
         try (var out = outputStream()) {
             out.write(bytes);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        setState(ResponseState.FULL_SENT);
     }
 
     @Override
