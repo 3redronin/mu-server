@@ -128,6 +128,7 @@ class Http2Response extends BaseResponse {
         if (bufferSize < 0) {
             throw new IllegalArgumentException("Response buffer size cannot be negative");
         }
+        ensureOutputOpen();
         if (wrappedOut == null) {
             // A 304 still negotiates metadata for the selected representation.
             ContentEncoder responseEncoder = status().canHaveContent() || status().code() == 304

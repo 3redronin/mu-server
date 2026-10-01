@@ -89,6 +89,9 @@ abstract class BaseResponse implements MuResponse {
 
     @Override
     public void write(String text) {
+        if (state != ResponseState.NOTHING || wrappedOut != null) {
+            throw new IllegalStateException("Cannot write a complete response after response output has started");
+        }
         var charset = ensureCharsetSet();
         var bytes = text.getBytes(charset);
         headers.set("content-length", bytes.length);
@@ -106,6 +109,7 @@ abstract class BaseResponse implements MuResponse {
 
     @Override
     public void sendChunk(String text) {
+        ensureOutputOpen();
         var charset = ensureCharsetSet();
         var out = outputStream();
         try {
@@ -153,10 +157,17 @@ abstract class BaseResponse implements MuResponse {
 
     @Override
     public OutputStream outputStream() {
+        ensureOutputOpen();
         if (wrappedOut == null) {
             wrappedOut = outputStream(8192);
         }
         return wrappedOut;
+    }
+
+    protected final void ensureOutputOpen() {
+        if (state.endState()) {
+            throw new IllegalStateException("Cannot write output after the response has completed");
+        }
     }
 
     protected @Nullable ContentEncoder contentEncoder() {
@@ -188,6 +199,7 @@ abstract class BaseResponse implements MuResponse {
 
     @Override
     public PrintWriter writer() {
+        ensureOutputOpen();
         if (writer == null) {
             if (!headers.contains(HeaderNames.CONTENT_TYPE)) {
                 headers.set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8);

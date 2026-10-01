@@ -122,6 +122,7 @@ public interface MuResponse {
      * <p>To set the size of the buffer, use {@link #outputStream(int)} instead.</p>
      * <p>If you are writing text, you may prefer the {@link #writer()} or {@link #sendChunk(String)} methods.</p>
      * @return An output stream to send data to the client.
+     * @throws IllegalStateException if the response has completed
      */
     OutputStream outputStream();
 
@@ -130,6 +131,7 @@ public interface MuResponse {
      * <p>If you are writing text, you may prefer the {@link #writer()} or {@link #sendChunk(String)} methods.</p>
      * @param bufferSize The size of the output buffer, e.g. 8192, or 0 if you do not want to buffer the response bytes.
      * @return An output stream to send data to the client.
+     * @throws IllegalStateException if the response has completed or an output stream has already been created
      */
     OutputStream outputStream(int bufferSize);
 
@@ -138,6 +140,7 @@ public interface MuResponse {
      * in a PrintWriter.</p>
      * <p>You may prefer using {@link #sendChunk(String)} or {@link #write(String)} to send text.</p>
      * @return A print writer that can be used to send text to the client.
+     * @throws IllegalStateException if the response has completed
      */
     PrintWriter writer();
 
