@@ -20,13 +20,14 @@ import static scaffolding.ServerUtils.httpsServerForTest;
 @Timeout(20)
 class Http2FinalWriteCompletionTest {
     static Stream<Arguments> finalWrites() {
-        return Stream.of(false, true).flatMap(dataFrame -> Stream.of(false, true).flatMap(duringFlush ->
-            Stream.of(false, true).map(fail -> Arguments.of(dataFrame, duringFlush, fail))));
+        return Stream.of(0, 1, 2).flatMap(frameKind -> Stream.of(false, true).flatMap(duringFlush ->
+            Stream.of(false, true).map(fail -> Arguments.of(frameKind, duringFlush, fail))));
     }
 
     @ParameterizedTest
     @MethodSource("finalWrites")
-    void peerCloseDuringTheFinalWriteWaitsForItsOutcome(boolean dataFrame, boolean duringFlush, boolean fail) throws Exception {
+    void peerCloseDuringTheFinalWriteWaitsForItsOutcome(int frameKind, boolean duringFlush, boolean fail) throws Exception {
+        boolean dataFrame = frameKind != 0;
         var entered = new CountDownLatch(1);
         var release = new CountDownLatch(1);
         var executor = Executors.newSingleThreadExecutor();
@@ -48,8 +49,10 @@ class Http2FinalWriteCompletionTest {
                 writer.testProbe().coordinator().openStream(1, 65_535, Http2StreamState.HALF_CLOSED_REMOTE, stream);
                 var headers = new FieldBlock();
                 headers.set(":status", dataFrame ? "200" : "304");
-                if (dataFrame) writer.write(new Http2HeadersFrame(1, false, headers));
-                var finalWrite = new WriteTask(dataFrame ? Http2DataFrame.eos(1)
+                if (frameKind == 1) writer.write(new Http2HeadersFrame(1, false, headers));
+                var finalWrite = new WriteTask(frameKind == 2
+                    ? new Http2ResponseFrame(new Http2HeadersFrame(1, false, headers), true, new byte[] {1}, 0, 1)
+                    : dataFrame ? Http2DataFrame.eos(1)
                     : new Http2HeadersFrame(1, true, headers), true);
                 writer.write(finalWrite);
                 var wire = new ByteArrayOutputStream();
@@ -58,7 +61,11 @@ class Http2FinalWriteCompletionTest {
                     @Override public void write(int value) { fail("Expected framed output"); }
                     @Override public void write(byte[] bytes, int offset, int length) throws IOException {
                         wire.write(bytes, offset, length);
-                        if (length >= 9) terminalFrame = (bytes[offset + 4] & 1) != 0;
+                        for (int at = offset; at + 9 <= offset + length; ) {
+                            int payloadLength = ((bytes[at] & 255) << 16) | ((bytes[at + 1] & 255) << 8) | (bytes[at + 2] & 255);
+                            if ((bytes[at + 4] & 1) != 0) terminalFrame = true;
+                            at += 9 + payloadLength;
+                        }
                         if (terminalFrame && !duringFlush) pauseFinalWrite();
                     }
                     @Override public void flush() throws IOException {

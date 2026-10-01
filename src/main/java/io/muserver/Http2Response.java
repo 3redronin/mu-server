@@ -10,6 +10,9 @@ import java.io.UncheckedIOException;
 
 class Http2Response extends BaseResponse {
 
+    private static final int MAX_BATCHED_BODY_BYTES = 8192;
+    private static final int MAX_BATCHED_HEADER_BYTES = 4096;
+
     private final Http2Stream stream;
     private final FieldBlock fields;
 
@@ -42,6 +45,10 @@ class Http2Response extends BaseResponse {
     }
 
     private void writeStatusAndHeaders(boolean endOfStream) throws InterruptedException, IOException {
+        stream.blockingWrite(prepareStatusAndHeaders(endOfStream));
+    }
+
+    private Http2HeadersFrame prepareStatusAndHeaders(boolean endOfStream) {
         if (responseState() != ResponseState.NOTHING) {
             throw new IllegalStateException("Cannot write headers multiple times");
         }
@@ -54,10 +61,49 @@ class Http2Response extends BaseResponse {
                 HttpDateCache.now()));
         }
 
-        var headerFragment = new Http2HeadersFrame(
+        return new Http2HeadersFrame(
             stream.id, endOfStream, (FieldBlock) headers()
         );
-        stream.blockingWrite(headerFragment);
+    }
+
+    @Override
+    protected void writeCompleteResponse(byte[] bytes) {
+        if (responseState() != ResponseState.NOTHING || wrappedOut != null || suppressContent()
+            || bytes.length > MAX_BATCHED_BODY_BYTES) {
+            super.writeCompleteResponse(bytes);
+            return;
+        }
+        ContentEncoder encoder = contentEncoder();
+        if (encoder != null || !headersFitBatch()) {
+            try (OutputStream out = createOutputStream(8192, encoder)) {
+                out.write(bytes);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+            return;
+        }
+        Http2HeadersFrame headers = prepareStatusAndHeaders(false);
+        // Match the closed output stream left by write(String), including cleanup.
+        wrappedOut = DiscardingOutputStream.INSTANCE;
+        try {
+            stream.blockingWrite(new Http2ResponseFrame(headers, true, bytes, 0, bytes.length));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(new InterruptedIOException("Interrupted while writing response"));
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+    }
+
+    private boolean headersFitBatch() {
+        // Bound the extra serialization buffer, including per-field overhead.
+        // Large header blocks retain their existing fragmented transport writes.
+        long remaining = MAX_BATCHED_HEADER_BYTES;
+        for (FieldLine field : fields.lineIterator()) {
+            remaining -= 32L + field.name().length() + field.value().length();
+            if (remaining < 0) return false;
+        }
+        return true;
     }
 
     @Override
@@ -86,29 +132,33 @@ class Http2Response extends BaseResponse {
             // A 304 still negotiates metadata for the selected representation.
             ContentEncoder responseEncoder = status().canHaveContent() || status().code() == 304
                 ? contentEncoder() : null;
-            // TODO don't do this here...
-            try {
-                if (responseState() == ResponseState.NOTHING) {
-                    writeStatusAndHeaders(suppressContent());
-                }
-            } catch (InterruptedException e) {
-                throw new RuntimeException("Interrupted while writing status headers", e);
-            } catch (IOException e) {
-                throw new UncheckedIOException(e);
-            }
-            OutputStream os = suppressContent() ? DiscardingOutputStream.INSTANCE
-                : new Http2DataFrameOutputStream(stream);
-            if (!suppressContent() && bufferSize > 0) {
-                os = new BufferedOutputStream(os, bufferSize);
-            }
-            try {
-                wrappedOut = responseEncoder == null ? os : responseEncoder.wrapStream(request, this, os);
-            } catch (IOException e) {
-                throw new UncheckedIOException("Error while setting up output stream", e);
-            }
-            return java.util.Objects.requireNonNull(wrappedOut);
+            return createOutputStream(bufferSize, responseEncoder);
         } else {
             throw new IllegalStateException("Cannot specify buffer size for response output stream when it has already been created");
         }
+    }
+
+    private OutputStream createOutputStream(int bufferSize, @Nullable ContentEncoder responseEncoder) {
+        // TODO don't do this here...
+        try {
+            if (responseState() == ResponseState.NOTHING) {
+                writeStatusAndHeaders(suppressContent());
+            }
+        } catch (InterruptedException e) {
+            throw new RuntimeException("Interrupted while writing status headers", e);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        OutputStream os = suppressContent() ? DiscardingOutputStream.INSTANCE
+            : new Http2DataFrameOutputStream(stream);
+        if (!suppressContent() && bufferSize > 0) {
+            os = new BufferedOutputStream(os, bufferSize);
+        }
+        try {
+            wrappedOut = responseEncoder == null ? os : responseEncoder.wrapStream(request, this, os);
+        } catch (IOException e) {
+            throw new UncheckedIOException("Error while setting up output stream", e);
+        }
+        return java.util.Objects.requireNonNull(wrappedOut);
     }
 }

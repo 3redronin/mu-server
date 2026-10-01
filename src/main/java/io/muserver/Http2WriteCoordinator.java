@@ -456,13 +456,16 @@ final class Http2WriteCoordinator {
             }
             if (reserved > 0) {
                 boolean completesTask = reserved == remaining;
-                var writableData = new Http2DataFrame(
-                    streamId,
-                    completesTask && data.endStream(),
-                    data.payload(),
-                    data.payloadOffset() + pending.dataBytesWritten,
-                    reserved
-                );
+                Http2DataFrame writableData;
+                if (data instanceof Http2ResponseFrame) {
+                    writableData = ((Http2ResponseFrame) data).slice(
+                        data.payloadOffset() + pending.dataBytesWritten, reserved,
+                        completesTask && data.endStream(), !pending.responseHeadersWritten);
+                    pending.responseHeadersWritten = true;
+                } else {
+                    writableData = new Http2DataFrame(streamId, completesTask && data.endStream(),
+                        data.payload(), data.payloadOffset() + pending.dataBytesWritten, reserved);
+                }
                 pending.dataBytesWritten += reserved;
                 if (completesTask) {
                     iterator.remove();
@@ -473,6 +476,13 @@ final class Http2WriteCoordinator {
                     completesTask,
                     pending.protocolError
                 );
+            }
+
+            // HEADERS are not flow controlled. A peer can wait for them before
+            // granting DATA credit, so never hold them behind an empty window.
+            if (data instanceof Http2ResponseFrame && !pending.responseHeadersWritten) {
+                pending.responseHeadersWritten = true;
+                return new WritableFrame(((Http2ResponseFrame) data).headers(), task, false, pending.protocolError);
             }
 
             if (streamId != 0) {
@@ -898,6 +908,7 @@ final class Http2WriteCoordinator {
         private final WriteTask task;
         private final @Nullable Http2Exception protocolError;
         private int dataBytesWritten;
+        private boolean responseHeadersWritten;
 
         private PendingWrite(WriteTask task, @Nullable Http2Exception protocolError) {
             this.task = task;
