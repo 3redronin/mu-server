@@ -35,9 +35,11 @@ final class CloseGuardedOutputStream extends FilterOutputStream {
         out.flush();
     }
 
-    @Override public synchronized void close() throws IOException {
-        if (closed) return;
-        closed = true;
+    @Override public void close() throws IOException {
+        synchronized (this) {
+            if (closed) return;
+            closed = true;
+        }
         out.close();
     }
 }

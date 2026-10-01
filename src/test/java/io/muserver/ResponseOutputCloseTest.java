@@ -6,10 +6,41 @@ import org.junit.jupiter.params.provider.ValueSource;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class ResponseOutputCloseTest {
+    @org.junit.jupiter.api.Test
+    void bufferingPreservesOrderAcrossPartialFullAndDirectWrites() throws Exception {
+        var writes = new ArrayList<String>();
+        var wire = new ByteArrayOutputStream() {
+            @Override public synchronized void write(byte[] bytes, int offset, int length) {
+                writes.add(new String(bytes, offset, length, StandardCharsets.US_ASCII));
+                super.write(bytes, offset, length);
+            }
+        };
+        var out = new CloseGuardedBufferedOutputStream(wire, 4);
+        out.write('a');
+        out.write("bc".getBytes(StandardCharsets.US_ASCII));
+        assertTrue(writes.isEmpty());
+        out.write("def".getBytes(StandardCharsets.US_ASCII));
+        assertEquals(List.of("abc"), writes);
+        out.write("_ghij_".getBytes(StandardCharsets.US_ASCII), 1, 4);
+        assertEquals(List.of("abc", "def", "ghij"), writes);
+        for (char value : "klmn".toCharArray()) out.write(value);
+        assertEquals(3, writes.size());
+        out.write('o');
+        out.flush();
+        out.write('p');
+        out.close();
+        assertEquals(List.of("abc", "def", "ghij", "klmn", "o", "p"), writes);
+        assertEquals("abcdefghijklmnop", wire.toString(StandardCharsets.US_ASCII));
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"fixed", "chunk", "delimited", "discard", "buffered", "encoder"})
     void closedOutputCannotWriteOrFlushUnderlyingTransport(String kind) throws Exception {
@@ -47,6 +78,49 @@ class ResponseOutputCloseTest {
             : new CloseGuardedOutputStream(delegate);
         assertThrows(IOException.class, out::close);
         assertThrows(IOException.class, () -> out.write('x'));
+        out.close();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void delegateCloseDoesNotHoldTheOuterMonitor(boolean buffered) throws Exception {
+        var outer = new AtomicReference<OutputStream>();
+        var delegate = new OutputStream() {
+            @Override public void write(int value) {
+                assertFalse(Thread.holdsLock(outer.get()));
+            }
+            @Override public void write(byte[] bytes, int offset, int length) {
+                assertFalse(Thread.holdsLock(outer.get()));
+            }
+            @Override public void flush() {
+                assertFalse(Thread.holdsLock(outer.get()));
+            }
+            @Override public void close() {
+                assertFalse(Thread.holdsLock(outer.get()), "A blocking H2 close must not gain a monitor that pins virtual threads");
+            }
+        };
+        var out = buffered ? new CloseGuardedBufferedOutputStream(delegate, 32)
+            : new CloseGuardedOutputStream(delegate);
+        outer.set(out);
+        out.write('x');
+        out.flush();
+        out.write(new byte[32]);
+        out.close();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void flushFailureRemainsPrimaryAndCloseStillRuns(boolean sameFailure) throws Exception {
+        var flushFailure = new IOException("flush failed");
+        var closeFailure = sameFailure ? flushFailure : new IOException("close failed");
+        var delegate = new OutputStream() {
+            @Override public void write(int value) {}
+            @Override public void flush() throws IOException { throw flushFailure; }
+            @Override public void close() throws IOException { throw closeFailure; }
+        };
+        var out = new CloseGuardedBufferedOutputStream(delegate, 32);
+        assertSame(flushFailure, assertThrows(IOException.class, out::close));
+        assertEquals(sameFailure ? 0 : 1, flushFailure.getSuppressed().length);
         out.close();
     }
 }
