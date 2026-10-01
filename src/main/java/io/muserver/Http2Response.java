@@ -10,7 +10,7 @@ import java.io.UncheckedIOException;
 
 class Http2Response extends BaseResponse {
 
-    private static final int MAX_BATCHED_BODY_BYTES = 1024;
+    private static final int MAX_BATCHED_BODY_BYTES = 8192;
     private static final int MAX_BATCHED_HEADER_BYTES = 4096;
 
     private final Http2Stream stream;

@@ -3,7 +3,6 @@ package io.muserver;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
@@ -20,7 +19,8 @@ import static scaffolding.ServerUtils.httpsServerForTest;
 @Timeout(15)
 class Http2CompleteResponseTest {
     @ParameterizedTest
-    @CsvSource({"false,0", "true,0", "false,5", "true,5", "false,1024", "true,1024", "false,1025", "true,1025", "false,16384", "true,16384"})
+    @CsvSource({"false,0", "true,0", "false,5", "true,5", "false,1024", "true,1024", "false,1025", "true,1025",
+        "false,8191", "true,8191", "false,8192", "true,8192", "false,8193", "true,8193", "false,16384", "true,16384"})
     void knownBodiesRemainCorrectAcrossBatchBoundary(boolean tls, int length) throws Exception {
         String text = "x".repeat(length);
         try (var server = httpsServerForTest(tls ? "h2" : "http")
@@ -66,13 +66,14 @@ class Http2CompleteResponseTest {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {0, 2})
-    void headersReachPeerBeforeBodyCreditAndOtherStreamsStillProgress(int credit) throws Exception {
+    @CsvSource({"0,5", "2,5", "0,8192", "4096,8192"})
+    void headersReachPeerBeforeBodyCreditAndOtherStreamsStillProgress(int credit, int length) throws Exception {
+        String text = length == 5 ? "hello" : "x".repeat(length);
         var written = new CountDownLatch(1);
         try (var server = httpsServerForTest("h2").withGzipEnabled(false)
             .addHandler((request, response) -> {
                 if (request.relativePath().equals("/hello")) {
-                    response.write("hello");
+                    response.write(text);
                     written.countDown();
                 } else response.status(204);
                 return true;
@@ -83,7 +84,7 @@ class Http2CompleteResponseTest {
             assertEquals("200", readIgnoringWindowUpdates(con, Http2HeadersFrame.class).headers().get(":status"));
             if (credit > 0) {
                 var prefix = readIgnoringWindowUpdates(con, Http2DataFrame.class);
-                assertEquals("he", prefix.toUTF8());
+                assertEquals(text.substring(0, credit), prefix.toUTF8());
                 assertFalse(prefix.endStream());
             }
             assertEquals(1, written.getCount(), "Whole-response write still waits for transport completion");
@@ -93,9 +94,9 @@ class Http2CompleteResponseTest {
             var other = readIgnoringWindowUpdates(con, Http2HeadersFrame.class);
             assertEquals(3, other.streamId());
             assertTrue(other.endStream());
-            con.writeFrame(new Http2WindowUpdate(1, 5 - credit)).flush();
+            con.writeFrame(new Http2WindowUpdate(1, length - credit)).flush();
             var tail = readIgnoringWindowUpdates(con, Http2DataFrame.class);
-            assertEquals(credit == 0 ? "hello" : "llo", tail.toUTF8());
+            assertEquals(text.substring(credit), tail.toUTF8());
             assertFalse(tail.endStream());
             assertTrue(readIgnoringWindowUpdates(con, Http2DataFrame.class).endStream());
         }
