@@ -253,7 +253,7 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
 
     static FieldBlock newWithDate() {
         var headers = new FieldBlock();
-        headers.set(HeaderNames.DATE, Mutils.toHttpDate(new Date()));
+        headers.set(HeaderNames.DATE, HttpDateCache.now());
         return headers;
     }
 
