@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.InetSocketAddress;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.*;
@@ -250,12 +251,13 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
             }
             muHeaders.set(HeaderNames.HOST, host);
             HttpRequest nettyReq = new Http2To1RequestAdapter(streamId, nettyMeth, uri, headers);
-            NettyRequestAdapter muReq;
+            URI serverUri;
             try {
-                muReq = new NettyRequestAdapter(ctx, nettyReq, muHeaders, muMethod, "https", uri, host);
-            } catch (IllegalArgumentException e) {
+                serverUri = new URI("https://" + host + uri);
+            } catch (URISyntaxException e) {
                 throw Http2Exception.streamError(streamId, Http2Error.PROTOCOL_ERROR, e, "Invalid request URI");
             }
+            NettyRequestAdapter muReq = new NettyRequestAdapter(ctx, nettyReq, muHeaders, muMethod, "https", uri, host, serverUri);
 
             Http2Response resp = new Http2Response(ctx, muReq, new Http2Headers(), encoder(), streamId, settings);
             HttpExchange httpExchange = new HttpExchange(this, ctx, muReq, resp, streamId);

@@ -52,11 +52,15 @@ class NettyRequestAdapter implements MuRequest {
     private final List<RequestStateChangeListener> listeners = new CopyOnWriteArrayList<>();
 
     NettyRequestAdapter(ChannelHandlerContext ctx, HttpRequest nettyRequest, Headers headers, Method method, String proto, String uri, String host) {
+        this(ctx, nettyRequest, headers, method, proto, uri, host, URI.create(proto + "://" + host + uri));
+    }
+
+    NettyRequestAdapter(ChannelHandlerContext ctx, HttpRequest nettyRequest, Headers headers, Method method, String proto, String uri, String host, URI serverUri) {
         this.ctx = ctx;
         this.nettyRequest = nettyRequest;
-        this.serverUri = URI.create(proto + "://" + host + uri).normalize();
+        this.serverUri = serverUri.normalize();
         this.headers = headers;
-        this.uri = getUri(headers, proto, host, uri, serverUri);
+        this.uri = getUri(headers, proto, host, uri, this.serverUri);
         this.relativePath = this.uri.getRawPath();
         this.query = new NettyRequestParameters(new QueryStringDecoder(uri, true).parameters());
         this.method = method;
