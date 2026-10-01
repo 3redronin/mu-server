@@ -58,6 +58,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private final CompletableFuture<@Nullable Void> writeLoopEnded = new CompletableFuture<>();
     private final CompletableFuture<@Nullable Void> retainedApplicationsEnded = new CompletableFuture<>();
     private volatile @Nullable OutputStream writerOutput;
+    // Only accessed by the serialized connection writer; allocated on demand.
+    private byte @Nullable [] dataWriteBuffer;
+    private static final int MAX_CONSOLIDATED_DATA_BYTES = 8192;
 
     private final ConnectionLifecycle lifecycle = new ConnectionLifecycle();
 
@@ -693,7 +696,20 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                         update.windowSizeIncrement()
                     );
                 }
-                frame.writeTo(this, clientOut);
+                if (frame.getClass() == Http2DataFrame.class && frame.flowControlSize() <= MAX_CONSOLIDATED_DATA_BYTES) {
+                    var data = (Http2DataFrame) frame;
+                    byte @Nullable [] buffer = dataWriteBuffer;
+                    int size = 9 + data.payloadLength();
+                    if (buffer == null || buffer.length < size) {
+                        buffer = new byte[size];
+                        dataWriteBuffer = buffer;
+                    }
+                    data.writeConsolidatedTo(clientOut, buffer);
+                } else {
+                    // Complete-response batches already serialize into one output
+                    // buffer. Large DATA frames retain their existing copy-free path.
+                    frame.writeTo(this, clientOut);
+                }
                 // Releasing a local END_STREAM fence before output makes any
                 // progress can over-admit peer streams indefinitely. Publish
                 // it after the complete frame has been handed to the output,

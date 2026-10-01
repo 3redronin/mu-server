@@ -90,22 +90,29 @@ class Http2DataFrame implements LogicalHttp2Frame {
 
     @Override
     public void writeTo(Http2Peer connection, OutputStream out) throws IOException {
-        out.write(new byte[] {
-            // len
-            (byte)(payloadLength >> 16),
-            (byte)(payloadLength >> 8),
-            (byte)payloadLength,
-            // type
-            (byte)0,
-            // flags
-            eos ? eosFlag : notEosFlag,
-            // stream id
-            (byte)(streamId >> 24),
-            (byte)(streamId >> 16),
-            (byte)(streamId >> 8),
-            (byte)(streamId)
-        });
+        byte[] header = new byte[9];
+        writeHeader(header);
+        out.write(header);
         out.write(payload, payloadOffset, payloadLength);
+    }
+
+    /** The connection writer owns and reuses buffer until this blocking output call returns. */
+    void writeConsolidatedTo(OutputStream out, byte[] buffer) throws IOException {
+        writeHeader(buffer);
+        System.arraycopy(payload, payloadOffset, buffer, 9, payloadLength);
+        out.write(buffer, 0, 9 + payloadLength);
+    }
+
+    private void writeHeader(byte[] bytes) {
+        bytes[0] = (byte) (payloadLength >> 16);
+        bytes[1] = (byte) (payloadLength >> 8);
+        bytes[2] = (byte) payloadLength;
+        bytes[3] = 0;
+        bytes[4] = eos ? eosFlag : notEosFlag;
+        bytes[5] = (byte) (streamId >> 24);
+        bytes[6] = (byte) (streamId >> 16);
+        bytes[7] = (byte) (streamId >> 8);
+        bytes[8] = (byte) streamId;
     }
 
     public String toUTF8() {
