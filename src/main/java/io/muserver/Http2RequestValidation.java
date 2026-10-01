@@ -58,7 +58,7 @@ final class Http2RequestValidation {
                 int end = value.indexOf(']');
                 String literal = value.substring(1, end);
                 // Zone identifiers are not part of an HTTP URI host. Do not silently discard one.
-                if (literal.indexOf('%') >= 0 || !NetUtil.isValidIpV6Address(literal)) {
+                if (literal.indexOf('%') >= 0) {
                     throw new IllegalArgumentException("Invalid IPv6 host");
                 }
                 host = Arrays.toString(NetUtil.createByteArrayFromIpAddressString(literal));
@@ -73,21 +73,14 @@ final class Http2RequestValidation {
             }
             int parsedPort = defaultPort;
             if (portSeparator < value.length()) {
-                if (value.charAt(portSeparator) != ':') {
-                    throw new IllegalArgumentException("Invalid port delimiter");
-                }
                 String digits = value.substring(portSeparator + 1);
                 if (!digits.isEmpty()) {
-                    parsedPort = 0;
-                    for (int i = 0; i < digits.length(); i++) {
-                        char digit = digits.charAt(i);
-                        if (digit < '0' || digit > '9') {
-                            throw new IllegalArgumentException("Invalid port");
-                        }
-                        parsedPort = parsedPort * 10 + digit - '0';
-                        if (parsedPort > 65535) {
-                            throw new IllegalArgumentException("Port out of range");
-                        }
+                    if (!digits.chars().allMatch(digit -> digit >= '0' && digit <= '9')) {
+                        throw new IllegalArgumentException("Invalid port");
+                    }
+                    parsedPort = Integer.parseInt(digits);
+                    if (parsedPort > 65535) {
+                        throw new IllegalArgumentException("Port out of range");
                     }
                 }
             }

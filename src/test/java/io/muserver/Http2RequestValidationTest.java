@@ -16,7 +16,8 @@ public class Http2RequestValidationTest {
         for (String[] example : new String[][]{
             {"https", "example.test", "EXAMPLE.TEST:443", "example.test:"},
             {"http", "example.test:80", "EXAMPLE.TEST", "example.test:00080"},
-            {"https", "example.test:8443", "EXAMPLE.TEST:08443"},
+            {"https", "example.test:8443", "EXAMPLE.TEST:08443", "example.test:000000000000000000008443"},
+            {"https", "my_service.test", "MY_SERVICE.TEST:443"},
             {"https", "[2001:db8::1]", "[2001:0DB8:0:0:0:0:0:1]:443"},
             {"https", "[::ffff:192.0.2.1]", "[::ffff:c000:201]:443"}
         }) {
@@ -65,6 +66,7 @@ public class Http2RequestValidationTest {
         for (String value : new String[]{"", ":443", "user@example.test", "example.test/path", "example.test/",
             "example.test?query", "example.test#fragment", "example.test:bad", "example.test:-1",
             "example.test:65536", "example.test:999999999999999999999", "example.test:443:80",
+            "example.test:+443", "example.test:\u0664\u0664\u0663",
             "example.test\\evil", "example.test%", "[not-ipv6]", "[::1", "[::1]extra", "[fe80::1%25eth0]"}) {
             // Disable Netty's field checks to exercise this helper independently of decoding.
             DefaultHttp2Headers headers = new DefaultHttp2Headers(false);
