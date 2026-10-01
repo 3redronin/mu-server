@@ -79,6 +79,9 @@ class Http2Response extends BaseResponse {
 
     @Override
     public OutputStream outputStream(int bufferSize) {
+        if (bufferSize < 0) {
+            throw new IllegalArgumentException("Response buffer size cannot be negative");
+        }
         if (wrappedOut == null) {
             // A 304 still negotiates metadata for the selected representation.
             ContentEncoder responseEncoder = status().canHaveContent() || status().code() == 304
@@ -94,7 +97,10 @@ class Http2Response extends BaseResponse {
                 throw new UncheckedIOException(e);
             }
             OutputStream os = suppressContent() ? DiscardingOutputStream.INSTANCE
-                : new BufferedOutputStream(new Http2DataFrameOutputStream(stream), bufferSize);
+                : new Http2DataFrameOutputStream(stream);
+            if (!suppressContent() && bufferSize > 0) {
+                os = new BufferedOutputStream(os, bufferSize);
+            }
             try {
                 wrappedOut = responseEncoder == null ? os : responseEncoder.wrapStream(request, this, os);
             } catch (IOException e) {
