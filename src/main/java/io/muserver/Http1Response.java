@@ -101,7 +101,7 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
                 rawOut.write(headerBytes);
                 if (suppressContent()) {
                     // Representation lengths on HEAD/304 do not describe bytes to write.
-                    wrappedOut = DiscardingOutputStream.INSTANCE;
+                    wrappedOut = new DiscardingOutputStream();
                     socketOut.flush();
                 } else if (fixedLen != -1L) {
                     wrappedOut = new FixedSizeOutputStream(fixedLen, rawOut);
@@ -111,7 +111,8 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
                     wrappedOut = new CloseDelimitedOutputStream(rawOut);
                 }
                 if (responseEncoder != null) {
-                    wrappedOut = responseEncoder.wrapStream(request, this, wrappedOut);
+                    OutputStream encoded = responseEncoder.wrapStream(request, this, wrappedOut);
+                    wrappedOut = encoded == null ? null : new CloseGuardedOutputStream(encoded);
                 }
             } catch (IOException e) {
                 throw new UncheckedIOException("Error while setting up output stream", e);

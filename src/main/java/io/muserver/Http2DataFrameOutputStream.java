@@ -17,6 +17,7 @@ class Http2DataFrameOutputStream extends OutputStream {
 
     @Override
     public void write(int b) throws IOException {
+        ensureOpen();
         write(new byte[] { (byte)b }, 0, 1);
     }
 
@@ -26,14 +27,19 @@ class Http2DataFrameOutputStream extends OutputStream {
      */
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
-        if (!closed.get()) {
-            try {
-                stream.blockingWriteData(b, off, len);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new InterruptedIOException("Interrupted while writing data frame");
-            }
+        ensureOpen();
+        try {
+            stream.blockingWriteData(b, off, len);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new InterruptedIOException("Interrupted while writing data frame");
         }
+    }
+
+    @Override public void flush() throws IOException { ensureOpen(); }
+
+    private void ensureOpen() throws IOException {
+        if (closed.get()) throw new IOException("Response output stream is closed");
     }
 
     @Override

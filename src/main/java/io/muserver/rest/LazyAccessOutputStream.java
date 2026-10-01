@@ -15,8 +15,10 @@ class LazyAccessOutputStream extends OutputStream {
     private final Runnable beforeFirstWrite;
     private @Nullable OutputStream os;
     private boolean prepared;
+    private boolean closed;
 
-    private OutputStream out() {
+    private OutputStream out() throws IOException {
+        ensureOpen();
         if (os == null) {
             prepare();
             os = muResponse.outputStream();
@@ -43,6 +45,7 @@ class LazyAccessOutputStream extends OutputStream {
 
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
+        ensureOpen();
         Objects.checkFromIndexSize(off, len, b.length);
         if (len > 0) {
             out().write(b, off, len);
@@ -51,6 +54,7 @@ class LazyAccessOutputStream extends OutputStream {
 
     @Override
     public void flush() throws IOException {
+        ensureOpen();
         if (os != null) {
             os.flush();
         }
@@ -58,9 +62,15 @@ class LazyAccessOutputStream extends OutputStream {
 
     @Override
     public void close() throws IOException {
+        if (closed) return;
+        closed = true;
         if (os != null) {
             os.close();
             os = null;
         }
+    }
+
+    private void ensureOpen() throws IOException {
+        if (closed) throw new IOException("Response output stream is closed");
     }
 }

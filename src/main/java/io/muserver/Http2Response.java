@@ -84,7 +84,7 @@ class Http2Response extends BaseResponse {
         }
         Http2HeadersFrame headers = prepareStatusAndHeaders(false);
         // Match the closed output stream left by write(String), including cleanup.
-        wrappedOut = DiscardingOutputStream.INSTANCE;
+        wrappedOut = DiscardingOutputStream.CLOSED;
         try {
             stream.blockingWrite(new Http2ResponseFrame(headers, true, bytes, 0, bytes.length));
         } catch (InterruptedException e) {
@@ -150,13 +150,19 @@ class Http2Response extends BaseResponse {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        OutputStream os = suppressContent() ? DiscardingOutputStream.INSTANCE
+        OutputStream os = suppressContent() ? new DiscardingOutputStream()
             : new Http2DataFrameOutputStream(stream);
-        if (!suppressContent() && bufferSize > 0) {
+        boolean buffered = !suppressContent() && bufferSize > 0;
+        if (buffered) {
             os = new BufferedOutputStream(os, bufferSize);
         }
         try {
-            wrappedOut = responseEncoder == null ? os : responseEncoder.wrapStream(request, this, os);
+            OutputStream encoded = responseEncoder == null ? os : responseEncoder.wrapStream(request, this, os);
+            // Guard the outermost buffer/encoder without subclassing the JDK buffer.
+            if (encoded != null && (buffered || responseEncoder != null)) {
+                encoded = new CloseGuardedOutputStream(encoded);
+            }
+            wrappedOut = encoded;
         } catch (IOException e) {
             throw new UncheckedIOException("Error while setting up output stream", e);
         }

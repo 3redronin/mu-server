@@ -8,6 +8,8 @@ import org.junit.jupiter.params.provider.ValueSource;
 import scaffolding.Http1Client;
 
 import java.io.ByteArrayOutputStream;
+import java.io.BufferedOutputStream;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -80,6 +82,66 @@ class ResponseWriteContractTest {
         return Stream.of("http", "https", "h2", "h2c").flatMap(protocol ->
             Stream.of("buffered", "unbuffered", "writer", "chunk")
                 .map(mode -> Arguments.of(protocol, mode)));
+    }
+
+    static Stream<Arguments> retainedStreams() {
+        return Stream.of("http", "https", "h2", "h2c").flatMap(protocol ->
+            Stream.of("fixed", "chunk", "unbuffered", "encoded", "writer", "head", "bodyless")
+                .map(mode -> Arguments.of(protocol, mode)));
+    }
+
+    @ParameterizedTest
+    @MethodSource("retainedStreams")
+    void retainedStreamsRejectWritesAndFlushAfterClose(String protocol, String mode) throws Exception {
+        var checked = new CompletableFuture<Void>();
+        var builder = httpsServerForTest("h2c".equals(protocol) ? "http" : protocol)
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled()).withGzipEnabled(false);
+        if ("encoded".equals(mode)) builder.withContentEncoders(List.of(new ContentEncoder() {
+            @Override public String contentCoding() { return "test"; }
+            @Override public boolean prepare(MuRequest request, MuResponse response) { return true; }
+            @Override public OutputStream wrapStream(MuRequest request, MuResponse response, OutputStream stream) {
+                return new BufferedOutputStream(stream, 32);
+            }
+        }));
+        var server = builder.addHandler((request, response) -> {
+            if (request.relativePath().equals("/healthy")) {
+                response.write("healthy");
+                return true;
+            }
+            try {
+                response.contentType(ContentTypes.TEXT_PLAIN_UTF8);
+                if (!"chunk".equals(mode)) response.headers().set(HeaderNames.CONTENT_LENGTH, 8);
+                if ("bodyless".equals(mode)) response.status(204);
+                var out = response.outputStream("unbuffered".equals(mode) ? 0 : 8192);
+                if ("writer".equals(mode)) {
+                    var writer = response.writer();
+                    writer.write("original");
+                    writer.close();
+                    writer.write("late");
+                    assertTrue(writer.checkError(), "PrintWriter reports rejected writes through its error flag");
+                } else {
+                    out.write("original".getBytes(StandardCharsets.UTF_8));
+                    out.close();
+                }
+                assertThrows(IOException.class, () -> out.write('x'));
+                assertThrows(IOException.class, () -> out.write(new byte[] {1}));
+                assertThrows(IOException.class, () -> out.write(new byte[0]));
+                assertThrows(IOException.class, () -> out.write(new byte[] {1, 2}, 1, 1));
+                assertThrows(IOException.class, out::flush);
+                out.close(); // Cleanup will also close the stream again.
+                checked.complete(null);
+            } catch (Throwable failure) {
+                checked.completeExceptionally(failure);
+            }
+            return true;
+        }).start();
+        try {
+            exerciseConnection(server, protocol, "head".equals(mode) ? Method.HEAD : Method.GET,
+                "bodyless".equals(mode) ? 204 : 200,
+                "head".equals(mode) || "bodyless".equals(mode) ? "" : "original", checked);
+        } finally {
+            stopAndCheck(server);
+        }
     }
 
     @ParameterizedTest
@@ -182,7 +244,18 @@ class ResponseWriteContractTest {
                     if (i == 0) checked.get(5, TimeUnit.SECONDS);
                     assertEquals(i == 0 && status == 204 ? "HTTP/1.1 204 No Content" : "HTTP/1.1 200 OK", con.readLine());
                     var headers = con.readHeaders();
-                    assertEquals(i == 0 ? body : "healthy", i == 0 && method == Method.HEAD ? "" : con.readBody(headers));
+                    String received;
+                    if (i == 0 && method == Method.HEAD) received = "";
+                    else if (headers.contains(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED, true)) {
+                        var bytes = new ByteArrayOutputStream();
+                        for (int length; (length = Integer.parseInt(con.readLine(), 16)) > 0; ) {
+                            bytes.write(con.in().readNBytes(length));
+                            assertEquals("", con.readLine());
+                        }
+                        assertEquals("", con.readLine());
+                        received = bytes.toString(StandardCharsets.UTF_8);
+                    } else received = con.readBody(headers);
+                    assertEquals(i == 0 ? body : "healthy", received);
                 }
             }
         }
