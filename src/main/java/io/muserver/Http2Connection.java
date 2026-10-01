@@ -58,6 +58,24 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private final CompletableFuture<@Nullable Void> writeLoopEnded = new CompletableFuture<>();
     private final CompletableFuture<@Nullable Void> retainedApplicationsEnded = new CompletableFuture<>();
     private volatile @Nullable OutputStream writerOutput;
+    private @Nullable Http2WriteBatch writeBatch;
+    private final ArrayList<BatchFrame> pendingWriteBatch = new ArrayList<>();
+    private static final int MAX_WRITE_BATCH_FRAMES = 64;
+
+    private static final class BatchFrame {
+        final Http2WriteCoordinator.WritableFrame candidate;
+        final LogicalHttp2Frame frame;
+        final @Nullable PendingSettingsAck settingsAck;
+        long endOffset = Long.MAX_VALUE;
+        boolean published;
+
+        BatchFrame(Http2WriteCoordinator.WritableFrame candidate, LogicalHttp2Frame frame,
+                   @Nullable PendingSettingsAck settingsAck) {
+            this.candidate = candidate;
+            this.frame = frame;
+            this.settingsAck = settingsAck;
+        }
+    }
 
     private final ConnectionLifecycle lifecycle = new ConnectionLifecycle();
 
@@ -664,71 +682,98 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     }
 
     private boolean drainWritableFrames(OutputStream clientOut) throws IOException {
-        Http2WriteCoordinator.WritableFrame candidate;
-        while (lifecycle.writeState.canSendFrames && (candidate = writeCoordinator.pollWritable()) != null) {
-            if (!candidate.beginWrite()) continue;
-            try {
+        Http2WriteBatch output = writeBatch;
+        if (output == null) {
+            output = new Http2WriteBatch(clientOut, this::publishBatchFrames, this::completeBatchFrames);
+            writeBatch = output;
+        }
+        Http2WriteCoordinator.@Nullable WritableFrame active = null;
+        try {
+            Http2WriteCoordinator.WritableFrame candidate;
+            while (lifecycle.writeState.canSendFrames && (candidate = writeCoordinator.pollWritable()) != null) {
+                if (!candidate.beginWrite()) continue;
+                active = candidate;
                 Http2Exception protocolError = candidate.protocolError();
+                // Finish preceding output before a protocol error changes connection state.
+                if (protocolError != null) flushWriteBatch(output);
                 LogicalHttp2Frame frame = protocolError == null
-                    ? candidate.frame()
-                    : prepareCoordinatorErrorFrame(protocolError);
+                    ? candidate.frame() : prepareCoordinatorErrorFrame(protocolError);
                 log.info("Writing {}", frame);
                 PendingSettingsAck pendingSettingsAck = null;
-                if (frame instanceof Http2Settings) {
-                    var settings = (Http2Settings) frame;
-                    if (!settings.isAck) {
-                        // Register before any bytes can reach the peer so a fast
-                        // ACK always has a FIFO entry to consume.
-                        pendingSettingsAck = registerPendingSettingsAck();
-                    }
+                if (frame instanceof Http2Settings && !((Http2Settings) frame).isAck) {
+                    pendingSettingsAck = registerPendingSettingsAck();
                 }
                 if (frame instanceof Http2WindowUpdate) {
                     var update = (Http2WindowUpdate) frame;
-                    // Raw socket output can expose the complete frame while
-                    // writeTo is still inside its blocking write call. Publish
-                    // the advertised credit first so a compliant peer cannot
-                    // race the local receive-window accounting.
-                    inboundFlowControl.windowUpdateWriting(
-                        update.streamId(),
-                        update.windowSizeIncrement()
-                    );
+                    // Publish advertised credit before any buffered bytes reach the peer.
+                    inboundFlowControl.windowUpdateWriting(update.streamId(), update.windowSizeIncrement());
                 }
-                frame.writeTo(this, clientOut);
-                // Releasing a local END_STREAM fence before output makes any
-                // progress can over-admit peer streams indefinitely. Publish
-                // it after the complete frame has been handed to the output,
-                // while protocol completion still waits for a successful flush.
-                candidate.publishAfterWrite(frame);
-                clientOut.flush();
-                if (pendingSettingsAck != null) {
-                    // The peer cannot be late until the SETTINGS frame has
-                    // actually crossed the writer's publication boundary.
-                    startSettingsAckTimeout(pendingSettingsAck);
+                var entry = new BatchFrame(candidate, frame, pendingSettingsAck);
+                pendingWriteBatch.add(entry);
+                active = null; // The batch now owns failure/completion of this candidate.
+                frame.writeTo(this, output);
+                entry.endOffset = output.acceptedBytes();
+                publishBatchFrames();
+                // Bound both buffered bytes and delayed task completions. Never wait
+                // for another command to fill a batch; only drain already-ready work.
+                if (pendingWriteBatch.size() >= MAX_WRITE_BATCH_FRAMES
+                    || output.acceptedBytes() - output.flushedBytes() >= Http2WriteBatch.MAX_BYTES
+                    || frame instanceof Http2GoAway || protocolError != null) {
+                    flushWriteBatch(output);
                 }
-                if (GO_AWAY_WARNING.equals(frame)) {
-                    lifecycle.recordInitialGoAwayWritten();
-                }
-                candidate.complete();
-                if (frame instanceof Http2ResetStreamFrame) {
-                    stateLock.lock();
-                    try {
-                        if (streamRegistry.removeRejectedRequestBody(frame.streamId())) {
-                            inboundFlowControl.closeStream(frame.streamId());
-                            writeCoordinator.forgetStream(frame.streamId());
-                        }
-                    } finally {
-                        stateLock.unlock();
-                    }
-                }
-                if (protocolError != null && protocolError.errorType() == Http2Level.CONNECTION) {
-                    return true;
-                }
-            } catch (IOException | RuntimeException | Error e) {
-                candidate.fail(e instanceof Exception ? (Exception) e : new IOException("Fatal output failure", e));
-                throw e;
+                if (protocolError != null && protocolError.errorType() == Http2Level.CONNECTION) return true;
+            }
+            // Includes a flow-control stall: already-ready output must reach the peer
+            // before waiting for credit, new commands, or application progress.
+            flushWriteBatch(output);
+            return false;
+        } catch (IOException | RuntimeException | Error e) {
+            Exception failure = e instanceof Exception ? (Exception) e : new IOException("Fatal output failure", e);
+            if (active != null) active.fail(failure);
+            for (BatchFrame entry : pendingWriteBatch) entry.candidate.fail(failure);
+            pendingWriteBatch.clear();
+            output.discard();
+            throw e;
+        }
+    }
+
+    private void flushWriteBatch(Http2WriteBatch output) throws IOException {
+        if (!pendingWriteBatch.isEmpty()) output.flush();
+    }
+
+    private void publishBatchFrames() {
+        long written = Objects.requireNonNull(writeBatch).writtenBytes();
+        for (BatchFrame entry : pendingWriteBatch) {
+            if (!entry.published && entry.endOffset <= written) {
+                // Buffered acceptance is not transport publication. Keep admission
+                // until the final bytes have actually been handed to the output.
+                entry.candidate.publishAfterWrite(entry.frame);
+                entry.published = true;
             }
         }
-        return false;
+    }
+
+    private void completeBatchFrames() throws IOException {
+        long flushed = Objects.requireNonNull(writeBatch).flushedBytes();
+        while (!pendingWriteBatch.isEmpty()) {
+            BatchFrame entry = pendingWriteBatch.get(0);
+            if (entry.endOffset > flushed) break;
+            if (entry.settingsAck != null) startSettingsAckTimeout(entry.settingsAck);
+            if (GO_AWAY_WARNING.equals(entry.frame)) lifecycle.recordInitialGoAwayWritten();
+            entry.candidate.complete();
+            if (entry.frame instanceof Http2ResetStreamFrame) {
+                stateLock.lock();
+                try {
+                    if (streamRegistry.removeRejectedRequestBody(entry.frame.streamId())) {
+                        inboundFlowControl.closeStream(entry.frame.streamId());
+                        writeCoordinator.forgetStream(entry.frame.streamId());
+                    }
+                } finally {
+                    stateLock.unlock();
+                }
+            }
+            pendingWriteBatch.remove(0);
+        }
     }
 
     private LogicalHttp2Frame prepareCoordinatorErrorFrame(Http2Exception error) {
