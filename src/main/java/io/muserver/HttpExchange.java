@@ -271,10 +271,10 @@ class HttpExchange implements ResponseInfo, Exchange {
                                HttpRequest nettyRequest, NettyHandlerAdapter nettyHandlerAdapter, MuStatsImpl connectionStats,
                                RequestStateChangeListener requestStateChangeListener, HttpExchangeStateChangeListener stateChangeListener) throws InvalidHttpRequestException, RedirectException {
         ServerSettings settings = server.settings();
-        throwIfInvalid(settings, ctx, nettyRequest);
+        Http1Headers headers = new Http1Headers(nettyRequest.headers());
+        throwIfInvalid(settings, ctx, nettyRequest, headers);
 
         Method method = getMethod(nettyRequest.method());
-        Http1Headers headers = new Http1Headers(nettyRequest.headers());
 
         String relativeUri = getRelativeUrl(nettyRequest.uri());
 
@@ -343,7 +343,7 @@ class HttpExchange implements ResponseInfo, Exchange {
         return method;
     }
 
-    private static void throwIfInvalid(ServerSettings settings, ChannelHandlerContext ctx, HttpRequest nettyRequest) throws InvalidHttpRequestException {
+    private static void throwIfInvalid(ServerSettings settings, ChannelHandlerContext ctx, HttpRequest nettyRequest, Headers headers) throws InvalidHttpRequestException {
         if (nettyRequest.decoderResult().isFailure()) {
             Throwable cause = nettyRequest.decoderResult().cause();
             if (cause instanceof TooLongFrameException) {
@@ -358,7 +358,7 @@ class HttpExchange implements ResponseInfo, Exchange {
             throw new InvalidHttpRequestException(500, "Invalid HTTP request received");
         }
 
-        QueryRequestValidation.validate(nettyRequest.method(), nettyRequest.headers());
+        QueryRequestValidation.validate(nettyRequest.method(), headers);
 
         String contentLenDecl = nettyRequest.headers().get("Content-Length");
         if (HttpUtil.is100ContinueExpected(nettyRequest)) {

@@ -1,6 +1,5 @@
 package io.muserver;
 
-import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -14,7 +13,7 @@ final class QueryRequestValidation {
     private static final Pattern CONTENT_TYPE = Pattern.compile(
         "[\\t ]*+" + TOKEN + "/" + TOKEN + "[\\t ]*+(?:;[\\t ]*+(?:" + TOKEN + "=(?:" + TOKEN + "|" + QUOTED + "))?[\\t ]*+)*+");
 
-    static void validate(HttpMethod method, HttpHeaders headers) throws InvalidHttpRequestException {
+    static void validate(HttpMethod method, Headers headers) throws InvalidHttpRequestException {
         if (!"QUERY".equals(method.name())) return;
         List<String> values = headers.getAll(HeaderNames.CONTENT_TYPE);
         if (values.size() != 1 || !CONTENT_TYPE.matcher(values.get(0)).matches()) {
