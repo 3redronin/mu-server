@@ -240,14 +240,7 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
                 throw new InvalidHttpRequestException(414, "414 Request-URI Too Long");
             }
 
-            String host;
-            try {
-                host = Http2RequestValidation.authority(streamId, headers);
-            } catch (Http2Exception e) {
-                connectionStats.onInvalidRequest();
-                server.stats.onInvalidRequest();
-                throw e;
-            }
+            String host = Http2RequestValidation.authority(streamId, headers);
             long bodyLen = endOfStream ? -1L : headers.getLong(HeaderNames.CONTENT_LENGTH, -1L);
             boolean hasRequestBody = !endOfStream && bodyLen != 0;
             Http2Headers muHeaders = new Http2Headers(headers, hasRequestBody);
@@ -257,7 +250,12 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
             }
             muHeaders.set(HeaderNames.HOST, host);
             HttpRequest nettyReq = new Http2To1RequestAdapter(streamId, nettyMeth, uri, headers);
-            NettyRequestAdapter muReq = new NettyRequestAdapter(ctx, nettyReq, muHeaders, muMethod, "https", uri, host);
+            NettyRequestAdapter muReq;
+            try {
+                muReq = new NettyRequestAdapter(ctx, nettyReq, muHeaders, muMethod, "https", uri, host);
+            } catch (IllegalArgumentException e) {
+                throw Http2Exception.streamError(streamId, Http2Error.PROTOCOL_ERROR, e, "Invalid request URI");
+            }
 
             Http2Response resp = new Http2Response(ctx, muReq, new Http2Headers(), encoder(), streamId, settings);
             HttpExchange httpExchange = new HttpExchange(this, ctx, muReq, resp, streamId);
@@ -304,6 +302,10 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
                 throw new InvalidHttpRequestException(503, "503 Service Unavailable");
             }
 
+        } catch (Http2Exception e) {
+            connectionStats.onInvalidRequest();
+            server.stats.onInvalidRequest();
+            throw e;
         } catch (InvalidHttpRequestException ihr) {
             if (ihr.code == 429 || ihr.code == 503) {
                 connectionStats.onRejectedDueToOverload();
