@@ -72,11 +72,13 @@ class Http2To1RequestAdapter implements HttpRequest {
     @Override
     public HttpHeaders headers() {
         if (http1Headers == null) {
+            // Only consumers of Netty's HTTP/1 API (such as multipart decoding) need this copy.
+            // Incoming HTTP/2 validation is performed before application dispatch.
             HttpHeaders adapter = new DefaultHttpHeaders();
             try {
                 HttpConversionUtil.addHttp2ToHttpHeaders(streamId, headers, adapter, HttpVersion.HTTP_1_1, false, true);
             } catch (Http2Exception e) {
-                throw new MuException("Error while preparing headers for multipart form upload");
+                throw new MuException("Error converting HTTP/2 headers to HTTP/1 headers", e);
             }
             http1Headers = adapter;
         }

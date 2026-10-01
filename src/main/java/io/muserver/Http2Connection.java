@@ -240,20 +240,23 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
                 throw new InvalidHttpRequestException(414, "414 Request-URI Too Long");
             }
 
-            HttpRequest nettyReq = new Http2To1RequestAdapter(streamId, nettyMeth, uri, headers);
-            QueryRequestValidation.validate(nettyMeth, nettyReq.headers());
-            boolean hasRequestBody = !endOfStream;
-            if (hasRequestBody) {
-                long bodyLen = headers.getLong(HeaderNames.CONTENT_LENGTH, -1L);
-                if (bodyLen == 0) {
-                    hasRequestBody = false;
-                } else if (bodyLen > settings.maxRequestSize) {
-                    throw new InvalidHttpRequestException(413, "413 Payload Too Large");
-                }
+            String host;
+            try {
+                host = Http2RequestValidation.authority(streamId, headers);
+            } catch (Http2Exception e) {
+                connectionStats.onInvalidRequest();
+                server.stats.onInvalidRequest();
+                throw e;
             }
+            long bodyLen = endOfStream ? -1L : headers.getLong(HeaderNames.CONTENT_LENGTH, -1L);
+            boolean hasRequestBody = !endOfStream && bodyLen != 0;
             Http2Headers muHeaders = new Http2Headers(headers, hasRequestBody);
-            String host = headers.authority().toString();
+            QueryRequestValidation.validate(nettyMeth, muHeaders);
+            if (hasRequestBody && bodyLen > settings.maxRequestSize) {
+                throw new InvalidHttpRequestException(413, "413 Payload Too Large");
+            }
             muHeaders.set(HeaderNames.HOST, host);
+            HttpRequest nettyReq = new Http2To1RequestAdapter(streamId, nettyMeth, uri, headers);
             NettyRequestAdapter muReq = new NettyRequestAdapter(ctx, nettyReq, muHeaders, muMethod, "https", uri, host);
 
             Http2Response resp = new Http2Response(ctx, muReq, new Http2Headers(), encoder(), streamId, settings);
