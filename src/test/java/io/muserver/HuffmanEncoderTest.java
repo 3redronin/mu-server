@@ -33,7 +33,7 @@ class HuffmanEncoderTest {
 
     @Test
     void speedTest() throws IOException {
-        var out = DiscardingOutputStream.INSTANCE;
+        var out = new DiscardingOutputStream();
         for (int i = 0; i < 1000; i++) {
             var s = "1".repeat(i);
             out.write(s.getBytes(StandardCharsets.US_ASCII));

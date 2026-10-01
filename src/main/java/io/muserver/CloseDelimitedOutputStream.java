@@ -14,21 +14,25 @@ class CloseDelimitedOutputStream extends OutputStream {
 
     @Override
     public void write(int b) throws IOException {
+        ensureOpen();
         out.write(b);
     }
 
     @Override
     public void write(byte[] b) throws IOException {
+        ensureOpen();
         out.write(b);
     }
 
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
+        ensureOpen();
         out.write(b, off, len);
     }
 
     @Override
     public void flush() throws IOException {
+        ensureOpen();
         out.flush();
     }
 
@@ -37,5 +41,8 @@ class CloseDelimitedOutputStream extends OutputStream {
         if (isClosed.compareAndSet(false, true)) {
             out.flush();
         }
+    }
+    private void ensureOpen() throws IOException {
+        if (isClosed.get()) throw new IOException("Response output stream is closed");
     }
 }

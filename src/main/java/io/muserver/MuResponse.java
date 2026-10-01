@@ -120,6 +120,8 @@ public interface MuResponse {
     /**
      * <p>Gets a buffered output stream that can send data to the client.</p>
      * <p>To set the size of the buffer, use {@link #outputStream(int)} instead.</p>
+     * <p>After closing the returned stream, writing or flushing it throws {@link java.io.IOException}.
+     * Closing it again is harmless.</p>
      * <p>If you are writing text, you may prefer the {@link #writer()} or {@link #sendChunk(String)} methods.</p>
      * @return An output stream to send data to the client.
      * @throws IllegalStateException if the response has completed
@@ -128,6 +130,8 @@ public interface MuResponse {
 
     /**
      * <p>Gets a buffered output stream that can send data to the client.</p>
+     * <p>After closing the returned stream, writing or flushing it throws {@link java.io.IOException}.
+     * Closing it again is harmless.</p>
      * <p>If you are writing text, you may prefer the {@link #writer()} or {@link #sendChunk(String)} methods.</p>
      * @param bufferSize The size of the output buffer, e.g. 8192, or 0 if you do not want to buffer the response bytes.
      * @return An output stream to send data to the client.
@@ -139,6 +143,7 @@ public interface MuResponse {
      * <p>A print writer that can be used to send text to the client. It is a convenience method, wrapping {@link #outputStream()}
      * in a PrintWriter.</p>
      * <p>You may prefer using {@link #sendChunk(String)} or {@link #write(String)} to send text.</p>
+     * <p>A closed writer reports rejected writes through {@link PrintWriter#checkError()}.</p>
      * @return A print writer that can be used to send text to the client.
      * @throws IllegalStateException if the response has completed
      */

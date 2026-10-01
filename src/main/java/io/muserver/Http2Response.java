@@ -2,7 +2,6 @@ package io.muserver;
 
 import org.jspecify.annotations.Nullable;
 
-import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.InterruptedIOException;
@@ -84,7 +83,7 @@ class Http2Response extends BaseResponse {
         }
         Http2HeadersFrame headers = prepareStatusAndHeaders(false);
         // Match the closed output stream left by write(String), including cleanup.
-        wrappedOut = DiscardingOutputStream.INSTANCE;
+        wrappedOut = DiscardingOutputStream.CLOSED;
         try {
             stream.blockingWrite(new Http2ResponseFrame(headers, true, bytes, 0, bytes.length));
         } catch (InterruptedException e) {
@@ -150,13 +149,14 @@ class Http2Response extends BaseResponse {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        OutputStream os = suppressContent() ? DiscardingOutputStream.INSTANCE
+        OutputStream os = suppressContent() ? new DiscardingOutputStream()
             : new Http2DataFrameOutputStream(stream);
         if (!suppressContent() && bufferSize > 0) {
-            os = new BufferedOutputStream(os, bufferSize);
+            os = new CloseGuardedBufferedOutputStream(os, bufferSize);
         }
         try {
-            wrappedOut = responseEncoder == null ? os : responseEncoder.wrapStream(request, this, os);
+            OutputStream encoded = responseEncoder == null ? os : responseEncoder.wrapStream(request, this, os);
+            wrappedOut = encoded == null ? null : responseEncoder == null ? encoded : new CloseGuardedOutputStream(encoded);
         } catch (IOException e) {
             throw new UncheckedIOException("Error while setting up output stream", e);
         }

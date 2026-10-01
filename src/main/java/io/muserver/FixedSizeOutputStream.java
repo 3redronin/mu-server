@@ -17,6 +17,7 @@ class FixedSizeOutputStream extends OutputStream {
 
     @Override
     public void write(int b) throws IOException {
+        ensureOpen();
         bytesWritten++;
         throwIfOver();
         out.write(b);
@@ -29,6 +30,7 @@ class FixedSizeOutputStream extends OutputStream {
 
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
+        ensureOpen();
         if (len > 0) {
             bytesWritten += len;
             throwIfOver();
@@ -38,6 +40,7 @@ class FixedSizeOutputStream extends OutputStream {
 
     @Override
     public void flush() throws IOException {
+        ensureOpen();
         out.flush();
     }
 
@@ -57,5 +60,9 @@ class FixedSizeOutputStream extends OutputStream {
         if (bytesWritten > declaredLen) {
             throw new HttpException(HttpStatus.INTERNAL_SERVER_ERROR_500, "Fixed size body size of " + declaredLen + " exceeded");
         }
+    }
+
+    private void ensureOpen() throws IOException {
+        if (isClosed.get()) throw new IOException("Response output stream is closed");
     }
 }

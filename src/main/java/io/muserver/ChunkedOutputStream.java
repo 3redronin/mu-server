@@ -16,6 +16,7 @@ class ChunkedOutputStream extends OutputStream {
     }
     @Override
     public void write(int b) throws IOException {
+        ensureOpen();
         // write an HTTP chunk with size=1
         var array = new byte[6];
         array[0] = '1';
@@ -34,6 +35,7 @@ class ChunkedOutputStream extends OutputStream {
 
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
+        ensureOpen();
         if (len > 0) {
             byte[] lenBytes = Integer.toString(len, 16).getBytes(StandardCharsets.US_ASCII);
             out.write(lenBytes, 0, lenBytes.length);
@@ -45,6 +47,7 @@ class ChunkedOutputStream extends OutputStream {
 
     @Override
     public void flush() throws IOException {
+        ensureOpen();
         out.flush();
     }
 
@@ -80,4 +83,7 @@ class ChunkedOutputStream extends OutputStream {
     }
 
 
+    private void ensureOpen() throws IOException {
+        if (isClosed.get()) throw new IOException("Response output stream is closed");
+    }
 }
