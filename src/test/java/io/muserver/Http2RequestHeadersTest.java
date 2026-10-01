@@ -78,7 +78,7 @@ public class Http2RequestHeadersTest {
     }
 
     @Test
-    public void equivalentAuthoritiesAreNormalizedForTheApplication() throws Exception {
+    public void matchingAuthoritiesUseTheSelectedValueForTheApplication() throws Exception {
         server = httpsServerForTest().withHttp2Config(Http2ConfigBuilder.http2Enabled()).withGzipEnabled(false)
             .addHandler((request, response) -> {
                 response.write(request.headers().get("host") + "|" + request.uri().getRawAuthority()
@@ -89,10 +89,10 @@ public class Http2RequestHeadersTest {
             for (String[] example : new String[][]{
                 {"Example.test"},
                 {"Example.test", "Example.test"},
-                {"Example.test", "example.test:443", "EXAMPLE.TEST"},
-                {"example.test:8443", "EXAMPLE.TEST:08443"},
-                {"[2001:db8::1]", "[2001:0DB8:0:0:0:0:0:1]:443"},
-                {null, "Example.test:443", "example.test"}
+                {"Example.test", "example.test", "EXAMPLE.TEST"},
+                {"example.test:8443", "EXAMPLE.TEST:8443"},
+                {"[2001:db8::1]:443", "[2001:DB8::1]:443"},
+                {null, "Example.test:443", "example.test:443"}
             }) {
                 String selected = example[0] == null ? example[1] : example[0];
                 String[] hosts = java.util.Arrays.copyOfRange(example, 1, example.length);
@@ -103,7 +103,7 @@ public class Http2RequestHeadersTest {
     }
 
     @Test
-    public void malformedAuthoritiesDoNotCloseTheConnection() throws Exception {
+    public void invalidAuthoritiesDoNotCloseTheConnection() throws Exception {
         startAcceptingServer();
         try (Client client = new Client(server)) {
             for (String authority : new String[]{null, "user@example.test", "example.test/path", "example.test?query",
@@ -112,6 +112,13 @@ public class Http2RequestHeadersTest {
             }
             assertReset(client.stream(headers("GET", "example.test", "example.test", "different.test"), false));
             assertReset(client.stream(headers("GET", null, "example.test", "different.test"), false));
+            for (String[] mismatch : new String[][]{
+                {"example.test", "example.test:443"},
+                {"example.test:443", "example.test:0443"},
+                {"[::1]", "[0:0:0:0:0:0:0:1]"}
+            }) {
+                assertReset(client.stream(headers("GET", mismatch[0], mismatch[1]), false));
+            }
             assertResponse(client.stream(headers("GET", "example.test"), false), "accepted");
         }
     }
@@ -139,14 +146,14 @@ public class Http2RequestHeadersTest {
             }).start();
         try (Client client = new Client(server)) {
             for (String authority : new String[]{"Example.test", null}) {
-                List<Header> headers = headers("POST", authority, "example.test:443", "EXAMPLE.TEST");
+                List<Header> headers = headers("POST", authority, "example.test", "EXAMPLE.TEST");
                 headers.add(new Header("content-type", "multipart/form-data; boundary=example-boundary"));
                 Http2Stream stream = client.stream(headers, true);
                 Buffer body = new Buffer().writeUtf8("--example-boundary\r\n"
                     + "Content-Disposition: form-data; name=\"field\"\r\n\r\nvalue\r\n--example-boundary--\r\n");
                 stream.getSink().write(body, body.size());
                 stream.getSink().close();
-                assertResponse(stream, "value|" + (authority == null ? "example.test:443" : authority));
+                assertResponse(stream, "value|" + (authority == null ? "example.test" : authority));
             }
         }
     }

@@ -2,18 +2,21 @@ package io.muserver;
 
 import io.netty.handler.codec.http2.Http2Exception;
 import io.netty.handler.codec.http2.Http2Headers;
-import io.netty.util.NetUtil;
+import io.netty.util.AsciiString;
 
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.Arrays;
-import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static io.netty.handler.codec.http2.Http2Error.PROTOCOL_ERROR;
 import static io.netty.handler.codec.http2.Http2Exception.streamError;
 
 /** Checks authority semantics that Netty's HTTP/2 decoder does not validate. */
 final class Http2RequestValidation {
+    // URI validates host syntax; this restricts ports to ASCII digits and excludes IPv6 zones.
+    private static final Pattern AUTHORITY = Pattern.compile("(?:\\[[^%]+\\]|[^:\\[\\]]+)(?::([0-9]*))?");
+
     private Http2RequestValidation() { }
 
     /** Must run before Host is replaced with :authority in the shared headers. */
@@ -27,12 +30,9 @@ final class Http2RequestValidation {
         }
         String selected = authority.toString();
         try {
-            CharSequence scheme = headers.scheme();
-            int defaultPort = "https".equalsIgnoreCase(String.valueOf(scheme)) ? 443
-                : "http".equalsIgnoreCase(String.valueOf(scheme)) ? 80 : -1;
-            Authority expected = new Authority(selected, defaultPort);
+            validate(selected);
             for (CharSequence host : headers.getAll(HeaderNames.HOST)) {
-                if (!expected.matches(new Authority(host.toString(), defaultPort))) {
+                if (!AsciiString.contentEqualsIgnoreCase(selected, host)) {
                     throw streamError(streamId, PROTOCOL_ERROR, "Conflicting :authority and Host values");
                 }
             }
@@ -42,53 +42,16 @@ final class Http2RequestValidation {
         return selected;
     }
 
-    private static final class Authority {
-        private final String host;
-        private final int port;
-
-        private Authority(String value, int defaultPort) throws URISyntaxException {
-            // URI checks escaping and authority syntax without resolving a hostname. Checking the
-            // complete raw authority also rejects path, query, fragment and userinfo injection.
-            URI uri = new URI("http://" + value);
-            if (!value.equals(uri.getRawAuthority()) || value.indexOf('@') >= 0) {
-                throw new IllegalArgumentException("Expected a host and optional port");
-            }
-            int portSeparator;
-            if (value.startsWith("[")) {
-                int end = value.indexOf(']');
-                String literal = value.substring(1, end);
-                // Zone identifiers are not part of an HTTP URI host. Do not silently discard one.
-                if (literal.indexOf('%') >= 0) {
-                    throw new IllegalArgumentException("Invalid IPv6 host");
-                }
-                host = Arrays.toString(NetUtil.createByteArrayFromIpAddressString(literal));
-                portSeparator = end + 1;
-            } else {
-                int colon = value.indexOf(':');
-                portSeparator = colon < 0 ? value.length() : colon;
-                host = value.substring(0, portSeparator).toLowerCase(Locale.ROOT);
-                if (host.isEmpty()) {
-                    throw new IllegalArgumentException("Empty host");
-                }
-            }
-            int parsedPort = defaultPort;
-            if (portSeparator < value.length()) {
-                String digits = value.substring(portSeparator + 1);
-                if (!digits.isEmpty()) {
-                    if (!digits.chars().allMatch(digit -> digit >= '0' && digit <= '9')) {
-                        throw new IllegalArgumentException("Invalid port");
-                    }
-                    parsedPort = Integer.parseInt(digits);
-                    if (parsedPort > 65535) {
-                        throw new IllegalArgumentException("Port out of range");
-                    }
-                }
-            }
-            port = parsedPort;
+    private static void validate(String value) throws URISyntaxException {
+        URI uri = new URI("http://" + value);
+        Matcher authority = AUTHORITY.matcher(value);
+        // Checking the complete raw authority rejects path, query and fragment injection.
+        if (!value.equals(uri.getRawAuthority()) || value.indexOf('@') >= 0 || !authority.matches()) {
+            throw new IllegalArgumentException("Expected a host and optional port");
         }
-
-        private boolean matches(Authority other) {
-            return host.equals(other.host) && port == other.port;
+        String port = authority.group(1);
+        if (port != null && !port.isEmpty() && Integer.parseInt(port) > 65535) {
+            throw new IllegalArgumentException("Port out of range");
         }
     }
 }
