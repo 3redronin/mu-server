@@ -53,16 +53,16 @@ class Http2WriteBatchTest {
         var batch = new Http2WriteBatch(output, () -> {}, () -> order.add("complete"));
         batch.write(1);
         batch.write(large);
-        assertEquals(List.of("write:1", "flush", "complete", "write:16384"), order);
+        assertEquals(List.of("write:1", "flush", "complete", "write:" + Http2WriteBatch.MAX_BYTES), order);
         assertSame(large, identities.get(1));
         assertEquals(1, batch.flushedBytes());
         batch.flush();
-        assertEquals(16385, batch.flushedBytes());
+        assertEquals(Http2WriteBatch.MAX_BYTES + 1, batch.flushedBytes());
     }
 
     @Test
     void largeBulkWritesBypassAnEmptyBufferButCombineWithPrecedingBytes() throws Exception {
-        var bulk = new byte[Http2WriteBatch.MAX_BYTES / 2];
+        var bulk = new byte[8192];
         var writes = new ArrayList<Integer>();
         var output = new OutputStream() {
             @Override public void write(int value) { fail("Expected bulk output"); }
@@ -79,6 +79,47 @@ class Http2WriteBatchTest {
         assertEquals(List.of(bulk.length), writes);
         batch.flush();
         assertEquals(List.of(bulk.length, bulk.length + 1), writes);
+    }
+
+    @Test
+    void defaultResponseChunkAndFrameHeaderShareOneWrite() throws Exception {
+        var writes = new ArrayList<Integer>();
+        var wire = new ByteArrayOutputStream() {
+            @Override public void write(byte[] bytes, int offset, int length) {
+                writes.add(length);
+                super.write(bytes, offset, length);
+            }
+        };
+        var batch = new Http2WriteBatch(wire, () -> {}, () -> {});
+        var header = new byte[9];
+        var body = new byte[8192];
+        java.util.Arrays.fill(header, (byte) 1);
+        java.util.Arrays.fill(body, (byte) 2);
+        batch.write(header);
+        batch.write(body);
+        assertTrue(writes.isEmpty());
+        batch.flush();
+        assertEquals(List.of(8201), writes);
+        var expected = new ByteArrayOutputStream();
+        expected.write(header);
+        expected.write(body);
+        assertArrayEquals(expected.toByteArray(), wire.toByteArray());
+    }
+
+    @Test
+    void bypassThresholdRemainsEightKiBWhenTheBatchLimitChanges() throws Exception {
+        var writes = new ArrayList<Integer>();
+        var output = new OutputStream() {
+            @Override public void write(int value) { fail("Expected bulk output"); }
+            @Override public void write(byte[] bytes, int offset, int length) { writes.add(length); }
+        };
+        var batch = new Http2WriteBatch(output, () -> {}, () -> {});
+        batch.write(new byte[8191]);
+        assertTrue(writes.isEmpty());
+        batch.flush();
+        assertEquals(List.of(8191), writes);
+        batch.write(new byte[8192]);
+        assertEquals(List.of(8191, 8192), writes);
     }
 
     @Test

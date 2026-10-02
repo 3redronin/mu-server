@@ -6,7 +6,9 @@ import java.util.Objects;
 
 /** A bounded buffer owned exclusively by the connection writer. */
 final class Http2WriteBatch extends OutputStream {
-    static final int MAX_BYTES = 16_384;
+    // Leave room for the default 8 KiB response chunk and its frame header.
+    static final int MAX_BYTES = 9_216;
+    private static final int DIRECT_WRITE_MIN_BYTES = 8_192;
     private final OutputStream out;
     private final Runnable afterWrite;
     @FunctionalInterface
@@ -42,7 +44,7 @@ final class Http2WriteBatch extends OutputStream {
         Objects.checkFromIndexSize(offset, length, bytes.length);
         // An already-consolidated large write needs no retained scratch buffer.
         // Keep buffering when there are preceding bytes that can share its write.
-        if (length >= MAX_BYTES || (count == 0 && length >= MAX_BYTES / 2)) {
+        if (length >= MAX_BYTES || (count == 0 && length >= DIRECT_WRITE_MIN_BYTES)) {
             flush();
             out.write(bytes, offset, length);
             acceptedBytes += length;
