@@ -352,7 +352,6 @@ class Http2Stream implements ResponseInfo {
         var iter = headers.lineIterator().iterator();
         Long cl = null;
         HeaderString authority = null;
-        HeaderString host = null;
         Method method = null;
         HeaderString path = null;
         HeaderString scheme = null;
@@ -393,9 +392,6 @@ class Http2Stream implements ResponseInfo {
                 if (scheme != null) throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "double :scheme", id);
                 scheme = line.value();
                 iter.remove();
-            } else if (HeaderNames.HOST.equals(n)) {
-                if (host != null) throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "double host", id);
-                host = line.value();
             } else if (HeaderNames.CONTENT_LENGTH.equals(n)) {
                 long len;
                 try {
@@ -423,14 +419,11 @@ class Http2Stream implements ResponseInfo {
         if (path.length() == 0) {
             throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "empty :path pseudo-header", id);
         }
+        String host = Http2RequestValidation.authority(id, authority, headers);
+        Http2RequestValidation.validateUri(id, connection.creator.uri().getScheme(), host, path.toString());
         QueryRequestValidation.validate(method, headers);
-        if (authority != null) {
-            if (host != null && !authority.contentEquals(host, true)) {
-                throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "host differs from :authority", id);
-            }
-            // Downstream URI construction uses Host; the HTTP/2 request target uses :authority.
-            headers.set(HeaderNames.HOST, authority);
-        }
+        // Downstream URI construction and multipart parsing use the selected authority.
+        headers.set(HeaderNames.HOST, host);
 
         var cookies = new ArrayList<String>(2);
         cookies.addAll(headers.getAll(HeaderNames.COOKIE));

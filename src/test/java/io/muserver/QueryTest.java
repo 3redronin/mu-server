@@ -177,6 +177,18 @@ public class QueryTest {
         try (Response response = call(request(server.uri()))) { assertEquals(301, response.code()); }
     }
 
+    @Test public void invalidContentTypeIsRejectedBeforeTheBodySizeLimitOnBothProtocols() throws Exception {
+        server = httpsServerForTest().withHttp2Config(Http2ConfigBuilder.http2EnabledIfAvailable()).withMaxRequestSize(3)
+            .addHandler((req, resp) -> { fail("Invalid QUERY must not reach the handler"); return true; }).start();
+        for (Protocol protocol : Arrays.asList(Protocol.HTTP_1_1, Protocol.HTTP_2)) {
+            try (Response response = call(clientFor(protocol), request(server.uri())
+                .header("Content-Type", "invalid").method("QUERY", RequestBody.create("too large", (MediaType) null)))) {
+                assertEquals(protocol, response.protocol());
+                assertEquals(400, response.code());
+            }
+        }
+    }
+
     @Test public void sizeLimitsApplyToQuery() throws Exception {
         server = httpsServerForTest().withHttp2Config(Http2ConfigBuilder.http2EnabledIfAvailable()).withMaxRequestSize(3)
             .addHandler((req, resp) -> { resp.write(req.readBodyAsString()); return true; }).start();

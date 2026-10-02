@@ -3,6 +3,26 @@ package io.muserver;
 import org.junit.jupiter.api.Test;
 
 public class QueryRequestValidationTest {
+    @Test public void contentTypeRulesApplyToQuery() {
+        FieldBlock headers = new FieldBlock();
+        org.junit.jupiter.api.Assertions.assertThrows(HttpException.class,
+            () -> QueryRequestValidation.validate(Method.QUERY, headers));
+        for (String value : new String[]{"text/plain", "application/json; charset=UTF-8"}) {
+            headers.set(HeaderNames.CONTENT_TYPE, value);
+            QueryRequestValidation.validate(Method.QUERY, headers);
+        }
+        for (String value : new String[]{"", "invalid", "text/*", "*/*", "text/plain; charset="}) {
+            headers.set(HeaderNames.CONTENT_TYPE, value);
+            org.junit.jupiter.api.Assertions.assertThrows(HttpException.class,
+                () -> QueryRequestValidation.validate(Method.QUERY, headers));
+            QueryRequestValidation.validate(Method.GET, headers);
+            QueryRequestValidation.validate(Method.POST, headers);
+        }
+        headers.set(HeaderNames.CONTENT_TYPE, "text/plain").add(HeaderNames.CONTENT_TYPE, "text/plain");
+        org.junit.jupiter.api.Assertions.assertThrows(HttpException.class,
+            () -> QueryRequestValidation.validate(Method.QUERY, headers));
+    }
+
     @Test public void emptyParametersAreValidButIncompleteNameValuePairsAreNot() throws Exception {
         for (String value : new String[]{"text/plain;", "text/plain;;;", "text/plain; ;charset=UTF-8;;"}) {
             QueryRequestValidation.validate(Method.QUERY, headers(value));

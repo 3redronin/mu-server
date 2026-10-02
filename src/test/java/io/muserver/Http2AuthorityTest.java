@@ -6,7 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
-import static io.muserver.FieldConformanceFixtures.assertInitialRejection;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static io.muserver.FieldConformanceFixtures.untilReset;
 import static io.muserver.MuServerBuilder.httpsServer;
 import static io.muserver.RFCTestUtils.encodeFieldBlock;
@@ -49,7 +50,10 @@ class Http2AuthorityTest {
         server = server();
         try (var client = new H2Client(); var con = client.connect(server)) {
             con.handshake().writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers(authority, host)))).flush();
-            assertInitialRejection(untilReset(con, 1), 1);
+            var frames = untilReset(con, 1);
+            assertFalse(frames.stream().anyMatch(frame -> frame instanceof Http2HeadersFrame || frame instanceof Http2GoAway));
+            assertEquals(Http2ErrorCode.PROTOCOL_ERROR,
+                ((Http2ResetStreamFrame) frames.get(frames.size() - 1)).errorCodeEnum());
 
             con.writeRaw(headersFrame(3, true, true, encodeFieldBlock(headers("alpha.example", "alpha.example")))).flush();
             assertThat(readIgnoringWindowUpdates(con, Http2HeadersFrame.class).headers().get(":status"), equalTo("200"));
@@ -70,11 +74,12 @@ class Http2AuthorityTest {
     }
 
     @Test
-    void neitherAuthorityNorHostIsRejectedByRequestVerifier() throws Exception {
+    void neitherAuthorityNorHostResetsTheStream() throws Exception {
         server = server();
         try (var client = new H2Client(); var con = client.connect(server)) {
             con.handshake().writeRaw(headersFrame(1, true, true, encodeFieldBlock(headers(null, null)))).flush();
-            assertThat(readIgnoringWindowUpdates(con, Http2HeadersFrame.class).headers().get(":status"), equalTo("400"));
+            assertEquals(Http2ErrorCode.PROTOCOL_ERROR,
+                readIgnoringWindowUpdates(con, Http2ResetStreamFrame.class).errorCodeEnum());
         }
     }
 

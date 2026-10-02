@@ -1200,6 +1200,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     newStreamAdmitted = true;
                     startRequest(headerFragment);
                 }
+            } catch (Http2RequestValidation.InvalidAuthorityException invalidAuthority) {
+                invalidHttpRequests.incrementAndGet();
+                server.getStatsImpl().onInvalidRequest();
+                throw invalidAuthority;
             } catch (Http2Exception malformedRequest) {
                 if (malformedRequest.errorType() != Http2Level.STREAM
                     || malformedRequest.errorCode() != Http2ErrorCode.PROTOCOL_ERROR) {
