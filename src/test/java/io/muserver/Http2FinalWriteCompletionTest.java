@@ -20,7 +20,7 @@ import static scaffolding.ServerUtils.httpsServerForTest;
 @Timeout(20)
 class Http2FinalWriteCompletionTest {
     static Stream<Arguments> finalWrites() {
-        return Stream.of(0, 1, 2).flatMap(frameKind -> Stream.of(false, true).flatMap(duringFlush ->
+        return Stream.of(0, 1, 2, 3).flatMap(frameKind -> Stream.of(false, true).flatMap(duringFlush ->
             Stream.of(false, true).map(fail -> Arguments.of(frameKind, duringFlush, fail))));
     }
 
@@ -50,8 +50,9 @@ class Http2FinalWriteCompletionTest {
                 var headers = new FieldBlock();
                 headers.set(":status", dataFrame ? "200" : "304");
                 if (frameKind == 1) writer.write(new Http2HeadersFrame(1, false, headers));
-                var finalWrite = new WriteTask(frameKind == 2
-                    ? new Http2ResponseFrame(new Http2HeadersFrame(1, false, headers), true, new byte[] {1}, 0, 1)
+                int bodySize = frameKind == 3 ? 8192 : 1;
+                var finalWrite = new WriteTask(frameKind >= 2
+                    ? new Http2ResponseFrame(new Http2HeadersFrame(1, false, headers), true, new byte[bodySize], 0, bodySize)
                     : dataFrame ? Http2DataFrame.eos(1)
                     : new Http2HeadersFrame(1, true, headers), true);
                 writer.write(finalWrite);

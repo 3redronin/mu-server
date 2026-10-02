@@ -67,6 +67,7 @@ final class Http2WriteCoordinator {
 
         boolean beginWrite() {
             if (task.beginWrite()) {
+                inFlightWrites.add(this);
                 if (frame.endStream()) {
                     Http2Stream stream = applicationStreams.get(frame.streamId());
                     if (stream != null) stream.onLocalEndStreamWriting();
@@ -83,11 +84,13 @@ final class Http2WriteCoordinator {
         }
 
         void complete() {
+            inFlightWrites.remove(this);
             if (completesTask) onWriteCompleted(frame);
             task.finishPart(completesTask);
         }
 
         void fail(Exception reason) {
+            inFlightWrites.remove(this);
             if (frame.endStream()) {
                 Http2Stream stream = applicationStreams.get(frame.streamId());
                 if (stream != null) stream.onLocalEndStreamWriteFailed();
@@ -236,6 +239,7 @@ final class Http2WriteCoordinator {
     private final BlockingQueue<Command> mailbox = new LinkedBlockingQueue<>();
     private final Runnable commandQueued;
     private final ArrayDeque<PendingWrite> pendingWrites = new ArrayDeque<>();
+    private final ArrayList<WritableFrame> inFlightWrites = new ArrayList<>();
     private final Set<Integer> peerResetStreams = new HashSet<>();
     private final Set<Integer> retainedLocalResetStreams = new HashSet<>();
     private final Set<Integer> localResetsPendingWrite = new HashSet<>();
@@ -496,7 +500,7 @@ final class Http2WriteCoordinator {
     }
 
     boolean isIdle() {
-        return mailbox.isEmpty() && pendingWrites.isEmpty();
+        return mailbox.isEmpty() && pendingWrites.isEmpty() && inFlightWrites.isEmpty();
     }
 
     boolean hasCommands() {
@@ -505,6 +509,7 @@ final class Http2WriteCoordinator {
 
     void failAll(Exception reason) {
         processAvailableCommands();
+        while (!inFlightWrites.isEmpty()) inFlightWrites.get(0).fail(reason);
         PendingWrite pending;
         while ((pending = pendingWrites.poll()) != null) {
             pending.task.fail(reason);
@@ -785,6 +790,9 @@ final class Http2WriteCoordinator {
     }
 
     private boolean hasPendingReset(int streamId) {
+        for (WritableFrame writing : inFlightWrites) {
+            if (writing.frame.streamId() == streamId && writing.frame instanceof Http2ResetStreamFrame) return true;
+        }
         for (PendingWrite pending : pendingWrites) {
             LogicalHttp2Frame frame = pending.task.frame();
             if (frame.streamId() == streamId && frame instanceof Http2ResetStreamFrame) {
@@ -795,6 +803,9 @@ final class Http2WriteCoordinator {
     }
 
     private boolean hasPendingWrite(int streamId) {
+        for (WritableFrame writing : inFlightWrites) {
+            if (writing.frame.streamId() == streamId) return true;
+        }
         for (PendingWrite pending : pendingWrites) {
             if (pending.task.frame().streamId() == streamId) {
                 return true;
@@ -804,6 +815,9 @@ final class Http2WriteCoordinator {
     }
 
     private boolean hasPendingEndStreamWrite(int streamId) {
+        for (WritableFrame writing : inFlightWrites) {
+            if (writing.frame.streamId() == streamId && writing.frame.endStream()) return true;
+        }
         for (PendingWrite pending : pendingWrites) {
             LogicalHttp2Frame frame = pending.task.frame();
             if (frame.streamId() == streamId && frame.endStream()) {
