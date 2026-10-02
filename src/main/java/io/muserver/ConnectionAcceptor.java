@@ -174,9 +174,7 @@ class ConnectionAcceptor {
             } catch (Throwable e) {
                 FatalErrors.rethrow(e);
                 if (Thread.interrupted() || e instanceof SocketException) {
-                    log.info("Accept listening stopped");
                 } else {
-                    log.info("Exception when state={}", state, e);
                     if (state == State.STARTED) {
                         log.warn("Error while accepting from {}", this, e);
                     }
@@ -237,7 +235,6 @@ class ConnectionAcceptor {
     private boolean shutdownConnections() {
         closePendingAcceptedSockets();
         List<BaseHttpConnection> active = connectionSnapshot();
-        log.info("Closing server with " + active.size() + " connected connections");
         if (gracefulShutdownDeadlineNanos == Long.MAX_VALUE) {
             gracefulShutdownDeadlineNanos =
                 MonotonicTime.deadlineAfterMillis(
@@ -252,7 +249,6 @@ class ConnectionAcceptor {
         }
         boolean drainedCleanly = awaitConnectionsRetired();
         for (BaseHttpConnection connection : connectionSnapshot()) {
-            log.info("Force closure of active connection {} with requests {}", connection, connection.activeRequests());
             try {
                 connection.abort();
             } catch (IOException e) {
@@ -264,7 +260,6 @@ class ConnectionAcceptor {
         } catch (IOException e) {
             log.warn("Error closing socket server", e);
         }
-        log.info("Closed");
         return drainedCleanly;
     }
 
@@ -342,7 +337,6 @@ class ConnectionAcceptor {
             );
             for (BaseHttpConnection con : connectionSnapshot()) {
                 if (con.hasBeenIdleFor(nowNanos, idleTimeoutNanos)) {
-                    log.info("Timing out {}", con);
                     con.abortWithTimeout();
                 }
             }
@@ -384,7 +378,6 @@ class ConnectionAcceptor {
                     }
                 } finally { lifecycleLock.unlock(); }
             } catch (IOException failure) {
-                log.debug("Rejected PROXY preamble: {}", failure.getMessage());
                 lifecycleLock.lock();
                 try {
                     if (pendingPreambles.remove(socket) != null) server.getStatsImpl().onFailedToConnect();
@@ -417,11 +410,7 @@ class ConnectionAcceptor {
                         secureSocket.setWantClientAuth(false);
                 }
 
-                secureSocket.addHandshakeCompletedListener(event ->
-                    log.debug("Handshake complete {}", event));
-
                 secureSocket.startHandshake();
-                log.debug("Selected protocol is {}", secureSocket.getApplicationProtocol());
 
                 if ("h2".equals(secureSocket.getApplicationProtocol())) {
                     httpVersion = HttpVersion.HTTP_2;
@@ -449,7 +438,6 @@ class ConnectionAcceptor {
                 inputStream = new PushbackInputStream(socket.getInputStream(), Http2Handshaker.clientConnectionPrefaceLength());
                 httpVersion = sniffClearTextHttpVersion(socket, inputStream);
             } catch (IOException e) {
-                log.info("Failed while checking for cleartext HTTP/2 prior knowledge: {}", e.getMessage());
                 return;
             }
         }
@@ -628,7 +616,6 @@ class ConnectionAcceptor {
             if (state == State.STOPPED) {
                 return lastStopWasGraceful;
             }
-            log.info("Stopping server 1");
             if (state != State.STOPPING) {
                 gracefulShutdownDeadlineNanos = callerDeadlineNanos;
                 state = State.STOPPING;
@@ -747,19 +734,13 @@ class ConnectionAcceptor {
             StandardSocketOptions.SO_REUSEPORT, true
         );
 
-        Map<SocketOption<?>, Object> appliedOptions = new HashMap<>();
         for (Map.Entry<SocketOption<?>, Object> entry : requestedOptions.entrySet()) {
             @SuppressWarnings("unchecked")
             SocketOption<Object> key = (SocketOption<Object>) entry.getKey();
             if (supportedOptions.contains(key)) {
                 Object value = entry.getValue();
                 socketServer.setOption(key, value);
-                appliedOptions.put(key, value);
             }
-        }
-
-        for (Map.Entry<SocketOption<?>, Object> entry : appliedOptions.entrySet()) {
-            log.debug("Applied socket option {}={}", entry.getKey(), entry.getValue());
         }
     }
 

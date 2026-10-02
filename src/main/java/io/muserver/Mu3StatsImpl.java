@@ -1,7 +1,5 @@
 package io.muserver;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.Set;
@@ -73,12 +71,9 @@ class Mu3StatsImpl implements MuStats {
         activeRequests.remove(request);
     }
 
-    private static final Logger log = LoggerFactory.getLogger(Mu3StatsImpl.class);
     void onRequestEnded(ResponseInfo exchange) {
         if (activeRequests.remove(exchange.request())) {
             completedRequests.incrementAndGet();
-        } else {
-            log.info("Asked to remove " + exchange.request() + " but it wasn't active");
         }
     }
 
@@ -95,12 +90,10 @@ class Mu3StatsImpl implements MuStats {
     }
 
     void onConnectionOpened(HttpConnection con) {
-        log.info("Connection open: " + con);
         activeConnections.incrementAndGet();
     }
 
     void onConnectionClosed(HttpConnection con) {
-        log.info("Connection closed: " + con);
         activeConnections.decrementAndGet();
         totalConnections.incrementAndGet();
     }

@@ -2,8 +2,6 @@ package io.muserver;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import scaffolding.*;
 
 import java.io.IOException;
@@ -21,7 +19,6 @@ public class SsePublisherTest {
     private MuServer server;
     private final SseClient.OkSse sseClient = new SseClient.OkSse(ClientUtils.client);
     private final TestSseClient listener = new TestSseClient();
-    private static final Logger log = LoggerFactory.getLogger(SsePublisherTest.class);
 
     @Test
     public void canCall() throws InterruptedException {
@@ -48,7 +45,6 @@ public class SsePublisherTest {
                     ssePublisher.send(multilineJson, null, null);
                     ssePublisher.send(multilineJsonWithNewlines, null, null);
                 } catch (Exception e) {
-                    log.info("Error while publishing", e);
                 }
 
             })

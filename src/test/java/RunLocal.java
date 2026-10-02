@@ -6,8 +6,6 @@ import org.example.petstore.resource.PetResource;
 import org.example.petstore.resource.PetStoreResource;
 import org.example.petstore.resource.UserResource;
 import org.example.petstore.resource.VehicleResource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import scaffolding.StringUtils;
 
 import java.io.IOException;
@@ -26,7 +24,6 @@ import static io.muserver.handlers.AsyncFileProviderTest.BIG_FILE_DIR;
 import static io.muserver.handlers.ResourceHandlerBuilder.fileOrClasspath;
 
 public class RunLocal {
-    private static final Logger log = LoggerFactory.getLogger(RunLocal.class);
     private static final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
 
     public static void main(String[] args) {
@@ -91,8 +88,6 @@ public class RunLocal {
                     response.contentType(file.contentType());
                     response.headers().set(HeaderNames.CONTENT_LENGTH, file.size());
                     boolean ticked = request.form().getBoolean("ticked");
-                    log.info("Form parameters: " + request.form().get("blah") + " - " + ticked);
-                    log.info("Going to send " + file.size() + " bytes as " + file.contentType());
                     try (InputStream fileStream = file.asStream();
                          OutputStream out = response.outputStream()) {
                         Mutils.copy(fileStream, out, 8192);
@@ -122,7 +117,6 @@ public class RunLocal {
             })
             .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
                 int startValue = request.headers().getInt(HeaderNames.LAST_EVENT_ID, 1);
-                log.info("Starting event stream at " + startValue);
                 try (SsePublisher ssePublisher = SsePublisher.start(request, response)) {
                     for (int i = startValue; i < startValue + 10; i++) {
                         ssePublisher.send("This is message " + i, null, String.valueOf(i));
@@ -130,7 +124,6 @@ public class RunLocal {
                     }
                 } catch (Exception e) {
                     // the user has probably disconnected; stop publishing
-                    log.info("Error while publishing to event stream", e);
                 }
             })
             .addHandler(Method.GET, "/stats", (request, response, pathParams) -> {
@@ -146,7 +139,6 @@ public class RunLocal {
                 AsyncHandle asyncHandle = req.handleAsync();
                 executor.schedule((Runnable) asyncHandle::complete,
                     req.query().getLong("millis", 5000), TimeUnit.MILLISECONDS);
-                asyncHandle.addResponseCompleteHandler(info -> log.info("Woke up: " + info));
             })
             .addHandler(Method.GET, "/throw-exception", (request, response, pathParams) -> { throw new RuntimeException("A runtime exception"); })
             .withExceptionHandler((request, response, cause) -> {
@@ -154,13 +146,9 @@ public class RunLocal {
                 response.writer().write("Oops, something went wrong: " + cause);
                 return true;
             });
-        log.info("Builder: " + builder);
         MuServer server = builder.start();
 
 
-        log.info("Started at " + server.httpUri() + " and " + server.httpsUri());
-        log.info("REST docs available at " + server.httpUri().resolve("/api.html") + " and OpenAPI JSON at " + server.httpUri().resolve("/openapi.json"));
-        log.info("Download stuff at " + server.uri().resolve("/files"));
 
 
         Runtime.getRuntime().addShutdownHook(new Thread(server::stop));

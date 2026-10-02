@@ -294,13 +294,11 @@ class AsyncFileProvider implements ResourceProvider, CompletionHandler<Integer, 
         try {
             requiredChannel().close();
         } catch (IOException e) {
-            log.debug("Error while closing file channel " + localPath, e);
         }
     }
 
     @Override
     public void failed(Throwable exc, Object a) {
-        log.info("File read failure for " + localPath, exc);
         requiredHandle().complete(exc);
     }
 

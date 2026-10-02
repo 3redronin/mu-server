@@ -307,12 +307,10 @@ public class HttpsConfigBuilder {
                     kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
                     kmf.init(ks, keyPasswordToUse);
                     sanToAliasMap.putAll(buildSanToAliasMap(ks));
-                    log.debug("keystore san to alias mapping: {}", sanToAliasMap);
                 } finally {
                     try {
                         keystoreStream.close();
                     } catch (IOException e) {
-                        log.info("Error while closing keystore stream: " + e.getMessage());
                     }
                 }
 
@@ -338,7 +336,6 @@ public class HttpsConfigBuilder {
             try {
                 keystoreStream.close();
             } catch (IOException e) {
-                log.info("Error while closing keystore stream: " + e.getMessage());
             }
         }
     }

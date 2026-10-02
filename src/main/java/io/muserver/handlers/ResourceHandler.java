@@ -2,8 +2,6 @@ package io.muserver.handlers;
 
 import io.muserver.*;
 import org.jspecify.annotations.Nullable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -22,7 +20,6 @@ import java.util.Map;
  * {@link ResourceHandlerBuilder#classpathHandler(String)}, {@link ResourceHandlerBuilder#fileHandler(File)} or one of its variants.
  */
 public class ResourceHandler implements MuHandler {
-    private static final Logger log = LoggerFactory.getLogger(ResourceHandler.class);
 
     private final Map<String, ResourceType> extensionToResourceType;
     private final @Nullable String defaultFile;
@@ -97,7 +94,6 @@ public class ResourceHandler implements MuHandler {
                         sendBody = false;
                     }
                 } catch (DateTimeParseException e) {
-                    log.info("Ignoring cache check due to invalid If-Modified-Since header value: {}", ims);
                 }
             }
 
@@ -117,13 +113,11 @@ public class ResourceHandler implements MuHandler {
                         }
                     }
                 } catch (IllegalArgumentException e) {
-                    log.info("Ignoring range request due to invalid Range header value: {}", rh);
                 }
             }
             try {
                 provider.sendTo(request, response, sendBody, maxAmountToSend);
             } catch (IOException | IllegalStateException ignored) {
-                log.debug("{} cancelled before full response sent to the client", request);
             }
         }
 

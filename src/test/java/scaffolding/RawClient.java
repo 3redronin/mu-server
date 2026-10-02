@@ -1,7 +1,5 @@
 package scaffolding;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.net.Socket;
@@ -14,7 +12,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class RawClient implements Closeable {
-    private static final Logger log = LoggerFactory.getLogger(RawClient.class);
     private static final ExecutorService executorService = Executors.newCachedThreadPool();
 
     private final ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -44,7 +41,6 @@ public class RawClient implements Closeable {
             int read;
             try {
                 while ((read = response.read(buffer)) > -1) {
-//                    log.info("Got " + read + " bytes: " + new String(buffer, 0, read, UTF_8));
                     if (read > 0) {
                         baos.write(buffer, 0, read);
                     }

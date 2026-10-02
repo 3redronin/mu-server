@@ -7,8 +7,6 @@ import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -31,7 +29,6 @@ import static scaffolding.ClientUtils.request;
 @Timeout(30)
 public class StopTest {
 
-    private static final Logger log = LoggerFactory.getLogger(StopTest.class);
 
     private @Nullable MuServer server;
 
@@ -46,11 +43,9 @@ public class StopTest {
         return MuServerBuilder
             .httpServer()
             .addHandler((request, response) -> {
-                log.info("received request {}", request);
                 serverReceivedLatch.countDown();
 
                 AsyncHandle asyncHandle = request.handleAsync();
-                asyncHandle.addResponseCompleteHandler(info -> log.info("request completed {}", info));
 
                 sendResponseLatch.await();
                 response.status(200);

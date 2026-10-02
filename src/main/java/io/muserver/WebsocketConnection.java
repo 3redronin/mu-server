@@ -213,7 +213,6 @@ class WebsocketConnection implements MuWebSocketSession {
 
 
                 if (closeReceived) {
-                    log.info("Ignoring " + opcode + " message as close received already");
                 } else if (opcode == 0x0) {
                     // continuation frame
                     messageLength += payloadLength;
@@ -275,7 +274,6 @@ class WebsocketConnection implements MuWebSocketSession {
                     }
                     lifecycle.onClientCloseStarted();
                     closeReceived = true;
-                    log.info("Client close: " + closeCode + " " + reason);
                     String closeReason = reason;
                     invokeApplicationEvent(() -> webSocket.onClientClosed(closeCode, closeReason));
                     completeCloseHandshakeIfCloseSent();
@@ -434,7 +432,6 @@ class WebsocketConnection implements MuWebSocketSession {
         enqueueApplicationEvent(webSocket::onServerShuttingDown)
             .whenComplete((ignored, failure) -> {
                 if (failure != null) {
-                    log.info("Error while shutting down WebSocket", failure);
                     httpConnection.forceShutdown();
                 }
             });

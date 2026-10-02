@@ -110,11 +110,9 @@ class Http1Connection extends BaseHttpConnection {
                 } catch (ParseException malformedRequest) {
                     msg = requestParser.rejectInvalidRequest(malformedRequest);
                 } catch (IOException e) {
-                    log.info("Error reading from client input stream " + e.getClass() + " " + e.getMessage());
                     break;
                 }
                 if (MessageBodyBit.isEof(msg)) {
-                    log.info("EOF detected");
 //                    reqStream.closeQuietly() // TODO: confirm if the input stream should be closed
                     markRemoteClosed();
                     clientSocket.shutdownInput();
@@ -448,7 +446,6 @@ class Http1Connection extends BaseHttpConnection {
     void initiateGracefulShutdown() {
         requestLocalShutdown();
         if (isIdle()) {
-            log.info("Connection is idle; shutting down");
             forceShutdown();
         } else {
             var cur = activeExchange.get();
@@ -456,7 +453,6 @@ class Http1Connection extends BaseHttpConnection {
                 try {
                     cur.websocket.onServerShuttingDown();
                 } catch (Exception e) {
-                    log.info("Error while aborting websocket: {}", e.getMessage());
                     forceShutdown();
                 }
             }

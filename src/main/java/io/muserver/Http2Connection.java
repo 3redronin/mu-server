@@ -109,7 +109,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         // Guarded by Http2Connection.this.stateLock.
         private void markLocalShutdownInitiatedLocked() {
             if (writeState == HState.ACTIVE) {
-                log.info("Graceful shutdown initiated with write state {}", writeState);
                 writeState = HState.SHUTDOWN_INITIATED;
                 // As per: https://datatracker.ietf.org/doc/html/rfc9113#section-6.8-18
                 // A server that is attempting to gracefully shut down a connection SHOULD send an initial GOAWAY frame
@@ -187,7 +186,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         private void queueFinalGoAwayLocked() {
             finalGoAwayQueued = true;
             maxAllowedStreamId = lastStreamId;
-            log.info("Queuing final go away with last stream id {}", maxAllowedStreamId);
             writeLocked(new Http2GoAway(maxAllowedStreamId, 0, null));
         }
 
@@ -223,7 +221,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
 
         // Guarded by Http2Connection.this.stateLock.
         private void completeShutdownLocked() {
-            log.info("HTTP/2 connection finished with read state {} and write state {}", readState, writeState);
             writeState = readState == HState.ERRORED ? HState.ERRORED : HState.COMPLETED;
             readState = writeState;
         }
@@ -597,7 +594,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             try {
                 clientSocket.close();
             } catch (IOException e) {
-                log.debug("Error closing HTTP/2 socket", e);
             }
         }
     }
@@ -698,7 +694,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 if (protocolError != null) flushWriteBatch(output);
                 LogicalHttp2Frame frame = protocolError == null
                     ? candidate.frame() : prepareCoordinatorErrorFrame(protocolError);
-                log.info("Writing {}", frame);
                 PendingSettingsAck pendingSettingsAck = null;
                 if (frame instanceof Http2Settings && !((Http2Settings) frame).isAck) {
                     pendingSettingsAck = registerPendingSettingsAck();
@@ -838,7 +833,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     var fh = currentFrameHeader;
                     var len = fh.length();
                     Mutils.readAtLeast(buffer, clientIn, len);
-                    log.info("read fh = " + fh);
 
                     if (fh.streamId() > lifecycle.maxAllowedStreamId) {
                         // Refused streams still share HPACK and connection flow control
@@ -894,7 +888,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                                 throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Client sent push promise");
                             }
                             default: {
-                                log.info("Discarding " + len + " bytes for unsupported type " + fh);
                                 discardPayload(buffer, clientIn, len);
                             }
                         }
@@ -917,7 +910,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 } catch (EOFException e) {
                     boolean noActiveWork = noConnectionWorkIsActive();
                     if (readingFrameHeader && noActiveWork) {
-                        log.info("Client closed HTTP/2 connection while waiting for the next frame");
                         setReadStateIfActiveAndSignal(HState.COMPLETED);
                     } else {
                         String frameDetails = readingFrameHeader ? "frame header" : "frame payload for " + currentFrameHeader;
@@ -931,7 +923,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 } catch (SocketException e) {
                     boolean noActiveWork = noConnectionWorkIsActive();
                     if (noActiveWork) {
-                        log.info("Socket closed while reading HTTP/2 frames at read state {} lifecycle.writeState={}: {}", lifecycle.readState, lifecycle.writeState, e.getMessage());
                         setReadStateIfActiveAndSignal(HState.COMPLETED);
                     } else {
                         log.warn("Socket exception while reading HTTP/2 frames at read state {} lifecycle.writeState={}", lifecycle.readState, lifecycle.writeState, e);
@@ -941,13 +932,11 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             }
 
             writeEndedFuture.get();
-            log.info("write loop ended");
             // A peer close can leave fully delivered responses awaiting application
             // work. Keep them visible to idle timeouts and server shutdown until cleanup.
             retainedApplicationsEnded.get();
 
         } catch (Http2Exception h2e) {
-            log.debug("HTTP2 error", h2e);
 
             var connectionError = new IOException("Connection error", h2e);
 
@@ -984,7 +973,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         var rstStream = Http2ResetStreamFrame.readFrom(fh, buffer);
         int streamId = rstStream.streamId();
         var stream = streamRegistry.applicationStream(streamId);
-        log.info("Reset stream " + rstStream + " for " + stream);
         if (stream == null && (streamId > lifecycle.lastStreamId || streamId % 2 == 0)) {
             throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID on rst_stream");
         }
@@ -1015,7 +1003,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
 
     private void readGoAwayFrame(Http2FrameHeader fh) throws Http2Exception {
         var goaway = Http2GoAway.readFrom(fh, buffer);
-        log.info("Got goaway from client " + Objects.requireNonNullElse(goaway.errorCodeEnum(), goaway.errorCode()) + " with last stream " + goaway.lastStreamId());
         stateLock.lock();
         try {
             if (goaway.lastStreamId() > lifecycle.peerGoAwayLastStreamId) {
@@ -1049,8 +1036,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             var ackedOne = settingsAckQueue.poll();
             if (ackedOne == null) {
                 throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Settings ack without pending settings");
-            } else if (ackedOne.acknowledge()) {
-                log.info("Settings acked");
+            } else {
+                ackedOne.acknowledge();
             }
         } else {
             var oldSettings = clientSettings;
@@ -1156,7 +1143,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 write(new Http2ResetStreamFrame(fh.streamId(), Http2ErrorCode.REFUSED_STREAM.code()));
                 return;
             }
-            log.info("Got headers " + headerFragment);
             Http2StreamRegistry.Lookup registered =
                 streamRegistry.lookup(headerFragment.streamId());
             if (registered.rejectedRequestBody()) {
@@ -1293,20 +1279,17 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         try {
             long now = System.nanoTime();
             if (!lifecycle.canStartNewStreamsLocked(now)) {
-                log.info("Refusing stream {} because graceful shutdown no longer allows new streams", streamId);
                 writeLocked(new Http2ResetStreamFrame(streamId, Http2ErrorCode.REFUSED_STREAM.code()));
                 return false;
             }
             long admissionCapacityUsed = streamRegistry.admissionCapacityUsed();
             if (admissionCapacityUsed >= serverSettings.maxConcurrentStreams) {
-                log.info("Max concurrent streams reached");
                 writeLocked(new Http2ResetStreamFrame(streamId, Http2ErrorCode.REFUSED_STREAM.code()));
                 return false;
             }
             // An HTTP error response also means the stream was processed. Record every
             // admitted stream before exposing it to application callbacks or queuing
             // flow-controlled output so subsequent frames and GOAWAY share one boundary.
-            log.info("Setting last stream id to " + streamId);
             lifecycle.lastStreamId = streamId;
             return true;
         } finally {
@@ -1368,7 +1351,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 finishWriteLoop(new IOException("HTTP/2 connection write loop closed"));
             }
         } catch (Exception e) {
-            log.info("Write loop IO Exception with state=" + lifecycle.writeState);
             failWriteLoop(e);
         } finally {
             writerTaskScheduled.set(false);
@@ -1438,7 +1420,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         }
         closeSocketQuietly();
         // Don't close the output stream here because that closes the TLS connection in Java.
-        log.info("Connection write loop closing with state=" + lifecycle.writeState);
         writeLoopEnded.complete(null);
         signalRetainedApplicationsEnded();
     }

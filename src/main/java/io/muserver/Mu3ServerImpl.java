@@ -669,7 +669,6 @@ class Mu3ServerImpl implements MuServer {
             executionResources.internal.execute(task);
             return true;
         } catch (RejectedExecutionException e) {
-            log.debug("Connection maintenance executor rejected timed work because the server is stopping or overloaded");
             return false;
         }
     }
