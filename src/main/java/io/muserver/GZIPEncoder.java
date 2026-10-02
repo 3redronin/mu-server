@@ -58,7 +58,7 @@ public class GZIPEncoder implements ContentEncoder {
 
     @Override
     public OutputStream wrapStream(MuRequest request, MuResponse response, OutputStream stream) throws IOException {
-        return new GZIPOutputStream(stream, bufferSize, true);
+        return new GZIPResponseOutputStream(stream, bufferSize);
     }
 
 }
