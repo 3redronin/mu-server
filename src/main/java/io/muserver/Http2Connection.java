@@ -257,6 +257,9 @@ final class Http2Connection extends Http2ConnectionFlowControl implements HttpCo
             } catch (URISyntaxException e) {
                 throw Http2Exception.streamError(streamId, Http2Error.PROTOCOL_ERROR, e, "Invalid request URI");
             }
+            if (!host.equals(serverUri.getRawAuthority()) || host.indexOf('@') >= 0) {
+                throw Http2Exception.streamError(streamId, Http2Error.PROTOCOL_ERROR, "Invalid request authority");
+            }
             NettyRequestAdapter muReq = new NettyRequestAdapter(ctx, nettyReq, muHeaders, muMethod, "https", uri, host, serverUri);
 
             Http2Response resp = new Http2Response(ctx, muReq, new Http2Headers(), encoder(), streamId, settings);

@@ -108,7 +108,8 @@ public class Http2RequestHeadersTest {
     public void invalidAuthoritiesDoNotCloseTheConnection() throws Exception {
         startAcceptingServer();
         try (Client client = new Client(server)) {
-            for (String authority : new String[]{null, "", "[::1", "[not-ipv6]", "example.test%", "example.test\\evil"}) {
+            for (String authority : new String[]{null, "", "[::1", "[not-ipv6]", "example.test%", "example.test\\evil",
+                "example.test/admin", "example.test?query", "example.test#fragment", "user@example.test", "user@my_service.test"}) {
                 assertReset(client.stream(headers("GET", authority), false));
             }
             assertReset(client.stream(headers("GET", "example.test", "example.test", "different.test"), false));
@@ -121,7 +122,7 @@ public class Http2RequestHeadersTest {
                 assertReset(client.stream(headers("GET", mismatch[0], mismatch[1]), false));
             }
             // Netty rejects the empty pseudo-header before it reaches mu's request statistics.
-            assertEquals(10, server.stats().invalidHttpRequests());
+            assertEquals(15, server.stats().invalidHttpRequests());
             assertResponse(client.stream(headers("GET", "example.test"), false), "accepted");
         }
     }
