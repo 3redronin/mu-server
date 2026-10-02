@@ -3,12 +3,15 @@ package io.muserver;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Objects;
+import java.util.concurrent.ArrayBlockingQueue;
 
 /** A bounded buffer owned exclusively by the connection writer. */
 final class Http2WriteBatch extends OutputStream {
     // Leave room for the default 8 KiB response chunk and its frame header.
-    static final int MAX_BYTES = 9_216;
+    static final int MAX_BYTES = 16_384;
     private static final int DIRECT_WRITE_MIN_BYTES = 8_192;
+    // Cache a bounded number of idle leases instead of a large array per connection.
+    private static final ArrayBlockingQueue<byte[]> SCRATCH_BUFFERS = new ArrayBlockingQueue<>(64);
     private final OutputStream out;
     private final Runnable afterWrite;
     @FunctionalInterface
@@ -17,7 +20,8 @@ final class Http2WriteBatch extends OutputStream {
     }
 
     private final FlushListener afterFlush;
-    private byte[] buffer = new byte[256];
+    private final byte[] smallBuffer = new byte[256];
+    private byte[] buffer = smallBuffer;
     private int count;
     private long acceptedBytes;
     private long writtenBytes;
@@ -61,10 +65,20 @@ final class Http2WriteBatch extends OutputStream {
 
     private void grow(int required) {
         if (required > buffer.length) {
-            // Grow geometrically for small frames, then in 256-byte increments:
-            // an 8 KiB body plus framing should not retain a 16 KiB buffer.
-            int size = Math.min(MAX_BYTES, Math.max((required + 255) & ~255, Math.min(8192, buffer.length * 2)));
-            buffer = java.util.Arrays.copyOf(buffer, size);
+            byte[] scratch = SCRATCH_BUFFERS.poll();
+            if (scratch == null) scratch = new byte[MAX_BYTES];
+            System.arraycopy(buffer, 0, scratch, 0, count);
+            buffer = scratch;
+        }
+    }
+
+    /** Return scratch only after transport output has relinquished its ownership. */
+    void releaseScratch() {
+        if (count != 0) throw new IllegalStateException("Cannot release buffered output");
+        if (buffer.length == MAX_BYTES) {
+            byte[] scratch = buffer;
+            buffer = smallBuffer;
+            SCRATCH_BUFFERS.offer(scratch);
         }
     }
 

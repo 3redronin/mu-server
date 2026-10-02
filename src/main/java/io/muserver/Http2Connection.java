@@ -734,6 +734,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             pendingWriteBatch.clear();
             output.discard();
             throw e;
+        } finally {
+            output.releaseScratch();
         }
     }
 

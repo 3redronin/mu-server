@@ -135,4 +135,63 @@ class Http2WriteBatchTest {
         assertEquals(0, batch.flushedBytes());
         assertTrue(completed.isEmpty());
     }
+
+    @Test
+    void returningScratchPreservesByteAccountingAcrossDrains() throws Exception {
+        var wire = new ByteArrayOutputStream();
+        var batch = new Http2WriteBatch(wire, () -> {}, () -> {});
+        var expected = new ByteArrayOutputStream();
+        for (int drain = 1; drain <= 3; drain++) {
+            var bytes = new byte[8191];
+            java.util.Arrays.fill(bytes, (byte) drain);
+            batch.write(bytes);
+            assertThrows(IllegalStateException.class, batch::releaseScratch);
+            batch.flush();
+            batch.releaseScratch();
+            batch.releaseScratch(); // Releasing an idle writer cannot return the lease twice.
+            expected.write(bytes);
+            assertEquals(drain * 8191L, batch.acceptedBytes());
+            assertEquals(batch.acceptedBytes(), batch.writtenBytes());
+            assertEquals(batch.acceptedBytes(), batch.flushedBytes());
+        }
+        assertArrayEquals(expected.toByteArray(), wire.toByteArray());
+    }
+
+    @Test
+    void concurrentWritersNeverShareAnOwnedScratchArray() throws Exception {
+        var arrays = new ArrayList<byte[]>();
+        var output = new OutputStream() {
+            @Override public void write(int value) { fail("Expected bulk output"); }
+            @Override public void write(byte[] bytes, int offset, int length) { arrays.add(bytes); }
+        };
+        var first = new Http2WriteBatch(output, () -> {}, () -> {});
+        var second = new Http2WriteBatch(output, () -> {}, () -> {});
+        first.write(new byte[8191]);
+        first.flush();
+        // Successful flush ends transport use; the first writer still owns its lease.
+        second.write(new byte[8191]);
+        second.flush();
+        assertNotSame(arrays.get(0), arrays.get(1));
+        first.releaseScratch();
+        second.releaseScratch();
+    }
+
+    @Test
+    void failedOutputCanDiscardAndReturnScratchWithoutPublishingCompletion() throws Exception {
+        var completions = new ArrayList<Integer>();
+        var output = new OutputStream() {
+            @Override public void write(int value) { fail("Expected bulk output"); }
+            @Override public void write(byte[] bytes, int offset, int length) throws IOException {
+                throw new IOException("Output failed");
+            }
+        };
+        var batch = new Http2WriteBatch(output, () -> {}, () -> completions.add(1));
+        batch.write(new byte[8191]);
+        assertThrows(IOException.class, batch::flush);
+        batch.discard();
+        batch.releaseScratch();
+        assertTrue(completions.isEmpty());
+        assertEquals(0, batch.writtenBytes());
+        assertEquals(0, batch.flushedBytes());
+    }
 }
