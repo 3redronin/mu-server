@@ -13,7 +13,7 @@ class ExecutionResources {
 
     @FunctionalInterface
     interface Factory {
-        ExecutionResources create(@Nullable ExecutorService application);
+        ExecutionResources create(@Nullable ExecutorService application, ThreadingMode mode);
     }
 
     ExecutionResources(ExecutorService application, boolean ownsApplication,
@@ -24,11 +24,11 @@ class ExecutionResources {
         this.timer = timer;
     }
 
-    static ExecutionResources create(@Nullable ExecutorService supplied) {
-        ExecutorService application = supplied == null ? MuServerBuilder.defaultExecutor() : supplied;
+    static ExecutionResources create(@Nullable ExecutorService supplied, ThreadingMode mode) {
+        ExecutorService application = supplied == null ? MuServerBuilder.defaultExecutor(mode) : supplied;
         ExecutorService internal = null;
         try {
-            internal = MuServerBuilder.defaultExecutor();
+            internal = MuServerBuilder.defaultExecutor(mode);
             return new ExecutionResources(application, supplied == null, internal,
                 MuServerBuilder.defaultTimerExecutor());
         } catch (RuntimeException | Error failure) {

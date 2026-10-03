@@ -5,10 +5,12 @@ import io.muserver.rest.MuRuntimeDelegate;
 import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -39,6 +41,7 @@ public class MuServerBuilder {
     private long requestReadTimeoutMillis = TimeUnit.MINUTES.toMillis(2);
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(20);
     private @Nullable ExecutorService executor;
+    private ThreadingMode threadingMode = ThreadingMode.AUTO;
     private int maxConcurrentRequests = 1000;
     ExecutionResources.Factory executionResourcesFactory = ExecutionResources::create;
     private long maxRequestSize = 24 * 1024 * 1024;
@@ -253,9 +256,11 @@ public class MuServerBuilder {
     /**
      * Sets the executor that runs request handlers and application callbacks, including
      * WebSocket events, response-completion listeners and resumed asynchronous JAX-RS responses.
-     * <p>By default, Mu uses a new virtual thread per task when available, otherwise a cached
+     * <p>By default, Mu uses a new virtual thread per task on Java 25 or later, otherwise a cached
      * pool of platform threads with no configured maximum. Use {@link #withMaxConcurrentRequests(int)}
-     * to limit unfinished requests. Network reads and writes use separate internal workers.</p>
+     * to limit unfinished requests. Network reads and writes use separate internal workers.
+     * {@link #withThreadingMode(ThreadingMode)} selects the implementation of Mu-owned executors;
+     * it does not change the supplied executor.</p>
      * <p>If you supply an executor, keep it running until the server has stopped; Mu does not
      * shut it down. It must run tasks asynchronously and throw
      * {@link java.util.concurrent.RejectedExecutionException} when it cannot accept them.
@@ -270,6 +275,35 @@ public class MuServerBuilder {
     public MuServerBuilder withHandlerExecutor(@Nullable ExecutorService executor) {
         this.executor = executor;
         return this;
+    }
+
+    /**
+     * Selects the thread implementation for Mu-owned application and internal I/O executors.
+     * The default, {@link ThreadingMode#AUTO}, uses virtual threads on Java 25 or later and
+     * cached platform threads on earlier runtimes. {@link ThreadingMode#VIRTUAL} explicitly
+     * enables virtual threads on Java 21 or later; starting on an earlier runtime fails.
+     * <p>On Java 21–23, blocking inside a synchronized block can pin virtual-thread carriers.
+     * This can occur in application code and dependencies, including stream wrappers.
+     * Java 24 removed monitor-induced pinning; Java 25 is Mu's automatic selection threshold.
+     * Native calls can still pin carriers on newer runtimes.</p>
+     * <p>Platform executors have no configured thread maximum. Request admission limits do
+     * not limit idle connection readers; many connections can require substantial native
+     * thread memory. This setting does not change a caller-supplied handler executor.</p>
+     * @param mode the thread selection policy
+     * @return this builder
+     * @throws NullPointerException if mode is null
+     */
+    public MuServerBuilder withThreadingMode(ThreadingMode mode) {
+        this.threadingMode = Objects.requireNonNull(mode, "mode");
+        return this;
+    }
+
+    /**
+     * Gets the thread selection policy for Mu-owned executors.
+     * @return the configured mode, initially {@link ThreadingMode#AUTO}
+     */
+    public ThreadingMode threadingMode() {
+        return threadingMode;
     }
 
     /**
@@ -837,6 +871,7 @@ public class MuServerBuilder {
             ", requestReadTimeoutMillis=" + requestReadTimeoutMillis +
             ", idleTimeoutMills=" + idleTimeoutMills +
             ", executor=" + executor +
+            ", threadingMode=" + threadingMode +
             ", maxRequestSize=" + maxRequestSize +
             ", maxMultipartParts=" + maxMultipartParts +
             ", responseCompleteListeners=" + responseCompleteListeners +
@@ -895,17 +930,24 @@ public class MuServerBuilder {
     }
 
     /**
-     * @return a virtual-thread-per-task executor if virtual threads are available; otherwise gets a cached thread pool.
+     * Creates an executor for the selected policy without silently changing an explicit selection.
      */
-    static ExecutorService defaultExecutor() {
-        // Executors.newVirtualThreadPerTaskExecutor()
+    static ExecutorService defaultExecutor(ThreadingMode mode) {
+        int runtime = Runtime.version().feature();
+        boolean virtual = mode == ThreadingMode.VIRTUAL || (mode == ThreadingMode.AUTO && runtime >= 25);
+        if (!virtual) return Executors.newCachedThreadPool();
+        if (runtime < 21) throw new UnsupportedOperationException("Virtual threads require Java 21 or later");
         try {
             java.lang.reflect.Method newVirtualThreadPerTaskExecutor = Executors.class.getMethod("newVirtualThreadPerTaskExecutor");
             return (ExecutorService) newVirtualThreadPerTaskExecutor.invoke(null);
-        } catch (Exception ignored) {
-            // no worries; we'll use the default
+        } catch (InvocationTargetException failure) {
+            Throwable cause = failure.getCause();
+            if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+            if (cause instanceof Error) throw (Error) cause;
+            throw new IllegalStateException("Could not create virtual-thread executor", cause);
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalStateException("Could not create virtual-thread executor", failure);
         }
-        return Executors.newCachedThreadPool();
     }
 
     private static final AtomicInteger TIMER_THREAD_IDS = new AtomicInteger();

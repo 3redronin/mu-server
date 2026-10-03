@@ -11,8 +11,25 @@ request handling and shutdown.
 | Internal task executor | Mu-owned, unbounded task dispatch | Connection readers, serialized HTTP/2 writer drains, maintenance and blocking adapter I/O |
 | Timer | Mu-owned single scheduled thread | Determine when work is due and dispatch it |
 
-The two task executors use virtual-thread-per-task execution when the runtime
-supports it, otherwise cached platform threads. Logical ownership does not
+The two task executors use `withThreadingMode` to select their implementation.
+`AUTO` (the default) uses virtual threads on Java 25 or later and cached platform
+threads on earlier runtimes. `PLATFORM` always uses cached platform threads;
+`VIRTUAL` explicitly selects virtual threads and requires Java 21 or later.
+A supplied handler executor remains caller-owned and is not changed by the mode.
+
+Java 21–23 can pin virtual-thread carriers when application code or dependencies
+block while holding Java monitors. The gzip and response-writer wrappers avoid
+the known Mu output paths, but cannot remove monitors held by callers. Java 24
+removed monitor-induced pinning; Java 25 is the automatic policy threshold.
+Native/foreign calls can still pin carriers. Separate virtual executors share
+the JVM's default carrier scheduler and do not isolate one another from pinning.
+
+Cached platform pools have no configured thread maximum. Each blocked connection
+reader can occupy a platform thread, increasing native thread memory as connection
+count grows. The request-admission limit does not limit idle connections. Runtime
+and mode must be included in resource/capacity evidence.
+
+Logical ownership does not
 require a separate configurable pool for every kind of task. Readers, writers
 and maintenance must all be able to make independent progress. HTTP/2 retains
 its existing rescheduling writer: one drain at a time per connection, returning

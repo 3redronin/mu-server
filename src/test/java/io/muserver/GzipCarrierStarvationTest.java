@@ -2,7 +2,7 @@ package io.muserver;
 
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -24,15 +24,15 @@ public class GzipCarrierStarvationTest {
     @TempDir Path temporary;
 
     @ParameterizedTest
-    @ValueSource(booleans = {false, true})
-    void concurrentGzipAndNewConnectionProgressWithOneCarrier(boolean tls) throws Exception {
+    @CsvSource({"false,VIRTUAL,false", "true,VIRTUAL,false", "false,AUTO,true", "true,AUTO,true"})
+    void concurrentGzipAndNewConnectionProgressWithOneCarrier(boolean tls, ThreadingMode mode, boolean stockWrapper) throws Exception {
         assumeTrue(Runtime.version().feature() >= 21, "Virtual threads require Java 21");
         String java = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
         String classPath = System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
         Path log = temporary.resolve("child.log");
         Process child = new ProcessBuilder(java,
             "-Djdk.virtualThreadScheduler.parallelism=1", "-Djdk.virtualThreadScheduler.maxPoolSize=1",
-            "-cp", classPath, GzipCarrierStarvationTest.class.getName(), Boolean.toString(tls))
+            "-cp", classPath, GzipCarrierStarvationTest.class.getName(), Boolean.toString(tls), mode.name(), Boolean.toString(stockWrapper))
             .redirectErrorStream(true).redirectOutput(log.toFile()).start();
         boolean finished;
         try {
@@ -50,18 +50,24 @@ public class GzipCarrierStarvationTest {
 
     public static void main(String[] args) throws Exception {
         boolean tls = Boolean.parseBoolean(args[0]);
+        ThreadingMode mode = args.length > 1 ? ThreadingMode.valueOf(args[1]) : ThreadingMode.VIRTUAL;
+        boolean stockWrapper = args.length > 2 && Boolean.parseBoolean(args[2]);
         byte[] body = new byte[65536];
         var random = new Random(73);
         for (int i = 0; i < body.length; i++) body[i] = (byte) (32 + random.nextInt(95));
         var server = httpsServerForTest(tls ? "h2" : "http")
+            .withThreadingMode(mode)
+            .withContentEncoders(stockWrapper ? java.util.List.of() : null)
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .addHandler((request, response) -> {
                 response.contentType("text/plain");
-                response.headers().set(HeaderNames.CONTENT_LENGTH, body.length);
-                var out = response.outputStream();
+                if (stockWrapper) response.headers().set(HeaderNames.CONTENT_ENCODING, "gzip");
+                else response.headers().set(HeaderNames.CONTENT_LENGTH, body.length);
+                var out = stockWrapper ? new java.util.zip.GZIPOutputStream(response.outputStream()) : response.outputStream();
                 for (int offset = 0; offset < body.length; offset += 8192) {
                     out.write(body, offset, 8192);
                 }
+                if (stockWrapper) out.close();
                 return true;
             }).start();
         try (var client = new H2Client();

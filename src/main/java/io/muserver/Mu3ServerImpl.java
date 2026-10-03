@@ -533,7 +533,7 @@ class Mu3ServerImpl implements MuServer {
             limiters = emptyList();
         }
 
-        ExecutionResources resources = builder.executionResourcesFactory.create(builder.executor());
+        ExecutionResources resources = builder.executionResourcesFactory.create(builder.executor(), builder.threadingMode());
         ExecutorService handlerExecutor = resources.application;
         ExecutorService connectionExecutor = resources.connectionExecutor();
         ExecutorService http2WriterExecutor = resources.writerExecutor();
