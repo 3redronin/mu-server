@@ -4,6 +4,8 @@ import java.util.Map;
 
 /**
  * A rate limiter. A limiter is created when {@link MuServerBuilder#withRateLimiter(RateLimitSelector)} is used.
+ * <p>Mu periodically reclaims expired bucket history in the background, including when no further
+ * requests arrive. Calling {@link #currentBuckets()} is not required for this cleanup.</p>
  */
 public interface RateLimiter {
 

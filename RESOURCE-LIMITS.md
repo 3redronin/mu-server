@@ -1,6 +1,6 @@
 # Resource ownership and limits
 
-This audit covers the Mu4 source based on `afba9f0a`, plus the async-output fixes in this change. It traces ordinary request, response, connection and callback lifetimes. It is a code audit with bounded correctness tests, not a capacity measurement, parser review or proof that all allocation paths are bounded. See also [HTTP/2 concurrency](HTTP2-CONCURRENCY.md).
+This audit covers the Mu4 source based on `afba9f0a`, plus the async-output and rate-limit cleanup fixes described below. It traces ordinary request, response, connection and callback lifetimes. It is a code audit with bounded correctness tests, not a capacity measurement, parser review or proof that all allocation paths are bounded. See also [HTTP/2 concurrency](HTTP2-CONCURRENCY.md).
 
 ## Main findings
 
@@ -32,7 +32,7 @@ Defaults below are configuration defaults, not measured heap or process-memory c
 | WebSocket output — `MuWebSocketSession`, `WebsocketConnection` | Blocking sends wait for the write lock/socket. Each async send submits a task; no pending count/byte cap. | Connection closure unblocks writes; completion dispatch follows the I/O result. Repeated async sends to a slow peer can retain many messages/tasks despite serialized socket output. Chain callbacks to bound production and preserve order. |
 | SSE — `AsyncSsePublisher`, REST `JaxSseEventSinkImpl` | Event text/serialized bytes are assembled before async output; no separate event-size or pending-event cap. | Inherits async-output cleanup. Wait/chain completion before producing another event. A single huge event can still require a large allocation. |
 | Timers — `MuServerBuilder`, connection and WebSocket maintenance | Default scheduler removes cancelled tasks and disables delayed/periodic execution after shutdown. Maintenance dispatch/writer wakeups are coalesced; WebSocket ping scheduling follows completion of the preceding ping. | Cancellation releases scheduled entries. Number of live connection/stream timers still scales with uncapped connection count. |
-| Rate-limit history — `RateLimiterImpl` | Accepted requests add expiry entries per bucket. A fixed bucket policy limits entries by its allowance; bucket cardinality has no global cap. | Recording prunes only the selected bucket. `currentBuckets()` prunes all buckets, but server maintenance does not call it. Expired one-off bucket names can therefore remain indefinitely without that query. This is a remaining cleanup gap, not a measured capacity result. |
+| Rate-limit history — `RateLimiterImpl` | Accepted requests add expiry entries per bucket. A fixed bucket policy limits entries by its allowance; bucket cardinality has no global cap. | Recording prunes the selected bucket and `currentBuckets()` prunes its snapshot. One coalesced server task now sweeps all limiters approximately once per second on the internal executor, releasing the decision lock between buckets and every 1,024 expired entries. Idle history is reclaimed without a diagnostic query. Cleanup stops between batches during server shutdown; a busy worker may delay it. Live bucket cardinality remains uncapped and the map can retain peak table capacity. |
 | Application/provider state | Response headers, serialized objects, registered listeners, caches and user buffers have application-controlled size. | Request/body limits do not bound these objects. Application code can keep requests, sessions and payloads reachable after Mu finishes them. |
 
 ## What this means for a 64 MiB total limit
@@ -43,7 +43,7 @@ Until measured on an otherwise quiet machine, use streaming, modest request/mess
 
 ## Follow-up priorities
 
-1. Fix rate-limit expiry reclamation independently of diagnostic queries, using bounded/coalesced maintenance and a fake-clock regression. Separately decide the policy for excessive live bucket cardinality.
+1. Decide the policy for excessive live rate-limit bucket cardinality. Expired-history cleanup is implemented; it is not a cap on live history or a guarantee of a particular total-memory envelope.
 2. Design accepted/setup connection admission and pending-output byte/count limits. Specify scope, opt-in/default behavior, rejection result, callback delivery and cancellation ownership before changing public behavior. WebSocket sends and SSE must be included; limiting only HTTP request slots is insufficient.
 3. Bound or coalesce HTTP/2 coordinator commands without blocking the reader behind a flow-controlled writer. Preserve control-frame progress, reset ordering and shutdown completion.
 4. Measure a selected configuration's total-memory envelope and sustained recovery when the host is available. This audit does not establish Mu3/Mu4 performance parity or release acceptance.
@@ -53,3 +53,5 @@ Until measured on an otherwise quiet machine, use streaming, modest request/mess
 `AsyncResponseOutputTest` checks success, failure, cancellation and rejected writes for retained Mu-owned references, including delayed callback dispatch. Its object graph inspection follows Mu fields and actual collections; it does not depend on garbage-collection timing or open JDK internals. Existing cases verify ordering, exactly-once delivery, and buffer ownership until I/O acknowledges abort.
 
 `AsyncOutputBufferTest` checks empty, small and multi-chunk array/direct/read-only buffers, slice offsets, exact bytes, bounded scratch-array size and a single flush. `AsyncOutputIntegrationTest` sends multi-chunk payloads over HTTP/1 and HTTP/2 with one application worker, plus cancellation of flow-controlled output. Existing `LifecycleRecoveryTest` covers slow-peer disconnect, timeout and shutdown retirement. These are small correctness tests, not performance or capacity tests.
+
+Rate-limit cleanup is covered by `RateLimiterCleanupTest`: fake-clock expiry without a further request/query, signed nano-time wraparound, preservation of live and concurrently renewed buckets, other-request progress between bounded batches, one coalesced task for multiple limiters, executor rejection recovery, no timer for an unconfigured server, and shutdown of queued/running cleanup. Existing `RateLimiterTest` covers atomic decisions and HTTP/1/HTTP/2 behavior.
