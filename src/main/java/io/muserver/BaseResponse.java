@@ -204,7 +204,7 @@ abstract class BaseResponse implements MuResponse {
             if (!headers.contains(HeaderNames.CONTENT_TYPE)) {
                 headers.set(HeaderNames.CONTENT_TYPE, ContentTypes.TEXT_PLAIN_UTF8);
             }
-            writer = new PrintWriter(outputStream(), false, ensureCharsetSet());
+            writer = new ResponsePrintWriter(outputStream(), ensureCharsetSet());
         }
         return writer;
     }
