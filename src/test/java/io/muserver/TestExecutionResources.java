@@ -11,9 +11,9 @@ public final class TestExecutionResources {
     public static MuServerBuilder configure(MuServerBuilder builder,
         @Nullable ExecutorService connections, @Nullable ExecutorService writers,
         @Nullable ExecutorService internal, @Nullable ScheduledExecutorService timer) {
-        builder.executionResourcesFactory = supplied -> new ExecutionResources(
-            supplied == null ? MuServerBuilder.defaultExecutor() : supplied, supplied == null,
-            internal == null ? MuServerBuilder.defaultExecutor() : internal,
+        builder.executionResourcesFactory = (supplied, mode) -> new ExecutionResources(
+            supplied == null ? MuServerBuilder.defaultExecutor(mode) : supplied, supplied == null,
+            internal == null ? MuServerBuilder.defaultExecutor(mode) : internal,
             timer == null ? MuServerBuilder.defaultTimerExecutor() : timer) {
             @Override ExecutorService connectionExecutor() {
                 return connections == null ? super.connectionExecutor() : connections;

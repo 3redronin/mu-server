@@ -11,8 +11,39 @@ request handling and shutdown.
 | Internal task executor | Mu-owned, unbounded task dispatch | Connection readers, serialized HTTP/2 writer drains, maintenance and blocking adapter I/O |
 | Timer | Mu-owned single scheduled thread | Determine when work is due and dispatch it |
 
-The two task executors use virtual-thread-per-task execution when the runtime
-supports it, otherwise cached platform threads. Logical ownership does not
+The two task executors use `withThreadingMode` to select their implementation.
+`AUTO` (the default) uses virtual threads on Java 21 or later and cached platform
+threads on earlier runtimes. `PLATFORM` always uses cached platform threads;
+`VIRTUAL` explicitly selects virtual threads and requires Java 21 or later.
+A supplied handler executor remains caller-owned and is not changed by the mode.
+
+Java 21–23 can pin virtual-thread carriers when application code or dependencies
+block while holding Java monitors. Mu's gzip and response-writer wrappers, certificate
+lookup and REST stream locks avoid the identified framework pinning paths. They
+cannot remove monitors held by callers: wrapping the response stream in a stock
+`PrintWriter` or `GZIPOutputStream` can reintroduce pinning on Java 21. Prefer
+`response.writer()` and Mu's content encoding. Use `PLATFORM` if blocking application
+code or dependencies pin carriers and cannot yet be changed.
+
+Java 25 or later is recommended for applications with unaudited blocking dependencies:
+[Java 24 removed monitor-induced pinning](https://docs.oracle.com/en/java/javase/24/migrate/significant-changes-jdk-24.html).
+[Native/foreign calls can still pin carriers](https://docs.oracle.com/en/java/javase/25/core/virtual-threads.html). Separate virtual executors share
+the JVM's default carrier scheduler and do not isolate one another from pinning.
+
+Cached platform pools have no configured thread maximum. Each blocked connection
+reader can occupy a platform thread, increasing native thread memory as connection
+count grows. The request-admission limit does not limit idle connections. Runtime
+and mode must be included in resource/capacity evidence.
+
+`ApplicationCarrierProgressTest` exercises the default virtual-thread mode with one
+and two carriers: JAX-RS text, streaming Jackson JSON, `StreamingOutput`, `InputStream`
+and `Reader` responses (identity and gzip), SSE, and paused `InputStream`/`Reader`
+uploads. HTTP/1 clients stop reading; TLS HTTP/2 clients advertise a zero stream
+window. Fresh connections and other HTTP/2 streams must progress before the paused
+exchange resumes, is cancelled, or is closed by forced shutdown. Resumed bodies are
+checked in full. These are correctness checks, not throughput, latency or memory limits.
+
+Logical ownership does not
 require a separate configurable pool for every kind of task. Readers, writers
 and maintenance must all be able to make independent progress. HTTP/2 retains
 its existing rescheduling writer: one drain at a time per connection, returning
@@ -89,7 +120,11 @@ order. Listeners added after completion have no ordering guarantee and may run
 concurrently. They run after internal cleanup, may overlap the next HTTP/1 request,
 and need not run on the handler's thread. `stop(timeout)` waits for scheduled
 application callbacks within the same timeout used for connections and requests.
-It cannot force application code to stop. When called from a tracked callback,
+On a forced stop, Mu shuts down its internal executor first and lets the remaining
+I/O tasks submit their final callbacks before shutting down its owned application
+executor. A daemon cleanup thread waits for this ordering without extending the
+caller's shutdown deadline. Caller-owned executors must remain available for these
+callbacks. It cannot force application code to stop. When called from a tracked callback,
 stop skips waiting for callbacks to avoid deadlock; an external stop caller still
 waits for them within its own timeout. Ordinary listener failures do not strand
 later listeners. Fatal VM failures and ThreadDeath are rethrown after available

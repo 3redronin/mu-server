@@ -145,7 +145,11 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
     @Override public void complete(@Nullable Throwable throwable) { output.complete(throwable); }
 
     @Override public void write(ByteBuffer data, DoneCallback callback) {
-        output.write(data, Objects.requireNonNull(callback, "callback"));
+        writeWithCallback(data, callback);
+    }
+
+    Future<@Nullable Void> writeWithCallback(ByteBuffer data, DoneCallback callback) {
+        return output.write(data, Objects.requireNonNull(callback, "callback"));
     }
 
     @Override public Future<@Nullable Void> write(ByteBuffer data) { return output.write(data, null); }

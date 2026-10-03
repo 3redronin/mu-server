@@ -16,17 +16,21 @@ public final class SingleCarrier {
     private SingleCarrier() { }
 
     public static void run(Class<?> mainClass, Path log, String... arguments) throws Exception {
+        run(mainClass, log, 1, 20, arguments);
+    }
+
+    public static void run(Class<?> mainClass, Path log, int carriers, int timeoutSeconds, String... arguments) throws Exception {
         assumeTrue(Runtime.version().feature() >= 21, "Virtual threads require Java 21");
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
         String classPath = System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
         var command = new ArrayList<>(List.of(java,
-            "-Djdk.virtualThreadScheduler.parallelism=1", "-Djdk.virtualThreadScheduler.maxPoolSize=1",
+            "-Djdk.virtualThreadScheduler.parallelism=" + carriers, "-Djdk.virtualThreadScheduler.maxPoolSize=" + carriers,
             "-cp", classPath, mainClass.getName()));
         command.addAll(List.of(arguments));
         Process child = new ProcessBuilder(command).redirectErrorStream(true).redirectOutput(log.toFile()).start();
         boolean finished;
         try {
-            finished = child.waitFor(20, TimeUnit.SECONDS);
+            finished = child.waitFor(timeoutSeconds, TimeUnit.SECONDS);
         } finally {
             if (child.isAlive()) {
                 child.destroyForcibly();

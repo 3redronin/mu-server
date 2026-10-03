@@ -4,6 +4,8 @@ import org.jspecify.annotations.Nullable;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -172,13 +174,29 @@ class AsyncSsePublisherImpl implements AsyncSsePublisher {
         if (closed) {
             stage.completeExceptionally(new IllegalStateException("The SSE stream was already closed"));
         } else {
-            asyncHandle.write(Mutils.toByteBuffer(text), error -> {
+            DoneCallback completion = error -> {
                 if (error == null) {
                     stage.complete(null);
                 } else {
                     stage.completeExceptionally(error);
                 }
-            });
+            };
+            if (asyncHandle instanceof Mu3AsyncHandleImpl) {
+                var result = ((Mu3AsyncHandleImpl) asyncHandle).writeWithCallback(Mutils.toByteBuffer(text), completion);
+                // A synchronous rejection queues its callback behind the current application
+                // turn. Resolve before exposing the stage so a caller can safely wait on it.
+                if (result.isDone()) {
+                    try { result.get(); stage.complete(null); }
+                    catch (ExecutionException e) { stage.completeExceptionally(e.getCause()); }
+                    catch (CancellationException e) { stage.completeExceptionally(e); }
+                    catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        stage.completeExceptionally(e);
+                    }
+                }
+            } else {
+                asyncHandle.write(Mutils.toByteBuffer(text), completion);
+            }
         }
         return stage;
     }

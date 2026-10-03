@@ -2114,8 +2114,8 @@ class ExecutionDomainsTest {
     void serverOwnedExecutorsAreShutDownWithTheServer() throws Exception {
         var builder = httpServer();
         var created = new java.util.concurrent.atomic.AtomicReference<ExecutionResources>();
-        builder.executionResourcesFactory = application -> {
-            ExecutionResources resources = ExecutionResources.create(application);
+        builder.executionResourcesFactory = (application, mode) -> {
+            ExecutionResources resources = ExecutionResources.create(application, mode);
             created.set(resources);
             return resources;
         };
@@ -2127,7 +2127,7 @@ class ExecutionDomainsTest {
         server = null;
 
         for (ExecutorService executor : serverOwnedExecutors) {
-            assertThat(executor.isShutdown(), is(true));
+            assertEventually(executor::isShutdown, is(true));
         }
     }
 

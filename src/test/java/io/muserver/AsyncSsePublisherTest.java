@@ -20,6 +20,27 @@ public class AsyncSsePublisherTest {
     private final TestSseClient listener = new TestSseClient();
 
     @Test
+    public void aSynchronouslyRejectedSendIsAlreadyFailedBeforeReturningToTheHandler() throws Exception {
+        var result = new CompletableFuture<CompletableFuture<?>>();
+        server = ServerUtils.httpsServerForTest("http")
+            .addHandler((request, response) -> {
+                AsyncHandle handle = request.handleAsync();
+                var publisher = new AsyncSsePublisherImpl(handle);
+                handle.complete();
+                var send = publisher.send("too late").toCompletableFuture();
+                // The callback is queued behind this handler; waiting for it would deadlock.
+                if (!send.isDone()) result.completeExceptionally(new AssertionError("Send was not resolved synchronously"));
+                else result.complete(send);
+                return true;
+            }).start();
+        try (var response = ClientUtils.client.newCall(request(server.uri()).build()).execute()) {
+            var send = result.get(5, TimeUnit.SECONDS);
+            var error = org.junit.jupiter.api.Assertions.assertThrows(ExecutionException.class, () -> send.get(5, TimeUnit.SECONDS));
+            org.junit.jupiter.api.Assertions.assertInstanceOf(IllegalStateException.class, error.getCause());
+        }
+    }
+
+    @Test
     public void canCall() throws InterruptedException {
         String multilineJson = "{\n" +
             "    \"value2\": \"Something \\n more\",\n" +
