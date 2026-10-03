@@ -112,6 +112,74 @@ class AsyncResponseOutputTest {
         } finally { releaseAbort.countDown(); }
     }
 
+    @Test void finishedFuturesDoNotRetainThePayloadCallbackOrResponse() throws Exception {
+        var queuedIo = new java.util.ArrayDeque<Runnable>();
+        var queuedCallbacks = new java.util.ArrayDeque<Runnable>();
+        var callbackExecutor = new java.util.concurrent.AbstractExecutorService() {
+            public void execute(Runnable task) { queuedCallbacks.add(task); }
+            public void shutdown() { }
+            public List<Runnable> shutdownNow() { return List.of(); }
+            public boolean isShutdown() { return false; }
+            public boolean isTerminated() { return false; }
+            public boolean awaitTermination(long duration, TimeUnit unit) { return true; }
+        };
+        var callbackServer = (Mu3ServerImpl) MuServerBuilder.httpServer().withHandlerExecutor(callbackExecutor).start();
+        try {
+            for (String ending : List.of("success", "failure", "cancel", "rejected")) {
+                var output = new AsyncResponseOutput(queuedIo::add, buffer -> { }, active -> { },
+                    new SerialApplicationTasks(callbackServer));
+                var payload = ByteBuffer.allocate(16384);
+                var delivered = new java.util.concurrent.atomic.AtomicInteger();
+                DoneCallback callback = error -> delivered.incrementAndGet();
+                if (ending.equals("rejected")) output.complete(null);
+                Future<?> future = output.write(payload, callback);
+                if (!ending.equals("rejected")) {
+                    assertTrue(retains(future, output), "Pending cancellation must still reach its output");
+                    if (ending.equals("failure")) output.complete(new IOException("closed"));
+                    else if (ending.equals("cancel")) assertTrue(future.cancel(false));
+                    while (!queuedIo.isEmpty()) queuedIo.remove().run();
+                }
+                assertTrue(future.isDone());
+                assertFalse(retains(future, payload), ending + ": completed future retains its payload");
+                assertFalse(retains(future, callback), ending + ": completed future retains its callback");
+                assertFalse(retains(future, output), ending + ": completed future retains its response");
+                // An application callback may be delayed independently of successful I/O.
+                assertEquals(0, delivered.get());
+                for (Runnable task : queuedCallbacks) {
+                    assertFalse(retains(task, payload), ending + ": callback dispatch retains an unused payload");
+                }
+                while (!queuedCallbacks.isEmpty()) queuedCallbacks.remove().run();
+                assertEquals(1, delivered.get());
+                assertFalse(future.cancel(false), "A finished future cannot cancel a later write");
+            }
+        } finally { callbackServer.stop(0, TimeUnit.SECONDS); }
+    }
+
+    /** Inspect Mu-owned strong references without relying on GC timing or opening JDK modules. */
+    private static boolean retains(Object root, Object target) throws Exception {
+        var seen = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<Object, Boolean>());
+        var pending = new java.util.ArrayDeque<Object>();
+        pending.add(root);
+        while (!pending.isEmpty()) {
+            Object value = pending.remove();
+            if (value == target) return true;
+            if (!seen.add(value)) continue;
+            if (value instanceof java.util.Collection<?>) {
+                for (Object item : (java.util.Collection<?>) value) if (item != null) pending.add(item);
+            } else {
+                for (Class<?> type = value.getClass(); type != null && type.getName().startsWith("io.muserver."); type = type.getSuperclass()) {
+                    for (var field : type.getDeclaredFields()) {
+                        if (java.lang.reflect.Modifier.isStatic(field.getModifiers()) || field.getType().isPrimitive()) continue;
+                        field.setAccessible(true);
+                        Object reference = field.get(value);
+                        if (reference != null) pending.add(reference);
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     @Test void cancellingTheReturnedFutureWaitsForBufferRelease() throws Exception {
         var started = new CountDownLatch(1);
         var aborted = new CountDownLatch(1);

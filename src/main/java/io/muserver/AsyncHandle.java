@@ -12,6 +12,9 @@ import java.util.concurrent.Future;
  * and the write methods here to send the response asynchronously. Blocking request and response
  * methods are also available, but do not read the body in both ways or mix blocking and
  * asynchronous writes while a write is still in progress.</p>
+ * <p>There is no byte or count limit on queued asynchronous writes. Each unfinished write retains
+ * its buffer; delayed callbacks also retain application state. Wait for each write or submit the
+ * next from its callback to apply backpressure when the client reads slowly.</p>
  */
 public interface AsyncHandle {
 
