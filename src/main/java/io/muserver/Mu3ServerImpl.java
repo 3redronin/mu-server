@@ -45,6 +45,7 @@ class Mu3ServerImpl implements MuServer {
     private final ThreadLocal<@Nullable DetachedApplicationTask> activeDetachedApplicationTask =
         new ThreadLocal<>();
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
+    private volatile boolean rateLimitCleanupStopped;
 
     Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, int maxMultipartParts, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutionResources executionResources, int maxConcurrentRequests, @Nullable HAProxyProtocolConfig haProxyProtocolConfig) {
         this.acceptors = acceptors;
@@ -74,6 +75,14 @@ class Mu3ServerImpl implements MuServer {
             for (ConnectionAcceptor acceptor : acceptors) {
                 acceptor.start();
             }
+            if (!rateLimiters.isEmpty()) {
+                scheduleConnectionTaskAtFixedRate(() -> {
+                    for (RateLimiterImpl limiter : rateLimiters) {
+                        if (rateLimitCleanupStopped) return;
+                        limiter.removeExpiredBuckets(() -> rateLimitCleanupStopped);
+                    }
+                }, 1, 1, TimeUnit.SECONDS);
+            }
         } catch (RuntimeException | Error startFailure) {
             try {
                 stop(0, TimeUnit.MILLISECONDS);
@@ -94,6 +103,7 @@ class Mu3ServerImpl implements MuServer {
     public boolean stop(long duration, java.util.concurrent.TimeUnit unit) {
         long timeoutMillis = Math.max(0L, unit.toMillis(duration));
         long deadlineNanos = MonotonicTime.deadlineAfterMillis(timeoutMillis);
+        rateLimitCleanupStopped = true;
         boolean stoppedCleanly = true;
         for (var acceptor : acceptors) {
             if (!acceptor.stopUntil(deadlineNanos)) {
