@@ -21,6 +21,10 @@ public final class SingleCarrier {
 
     public static void run(Class<?> mainClass, Path log, int carriers, int timeoutSeconds, String... arguments) throws Exception {
         assumeTrue(Runtime.version().feature() >= 21, "Virtual threads require Java 21");
+        runOnAnyJdk(mainClass, log, carriers, timeoutSeconds, arguments);
+    }
+
+    public static void runOnAnyJdk(Class<?> mainClass, Path log, int carriers, int timeoutSeconds, String... arguments) throws Exception {
         String java = Path.of(System.getProperty("java.home"), "bin", "java").toString();
         String classPath = System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
         var command = new ArrayList<>(List.of(java,

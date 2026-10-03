@@ -301,6 +301,13 @@ class WebsocketConnection implements MuWebSocketSession {
                     e instanceof TimeoutException || e instanceof SocketTimeoutException
                         ? WebsocketSessionState.TIMED_OUT
                         : WebsocketSessionState.ERRORED;
+                if (errorState == WebsocketSessionState.TIMED_OUT) {
+                    // A read timeout must also release a pending send. Publishing the
+                    // terminal state first prevents the default error callback from
+                    // waiting to send a close frame behind that unfinished message.
+                    lifecycle.terminateWith(errorState);
+                    httpConnection.forceShutdown();
+                }
                 invokeApplicationError(e, errorState);
             }
         } finally {
