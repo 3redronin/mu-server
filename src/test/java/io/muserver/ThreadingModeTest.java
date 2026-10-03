@@ -25,7 +25,7 @@ class ThreadingModeTest {
     }
 
     private static boolean expectedVirtual(ThreadingMode mode) {
-        return mode == ThreadingMode.VIRTUAL || (mode == ThreadingMode.AUTO && Runtime.version().feature() >= 25);
+        return mode == ThreadingMode.VIRTUAL || (mode == ThreadingMode.AUTO && Runtime.version().feature() >= 21);
     }
 
     @Test void builderPolicyIsExplicitAndResettable() {
@@ -51,6 +51,7 @@ class ThreadingModeTest {
             assertEquals(expectedVirtual(mode), resources.internal.submit(ThreadingModeTest::virtualThread).get(5, TimeUnit.SECONDS));
             assertFalse(resources.timer.submit(ThreadingModeTest::virtualThread).get(5, TimeUnit.SECONDS));
         } finally { resources.shutdown(); }
+        assertTrue(resources.application.awaitTermination(5, TimeUnit.SECONDS));
         assertTrue(resources.application.isShutdown());
         assertTrue(resources.internal.isShutdown());
         assertTrue(resources.timer.isShutdown());

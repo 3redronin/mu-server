@@ -2127,7 +2127,7 @@ class ExecutionDomainsTest {
         server = null;
 
         for (ExecutorService executor : serverOwnedExecutors) {
-            assertThat(executor.isShutdown(), is(true));
+            assertEventually(executor::isShutdown, is(true));
         }
     }
 

@@ -24,9 +24,12 @@ public class GzipCarrierStarvationTest {
     @TempDir Path temporary;
 
     @ParameterizedTest
-    @CsvSource({"false,VIRTUAL,false", "true,VIRTUAL,false", "false,AUTO,true", "true,AUTO,true"})
+    @CsvSource({"false,VIRTUAL,false", "true,VIRTUAL,false", "false,AUTO,true", "true,AUTO,true",
+        "false,PLATFORM,true", "true,PLATFORM,true"})
     void concurrentGzipAndNewConnectionProgressWithOneCarrier(boolean tls, ThreadingMode mode, boolean stockWrapper) throws Exception {
         assumeTrue(Runtime.version().feature() >= 21, "Virtual threads require Java 21");
+        assumeTrue(!stockWrapper || mode != ThreadingMode.AUTO || Runtime.version().feature() >= 24,
+            "Stock application wrappers can pin virtual threads before Java 24; PLATFORM is the escape hatch");
         String java = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
         String classPath = System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
         Path log = temporary.resolve("child.log");

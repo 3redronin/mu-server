@@ -33,10 +33,13 @@ public class ResponseWriterCarrierStarvationTest {
         "false,format,false,VIRTUAL,false", "true,format,false,VIRTUAL,false",
         "false,write,true,AUTO,true", "true,write,true,AUTO,true",
         "false,println,true,AUTO,true", "true,println,true,AUTO,true",
-        "false,format,true,AUTO,true", "true,format,true,AUTO,true"})
+        "false,format,true,AUTO,true", "true,format,true,AUTO,true",
+        "false,write,true,PLATFORM,true", "true,write,true,PLATFORM,true", "false,println,true,PLATFORM,true", "true,println,true,PLATFORM,true", "false,format,true,PLATFORM,true", "true,format,true,PLATFORM,true"})
     void writerAndNewConnectionProgressWithOneCarrier(boolean tls, String operation, boolean compressed,
                                                      ThreadingMode mode, boolean stockWrapper) throws Exception {
         assumeTrue(Runtime.version().feature() >= 21, "Virtual threads require Java 21");
+        assumeTrue(!stockWrapper || mode != ThreadingMode.AUTO || Runtime.version().feature() >= 24,
+            "Stock application wrappers can pin virtual threads before Java 24; PLATFORM is the escape hatch");
         String java = System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
         String classPath = System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
         Path log = temporary.resolve("child.log");
