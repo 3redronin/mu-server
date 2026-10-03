@@ -12,12 +12,15 @@ import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * HTTPS configuration
  */
 public class HttpsConfig implements SSLInfo {
     private static final Logger log = LoggerFactory.getLogger(HttpsConfig.class);
+    // Lookup performs network I/O; a monitor would pin Java 21 virtual-thread carriers.
+    private final ReentrantLock certificateLock = new ReentrantLock();
     private final SSLContext sslContext;
     private final SSLParameters sslParameters;
     private final ClientCertificateAuthentication clientCertificateAuthentication;
@@ -99,50 +102,55 @@ public class HttpsConfig implements SSLInfo {
      * @return An ordered list of server certificates, with the server's own certificate first followed by any certificate authorities.
      */
     @Override
-    public synchronized List<X509Certificate> certificates() {
-        if (cachedCerts != null) {
-            return cachedCerts;
-        }
-        if (httpsUri == null) {
-            return Collections.emptyList();
-        }
-        HttpsURLConnection conn = null;
+    public List<X509Certificate> certificates() {
+        certificateLock.lock();
         try {
-            SSLContext ctx = SSLContext.getInstance("TLS");
-            ctx.init(new KeyManager[0], new TrustManager[] {new X509TrustManager() {
-                    @Override
-                    public void checkClientTrusted(X509Certificate[] x509Certificates, String s) {
+            if (cachedCerts != null) {
+                return cachedCerts;
+            }
+            if (httpsUri == null) {
+                return Collections.emptyList();
+            }
+            HttpsURLConnection conn = null;
+            try {
+                SSLContext ctx = SSLContext.getInstance("TLS");
+                ctx.init(new KeyManager[0], new TrustManager[] {new X509TrustManager() {
+                        @Override
+                        public void checkClientTrusted(X509Certificate[] x509Certificates, String s) {
+                        }
+                        @Override
+                        public void checkServerTrusted(X509Certificate[] x509Certificates, String s) {
+                        }
+                        @Override
+                        public X509Certificate@Nullable[] getAcceptedIssuers() {
+                            return null;
+                        }
+                    }},
+                    new SecureRandom());
+                conn = (HttpsURLConnection) httpsUri.toURL().openConnection();
+                conn.setSSLSocketFactory(ctx.getSocketFactory());
+                conn.setHostnameVerifier((arg0, arg1) -> true);
+                conn.setConnectTimeout(5000);
+                conn.connect();
+                List<X509Certificate> results = new ArrayList<>();
+                Certificate[] certs = conn.getServerCertificates();
+                for (Certificate cert :certs){
+                    if (cert instanceof X509Certificate) {
+                        results.add((X509Certificate) cert);
                     }
-                    @Override
-                    public void checkServerTrusted(X509Certificate[] x509Certificates, String s) {
-                    }
-                    @Override
-                    public X509Certificate@Nullable[] getAcceptedIssuers() {
-                        return null;
-                    }
-                }},
-                new SecureRandom());
-            conn = (HttpsURLConnection) httpsUri.toURL().openConnection();
-            conn.setSSLSocketFactory(ctx.getSocketFactory());
-            conn.setHostnameVerifier((arg0, arg1) -> true);
-            conn.setConnectTimeout(5000);
-            conn.connect();
-            List<X509Certificate> results = new ArrayList<>();
-            Certificate[] certs = conn.getServerCertificates();
-            for (Certificate cert :certs){
-                if (cert instanceof X509Certificate) {
-                    results.add((X509Certificate) cert);
+                }
+                cachedCerts = results;
+                return results;
+            } catch (Exception e) {
+                log.warn("Error finding SSL certificate info", e);
+                return Collections.emptyList();
+            } finally {
+                if (conn != null) {
+                    conn.disconnect();
                 }
             }
-            cachedCerts = results;
-            return results;
-        } catch (Exception e) {
-            log.warn("Error finding SSL certificate info", e);
-            return Collections.emptyList();
         } finally {
-            if (conn != null) {
-                conn.disconnect();
-            }
+            certificateLock.unlock();
         }
     }
 

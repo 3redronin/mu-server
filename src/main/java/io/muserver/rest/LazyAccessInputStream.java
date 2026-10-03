@@ -6,6 +6,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * An input stream based on the request input stream, but if no methods are called then the output stream is never created.
@@ -13,6 +14,7 @@ import java.io.InputStream;
 class LazyAccessInputStream extends InputStream {
 
     private final MuRequest request;
+    private final ReentrantLock markResetLock = new ReentrantLock();
     private @Nullable InputStream inputStream;
 
     LazyAccessInputStream(MuRequest request) {
@@ -59,13 +61,25 @@ class LazyAccessInputStream extends InputStream {
     }
 
     @Override
-    public synchronized void mark(int readlimit) {
-        in().mark(readlimit);
+    @SuppressWarnings("UnsynchronizedOverridesSynchronized") // ReentrantLock replaces the monitor across delegated I/O.
+    public void mark(int readlimit) {
+        markResetLock.lock();
+        try {
+            in().mark(readlimit);
+        } finally {
+            markResetLock.unlock();
+        }
     }
 
     @Override
-    public synchronized void reset() throws IOException {
-        in().reset();
+    @SuppressWarnings("UnsynchronizedOverridesSynchronized") // ReentrantLock replaces the monitor across delegated I/O.
+    public void reset() throws IOException {
+        markResetLock.lock();
+        try {
+            in().reset();
+        } finally {
+            markResetLock.unlock();
+        }
     }
 
     @Override

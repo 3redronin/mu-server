@@ -20,6 +20,7 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Type;
 import java.net.URI;
 import java.util.*;
+import java.util.concurrent.locks.ReentrantLock;
 
 class JaxRSRequest implements Request, ContainerRequestContext, ReaderInterceptorContext {
 
@@ -27,6 +28,8 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
     private final MuResponse muResponse;
     private InputStream inputStream;
     private boolean entityStreamClosed;
+    // A caller-supplied stream may block in close; concurrent callers still wait for completion.
+    private final ReentrantLock entityStreamCloseLock = new ReentrantLock();
     private final String relativePath;
     private final JaxRsHttpHeadersAdapter jaxHeaders;
     private UriInfo uriInfo;
@@ -465,10 +468,15 @@ class JaxRSRequest implements Request, ContainerRequestContext, ReaderIntercepto
         return inputStream;
     }
 
-    synchronized void closeEntityStream() throws IOException {
-        if (!entityStreamClosed) {
-            entityStreamClosed = true;
-            inputStream.close();
+    void closeEntityStream() throws IOException {
+        entityStreamCloseLock.lock();
+        try {
+            if (!entityStreamClosed) {
+                entityStreamClosed = true;
+                inputStream.close();
+            }
+        } finally {
+            entityStreamCloseLock.unlock();
         }
     }
 
