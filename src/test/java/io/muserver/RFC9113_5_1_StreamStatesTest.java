@@ -50,6 +50,7 @@ class RFC9113_5_1_StreamStatesTest {
                     liveConnection.server,
                     liveConnection.creator,
                     liveConnection.clientSocket,
+                    liveConnection.transportSocket,
                     liveConnection.clientCertificate,
                     ConnectionAcceptedTime.now(),
                     liveConnection.proxyInfo().orElse(null),

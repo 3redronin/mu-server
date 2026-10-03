@@ -36,7 +36,7 @@ class Http2FinalWriteCompletionTest {
             con.handshake();
             var live = (Http2Connection) server.activeConnections().iterator().next();
             // Exercise the real writer with controlled output, independently of socket buffering.
-            var writer = new Http2Connection(live.server, live.creator, live.clientSocket,
+            var writer = new Http2Connection(live.server, live.creator, live.clientSocket, live.transportSocket,
                 live.clientCertificate, ConnectionAcceptedTime.now(), live.proxyInfo().orElse(null), Http2Settings.DEFAULT_CLIENT_SETTINGS,
                 5000, executor, executor);
             try {

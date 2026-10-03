@@ -157,7 +157,7 @@ class Http2QueuedWriteBatchTest {
         try (var server = httpsServerForTest("h2").start(); var client = new H2Client(); var con = client.connect(server)) {
             con.handshake();
             var live = (Http2Connection) server.activeConnections().iterator().next();
-            var writer = new Http2Connection(live.server, live.creator, live.clientSocket,
+            var writer = new Http2Connection(live.server, live.creator, live.clientSocket, live.transportSocket,
                 live.clientCertificate, ConnectionAcceptedTime.now(), live.proxyInfo().orElse(null),
                 Http2Settings.DEFAULT_CLIENT_SETTINGS, 5000, executor, executor);
             try { test.run(writer); } finally { writer.forceShutdown(); }
