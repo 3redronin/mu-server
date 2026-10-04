@@ -43,6 +43,7 @@ public class MuServerBuilder {
     private @Nullable ExecutorService executor;
     private ThreadingMode threadingMode = ThreadingMode.AUTO;
     private int maxConcurrentRequests = 1000;
+    private int maxConnections;
     ExecutionResources.Factory executionResourcesFactory = ExecutionResources::create;
     private long maxRequestSize = 24 * 1024 * 1024;
     private int maxMultipartParts = 1024;
@@ -306,6 +307,32 @@ public class MuServerBuilder {
     public ThreadingMode threadingMode() {
         return threadingMode;
     }
+
+    /**
+     * Limits admitted connections across all HTTP and HTTPS ports of this server.
+     * <p>Connections count during setup (including TLS and PROXY negotiation), while idle,
+     * while handling requests and after a WebSocket upgrade. A slot is released after its
+     * accepted socket closes. HTTP/2 streams share their connection's slot; use
+     * {@link #withMaxConcurrentRequests(int)} to limit request processing separately.</p>
+     * <p>At capacity, listeners pause acceptance and additional connections may wait in the
+     * operating system's bounded listen queue. Concurrent accepts on different ports can race
+     * for the last slot; an excess socket is closed before setup. Overload can therefore cause
+     * connection delays, resets or timeouts, rather than an HTTP error response. The limit
+     * excludes the OS backlog and transient sockets being accepted and immediately rejected.</p>
+     * @param maximum The maximum admitted connections, or zero for unlimited (the default)
+     * @return This builder
+     */
+    public MuServerBuilder withMaxConnections(int maximum) {
+        if (maximum < 0) throw new IllegalArgumentException("maximum must be non-negative");
+        maxConnections = maximum;
+        return this;
+    }
+
+    /**
+     * Gets the connection admission limit across all listener ports.
+     * @return The limit; zero means unlimited.
+     */
+    public int maxConnections() { return maxConnections; }
 
     /**
      * Limits how many requests the server handles at once, across all its HTTP and HTTPS ports.
@@ -873,6 +900,7 @@ public class MuServerBuilder {
             ", idleTimeoutMills=" + idleTimeoutMills +
             ", executor=" + executor +
             ", threadingMode=" + threadingMode +
+            ", maxConnections=" + maxConnections +
             ", maxRequestSize=" + maxRequestSize +
             ", maxMultipartParts=" + maxMultipartParts +
             ", responseCompleteListeners=" + responseCompleteListeners +

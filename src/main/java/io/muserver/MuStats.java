@@ -51,10 +51,12 @@ public interface MuStats {
     long bytesRead();
 
     /**
-     * Gets the number of requests rejected because of overload.
+     * Gets the number of requests or accepted connections rejected because of overload.
+     * <p>Includes request admission, application/internal executor rejection, and accepted
+     * sockets rejected when listeners race for the last connection slot. Clients waiting
+     * in the operating system's listen queue are not counted.</p>
      *
-     * @return The number of requests rejected because the executor passed to {@link MuServerBuilder#withHandlerExecutor(ExecutorService)}
-     * rejected a new response.
+     * @return The total number of overload rejections.
      */
     long rejectedDueToOverload();
 
