@@ -74,7 +74,7 @@ class ConnectionLimitTest {
 
     @Test void idleListenersDoNotReserveSharedCapacity() throws Exception {
         try (MuServer server = responding(muServer().withHttpPort(0).withHttpsPort(0), new AtomicInteger())
-            .withMaxConnections(1).start()) {
+            .withMaxConnections(1).withListenBacklog(7).start()) {
             for (URI uri : new URI[]{server.httpUri(), server.httpsUri(), server.httpUri(), server.httpsUri()}) {
                 try (Socket connection = connect(uri)) {
                     exchange(connection, uri, false);

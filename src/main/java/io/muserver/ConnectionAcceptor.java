@@ -29,7 +29,6 @@ import java.util.concurrent.locks.ReentrantLock;
 
 class ConnectionAcceptor {
     private static final Logger log = LoggerFactory.getLogger(ConnectionAcceptor.class);
-    private static final int ACCEPT_BACKLOG = 50;
 
     private final Mu3ServerImpl server;
     private final @Nullable HAProxyProtocolConfig proxyConfig;
@@ -711,6 +710,7 @@ class ConnectionAcceptor {
         Mu3ServerImpl server,
         @Nullable InetAddress address,
         int bindPort,
+        int listenBacklog,
         @Nullable HttpsConfig httpsConfig,
         @Nullable Http2Config h2Config,
         ExecutorService handlerExecutor,
@@ -718,7 +718,7 @@ class ConnectionAcceptor {
         ExecutorService http2WriterExecutor,
         List<ContentEncoder> contentEncoders) throws IOException {
 
-        ServerSocket socketServer = new ServerSocket(bindPort, ACCEPT_BACKLOG, address);
+        ServerSocket socketServer = new ServerSocket(bindPort, listenBacklog, address);
         try {
             configureSocketOptions(socketServer);
 

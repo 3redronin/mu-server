@@ -12,6 +12,17 @@ import static org.junit.jupiter.api.Assertions.*;
 @Timeout(15)
 class ConnectionAdmissionTest {
     @Test void configurationAndUnlimitedDefault() {
+        for (MuServerBuilder builder : List.of(MuServerBuilder.httpServer(), MuServerBuilder.httpsServer(), MuServerBuilder.muServer())) {
+            assertEquals(50, builder.listenBacklog());
+            assertSame(builder, builder.withListenBacklog(7));
+            assertEquals(7, builder.listenBacklog());
+            assertEquals(0, builder.maxConnections());
+            builder.withMaxConnections(12);
+            assertEquals(7, builder.listenBacklog(), "Backlog and connection admission are independent");
+            assertThrows(IllegalArgumentException.class, () -> builder.withListenBacklog(0));
+            assertThrows(IllegalArgumentException.class, () -> builder.withListenBacklog(-1));
+            assertEquals(7, builder.listenBacklog());
+        }
         assertEquals(0, MuServerBuilder.httpServer().maxConnections());
         assertEquals(12, MuServerBuilder.httpServer().withMaxConnections(12).maxConnections());
         assertThrows(IllegalArgumentException.class, () -> MuServerBuilder.httpServer().withMaxConnections(-1));
