@@ -8,7 +8,9 @@ import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -32,6 +34,7 @@ public class MuServerBuilder {
     private int httpPort = -1;
     private int httpsPort = -1;
     private int maxHeadersSize = 8192;
+    private Set<String> sensitiveHeaders = Headers.DEFAULT_SENSITIVE_HEADERS;
     private int maxUrlSize = 8192;
     private final List<MuHandler> handlers = new ArrayList<>();
     private boolean addShutdownHook = false;
@@ -417,6 +420,29 @@ public class MuServerBuilder {
     }
 
     /**
+     * Sets the header names whose values HTTP/2 responses must encode as never indexed.
+     * <p>The default is {@link Headers#DEFAULT_SENSITIVE_HEADERS}. This collection replaces
+     * the defaults; an empty collection disables detection by name. Explicit never-indexed
+     * flags received over HTTP/2 are always respected.</p>
+     * <p>Names are validated, normalized to lowercase, and copied. This setting does not
+     * change {@link Headers#toString()}; pass the set returned by {@link MuServer#sensitiveHeaders()}
+     * to {@link Headers#toString(Collection)} to use it for diagnostic redaction.</p>
+     * @param names the sensitive header names, compared case-insensitively
+     * @return this builder
+     * @throws IllegalArgumentException if a name is not a valid header name
+     * @throws NullPointerException if the collection or any name is null
+     */
+    public MuServerBuilder withSensitiveHeaders(Collection<String> names) {
+        Objects.requireNonNull(names, "names is null");
+        var normalized = new HashSet<String>();
+        for (String name : names) {
+            normalized.add(ValidatedHeaderName.from(Objects.requireNonNull(name, "name is null")).toString());
+        }
+        this.sensitiveHeaders = Set.copyOf(normalized);
+        return this;
+    }
+
+    /**
      * The maximum length that a URL can be. If it exceeds this value, a <code>414</code> error is
      * returned to the client. The default value is 8175.
      *
@@ -695,6 +721,14 @@ public class MuServerBuilder {
     }
 
     /**
+     * Gets the configured sensitive header names.
+     * @return an immutable set of lowercase names, initially {@link Headers#DEFAULT_SENSITIVE_HEADERS}
+     */
+    public Set<String> sensitiveHeaders() {
+        return sensitiveHeaders;
+    }
+
+    /**
      * Gets the maximum allowed URL length.
      *
      * @return The URL length limit in characters.
@@ -916,6 +950,7 @@ public class MuServerBuilder {
             ", httpPort=" + httpPort +
             ", httpsPort=" + httpsPort +
             ", maxHeadersSize=" + maxHeadersSize +
+            ", sensitiveHeaders=" + sensitiveHeaders +
             ", maxUrlSize=" + maxUrlSize +
             ", handlers=" + handlers +
             ", addShutdownHook=" + addShutdownHook +

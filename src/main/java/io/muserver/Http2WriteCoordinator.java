@@ -249,8 +249,7 @@ final class Http2WriteCoordinator {
     private final Map<Integer, Http2Stream> applicationStreams = new HashMap<>();
     private final ArrayList<Command> commandBatch = new ArrayList<>();
     private final AtomicBoolean wakeUpQueued = new AtomicBoolean();
-    private final FieldBlockEncoder fieldBlockEncoder =
-        new FieldBlockEncoder(new HpackTable(Http2Settings.DEFAULT_CLIENT_SETTINGS.headerTableSize));
+    private final FieldBlockEncoder fieldBlockEncoder;
     private int connectionCredit;
     private boolean connectionErrorPendingGoAway;
     private @Nullable IOException connectionFailureReason;
@@ -261,11 +260,17 @@ final class Http2WriteCoordinator {
     }
 
     Http2WriteCoordinator(int initialConnectionCredit, Runnable commandQueued) {
+        this(initialConnectionCredit, commandQueued, Headers.DEFAULT_SENSITIVE_HEADERS);
+    }
+
+    Http2WriteCoordinator(int initialConnectionCredit, Runnable commandQueued, Set<String> sensitiveHeaders) {
         if (initialConnectionCredit < 0) {
             throw new IllegalArgumentException("Initial connection credit cannot be negative");
         }
         this.connectionCredit = initialConnectionCredit;
         this.commandQueued = commandQueued;
+        this.fieldBlockEncoder = new FieldBlockEncoder(
+            new HpackTable(Http2Settings.DEFAULT_CLIENT_SETTINGS.headerTableSize), sensitiveHeaders);
     }
 
     void submit(WriteTask task) {

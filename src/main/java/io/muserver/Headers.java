@@ -20,6 +20,12 @@ import java.util.*;
  */
 public interface Headers extends Iterable<Map.Entry<String, String>> {
     /**
+     * The immutable default set of sensitive header names used by {@link #toString()}
+     * and {@link MuServerBuilder#withSensitiveHeaders(Collection)}.
+     */
+    Set<String> DEFAULT_SENSITIVE_HEADERS = Set.of("authorization", "cookie", "set-cookie");
+
+    /**
      * <p>Gets the value with the given name, or null if there is no parameter with that name.</p>
      * <p>If there are multiple parameters with the same name, the first one is returned.</p>
      *
@@ -572,6 +578,8 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * Returns a string representation of the headers.
      * <p><strong>Note:</strong> The following headers will have their actual values replaced with the string <code>(hidden)</code>
      * in order to protect potentially sensitive information: <code>authorization</code>, <code>cookie</code> and <code>set-cookie</code>.</p>
+     * <p>HTTP/2 fields received with the never-indexed flag are also hidden.
+     * Server-specific sensitive header settings do not change this method's defaults.</p>
      * <p>If you wish to print all values or customize the header values that are hidden, use {@link #toString(Collection)}</p>
      *
      * @return a string representation of these headers
@@ -587,6 +595,7 @@ public interface Headers extends Iterable<Map.Entry<String, String>> {
      * @param toSuppress A collection of case-insensitive header names which will not have their values printed.
      *                   Pass an empty collection to print all header values. A <code>null</code> value will hide
      *                   the header values as defined on {@link #toString()}.
+     *                   Pass {@link MuServer#sensitiveHeaders()} to use the server's configured sensitive header names.
      * @return a string representation of these headers
      */
     String toString(@Nullable Collection<String> toSuppress);

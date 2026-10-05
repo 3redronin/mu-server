@@ -217,7 +217,7 @@ class FieldBlock implements Headers, Iterable<Map.Entry<String, String>> {
 
     @Override
     public String toString(@Nullable Collection<String> toSuppress) {
-        var sup = toSuppress == null ? Set.of("authorization", "cookie", "set-cookie") : toSuppress;
+        var sup = toSuppress == null ? Headers.DEFAULT_SENSITIVE_HEADERS : toSuppress;
         var sb = new StringBuilder("HttpHeaders[");
         var first = true;
         for (var line : lines) {

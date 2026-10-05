@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.util.Collections;
+import java.util.Set;
 
 import static io.muserver.FieldBlockEncoderTest.bytesToHex;
 import static io.muserver.FieldBlockEncoderTest.hexToByteArray;
@@ -17,6 +18,49 @@ import static org.hamcrest.Matchers.not;
 
 @DisplayName("RFC 7541 6.2.3 Literal Header Field Never Indexed")
 class RFC7541_6_2_3_LiteralHeaderFieldNeverIndexedTest {
+
+    @Test
+    void aConfiguredSensitiveNameOverridesAnExactStaticMatch() throws Exception {
+        var encoder = new FieldBlockEncoder(new HpackTable(4096), Set.of("authorization"));
+        var block = new FieldBlock();
+        block.set("AUTHORIZATION", "");
+
+        try (var out = new ByteArrayOutputStream()) {
+            encoder.encodeTo(block, out);
+            assertThat(bytesToHex(out.toByteArray()), equalTo("1f0800"));
+        }
+    }
+
+    @Test
+    void aConfiguredSensitiveNameOverridesAnExactDynamicMatch() throws Exception {
+        var table = new HpackTable(4096);
+        var block = new FieldBlock();
+        block.set("x-secret", "secret");
+        table.indexField(block.lineIterator().iterator().next());
+        int originalSize = table.dynamicTableSizeInBytes();
+        var encoder = new FieldBlockEncoder(table, Set.of("x-secret"));
+
+        try (var out = new ByteArrayOutputStream()) {
+            encoder.encodeTo(block, out);
+            assertThat(bytesToHex(out.toByteArray()), equalTo("1f2f06736563726574"));
+            var decoded = new FieldBlockDecoder(table, 8192, 8192 * 4).decodeFrom(ByteBuffer.wrap(out.toByteArray()));
+            assertThat(decoded.lineIterator().iterator().next().neverIndexed(), equalTo(true));
+            assertThat(table.dynamicTableSizeInBytes(), equalTo(originalSize));
+        }
+    }
+
+    @Test
+    void anEmptyPolicyAllowsOrdinaryExactMatchesButPreservesExplicitFlags() throws Exception {
+        var encoder = new FieldBlockEncoder(new HpackTable(4096), Set.of());
+        var block = new FieldBlock();
+        block.set("authorization", "");
+        block.add(new FieldLine((HeaderString) HeaderNames.AUTHORIZATION, ValidatedHeaderValue.EMPTY_VALUE, true));
+
+        try (var out = new ByteArrayOutputStream()) {
+            encoder.encodeTo(block, out);
+            assertThat(bytesToHex(out.toByteArray()), equalTo("971f0800"));
+        }
+    }
 
     @Test
     void neverIndexedHeadersDoNotEnterTheDynamicTable() throws Exception {
