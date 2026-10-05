@@ -5,9 +5,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.function.BooleanSupplier;
 import java.util.function.LongSupplier;
 
 class RateLimiterImpl implements RateLimiter {
@@ -37,7 +39,10 @@ class RateLimiterImpl implements RateLimiter {
     private final Lock lock = new ReentrantLock();
     private final RateLimitSelector selector;
     private final LongSupplier nanoTime;
-    private final Map<String, Queue<Long>> map = new HashMap<>();
+    // Decisions and queue mutation remain guarded by lock. The concurrent map lets
+    // maintenance traverse buckets without holding that lock across the whole map.
+    private final Map<String, Queue<Long>> map = new ConcurrentHashMap<>();
+    private static final int CLEANUP_BATCH_SIZE = 1024;
 
     RateLimiterImpl(RateLimitSelector selector) {
         this(selector, System::nanoTime);
@@ -52,14 +57,41 @@ class RateLimiterImpl implements RateLimiter {
         @Nullable Queue<Long> queue,
         long nowNanos
     ) {
+        removeExpired(queue, nowNanos, Integer.MAX_VALUE);
+    }
+
+    private static int removeExpired(@Nullable Queue<Long> queue, long nowNanos, int maximum) {
         if (queue == null) {
-            return;
+            return 0;
         }
+        int removed = 0;
         var head = queue.peek();
-        while (head != null
+        while (removed < maximum && head != null
             && MonotonicTime.nanosUntil(head, nowNanos) <= 0L) {
             queue.poll();
+            removed++;
             head = queue.peek();
+        }
+        return removed;
+    }
+
+    /** Runs off the timer thread, releasing the decision lock between bounded batches. */
+    void removeExpiredBuckets(BooleanSupplier stopRequested) {
+        for (String bucket : map.keySet()) {
+            int removed;
+            do {
+                if (stopRequested.getAsBoolean()) return;
+                lock.lock();
+                try {
+                    // A request may have removed or replaced this bucket since iteration.
+                    Queue<Long> expiries = map.get(bucket);
+                    if (expiries == null) break;
+                    removed = removeExpired(expiries, nanoTime.getAsLong(), CLEANUP_BATCH_SIZE);
+                    if (expiries.isEmpty()) map.remove(bucket);
+                } finally {
+                    lock.unlock();
+                }
+            } while (removed == CLEANUP_BATCH_SIZE);
         }
     }
 
