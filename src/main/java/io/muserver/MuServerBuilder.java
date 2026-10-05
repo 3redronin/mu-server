@@ -40,6 +40,8 @@ public class MuServerBuilder {
     private long idleTimeoutMills = TimeUnit.MINUTES.toMillis(20);
     private @Nullable ExecutorService executor;
     private int maxConcurrentRequests = 1000;
+    private int maxConnections;
+    private int listenBacklog = 50;
     ExecutionResources.Factory executionResourcesFactory = ExecutionResources::create;
     private long maxRequestSize = 24 * 1024 * 1024;
     private int maxMultipartParts = 1024;
@@ -271,6 +273,57 @@ public class MuServerBuilder {
         this.executor = executor;
         return this;
     }
+
+    /**
+     * Limits admitted connections across all HTTP and HTTPS ports of this server.
+     * <p>Connections count during setup (including TLS and PROXY negotiation), while idle,
+     * while handling requests and after a WebSocket upgrade. A slot is released after its
+     * accepted socket closes. HTTP/2 streams share their connection's slot; use
+     * {@link #withMaxConcurrentRequests(int)} to limit request processing separately.</p>
+     * <p>At capacity, listeners pause acceptance and additional connections may wait in the
+     * operating system's bounded listen queue (see {@link #withListenBacklog(int)}).
+     * Concurrent accepts on different ports can race
+     * for the last slot; an excess socket is closed before setup. Overload can therefore cause
+     * connection delays, resets or timeouts, rather than an HTTP error response. The limit
+     * excludes the OS backlog and transient sockets being accepted and immediately rejected.</p>
+     * @param maximum The maximum admitted connections, or zero for unlimited (the default)
+     * @return This builder
+     */
+    public MuServerBuilder withMaxConnections(int maximum) {
+        if (maximum < 0) throw new IllegalArgumentException("maximum must be non-negative");
+        maxConnections = maximum;
+        return this;
+    }
+
+    /**
+     * Gets the connection admission limit across all listener ports.
+     * @return The limit; zero means unlimited.
+     */
+    public int maxConnections() { return maxConnections; }
+
+    /**
+     * Sets the requested TCP listen backlog for each HTTP and HTTPS listening port.
+     * <p>This controls connections waiting for Mu to accept them, separately from
+     * {@link #withMaxConnections(int)}, which limits connections admitted into Mu across
+     * all ports. Each listening socket receives the same backlog setting.</p>
+     * <p>The value is passed to {@link java.net.ServerSocket#ServerSocket(int, int, java.net.InetAddress)}.
+     * Its effective size is platform-dependent: the implementation may cap or ignore the
+     * requested value. It is not a socket buffer size or a total-memory limit.</p>
+     * @param backlog The requested queue length, greater than zero; the default is 50
+     * @return This builder
+     * @throws IllegalArgumentException if backlog is zero or negative
+     */
+    public MuServerBuilder withListenBacklog(int backlog) {
+        if (backlog <= 0) throw new IllegalArgumentException("backlog must be positive");
+        listenBacklog = backlog;
+        return this;
+    }
+
+    /**
+     * Gets the requested listen backlog for each listening port.
+     * @return The configured backlog, initially 50; the effective OS queue size may differ
+     */
+    public int listenBacklog() { return listenBacklog; }
 
     /**
      * Limits how many requests the server handles at once, across all its HTTP and HTTPS ports.
@@ -837,6 +890,8 @@ public class MuServerBuilder {
             ", requestReadTimeoutMillis=" + requestReadTimeoutMillis +
             ", idleTimeoutMills=" + idleTimeoutMills +
             ", executor=" + executor +
+            ", maxConnections=" + maxConnections +
+            ", listenBacklog=" + listenBacklog +
             ", maxRequestSize=" + maxRequestSize +
             ", maxMultipartParts=" + maxMultipartParts +
             ", responseCompleteListeners=" + responseCompleteListeners +

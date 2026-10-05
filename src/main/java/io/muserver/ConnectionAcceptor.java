@@ -29,7 +29,6 @@ import java.util.concurrent.locks.ReentrantLock;
 
 class ConnectionAcceptor {
     private static final Logger log = LoggerFactory.getLogger(ConnectionAcceptor.class);
-    private static final int ACCEPT_BACKLOG = 50;
 
     private final Mu3ServerImpl server;
     private final @Nullable HAProxyProtocolConfig proxyConfig;
@@ -148,28 +147,31 @@ class ConnectionAcceptor {
         boolean h2 = http2Config != null && http2Config.enabled();
         while (state == State.STARTED) {
             try {
+                if (server.connectionAdmission.isLimited()
+                    && !server.connectionAdmission.awaitCapacity(() -> state == State.STARTED)) break;
                 Socket clientSocket = socketServer.accept();
-                long proxyDeadline = MonotonicTime.deadlineAfterMillis(proxyConfig == null ? 0 : proxyConfig.timeoutMillis());
-                clientSocket.setTcpNoDelay(true);
-                if (!registerAcceptedSocket(clientSocket, proxyDeadline)) {
-                    closeQuietly(clientSocket);
-                    continue;
-                }
-                ConnectionAcceptedTime acceptedTime = ConnectionAcceptedTime.now();
+                boolean submitted = false;
                 try {
-                    connectionExecutor.execute(
-                        () -> runAcceptedSocket(clientSocket, acceptedTime, h2)
-                    );
-                } catch (RejectedExecutionException e) {
-                    // Internal rejection must not move network work onto the acceptor thread.
-                    // Application request overload is handled separately with HTTP 503.
-                    server.getStatsImpl().onRejectedDueToOverload();
-                    retireAcceptedSocket(clientSocket);
-                    closeQuietly(clientSocket);
-                } catch (RuntimeException | Error submissionFailure) {
-                    retireAcceptedSocket(clientSocket);
-                    closeQuietly(clientSocket);
-                    throw submissionFailure;
+                    if (!server.connectionAdmission.tryAdmit(clientSocket)) {
+                        if (!server.connectionAdmission.isStopped()) server.getStatsImpl().onRejectedDueToOverload();
+                        continue;
+                    }
+                    clientSocket.setTcpNoDelay(true);
+                    long proxyDeadline = MonotonicTime.deadlineAfterMillis(proxyConfig == null ? 0 : proxyConfig.timeoutMillis());
+                    if (!registerAcceptedSocket(clientSocket, proxyDeadline)) continue;
+                    ConnectionAcceptedTime acceptedTime = ConnectionAcceptedTime.now();
+                    try {
+                        connectionExecutor.execute(() -> runAcceptedSocket(clientSocket, acceptedTime, h2));
+                        submitted = true;
+                    } catch (RejectedExecutionException e) {
+                        // Application request overload is handled separately with HTTP 503.
+                        server.getStatsImpl().onRejectedDueToOverload();
+                    }
+                } finally {
+                    if (!submitted) {
+                        retireAcceptedSocket(clientSocket);
+                        closeAndReleaseSocket(clientSocket);
+                    }
                 }
             } catch (Throwable e) {
                 FatalErrors.rethrow(e);
@@ -218,7 +220,7 @@ class ConnectionAcceptor {
             );
         } finally {
             retireAcceptedSocket(socket);
-            closeQuietly(socket);
+            closeAndReleaseSocket(socket);
         }
     }
 
@@ -275,7 +277,7 @@ class ConnectionAcceptor {
             lifecycleLock.unlock();
         }
         for (Socket socket : pending) {
-            closeQuietly(socket);
+            closeAndReleaseSocket(socket);
         }
     }
 
@@ -323,7 +325,7 @@ class ConnectionAcceptor {
                 return true;
             });
         } finally { lifecycleLock.unlock(); }
-        for (Socket socket : expired) closeQuietly(socket);
+        for (Socket socket : expired) closeAndReleaseSocket(socket);
     }
 
     private void checkIdleTimeouts() {
@@ -631,6 +633,7 @@ class ConnectionAcceptor {
         } finally {
             lifecycleLock.unlock();
         }
+        server.connectionAdmission.signalWaiters();
         closePendingAcceptedSockets();
         ScheduledFuture<?> preambleTask = preambleTimeoutTask;
         if (preambleTask != null) preambleTask.cancel(false);
@@ -679,6 +682,11 @@ class ConnectionAcceptor {
         }
     }
 
+    private void closeAndReleaseSocket(Socket socket) {
+        closeQuietly(socket);
+        server.connectionAdmission.release(socket);
+    }
+
     private static void closeQuietly(Socket socket) {
         try {
             socket.close();
@@ -700,6 +708,7 @@ class ConnectionAcceptor {
         Mu3ServerImpl server,
         @Nullable InetAddress address,
         int bindPort,
+        int listenBacklog,
         @Nullable HttpsConfig httpsConfig,
         @Nullable Http2Config h2Config,
         ExecutorService handlerExecutor,
@@ -707,7 +716,7 @@ class ConnectionAcceptor {
         ExecutorService http2WriterExecutor,
         List<ContentEncoder> contentEncoders) throws IOException {
 
-        ServerSocket socketServer = new ServerSocket(bindPort, ACCEPT_BACKLOG, address);
+        ServerSocket socketServer = new ServerSocket(bindPort, listenBacklog, address);
         try {
             configureSocketOptions(socketServer);
 

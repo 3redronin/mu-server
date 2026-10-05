@@ -40,13 +40,14 @@ class Mu3ServerImpl implements MuServer {
     final @Nullable HAProxyProtocolConfig haProxyProtocolConfig;
     private final ExecutionResources executionResources;
     private final RequestAdmission requestAdmission;
+    final ConnectionAdmission connectionAdmission;
     private final ThreadLocal<ApplicationTaskContext> applicationTaskContext = new ThreadLocal<>();
     private final ApplicationTaskTracker detachedApplicationTasks = new ApplicationTaskTracker();
     private final ThreadLocal<@Nullable DetachedApplicationTask> activeDetachedApplicationTask =
         new ThreadLocal<>();
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
 
-    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, int maxMultipartParts, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutionResources executionResources, int maxConcurrentRequests, @Nullable HAProxyProtocolConfig haProxyProtocolConfig) {
+    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, int maxMultipartParts, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutionResources executionResources, int maxConcurrentRequests, int maxConnections, @Nullable HAProxyProtocolConfig haProxyProtocolConfig) {
         this.acceptors = acceptors;
         this.handlers = handlers;
         this.responseCompleteListeners = responseCompleteListeners;
@@ -63,6 +64,7 @@ class Mu3ServerImpl implements MuServer {
         this.tempDir = tempDir;
         this.executionResources = executionResources;
         this.requestAdmission = new RequestAdmission(maxConcurrentRequests);
+        this.connectionAdmission = new ConnectionAdmission(maxConnections);
         this.haProxyProtocolConfig = haProxyProtocolConfig;
     }
 
@@ -100,6 +102,7 @@ class Mu3ServerImpl implements MuServer {
                 stoppedCleanly = false;
             }
         }
+        connectionAdmission.stop();
         if (!awaitDetachedApplicationTasks(deadlineNanos)) {
             stoppedCleanly = false;
         }
@@ -555,6 +558,7 @@ class Mu3ServerImpl implements MuServer {
             tempDir,
             resources,
             builder.maxConcurrentRequests(),
+            builder.maxConnections(),
             builder.haProxyProtocolConfig()
             );
 
@@ -587,6 +591,7 @@ class Mu3ServerImpl implements MuServer {
                     impl,
                     address,
                     builder.httpsPort(),
+                    builder.listenBacklog(),
                     httpsConfig,
                     http2Config,
                     handlerExecutor,
@@ -602,6 +607,7 @@ class Mu3ServerImpl implements MuServer {
                     impl,
                     address,
                     builder.httpPort(),
+                    builder.listenBacklog(),
                     null,
                     http2ConfigForHttp,
                     handlerExecutor,
