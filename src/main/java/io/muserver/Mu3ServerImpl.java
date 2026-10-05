@@ -34,6 +34,7 @@ class Mu3ServerImpl implements MuServer {
     private final Long idleTimeoutMillis;
     private final int maxUrlSize;
     private final int maxHeadersSize;
+    private final Set<String> sensitiveHeaders;
     private final int maxMultipartParts;
     final List<RateLimiterImpl> rateLimiters;
     final Path tempDir;
@@ -46,7 +47,7 @@ class Mu3ServerImpl implements MuServer {
         new ThreadLocal<>();
     private final Mu3StatsImpl statsImpl = new Mu3StatsImpl();
 
-    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, int maxMultipartParts, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutionResources executionResources, int maxConcurrentRequests, @Nullable HAProxyProtocolConfig haProxyProtocolConfig) {
+    Mu3ServerImpl(List<ConnectionAcceptor> acceptors, List<MuHandler> handlers, List<ResponseCompleteListener> responseCompleteListeners, List<RequestRejectListener> requestRejectListeners, UnhandledExceptionHandler exceptionHandler, Long maxRequestBodySize, List<ContentEncoder> contentEncoders, Long requestIdleTimeoutMillis, Long idleTimeoutMillis, int maxUrlSize, int maxHeadersSize, int maxMultipartParts, List<RateLimiterImpl> rateLimiters, Path tempDir, ExecutionResources executionResources, int maxConcurrentRequests, @Nullable HAProxyProtocolConfig haProxyProtocolConfig, Set<String> sensitiveHeaders) {
         this.acceptors = acceptors;
         this.handlers = handlers;
         this.responseCompleteListeners = responseCompleteListeners;
@@ -58,6 +59,7 @@ class Mu3ServerImpl implements MuServer {
         this.idleTimeoutMillis = idleTimeoutMillis;
         this.maxUrlSize = maxUrlSize;
         this.maxHeadersSize = maxHeadersSize;
+        this.sensitiveHeaders = sensitiveHeaders;
         this.maxMultipartParts = maxMultipartParts;
         this.rateLimiters = rateLimiters;
         this.tempDir = tempDir;
@@ -391,6 +393,11 @@ class Mu3ServerImpl implements MuServer {
     }
 
     @Override
+    public Set<String> sensitiveHeaders() {
+        return sensitiveHeaders;
+    }
+
+    @Override
     @Deprecated
     public boolean gzipEnabled() {
         return zippy() != null;
@@ -555,7 +562,8 @@ class Mu3ServerImpl implements MuServer {
             tempDir,
             resources,
             builder.maxConcurrentRequests(),
-            builder.haProxyProtocolConfig()
+            builder.haProxyProtocolConfig(),
+            builder.sensitiveHeaders()
             );
 
         try {

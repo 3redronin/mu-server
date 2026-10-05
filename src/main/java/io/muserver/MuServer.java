@@ -166,6 +166,14 @@ public interface MuServer extends Closeable {
     int maxUrlSize();
 
     /**
+     * Gets the sensitive header names configured with {@link MuServerBuilder#withSensitiveHeaders(java.util.Collection)}.
+     * <p>HTTP/2 response values for these names are encoded as never indexed. Pass this set
+     * to {@link Headers#toString(java.util.Collection)} to use it for diagnostic redaction.</p>
+     * @return an immutable set of lowercase names, defaulting to {@link Headers#DEFAULT_SENSITIVE_HEADERS}
+     */
+    Set<String> sensitiveHeaders();
+
+    /**
      * Specifies whether GZIP is on or not.
      * <p>This can only be set at point of server creation with {@link MuServerBuilder#withGzipEnabled(boolean)} or
      * {@link MuServerBuilder#withGzip(long, Set)}</p>

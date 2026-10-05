@@ -286,7 +286,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         this.settingsAckTimeoutMillis = settingsAckTimeoutMillis;
         this.handlerExecutor = handlerExecutor;
         this.writerExecutor = writerExecutor;
-        this.writeCoordinator = new Http2WriteCoordinator(65535, this::requestWriteRun);
+        this.writeCoordinator = new Http2WriteCoordinator(65535, this::requestWriteRun, server.sensitiveHeaders());
         this.buffer = ByteBuffer.allocate(serverSettings.maxFrameSize).flip();
     }
 

@@ -2,26 +2,34 @@ package io.muserver;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.Set;
 
 class FieldBlockEncoder {
 
     private final HpackTable table;
+    private final Set<String> sensitiveHeaders;
     private int pendingMinimumTableSize = -1;
     private int pendingFinalTableSize = -1;
 
     FieldBlockEncoder(HpackTable table) {
+        this(table, Set.of());
+    }
+
+    FieldBlockEncoder(HpackTable table, Set<String> sensitiveHeaders) {
         this.table = table;
+        this.sensitiveHeaders = Set.copyOf(sensitiveHeaders);
     }
 
     void encodeTo(FieldBlock block, OutputStream out) throws IOException {
         writePendingTableSizeChanges(out);
         for (FieldLine line : block.lineIterator()) {
-            int lineCode = line.neverIndexed() ? -1 : table.codeFor(line);
+            boolean neverIndex = line.neverIndexed() || sensitiveHeaders.contains(line.name().toString());
+            int lineCode = neverIndex ? -1 : table.codeFor(line);
             if (lineCode > 0) {
                 // indexed name and value
                 writeHpackInt(7, (byte)0b10000000, out, lineCode);
             } else {
-                int designation = line.neverIndexed() ? 0b00010000 : 0b00000000;
+                int designation = neverIndex ? 0b00010000 : 0b00000000;
                 int headerCode = table.codeFor(line.name());
                 if (headerCode >= 0) {
                     // indexed name; literal value
