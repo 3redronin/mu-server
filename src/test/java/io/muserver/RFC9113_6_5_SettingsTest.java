@@ -778,6 +778,7 @@ class RFC9113_6_5_SettingsTest {
                     liveConnection.server,
                     liveConnection.creator,
                     liveConnection.clientSocket,
+                    liveConnection.transportSocket,
                     liveConnection.clientCertificate,
                     ConnectionAcceptedTime.now(),
                     liveConnection.proxyInfo().orElse(null),
