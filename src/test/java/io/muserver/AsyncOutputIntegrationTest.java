@@ -3,7 +3,7 @@ package io.muserver;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
@@ -16,19 +16,26 @@ import static scaffolding.ClientUtils.request;
 
 @Timeout(15)
 class AsyncOutputIntegrationTest {
-    @ParameterizedTest @ValueSource(booleans = {false, true})
-    void aHandlerCanWaitForWriteIoWithOneApplicationWorker(boolean h2) throws Exception {
+    @ParameterizedTest @CsvSource({"false,array", "true,array", "false,direct", "true,direct", "false,readonly", "true,readonly"})
+    void aHandlerCanWaitForWriteIoWithOneApplicationWorker(boolean h2, String kind) throws Exception {
         var application = Executors.newSingleThreadExecutor();
+        byte[] expected = new byte[20003];
+        for (int i = 0; i < expected.length; i++) expected[i] = (byte) (i * 31);
         MuServer server = MuServerBuilder.httpServer().withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .withHandlerExecutor(application).addHandler((req, resp) -> {
                 AsyncHandle handle = req.handleAsync();
-                handle.write(ByteBuffer.wrap(new byte[]{1, 2, 3})).get(5, TimeUnit.SECONDS);
+                ByteBuffer data = ByteBuffer.wrap(expected);
+                if (kind.equals("direct")) {
+                    data = ByteBuffer.allocateDirect(expected.length);
+                    data.put(expected).flip();
+                } else if (kind.equals("readonly")) data = data.asReadOnlyBuffer();
+                handle.write(data).get(5, TimeUnit.SECONDS);
                 handle.complete();
                 return true;
             }).start();
         var transport = client.newBuilder().protocols(h2 ? List.of(Protocol.H2_PRIOR_KNOWLEDGE) : List.of(Protocol.HTTP_1_1)).build();
         try (Response response = transport.newCall(request(server.uri()).build()).execute()) {
-            assertArrayEquals(new byte[]{1, 2, 3}, response.body().bytes());
+            assertArrayEquals(expected, response.body().bytes());
         } finally { server.stop(); application.shutdownNow(); transport.connectionPool().evictAll(); }
     }
 

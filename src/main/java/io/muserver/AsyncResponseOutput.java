@@ -68,7 +68,7 @@ final class AsyncResponseOutput {
             try { executor.execute(this::drain); }
             catch (RejectedExecutionException rejectedExecution) { fail(rejectedExecution); }
         }
-        return write;
+        return write.result;
     }
 
     void complete(@Nullable Throwable cause) {
@@ -163,10 +163,17 @@ final class AsyncResponseOutput {
         }
     }
 
-    private final class PendingWrite implements Future<@Nullable Void> {
+    private void notifyCallback(@Nullable DoneCallback callback, @Nullable Throwable error) {
+        if (callback != null) callbacks.submit(() -> {
+            try { callback.onComplete(error); }
+            catch (Throwable callbackFailure) { fail(callbackFailure); FatalErrors.rethrow(callbackFailure); }
+        }, this::fail);
+    }
+
+    private final class PendingWrite {
         private final ByteBuffer data;
         private final @Nullable DoneCallback callback;
-        private final CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
+        private final WriteFuture result = new WriteFuture(AsyncResponseOutput.this);
 
         PendingWrite(ByteBuffer data, @Nullable DoneCallback callback) {
             this.data = data;
@@ -174,17 +181,29 @@ final class AsyncResponseOutput {
         }
 
         void finish(@Nullable Throwable error) {
+            result.finish(error);
+            // Dispatch from the response, so delayed callbacks do not capture this payload entry.
+            notifyCallback(callback, error);
+        }
+    }
+
+    /** A completed public future must not keep its response, queued writes or payload alive. */
+    private static final class WriteFuture implements Future<@Nullable Void> {
+        private final CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
+        private volatile @Nullable AsyncResponseOutput owner;
+
+        WriteFuture(AsyncResponseOutput owner) { this.owner = owner; }
+
+        void finish(@Nullable Throwable error) {
+            owner = null;
             if (error == null) result.complete(null);
             else result.completeExceptionally(error);
-            if (callback != null) callbacks.submit(() -> {
-                try { callback.onComplete(error); }
-                catch (Throwable callbackFailure) { fail(callbackFailure); FatalErrors.rethrow(callbackFailure); }
-            }, AsyncResponseOutput.this::fail);
         }
 
         @Override public boolean cancel(boolean mayInterruptIfRunning) {
-            if (result.isDone()) return false;
-            fail(new CancellationException("Asynchronous output was cancelled"));
+            AsyncResponseOutput output = owner;
+            if (output == null || result.isDone()) return false;
+            output.fail(new CancellationException("Asynchronous output was cancelled"));
             boolean interrupted = false;
             for (;;) {
                 try { result.get(); break; }

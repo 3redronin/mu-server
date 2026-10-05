@@ -189,15 +189,21 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
     }
 
     private void copyBufferToResponseOutput(ByteBuffer data) throws IOException {
+        copyBufferToOutput(data, response.outputStream());
+    }
+
+    static void copyBufferToOutput(ByteBuffer data, OutputStream respOut) throws IOException {
         int len = data.remaining();
         int pos = data.position();
-        OutputStream respOut = response.outputStream();
         if (data.hasArray()) {
             respOut.write(data.array(), data.arrayOffset() + pos, len);
         } else {
-            var buffer = new byte[len];
-            data.get(buffer);
-            respOut.write(buffer);
+            var buffer = new byte[Math.min(len, 8192)];
+            while (data.hasRemaining()) {
+                int count = Math.min(data.remaining(), buffer.length);
+                data.get(buffer, 0, count);
+                respOut.write(buffer, 0, count);
+            }
         }
         respOut.flush();
     }
