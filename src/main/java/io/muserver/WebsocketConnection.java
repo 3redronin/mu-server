@@ -301,14 +301,8 @@ class WebsocketConnection implements MuWebSocketSession {
                     e instanceof TimeoutException || e instanceof SocketTimeoutException
                         ? WebsocketSessionState.TIMED_OUT
                         : WebsocketSessionState.ERRORED;
-                if (errorState == WebsocketSessionState.TIMED_OUT) {
-                    // A read timeout must also release a pending send. Publishing the
-                    // terminal state first prevents the default error callback from
-                    // waiting to send a close frame behind that unfinished message.
-                    lifecycle.terminateWith(errorState);
-                    httpConnection.forceShutdown();
-                }
-                invokeApplicationError(e, errorState);
+                invokeApplicationError(e, errorState,
+                    !applicationFailure && errorState == WebsocketSessionState.TIMED_OUT);
             }
         } finally {
             ScheduledFuture<?> currentPing = pingFuture;
@@ -467,8 +461,16 @@ class WebsocketConnection implements MuWebSocketSession {
         return WebSocketEventCompletion.invoke(event::run);
     }
 
-    private void invokeApplicationError(Throwable cause, WebsocketSessionState errorState) throws InterruptedException, ApplicationEventFailure {
+    private void invokeApplicationError(Throwable cause, WebsocketSessionState errorState,
+                                        boolean transportTimeout) throws InterruptedException, ApplicationEventFailure {
         if (errorEventQueued.compareAndSet(false, true)) {
+            if (transportTimeout) {
+                // Reserve the read-timeout error before closing the transport wakes a
+                // competing writer. Publish the terminal state so default error handling
+                // does not try to send a close frame behind an unfinished write.
+                lifecycle.terminateWith(errorState);
+                httpConnection.forceShutdown();
+            }
             invokeApplicationEvent(errorEvent(cause, errorState));
         }
     }
