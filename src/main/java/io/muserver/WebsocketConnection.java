@@ -44,6 +44,8 @@ class WebsocketConnection implements MuWebSocketSession {
     private volatile @Nullable RejectedExecutionException applicationEventRejection;
     private final AtomicBoolean applicationEventRunnerScheduled = new AtomicBoolean();
     private final AtomicBoolean errorEventQueued = new AtomicBoolean();
+    private final AtomicBoolean abortRequested = new AtomicBoolean();
+    private final CompletableFuture<@Nullable Void> abortCompletion = new CompletableFuture<>();
     private final AtomicBoolean serverShutdownRequested = new AtomicBoolean();
     private volatile boolean closeReceived = false;
     private volatile boolean closeSent = false;
@@ -130,13 +132,13 @@ class WebsocketConnection implements MuWebSocketSession {
             lifecycle.onConnected();
             invokeApplicationEvent(() -> webSocket.onConnect(this));
 
-            if (settings.pingIntervalMillis > 0) {
+            if (!abortRequested.get() && settings.pingIntervalMillis > 0) {
                 startPinging();
             }
 
             long messageLength = 0;
             var utf8 = new WebsocketUtf8Validator();
-            while (!closeReceived) {
+            while (!closeReceived && !abortRequested.get()) {
 
                 // make sure we at least have the minimum sized buffer
                 readAtLeast(2);
@@ -294,7 +296,8 @@ class WebsocketConnection implements MuWebSocketSession {
             boolean applicationFailure = failure instanceof ApplicationEventFailure;
             Throwable e = applicationFailure ? Objects.requireNonNull(failure.getCause()) : failure;
             FatalErrors.rethrow(e);
-            if ((!serverShutdownRequested.get() || applicationFailure)
+            if (!abortRequested.get()
+                && (!serverShutdownRequested.get() || applicationFailure)
                 && !errorEventQueued.get()
                 && lifecycle.state() != WebsocketSessionState.TIMED_OUT) {
                 WebsocketSessionState errorState =
@@ -388,6 +391,9 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     private void completeCloseHandshakeIfCloseSent() {
+        if (abortRequested.get()) {
+            return;
+        }
         // Synchronize with the close-frame writer before publishing that both
         // sides of the closing handshake have completed.
         writeLock.lock();
@@ -415,7 +421,7 @@ class WebsocketConnection implements MuWebSocketSession {
     private @Nullable IOException writeFailure;
 
     void onTimeout() {
-        if (errorEventQueued.compareAndSet(false, true)) {
+        if (!abortRequested.get() && errorEventQueued.compareAndSet(false, true)) {
             // The connection-level timeout closes the transport immediately after this
             // method returns. Publish the terminal state before the callback so default
             // implementations do not try to write a close frame to that closed transport.
@@ -439,9 +445,14 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     private void invokeApplicationEvent(ApplicationEvent event) throws InterruptedException, ApplicationEventFailure {
+        if (abortRequested.get()) {
+            return;
+        }
         CompletableFuture<@Nullable Void> completion = enqueueApplicationEvent(event);
         try {
-            completion.get();
+            // Closing the transport cannot wake a reader awaiting application completion.
+            // Abort releases that reader without waiting for, or interrupting, application code.
+            CompletableFuture.anyOf(completion, abortCompletion).get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw e;
@@ -463,7 +474,7 @@ class WebsocketConnection implements MuWebSocketSession {
 
     private void invokeApplicationError(Throwable cause, WebsocketSessionState errorState,
                                         boolean transportTimeout) throws InterruptedException, ApplicationEventFailure {
-        if (errorEventQueued.compareAndSet(false, true)) {
+        if (!abortRequested.get() && errorEventQueued.compareAndSet(false, true)) {
             if (transportTimeout) {
                 // Reserve the read-timeout error before closing the transport wakes a
                 // competing writer. Publish the terminal state so default error handling
@@ -476,7 +487,7 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     private void enqueueApplicationError(Throwable cause, WebsocketSessionState errorState) {
-        if (errorEventQueued.compareAndSet(false, true)) {
+        if (!abortRequested.get() && errorEventQueued.compareAndSet(false, true)) {
             enqueueApplicationEvent(errorEvent(cause, errorState));
         }
     }
@@ -578,6 +589,7 @@ class WebsocketConnection implements MuWebSocketSession {
 
     @Override
     public void sendTextFragment(ByteBuffer fragment, boolean isLastFragment) throws IOException {
+        throwIfAborted();
         writeLock.lock();
         try {
             throwStoredWriteFailure();
@@ -612,6 +624,7 @@ class WebsocketConnection implements MuWebSocketSession {
 
     @Override
     public void sendBinaryFragment(ByteBuffer message, boolean isLastFragment) throws IOException {
+        throwIfAborted();
         writeLock.lock();
         try {
             throwStoredWriteFailure();
@@ -653,7 +666,34 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     @Override
+    public void abort() {
+        if (!abortRequested.compareAndSet(false, true)) {
+            return;
+        }
+        // Claim error ownership before socket closure wakes competing readers and writers.
+        // A previously claimed error keeps its callback; deliberate closure creates no new one.
+        errorEventQueued.compareAndSet(false, true);
+        lifecycle.terminateWith(WebsocketSessionState.DISCONNECTED);
+        ScheduledFuture<?> currentPing = pingFuture;
+        if (currentPing != null) {
+            currentPing.cancel(false);
+        }
+        try {
+            httpConnection.forceShutdown();
+        } finally {
+            abortCompletion.complete(null);
+        }
+    }
+
+    private void throwIfAborted() throws IOException {
+        if (abortRequested.get()) {
+            throw new IOException("WebSocket session aborted");
+        }
+    }
+
+    @Override
     public void close() throws IOException {
+        throwIfAborted();
         writeLock.lock();
         try {
             lifecycle.onServerCloseStarted();
@@ -668,6 +708,7 @@ class WebsocketConnection implements MuWebSocketSession {
 
     @Override
     public void close(int statusCode, @Nullable String reason) throws IOException {
+        throwIfAborted();
         if (statusCode < 1000 || statusCode > 4999) {
             throw new IllegalArgumentException("Websocket closure codes must be between 1000 and 4999 (inclusive)");
         }
@@ -713,6 +754,7 @@ class WebsocketConnection implements MuWebSocketSession {
         if ((firstByte & 0x08) != 0) {
             requireControlPayloadSize(payloadLen);
         }
+        throwIfAborted();
         var header = header(firstByte, payloadLen);
         OutputStream output = java.util.Objects.requireNonNull(outputStream);
         IOException failure = null;
@@ -749,6 +791,7 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     private void throwStoredWriteFailure() throws IOException {
+        throwIfAborted();
         if (writeFailure != null) {
             throw new IOException("Cannot write websocket messages after a previous write failed", writeFailure);
         }
