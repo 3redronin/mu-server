@@ -420,7 +420,7 @@ class Http1Connection extends BaseHttpConnection {
                 new MuException("Connection aborted")
             );
             state.set(HttpConnectionState.CLOSED);
-            forceTransportClose();
+            forceTransportCloseAndReleaseWebsocket();
             clientSocket.close();
         } else {
             state.set(HttpConnectionState.CLOSED);
@@ -436,7 +436,7 @@ class Http1Connection extends BaseHttpConnection {
             );
             notifyWebsocketTimeout();
             state.set(HttpConnectionState.CLOSED);
-            forceTransportClose();
+            forceTransportCloseAndReleaseWebsocket();
             clientSocket.close();
         } else {
             state.set(HttpConnectionState.CLOSED);
@@ -464,8 +464,18 @@ class Http1Connection extends BaseHttpConnection {
     @Override
     void forceShutdown() {
         state.set(HttpConnectionState.CLOSED);
-        forceTransportClose();
+        forceTransportCloseAndReleaseWebsocket();
         closeTransportQuietly();
+    }
+
+    private void forceTransportCloseAndReleaseWebsocket() {
+        var cur = activeExchange.get();
+        // Close the raw socket before releasing a reader that may close the TLS wrapper
+        // in its finally block. Otherwise wrapper closure could wait behind a stalled write.
+        forceTransportClose();
+        if (cur != null && cur.websocket != null) {
+            cur.websocket.onTransportClosed();
+        }
     }
 
     private void requestLocalShutdown() {

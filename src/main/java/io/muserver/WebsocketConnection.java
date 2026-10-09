@@ -138,7 +138,7 @@ class WebsocketConnection implements MuWebSocketSession {
 
             long messageLength = 0;
             var utf8 = new WebsocketUtf8Validator();
-            while (!closeReceived && !abortRequested.get()) {
+            while (!closeReceived && !abortRequested.get() && !abortCompletion.isDone()) {
 
                 // make sure we at least have the minimum sized buffer
                 readAtLeast(2);
@@ -674,19 +674,26 @@ class WebsocketConnection implements MuWebSocketSession {
         // A previously claimed error keeps its callback; deliberate closure creates no new one.
         errorEventQueued.compareAndSet(false, true);
         lifecycle.terminateWith(WebsocketSessionState.DISCONNECTED);
+        try {
+            httpConnection.forceShutdown();
+        } finally {
+            onTransportClosed();
+        }
+    }
+
+    void onTransportClosed() {
+        lifecycle.terminateWith(WebsocketSessionState.DISCONNECTED);
         ScheduledFuture<?> currentPing = pingFuture;
         if (currentPing != null) {
             currentPing.cancel(false);
         }
-        try {
-            httpConnection.forceShutdown();
-        } finally {
-            abortCompletion.complete(null);
-        }
+        // Every forced transport close must release readers awaiting receive completion,
+        // including server stop and idle timeout. Preserve any timeout/error already owned.
+        abortCompletion.complete(null);
     }
 
     private void throwIfAborted() throws IOException {
-        if (abortRequested.get()) {
+        if (abortRequested.get() || abortCompletion.isDone()) {
             throw new IOException("WebSocket session aborted");
         }
     }
