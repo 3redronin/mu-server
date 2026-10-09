@@ -1,11 +1,10 @@
 package io.muserver;
 
-import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import scaffolding.Http1Client;
-import scaffolding.SingleCarrier;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
@@ -13,7 +12,6 @@ import java.io.BufferedInputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
@@ -27,9 +25,8 @@ import static scaffolding.ClientUtils.veryTrustingTrustManager;
 import static scaffolding.ServerUtils.httpsServerForTest;
 
 /** Bounded valid-traffic lifecycle checks. Socket buffers induce backpressure, not a throughput target. */
-public class LifecycleRecoveryTest {
-    @TempDir Path temporary;
-
+@Timeout(90)
+class LifecycleRecoveryTest {
     static Stream<Arguments> cases() {
         var cases = new ArrayList<Arguments>();
         for (String protocol : List.of("http1", "https", "h2", "h2-socket", "ws", "wss")) {
@@ -44,14 +41,6 @@ public class LifecycleRecoveryTest {
 
     @ParameterizedTest(name = "{0}, supplied={1}, {2}") @MethodSource("cases")
     void pendingWritesAndExecutorsAreReleased(String protocol, boolean supplied, String ending) throws Exception {
-        SingleCarrier.runOnAnyJdk(LifecycleRecoveryTest.class, temporary.resolve("child.log"), 1, 90,
-            protocol, Boolean.toString(supplied), ending);
-    }
-
-    public static void main(String[] args) throws Exception {
-        String protocol = args[0];
-        boolean supplied = Boolean.parseBoolean(args[1]);
-        String ending = args[2];
         boolean websocket = protocol.startsWith("ws");
         boolean tls = protocol.startsWith("h2") || protocol.equals("https") || protocol.equals("wss");
         var application = supplied ? new ThreadPoolExecutor(2, 2, 0, TimeUnit.SECONDS,
@@ -137,9 +126,9 @@ public class LifecycleRecoveryTest {
             await(() -> server.activeConnections().isEmpty(), "Connections did not retire");
             if (!ending.equals("shutdown")) probe(server);
         } finally {
-            server.stop(0, TimeUnit.SECONDS);
             var owned = resources.get();
             try {
+                server.stop(0, TimeUnit.SECONDS);
                 assertTrue(owned.internal.awaitTermination(20, TimeUnit.SECONDS), "Internal executor retained work");
                 assertTrue(owned.timer.awaitTermination(20, TimeUnit.SECONDS), "Timer retained work");
                 if (supplied) {
@@ -149,12 +138,15 @@ public class LifecycleRecoveryTest {
                     assertTrue(owned.application.awaitTermination(20, TimeUnit.SECONDS), "Owned application executor retained work");
                 }
             } finally {
+                // A failed assertion must not leave server workers running in the test JVM.
+                owned.internal.shutdownNow();
+                owned.timer.shutdownNow();
+                if (!supplied) owned.application.shutdownNow();
                 if (application != null) { application.shutdownNow(); assertTrue(application.awaitTermination(20, TimeUnit.SECONDS)); }
             }
         }
         assertEquals(1, callbacks.get(), "Write callback must be delivered once");
         if (!websocket) assertEquals(1, completions.get(), "Response completion must be delivered once");
-        System.out.println("PASS " + String.join(" ", args));
     }
 
     private static void probe(MuServer server) throws Exception {
