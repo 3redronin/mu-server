@@ -15,7 +15,7 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * Bounded plaintext bridge from a transport producer to a blocking protocol/application reader.
  * The producer never waits for capacity: offer advances only across bytes copied into owned storage.
- * The internal capacity notification must only schedule transport work, without blocking or throwing.
+ * Internal capacity and input-readiness notifications must only schedule work, without blocking or throwing.
  * No application callbacks run here. A transport must stop reading when capacity reaches zero.
  */
 final class TransportInputBuffer extends InputStream {
@@ -23,6 +23,7 @@ final class TransportInputBuffer extends InputStream {
     private final Condition changed = lock.newCondition();
     private byte[] bytes;
     private final Runnable capacityAvailable;
+    private final Runnable inputAvailable;
     private int head;
     private int size;
     private int timeoutMillis;
@@ -30,9 +31,14 @@ final class TransportInputBuffer extends InputStream {
     private @Nullable IOException failure;
 
     TransportInputBuffer(int capacity, Runnable capacityAvailable) {
+        this(capacity, capacityAvailable, () -> { });
+    }
+
+    TransportInputBuffer(int capacity, Runnable capacityAvailable, Runnable inputAvailable) {
         if (capacity < 1) throw new IllegalArgumentException("Positive capacity required");
         bytes = new byte[capacity];
         this.capacityAvailable = capacityAvailable;
+        this.inputAvailable = inputAvailable;
     }
 
     int remainingCapacity() {
@@ -42,6 +48,7 @@ final class TransportInputBuffer extends InputStream {
     }
 
     int offer(ByteBuffer source) throws IOException {
+        boolean notifyInput = false;
         lock.lock();
         try {
             checkFailure();
@@ -51,29 +58,38 @@ final class TransportInputBuffer extends InputStream {
             int first = Math.min(count, bytes.length - tail);
             source.get(bytes, tail, first);
             source.get(bytes, 0, count - first);
+            notifyInput = size == 0 && count > 0;
             size += count;
             if (count > 0) changed.signalAll();
             return count;
-        } finally { lock.unlock(); }
+        } finally {
+            lock.unlock();
+            if (notifyInput) inputAvailable.run();
+        }
     }
 
     /** Buffered data remains readable before EOF. Input half-close does not close output. */
     void endOfInput() {
+        boolean notifyInput;
         lock.lock();
-        try { ended = true; changed.signalAll(); }
+        try { notifyInput = !ended && failure == null; ended = true; changed.signalAll(); }
         finally { lock.unlock(); }
+        if (notifyInput) inputAvailable.run();
     }
 
     /** Abort wins over queued bytes and EOF, and wakes blocked readers. The first failure is retained. */
     void fail(IOException cause) {
+        boolean notifyInput;
         lock.lock();
         try {
-            if (failure == null) failure = cause;
+            notifyInput = failure == null;
+            if (notifyInput) failure = cause;
             // No ring storage is borrowed outside this lock; terminal failure can release it.
             bytes = new byte[0];
             size = 0;
             changed.signalAll();
         } finally { lock.unlock(); }
+        if (notifyInput) inputAvailable.run();
     }
 
     /** Applies to reads started after this call, as with a socket read timeout. Zero disables it. */
@@ -97,7 +113,18 @@ final class TransportInputBuffer extends InputStream {
 
     /** One nonblocking read: zero is temporarily empty; minus one is drained EOF. */
     int readAvailable(byte[] target) throws IOException {
-        return read(target, 0, target.length, false);
+        return readAvailable(target, 0, target.length);
+    }
+
+    int readAvailable(byte[] target, int offset, int length) throws IOException {
+        return read(target, offset, length, false);
+    }
+
+    /** Includes terminal input, so a suspended protocol gets one last progression turn. */
+    boolean readable() {
+        lock.lock();
+        try { return size > 0 || ended || failure != null; }
+        finally { lock.unlock(); }
     }
 
     private int read(byte[] target, int offset, int length, boolean wait) throws IOException {

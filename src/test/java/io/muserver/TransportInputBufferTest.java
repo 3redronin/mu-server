@@ -18,6 +18,35 @@ import static org.junit.jupiter.api.Assertions.*;
 @Timeout(10)
 class TransportInputBufferTest {
     @Test
+    void readinessWakesOnEmptyToReadableTransitionsAndTerminalChangesOnly() throws Exception {
+        AtomicInteger readable = new AtomicInteger();
+        var input = new TransportInputBuffer(4, () -> {}, readable::incrementAndGet);
+        assertFalse(input.readable());
+        input.offer(ByteBuffer.wrap(new byte[]{1, 2}));
+        input.offer(ByteBuffer.wrap(new byte[]{3}));
+        assertTrue(input.readable());
+        assertEquals(1, readable.get());
+        byte[] bytes = new byte[5];
+        assertEquals(3, input.readAvailable(bytes, 1, 3));
+        assertArrayEquals(new byte[]{0, 1, 2, 3, 0}, bytes);
+        assertFalse(input.readable());
+        input.offer(ByteBuffer.wrap(new byte[]{4}));
+        assertEquals(2, readable.get());
+        input.endOfInput();
+        input.endOfInput();
+        assertEquals(3, readable.get());
+        assertEquals(1, input.readAvailable(bytes));
+        assertTrue(input.readable());
+        assertEquals(-1, input.readAvailable(bytes));
+        input.fail(new IOException("failed after EOF"));
+        input.close();
+        input.endOfInput();
+        assertTrue(input.readable());
+        assertEquals(4, readable.get());
+        assertThrows(IOException.class, () -> input.readAvailable(bytes));
+    }
+
+    @Test
     void nonblockingReadsDistinguishTemporaryEmptinessFromEofAndReleaseCapacity() throws Exception {
         AtomicInteger wakeups = new AtomicInteger();
         try (var input = new TransportInputBuffer(2, wakeups::incrementAndGet)) {

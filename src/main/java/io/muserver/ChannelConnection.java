@@ -34,7 +34,7 @@ final class ChannelConnection implements ConnectionTransport {
     private final boolean secure;
     final AtomicBoolean scheduled = new AtomicBoolean();
     private final AtomicBoolean aborted = new AtomicBoolean();
-    private final TransportInputBuffer input = new TransportInputBuffer(BUFFER_SIZE, this::schedule);
+    private final TransportInputBuffer input = new TransportInputBuffer(BUFFER_SIZE, this::schedule, this::schedule);
     private final TransportOutputBuffer output = new TransportOutputBuffer(BUFFER_SIZE, this::schedule);
     private ByteBuffer incoming = ByteBuffer.allocate(BUFFER_SIZE).flip();
     private final ByteBuffer protocolPrefix = ByteBuffer.allocate(Http2Handshaker.clientConnectionPrefaceLength());
@@ -44,6 +44,7 @@ final class ChannelConnection implements ConnectionTransport {
     private @Nullable TlsEngineDriver tls;
     private @Nullable BaseHttpConnection connection;
     private Http1Connection.@Nullable ReadDriver http1;
+    private Http2Connection.@Nullable ReadDriver http2;
     private @Nullable CompletableFuture<?> protocolCompletion;
     private volatile boolean retired;
     private volatile boolean closeRequested;
@@ -124,6 +125,7 @@ final class ChannelConnection implements ConnectionTransport {
             failBuffers(new IOException("Channel closed"));
             notifyProtocolFailure();
             boolean progressed = http1 != null && http1.advance();
+            if (http2 != null) http2.inputAvailable();
             retireIfDone();
             return progressed;
         }
@@ -208,6 +210,7 @@ final class ChannelConnection implements ConnectionTransport {
                 if (tls != null && tls.revision() != beforeWrite) progress = true;
             }
             if (http1 != null) progress |= http1.advance();
+            if (http2 != null) http2.inputAvailable();
             if (protocolCompletion != null && protocolCompletion.isDone()) closeRequested = true;
         }
         if (closeRequested && output.pendingBytes() == 0) {
@@ -244,20 +247,9 @@ final class ChannelConnection implements ConnectionTransport {
             http1 = ((Http1Connection) promoted).readDriver(input, clientOut, this::schedule);
             protocolCompletion = http1.completion();
         } else {
-            // The existing H2 frame reader/writer remains the compatibility adapter until its
-            // own continuations are migrated. Socket IO is still owned by this channel loop.
-            var completion = new CompletableFuture<Void>();
-            protocolCompletion = completion;
-            try {
-                loop.server.executeInternalTask(() -> {
-                    try { promoted.start(new HttpConnectionInputStream(promoted, input, false), clientOut); completion.complete(null); }
-                    catch (Throwable error) {
-                        if (error instanceof InterruptedException) Thread.currentThread().interrupt();
-                        completion.completeExceptionally(error);
-                        FatalErrors.rethrow(error);
-                    } finally { close(); }
-                });
-            } catch (RejectedExecutionException rejected) { completion.completeExceptionally(rejected); throw rejected; }
+            http2 = ((Http2Connection) promoted).readDriver(input, clientOut);
+            protocolCompletion = http2.completion();
+            http2.inputAvailable();
         }
         protocolCompletion.whenComplete((ignored, error) -> schedule());
     }
@@ -377,6 +369,7 @@ final class ChannelConnection implements ConnectionTransport {
         tls = null;
         prefetchedCiphertext = null;
         http1 = null;
+        http2 = null;
         protocolCompletion = null;
         incoming = ByteBuffer.allocate(0);
         SelectionKey current = key;
@@ -394,6 +387,7 @@ final class ChannelConnection implements ConnectionTransport {
         // Completion must continue even though the readiness owner is gone. Retain an active
         // handler's accounting until its work actually returns, just as during forced shutdown.
         if (http1 != null) http1.ownerFailed(new IOException("Channel readiness owner stopped"));
+        if (http2 != null) http2.inputAvailable();
         CompletableFuture<?> completion = protocolCompletion;
         if (completion == null) retire();
         else completion.whenComplete((ignored, error) -> retire());

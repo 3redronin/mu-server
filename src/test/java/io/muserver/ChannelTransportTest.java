@@ -168,6 +168,107 @@ class ChannelTransportTest {
         } finally { application.shutdownNow(); internal.shutdownNow(); timer.shutdownNow(); }
     }
 
+    @Test
+    void unexpectedHttp2HandlerExecutorFailureRetiresTheUndispatchedStream() throws Exception {
+        var failNext = new java.util.concurrent.atomic.AtomicBoolean(true);
+        var application = new java.util.concurrent.ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
+            new java.util.concurrent.LinkedBlockingQueue<>()) {
+            @Override public void execute(Runnable task) {
+                if (failNext.compareAndSet(true, false)) throw new IllegalStateException("Injected executor failure");
+                super.execute(task);
+            }
+        };
+        try (MuServer server = builder(false, true).withHandlerExecutor(application)
+            .addHandler((req, res) -> { res.status(204); return true; }).start();
+             H2Client client = new H2Client(); var peer = client.connectClearText(server)) {
+            FieldBlock headers = RFCTestUtils.getHelloHeaders("http", server.uri().getPort());
+            peer.handshake().writeFrame(new Http2HeadersFrame(1, true, headers)).flush();
+            var reset = RFCTestUtils.readIgnoringWindowUpdates(peer, Http2ResetStreamFrame.class);
+            assertEquals(1, reset.streamId());
+            assertEquals(Http2ErrorCode.INTERNAL_ERROR.code(), reset.errorCode());
+            until(() -> server.stats().completedRequests() == 1 && server.stats().activeRequests().isEmpty());
+            peer.writeFrame(new Http2HeadersFrame(3, true, headers)).flush();
+            assertEquals("204", RFCTestUtils.readIgnoringWindowUpdates(peer, Http2HeadersFrame.class).headers().get(":status"));
+            until(() -> server.stats().completedRequests() == 2);
+        } finally { application.shutdownNow(); }
+    }
+
+    @Test
+    void inlineHttp2HandlerSubmissionCannotBlockItsOwnRequestBodyReader() throws Exception {
+        CountDownLatch occupied = new CountDownLatch(1), release = new CountDownLatch(1);
+        var application = new java.util.concurrent.ThreadPoolExecutor(1, 1, 0, TimeUnit.MILLISECONDS,
+            new java.util.concurrent.SynchronousQueue<>(), new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+        CompletableFuture<String> entered = new CompletableFuture<>();
+        application.execute(() -> {
+            occupied.countDown();
+            try { release.await(); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+        });
+        assertTrue(occupied.await(2, TimeUnit.SECONDS));
+        try (MuServer server = builder(false, true).withHandlerExecutor(application).addHandler((req, res) -> {
+            entered.complete(Thread.currentThread().getName());
+            res.write(req.readBodyAsString());
+            return true;
+        }).start(); H2Client client = new H2Client(); var peer = client.connectClearText(server)) {
+            FieldBlock headers = RFCTestUtils.getHelloHeaders("http", server.uri().getPort());
+            headers.set(":method", "POST");
+            peer.handshake().writeFrame(new Http2HeadersFrame(1, false, headers)).flush();
+            assertFalse(entered.get(5, TimeUnit.SECONDS).startsWith("mu-channel-loop-"));
+            peer.writeFrame(RFCTestUtils.utf8DataFrame(1, true, "body after handler submission")).flush();
+            assertEquals("200", RFCTestUtils.readIgnoringWindowUpdates(peer, Http2HeadersFrame.class).headers().get(":status"));
+            var body = RFCTestUtils.readIgnoringWindowUpdates(peer, Http2DataFrame.class);
+            assertEquals("body after handler submission", new String(body.payload(), body.payloadOffset(), body.payloadLength(), US_ASCII));
+            until(() -> server.stats().completedRequests() == 1);
+        } finally { release.countDown(); application.shutdownNow(); }
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void idleAndSuspendedHttp2ConnectionsReleaseTheInternalWorker(boolean secure) throws Exception {
+        var application = Executors.newSingleThreadExecutor();
+        var internal = Executors.newSingleThreadExecutor();
+        var timer = Executors.newSingleThreadScheduledExecutor();
+        Queue<AsyncHandle> handles = new ConcurrentLinkedQueue<>();
+        List<Socket> clients = new ArrayList<>();
+        MuServerBuilder builder = builder(secure, true).withHandlerExecutor(application);
+        builder.executionResourcesFactory = (supplied, mode) -> new ExecutionResources(application, false, internal, timer);
+        var ssl = sslContextForTesting(veryTrustingTrustManager()).getSocketFactory();
+        try (MuServer server = builder.addHandler((req, res) -> { handles.add(req.handleAsync()); return true; }).start()) {
+            try {
+                var preface = new java.io.ByteArrayOutputStream();
+                preface.write("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n".getBytes(US_ASCII));
+                Http2Settings.DEFAULT_CLIENT_SETTINGS.writeTo(null, preface);
+                for (int i = 0; i < 128; i++) {
+                    Socket socket;
+                    if (secure) {
+                        SSLSocket tls = (SSLSocket) ssl.createSocket("localhost", server.uri().getPort());
+                        clients.add(tls);
+                        var parameters = tls.getSSLParameters();
+                        parameters.setApplicationProtocols(new String[]{"h2"});
+                        tls.setSSLParameters(parameters);
+                        tls.startHandshake();
+                        socket = tls;
+                    } else { socket = connect(server); clients.add(socket); }
+                    socket.setSoTimeout(5000);
+                    socket.getOutputStream().write(preface.toByteArray());
+                    // Current server SETTINGS has five entries (39 bytes), followed by ACK (9).
+                    assertEquals(48, socket.getInputStream().readNBytes(48).length);
+                    Http2Settings.ACK.writeTo(null, socket.getOutputStream());
+                }
+                application.submit(() -> {}).get(2, TimeUnit.SECONDS);
+                internal.submit(() -> {}).get(2, TimeUnit.SECONDS);
+                byte[] headers = RFCTestUtils.headersFrame(1, true, true, RFCTestUtils.encodeFieldBlock(
+                    RFCTestUtils.getHelloHeaders(secure ? "https" : "http", server.uri().getPort())));
+                for (Socket socket : clients) socket.getOutputStream().write(headers);
+                until(() -> handles.size() == 128);
+                application.submit(() -> {}).get(2, TimeUnit.SECONDS);
+                internal.submit(() -> {}).get(2, TimeUnit.SECONDS);
+                AsyncHandle handle;
+                while ((handle = handles.poll()) != null) handle.complete();
+                until(() -> server.stats().completedRequests() == 128);
+            } finally { for (Socket socket : clients) socket.close(); }
+            until(() -> server.stats().completedConnections() == 128);
+        } finally { application.shutdownNow(); internal.shutdownNow(); timer.shutdownNow(); }
+    }
+
     @ParameterizedTest @ValueSource(booleans = {false, true})
     void websocketUpgradeAndCallbacksUseTheChannelTransport(boolean secure) throws Exception {
         CompletableFuture<String> received = new CompletableFuture<>();

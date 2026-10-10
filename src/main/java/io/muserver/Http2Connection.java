@@ -54,6 +54,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private final AtomicBoolean writerTaskScheduled = new AtomicBoolean();
     private final CompletableFuture<@Nullable Void> writeLoopEnded = new CompletableFuture<>();
     private final CompletableFuture<@Nullable Void> retainedApplicationsEnded = new CompletableFuture<>();
+    private boolean resumableReader;
     private volatile @Nullable OutputStream writerOutput;
     private @Nullable Http2WriteBatch writeBatch;
     private final ArrayList<BatchFrame> pendingWriteBatch = new ArrayList<>();
@@ -799,6 +800,234 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         return new Http2GoAway(acceptedLastStreamId, error.errorCode().code(), null);
     }
 
+    private static void checkHeadersStream(Http2FrameHeader header) throws Http2Exception {
+        if (header.streamId() == 0 || (header.streamId() % 2) == 0) {
+            throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID " + header.streamId());
+        }
+    }
+
+    /** All frame payloads have already been accumulated, and cannot borrow following bytes. */
+    private void readFrame(Http2FrameHeader header) throws Http2Exception {
+        int oldLimit = buffer.limit();
+        int end = buffer.position() + header.length();
+        buffer.limit(end);
+        try {
+            if (header.streamId() > lifecycle.maxAllowedStreamId) {
+                if (header.frameType() == Http2FrameType.DATA) {
+                    Http2DataFrame.readFrom(header, buffer);
+                    applyInboundFlowResult(inboundFlowControl.discard(header.length()));
+                } else if (header.frameType() == Http2FrameType.CONTINUATION) {
+                    throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Out of order continuation frame");
+                }
+                return;
+            }
+            switch (header.frameType()) {
+                case DATA: readDataFrame(header); break;
+                case SETTINGS: readSettingsFrame(header); break;
+                case PING: readPingFrame(header); break;
+                case WINDOW_UPDATE: readWindowUpdate(header); break;
+                case GOAWAY: readGoAwayFrame(header); break;
+                case RST_STREAM: readResetStreamFrame(header); break;
+                case PRIORITY: readPriorityFrame(header); break;
+                case CONTINUATION: throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Out of order continuation frame");
+                case PUSH_PROMISE: throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Client sent push promise");
+                default: break;
+            }
+        } finally { buffer.limit(oldLimit).position(end); }
+    }
+
+    private void handleStreamError(Http2Exception error) {
+        var stream = streamRegistry.applicationStream(error.streamId());
+        if (stream != null && !stream.peerResetWasRead()) stream.recordLocalResetFromReader();
+        // Publish the reset before body cancellation can wake a response-producing handler.
+        write(new Http2ResetStreamFrame(error.streamId(), error.errorCode().code()));
+        if (stream != null && !stream.peerResetWasRead()) stream.cancel(new IOException("Stream error", error));
+    }
+
+    private void handleInputFailure(IOException failure) {
+        if (noConnectionWorkIsActive()) {
+            setReadStateIfActiveAndSignal(HState.COMPLETED);
+        } else {
+            log.warn("Input failure while reading HTTP/2 frames at read state {} lifecycle.writeState={}",
+                lifecycle.readState, lifecycle.writeState, failure);
+            failAfterUnexpectedInputEnd(new IOException("Input failed with active HTTP/2 streams", failure));
+        }
+    }
+
+    ReadDriver readDriver(TransportInputBuffer input, OutputStream output) {
+        resumableReader = true;
+        return new ReadDriver(input, output);
+    }
+
+    /**
+     * One serial protocol task at a time; a partial preface, header or payload releases its worker.
+     * Frame effects can dispatch application callbacks, so transport owners only call inputAvailable.
+     */
+    final class ReadDriver {
+        private static final int FRAMES_PER_TURN = 64;
+        private final TransportInputBuffer input;
+        private final OutputStream output;
+        private final AtomicBoolean scheduled = new AtomicBoolean();
+        private final CompletableFuture<@Nullable Void> readEnded = new CompletableFuture<>();
+        private final CompletableFuture<Void> completion =
+            CompletableFuture.allOf(readEnded, writeLoopEnded, retainedApplicationsEnded);
+        private final FieldBlockDecoder hpack = new FieldBlockDecoder(new HpackTable(serverSettings.headerTableSize),
+            server.maxUrlSize(), serverSettings.maxHeaderListSize);
+        private boolean prefaceRead;
+        private boolean handshaken;
+        private boolean needsInput = true;
+        private @Nullable Http2FrameHeader pendingHeader;
+        private @Nullable Http2FrameHeader firstHeader;
+        private @Nullable Http2HeaderBlockDecoder headerBlock;
+
+        private ReadDriver(TransportInputBuffer input, OutputStream output) {
+            this.input = input;
+            this.output = output;
+        }
+
+        CompletableFuture<Void> completion() { return completion; }
+
+        void inputAvailable() {
+            if (!readEnded.isDone() && (input.readable() || !lifecycle.readState.canSendFrames)) schedule();
+        }
+
+        private void schedule() {
+            if (readEnded.isDone() || !scheduled.compareAndSet(false, true)) return;
+            try { server.executeInternalTask(this::run); }
+            catch (RejectedExecutionException rejected) {
+                // Resource leases keep Mu's executor open until retirement. If an injected or
+                // externally failed executor still rejects, cleanup must not call user code on
+                // the selector. The scheduled flag retains exclusive ownership for this task.
+                Thread cleanup = new Thread(() -> {
+                    try { failUnexpectedly(rejected); }
+                    finally { finishReading(); }
+                }, "mu-http2-rejected-reader");
+                cleanup.setDaemon(true);
+                cleanup.start();
+            }
+        }
+
+        private void run() {
+            needsInput = false;
+            try {
+                for (int count = 0; count < FRAMES_PER_TURN && lifecycle.readState.canSendFrames; count++) {
+                    try { if (!readOne()) break; }
+                    catch (Http2Exception error) {
+                        if (error.errorType() == Http2Level.CONNECTION) throw error;
+                        handleStreamError(error);
+                    }
+                }
+            } catch (Http2Exception error) {
+                try { failProtocol(error); }
+                catch (Throwable failure) { failUnexpectedly(failure); FatalErrors.rethrow(failure); }
+            } catch (IOException failure) {
+                handleInputFailure(failure);
+            } catch (Throwable failure) {
+                failUnexpectedly(failure);
+                FatalErrors.rethrow(failure);
+            } finally {
+                if (!lifecycle.readState.canSendFrames) finishReading();
+                scheduled.set(false);
+                // Recheck after releasing ownership: an offer racing the last empty read must
+                // either schedule here or observe scheduled=false on the transport owner.
+                if (!readEnded.isDone() && (!needsInput || input.readable() || !lifecycle.readState.canSendFrames)) schedule();
+            }
+        }
+
+        private boolean ensure(int length) throws IOException {
+            if (buffer.remaining() >= length) return true;
+            buffer.compact();
+            int count;
+            try {
+                count = input.readAvailable(buffer.array(), buffer.position(), buffer.remaining());
+                if (count > 0) buffer.position(buffer.position() + count);
+            } finally { buffer.flip(); }
+            if (count == -1) throw new EOFException("EOF during HTTP/2 " + (prefaceRead ? "frame" : "preface"));
+            if (buffer.remaining() >= length) return true;
+            needsInput = true;
+            return false;
+        }
+
+        private boolean readOne() throws IOException, Http2Exception {
+            if (!prefaceRead) {
+                int length = Http2Handshaker.clientConnectionPrefaceLength();
+                if (!ensure(length)) return false;
+                byte[] preface = new byte[length];
+                buffer.get(preface);
+                if (!Http2Handshaker.isClientPrefacePrefix(preface, length)) {
+                    throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid connection prefix");
+                }
+                prefaceRead = true;
+            }
+            Http2FrameHeader header = pendingHeader;
+            if (header == null) {
+                if (!ensure(Http2FrameHeader.FRAME_HEADER_LENGTH)) return false;
+                header = Http2FrameHeader.readFrom(buffer);
+                if (!handshaken && header.frameType() != Http2FrameType.SETTINGS) {
+                    throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Received " + header + " during client connection preface");
+                }
+                if (headerBlock != null) headerBlock.continuation(header);
+                else if (header.frameType() == Http2FrameType.HEADERS) {
+                    checkHeadersStream(header);
+                    firstHeader = header;
+                    headerBlock = new Http2HeaderBlockDecoder(header, hpack, maxBufferedFieldBlockSize());
+                }
+                pendingHeader = header;
+            }
+            if (!ensure(header.length())) return false;
+            pendingHeader = null;
+            if (!handshaken) {
+                Http2Settings settings = Http2Settings.readFrom(header, buffer);
+                if (settings.isAck) throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Client acked settings before sent");
+                initializeHandshakePeerSettings(settings.copyIfChanged(clientSettings));
+                // The output adapter still waits for socket drain; this small initial write is
+                // off the selector. Reader resumption begins only after ACK registration.
+                serverSettings.writeTo(Http2Connection.this, output);
+                Http2Settings.ACK.writeTo(Http2Connection.this, output);
+                output.flush();
+                registerInitialSettingsAck();
+                handshaken = true;
+                startWriteLoop(output);
+            } else if (headerBlock != null) {
+                Http2HeaderBlockDecoder decoder = headerBlock;
+                try { readHeaders(Objects.requireNonNull(firstHeader), () -> decoder.payload(buffer)); }
+                finally {
+                    if ((header.flags() & 4) != 0) { headerBlock = null; firstHeader = null; }
+                }
+            } else {
+                readFrame(header);
+            }
+            return true;
+        }
+
+        private void failProtocol(Http2Exception error) throws IOException {
+            IOException reason = new IOException("HTTP/2 connection error", error);
+            Http2GoAway goAway = new Http2GoAway(lifecycle.lastStreamId, error.errorCode().code(), null);
+            try {
+                if (handshaken) {
+                    failConnection(new WriteTask(goAway, false), reason);
+                    for (Http2Stream stream : streamRegistry.applicationStreams()) stream.onConnectionTerminated(reason, ResponseState.ERRORED);
+                } else {
+                    goAway.writeTo(Http2Connection.this, output);
+                    output.flush();
+                }
+            } finally { setReadStateAndSignal(HState.ERRORED); }
+        }
+
+        private void failUnexpectedly(Throwable failure) {
+            log.warn("HTTP/2 reader failed", failure);
+            forceShutdown(new IOException("HTTP/2 reader failed", failure), ResponseState.ERRORED);
+        }
+
+        private void finishReading() {
+            headerBlock = null;
+            firstHeader = pendingHeader = null;
+            buffer.clear().limit(0);
+            if (!handshaken) finishWriteLoop(new IOException("HTTP/2 handshake ended before writer startup"));
+            readEnded.complete(null);
+        }
+    }
+
     @Override
     public void start(InputStream clientIn, OutputStream clientOut) throws Http2Exception, IOException, ExecutionException, InterruptedException, TimeoutException {
         Future<?> writeEndedFuture = null;
@@ -830,79 +1059,17 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     var len = fh.length();
                     Mutils.readAtLeast(buffer, clientIn, len);
 
-                    if (fh.streamId() > lifecycle.maxAllowedStreamId) {
-                        // Refused streams still share HPACK and connection flow control
-                        // with the lower-numbered requests finishing graceful shutdown.
-                        if (fh.frameType() == Http2FrameType.HEADERS) {
-                            readHeaders(clientIn, fh, fieldBlockDecoder);
-                        } else if (fh.frameType() == Http2FrameType.DATA) {
-                            Http2DataFrame.readFrom(fh, buffer);
-                            applyInboundFlowResult(inboundFlowControl.discard(len));
-                        } else if (fh.frameType() == Http2FrameType.CONTINUATION) {
-                            throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Out of order continuation frame");
-                        } else {
-                            discardPayload(buffer, clientIn, len);
-                        }
+                    if (fh.frameType() == Http2FrameType.HEADERS) {
+                        readHeaders(fh, () -> Http2HeadersFrame.readLogicalFrame(fh, fieldBlockDecoder,
+                            buffer, clientIn, maxBufferedFieldBlockSize()));
                     } else {
-                        switch (fh.frameType()) {
-                            case HEADERS: {
-                                readHeaders(clientIn, fh, fieldBlockDecoder);
-                                break;
-                            }
-                            case DATA: {
-                                readDataFrame(fh);
-                                break;
-                            }
-                            case SETTINGS: {
-                                readSettingsFrame(fh);
-                                break;
-                            }
-                             case PING: {
-                                 readPingFrame(fh);
-                                 break;
-                             }
-                            case WINDOW_UPDATE: {
-                                readWindowUpdate(fh);
-                                break;
-                            }
-                            case GOAWAY: {
-                                readGoAwayFrame(fh);
-                                break;
-                            }
-                            case RST_STREAM: {
-                                readResetStreamFrame(fh);
-                                break;
-                            }
-                            case PRIORITY: {
-                                readPriorityFrame(fh);
-                                break;
-                            }
-                            case CONTINUATION: {
-                                throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Out of order continuation frame");
-                            }
-                            case PUSH_PROMISE: {
-                                throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Client sent push promise");
-                            }
-                            default: {
-                                discardPayload(buffer, clientIn, len);
-                            }
-                        }
+                        readFrame(fh);
                     }
                 } catch (Http2Exception h2e) {
                     if (h2e.errorType() == Http2Level.CONNECTION) {
                         throw h2e;
                     }
-                    var stream = streamRegistry.applicationStream(h2e.streamId());
-                    if (stream != null && !stream.peerResetWasRead()) {
-                        stream.recordLocalResetFromReader();
-                    }
-                    // Queue the reset before cancellation wakes the request handler. Any
-                    // response work triggered by the body failure is then ordered behind
-                    // the reset and rejected by the coordinator.
-                    write(new Http2ResetStreamFrame(h2e.streamId(), h2e.errorCode().code()));
-                    if (stream != null && !stream.peerResetWasRead()) {
-                        stream.cancel(new IOException("Stream error", h2e));
-                    }
+                    handleStreamError(h2e);
                 } catch (EOFException e) {
                     boolean noActiveWork = noConnectionWorkIsActive();
                     if (readingFrameHeader && noActiveWork) {
@@ -917,13 +1084,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                         }
                     }
                 } catch (IOException e) {
-                    boolean noActiveWork = noConnectionWorkIsActive();
-                    if (noActiveWork) {
-                        setReadStateIfActiveAndSignal(HState.COMPLETED);
-                    } else {
-                        log.warn("Input failure while reading HTTP/2 frames at read state {} lifecycle.writeState={}", lifecycle.readState, lifecycle.writeState, e);
-                        failAfterUnexpectedInputEnd(new IOException("Input failed with active HTTP/2 streams", e));
-                    }
+                    handleInputFailure(e);
                 }
             }
 
@@ -1119,22 +1280,21 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         return !streamRegistry.hasActiveConnectionWork();
     }
 
-    private void readHeaders(InputStream clientIn, Http2FrameHeader fh, FieldBlockDecoder fieldBlockDecoder) throws Http2Exception, IOException {
-        if (fh.streamId() == 0 || (fh.streamId() % 2) == 0) {
-            throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Invalid stream ID " + fh.streamId());
-        }
+    @FunctionalInterface
+    private interface HeadersRead {
+        @Nullable Http2HeadersFrame read() throws Http2Exception, IOException;
+    }
+
+    private int maxBufferedFieldBlockSize() {
+        return Math.max(serverSettings.maxHeaderListSize, serverSettings.maxFrameSize);
+    }
+
+    private void readHeaders(Http2FrameHeader fh, HeadersRead read) throws Http2Exception, IOException {
+        checkHeadersStream(fh);
         boolean newStreamAdmitted = false;
         try {
-            var headerFragment = Http2HeadersFrame.readLogicalFrame(
-                fh,
-                fieldBlockDecoder,
-                buffer,
-                clientIn,
-                Math.max(
-                    serverSettings.maxHeaderListSize,
-                    serverSettings.maxFrameSize
-                )
-            );
+            var headerFragment = read.read();
+            if (headerFragment == null) return;
             if (fh.streamId() > lifecycle.maxAllowedStreamId) {
                 write(new Http2ResetStreamFrame(fh.streamId(), Http2ErrorCode.REFUSED_STREAM.code()));
                 return;
@@ -1453,10 +1613,36 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         onRequestStarted(stream.request);
         try {
             if (!server.tryAdmit(stream.request)) throw new RejectedExecutionException("Request limit reached");
-            handlerExecutor.execute(server.handlerApplicationTask(() -> startHandledStream(stream)));
+            if (resumableReader) server.executeInternalTask(() -> submitHandler(frame, stream));
+            else submitHandler(frame, stream);
         } catch (RejectedExecutionException e) {
             server.onRequestSubmissionRejected(stream.request);
             rejectRequestDueToHandlerOverload(frame, stream);
+        }
+    }
+
+    private void submitHandler(Http2HeadersFrame frame, Http2Stream stream) {
+        AtomicBoolean started = new AtomicBoolean();
+        try {
+            handlerExecutor.execute(server.handlerApplicationTask(() -> {
+                started.set(true);
+                startHandledStream(stream);
+            }));
+        } catch (RejectedExecutionException rejected) {
+            if (started.get()) throw rejected;
+            server.onRequestSubmissionRejected(stream.request);
+            rejectRequestDueToHandlerOverload(frame, stream);
+        } catch (RuntimeException | Error failure) {
+            // A broken executor must not leave a registered exchange whose handler never ran.
+            if (!started.get()) {
+                stream.onApplicationFailure();
+                write(new Http2ResetStreamFrame(stream.id, Http2ErrorCode.INTERNAL_ERROR.code()));
+                stream.cancel(new IOException("HTTP/2 handler submission failed", failure));
+                stream.abandonApplicationExchange();
+                onExchangeEnded(stream);
+            }
+            FatalErrors.rethrow(failure);
+            log.warn("HTTP/2 handler executor failed", failure);
         }
     }
 
@@ -1630,35 +1816,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             this
         ));
     }
-
-    private void discardPayload(ByteBuffer buffer, InputStream clientIn, int len) throws IOException {
-        while (len > 0) {
-            // first ignore stuff already in the buffer
-            if (buffer.hasRemaining()) {
-                if (len >= buffer.remaining()) {
-                    // reset the buffer completely
-                    len -= buffer.remaining();
-                    buffer.clear().flip();
-                } else {
-                    buffer.position(buffer.position() + len);
-                    len = 0;
-                }
-            }
-            if (len > 0) {
-                while (len > buffer.capacity()) {
-                    Mutils.readAtLeast(buffer, clientIn, buffer.capacity());
-                    buffer.clear();
-                    len -= buffer.capacity();
-                }
-                if (len > 0) {
-                    Mutils.readAtLeast(buffer, clientIn, len);
-                    buffer.flip();
-                    len = 0;
-                }
-            }
-        }
-    }
-
 
     @Override
     public void abortWithTimeout() {
