@@ -17,6 +17,255 @@ class AsyncResponseOutputTest {
 
     @AfterEach void stop() { server.stop(); application.shutdownNow(); io.shutdownNow(); }
 
+    @Test void aWriteCallbackSharesAnEarlierBodyCallbacksPendingDispatchOutcome() throws Exception {
+        var dispatchEntered = new CountDownLatch(1);
+        var rejectDispatch = new CountDownLatch(1);
+        var rejecting = new AbstractExecutorService() {
+            public void execute(Runnable task) {
+                dispatchEntered.countDown();
+                try { rejectDispatch.await(); }
+                catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+                throw new RejectedExecutionException("Controlled application rejection");
+            }
+            public void shutdown() { }
+            public List<Runnable> shutdownNow() { return List.of(); }
+            public boolean isShutdown() { return false; }
+            public boolean isTerminated() { return false; }
+            public boolean awaitTermination(long timeout, TimeUnit unit) { return true; }
+        };
+        var rejectingServer = (Mu3ServerImpl) MuServerBuilder.httpServer().withHandlerExecutor(rejecting).start();
+        try {
+            var callbacks = new SerialApplicationTasks(rejectingServer);
+            var firstSubmission = io.submit(() -> callbacks.submit(() -> fail("Rejected body callback"), error -> {}));
+            assertTrue(dispatchEntered.await(3, TimeUnit.SECONDS));
+            var tasks = new java.util.ArrayDeque<Runnable>();
+            var output = AsyncResponseOutput.asynchronous(tasks::add, data -> CompletableFuture.completedFuture(null), active -> {}, callbacks);
+            output.write(ByteBuffer.allocate(1), error -> fail("Rejected write callback"));
+            output.complete(null);
+            tasks.remove().run();
+            assertFalse(output.completion().isDone());
+            rejectDispatch.countDown();
+            firstSubmission.get(3, TimeUnit.SECONDS);
+            assertInstanceOf(RejectedExecutionException.class,
+                assertThrows(ExecutionException.class, () -> output.completion().get(3, TimeUnit.SECONDS)).getCause());
+        } finally { rejectDispatch.countDown(); rejectingServer.stop(0, TimeUnit.MILLISECONDS); }
+    }
+
+    @Test void completionWaitsForCallbackDispatchAcceptanceWithoutWaitingForCallbackExecution() throws Exception {
+        var tasks = new java.util.ArrayDeque<Runnable>();
+        var output = AsyncResponseOutput.asynchronous(tasks::add, data -> CompletableFuture.completedFuture(null),
+            active -> {}, new SerialApplicationTasks(server));
+        var write = output.write(ByteBuffer.allocate(1), error -> fail("Application executor should reject this callback"));
+        output.complete(null);
+        tasks.remove().run();
+        assertTrue(write.isDone());
+        assertFalse(output.completion().isDone(), "Dispatch rejection must still be able to fail this exchange");
+        application.shutdown();
+        assertTrue(application.awaitTermination(3, TimeUnit.SECONDS));
+        while (!tasks.isEmpty()) tasks.remove().run();
+        assertInstanceOf(RejectedExecutionException.class,
+            assertThrows(ExecutionException.class, () -> output.completion().get()).getCause());
+    }
+
+    @Test void aQueuedDrainCannotRetireTheExchangeBeforeCancelledFuturesAreSettled() throws Exception {
+        var tasks = new LinkedBlockingQueue<Runnable>();
+        var submissions = new java.util.concurrent.atomic.AtomicInteger();
+        var dispatchEntered = new CountDownLatch(1);
+        var releaseDispatch = new CountDownLatch(1);
+        Executor executor = task -> {
+            if (submissions.incrementAndGet() == 2) {
+                dispatchEntered.countDown();
+                try { releaseDispatch.await(); }
+                catch (InterruptedException error) { Thread.currentThread().interrupt(); }
+            }
+            tasks.add(task);
+        };
+        var output = AsyncResponseOutput.asynchronous(executor, data -> {
+            throw new AssertionError("Output cancelled before starting");
+        }, active -> {}, new SerialApplicationTasks(server));
+        var first = output.write(ByteBuffer.allocate(1), error -> {});
+        var second = output.write(ByteBuffer.allocate(1), null);
+        var cancellation = io.submit(() -> output.complete(new IOException("Stop")));
+        try {
+            assertTrue(dispatchEntered.await(3, TimeUnit.SECONDS));
+            assertTrue(first.isDone());
+            assertFalse(second.isDone());
+            tasks.remove().run();
+            assertFalse(output.completion().isDone(), "A removed queue entry still owns its completion future");
+            releaseDispatch.countDown();
+            cancellation.get(3, TimeUnit.SECONDS);
+            assertTrue(second.isDone());
+            while (!tasks.isEmpty()) tasks.remove().run();
+            assertTrue(output.completion().isDone());
+        } finally { releaseDispatch.countDown(); }
+    }
+
+    @Test void anExceptionalWriteFutureRetainsItsCauseAndPreventsLaterIo() throws Exception {
+        var started = new CountDownLatch(1);
+        var pending = new CompletableFuture<Void>();
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var aborts = new java.util.concurrent.atomic.AtomicInteger();
+        var output = AsyncResponseOutput.asynchronous(io, data -> {
+            calls.incrementAndGet(); started.countDown(); return pending;
+        }, active -> aborts.incrementAndGet(), new SerialApplicationTasks(server));
+        var first = output.write(ByteBuffer.allocate(1), null);
+        var second = output.write(ByteBuffer.allocate(1), null);
+        output.complete(null);
+        assertTrue(started.await(3, TimeUnit.SECONDS));
+        IOException failure = new IOException("TLS drain failed");
+        pending.completeExceptionally(new CompletionException(failure));
+        for (Future<?> result : List.of(first, second, output.completion())) {
+            assertSame(failure, assertThrows(ExecutionException.class, () -> result.get(3, TimeUnit.SECONDS)).getCause());
+        }
+        assertEquals(1, calls.get());
+        assertEquals(1, aborts.get());
+    }
+
+    @Test void immediatelyCompletedWritesYieldAfterABoundedTurn() throws Exception {
+        var tasks = new java.util.ArrayDeque<Runnable>();
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var output = AsyncResponseOutput.asynchronous(tasks::add, data -> {
+            calls.incrementAndGet(); return CompletableFuture.completedFuture(null);
+        }, active -> {}, new SerialApplicationTasks(server));
+        for (int i = 0; i < 1000; i++) output.write(ByteBuffer.allocate(1), null);
+        output.complete(null);
+        assertEquals(1, tasks.size());
+        tasks.remove().run();
+        assertEquals(64, calls.get());
+        assertFalse(output.completion().isDone());
+        while (!tasks.isEmpty()) tasks.remove().run();
+        output.completion().get(3, TimeUnit.SECONDS);
+        assertEquals(1000, calls.get());
+    }
+
+    @Test void failedTransportAbortStillSettlesQueuedWritesAndRetainsItsDiagnostic() throws Exception {
+        var tasks = new java.util.ArrayDeque<Runnable>();
+        var abortFailure = new IllegalStateException("Abort failed");
+        var output = AsyncResponseOutput.asynchronous(tasks::add, data -> {
+            throw new AssertionError("Cancelled before dispatch");
+        }, active -> { throw abortFailure; }, new SerialApplicationTasks(server));
+        var write = output.write(ByteBuffer.allocate(1), null);
+        var failure = new IOException("Stop");
+        output.complete(failure);
+        assertSame(failure, assertThrows(ExecutionException.class, write::get).getCause());
+        assertSame(failure, assertThrows(ExecutionException.class, () -> output.completion().get()).getCause());
+        assertArrayEquals(new Throwable[]{abortFailure}, failure.getSuppressed());
+        while (!tasks.isEmpty()) tasks.remove().run();
+    }
+
+    @Test void asynchronousWritesSuspendTheWorkerAndResumeInOrderAfterDrain() throws Exception {
+        var worker = Executors.newSingleThreadExecutor();
+        var writes = new LinkedBlockingQueue<CompletableFuture<Void>>();
+        var bytes = new CopyOnWriteArrayList<Integer>();
+        var delivered = new CopyOnWriteArrayList<Integer>();
+        try {
+            var output = AsyncResponseOutput.asynchronous(worker, data -> {
+                bytes.add((int) data.get(0));
+                var completion = new CompletableFuture<Void>();
+                writes.add(completion);
+                return completion;
+            }, active -> {}, new SerialApplicationTasks(server));
+            Future<?> first = output.write(ByteBuffer.wrap(new byte[]{1}), error -> delivered.add(1));
+            Future<?> second = output.write(ByteBuffer.wrap(new byte[]{2}), error -> delivered.add(2));
+            output.complete(null);
+            var firstIo = writes.poll(3, TimeUnit.SECONDS);
+            assertNotNull(firstIo);
+            assertEquals(42, worker.submit(() -> 42).get(3, TimeUnit.SECONDS));
+            assertEquals(List.of(1), bytes);
+            assertFalse(first.isDone());
+            assertFalse(output.completion().isDone());
+            firstIo.complete(null);
+            first.get(3, TimeUnit.SECONDS);
+            var secondIo = writes.poll(3, TimeUnit.SECONDS);
+            assertNotNull(secondIo);
+            assertEquals(43, worker.submit(() -> 43).get(3, TimeUnit.SECONDS));
+            assertFalse(second.isDone());
+            secondIo.complete(null);
+            output.completion().get(3, TimeUnit.SECONDS);
+            worker.submit(() -> {}).get(3, TimeUnit.SECONDS);
+            application.submit(() -> {}).get(3, TimeUnit.SECONDS);
+            assertEquals(List.of(1, 2), bytes);
+            assertEquals(List.of(1, 2), delivered);
+        } finally { worker.shutdownNow(); }
+    }
+
+    @Test void asynchronousCancellationRetainsTheSourceUntilItsWriteAcknowledgesAbort() throws Exception {
+        var pending = new CompletableFuture<Void>();
+        var started = new CountDownLatch(1);
+        var aborted = new CountDownLatch(1);
+        var output = AsyncResponseOutput.asynchronous(io, data -> {
+            started.countDown(); return pending;
+        }, active -> { assertTrue(active); aborted.countDown(); }, new SerialApplicationTasks(server));
+        Future<?> write = output.write(ByteBuffer.allocate(16), null);
+        assertTrue(started.await(3, TimeUnit.SECONDS));
+        Future<Boolean> cancellation = io.submit(() -> write.cancel(false));
+        assertTrue(aborted.await(3, TimeUnit.SECONDS));
+        assertFalse(write.isDone());
+        assertFalse(cancellation.isDone());
+        assertFalse(pending.isCancelled(), "The transport acknowledgement is not a cancellation API");
+        pending.complete(null);
+        assertTrue(cancellation.get(3, TimeUnit.SECONDS));
+        assertThrows(CancellationException.class, write::get);
+        assertThrows(CancellationException.class, () -> output.completion().get(3, TimeUnit.SECONDS));
+    }
+
+    @Test void aCallerRunsWriteCallbackCanWaitForAnotherWriteWithoutRetainingTheDrain() throws Exception {
+        var direct = new AbstractExecutorService() {
+            public void execute(Runnable task) { task.run(); }
+            public void shutdown() { }
+            public List<Runnable> shutdownNow() { return List.of(); }
+            public boolean isShutdown() { return false; }
+            public boolean isTerminated() { return false; }
+            public boolean awaitTermination(long timeout, TimeUnit unit) { return true; }
+        };
+        var inlineServer = (Mu3ServerImpl) MuServerBuilder.httpServer().withHandlerExecutor(direct).start();
+        var outputRef = new java.util.concurrent.atomic.AtomicReference<AsyncResponseOutput>();
+        var bytes = new CopyOnWriteArrayList<Integer>();
+        var callback = new CompletableFuture<Void>();
+        try {
+            var output = AsyncResponseOutput.asynchronous(io, data -> {
+                bytes.add((int) data.get(0)); return CompletableFuture.completedFuture(null);
+            }, active -> {}, new SerialApplicationTasks(inlineServer));
+            outputRef.set(output);
+            output.write(ByteBuffer.wrap(new byte[]{1}), error -> {
+                try {
+                    assertNull(error);
+                    outputRef.get().write(ByteBuffer.wrap(new byte[]{2}), null).get(3, TimeUnit.SECONDS);
+                    outputRef.get().complete(null);
+                    callback.complete(null);
+                } catch (Throwable failure) { callback.completeExceptionally(failure); }
+            });
+            callback.get(5, TimeUnit.SECONDS);
+            output.completion().get(3, TimeUnit.SECONDS);
+            assertEquals(List.of(1, 2), bytes);
+        } finally { inlineServer.stop(0, TimeUnit.MILLISECONDS); }
+    }
+
+    @Test void rejectedContinuationReleasesAnAcknowledgedWriteAndFailsItsQueuedWrites() throws Exception {
+        var worker = Executors.newSingleThreadExecutor();
+        var pending = new CompletableFuture<Void>();
+        var started = new CountDownLatch(1);
+        var callbacksDone = new CountDownLatch(2);
+        var delivered = new CopyOnWriteArrayList<Integer>();
+        var output = AsyncResponseOutput.asynchronous(worker, data -> { started.countDown(); return pending; },
+            active -> {}, new SerialApplicationTasks(server));
+        try {
+            var first = output.write(ByteBuffer.allocate(1), error -> { delivered.add(1); callbacksDone.countDown(); });
+            var second = output.write(ByteBuffer.allocate(1), error -> { delivered.add(2); callbacksDone.countDown(); });
+            output.complete(null);
+            assertTrue(started.await(3, TimeUnit.SECONDS));
+            worker.shutdown();
+            assertTrue(worker.awaitTermination(3, TimeUnit.SECONDS));
+            pending.complete(null); // Simulate a selector notification after internal executor shutdown.
+            for (Future<?> result : List.of(first, second, output.completion())) {
+                assertInstanceOf(RejectedExecutionException.class,
+                    assertThrows(ExecutionException.class, () -> result.get(3, TimeUnit.SECONDS)).getCause());
+            }
+            assertTrue(callbacksDone.await(3, TimeUnit.SECONDS));
+            assertEquals(List.of(1, 2), delivered);
+        } finally { worker.shutdownNow(); }
+    }
+
     @Test void acceptedWritesDrainInOrderWithoutWaitingForCallbacks() throws Exception {
         var firstStarted = new CountDownLatch(1);
         var releaseOutput = new CountDownLatch(1);

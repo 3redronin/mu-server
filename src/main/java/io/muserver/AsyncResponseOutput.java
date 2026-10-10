@@ -12,9 +12,11 @@ import java.util.function.Consumer;
 final class AsyncResponseOutput {
     @FunctionalInterface
     interface Writer { void write(ByteBuffer data) throws Exception; }
+    @FunctionalInterface
+    interface AsyncWriter { CompletableFuture<@Nullable Void> write(ByteBuffer data) throws Exception; }
 
     private final Executor executor;
-    private final Writer writer;
+    private final AsyncWriter writer;
     private final Consumer<Boolean> abort;
     private final SerialApplicationTasks callbacks;
     private final ReentrantLock lock = new ReentrantLock();
@@ -27,14 +29,32 @@ final class AsyncResponseOutput {
     private @Nullable Throwable failure;
     // Guarded by lock.
     private @Nullable PendingWrite active;
+    // Guarded by lock. Only its completed notification may resume the suspended drain.
+    private @Nullable CompletableFuture<@Nullable Void> activeIo;
     // Guarded by lock.
     private boolean draining;
     /** Prevents an empty I/O drain from publishing failure before transport abort has returned. */
     // Guarded by lock.
     private boolean abortFinished;
+    // Removed queued writes still need their futures settled before exchange retirement.
+    private int pendingSettlements;
+    private int pendingCallbackDispatches;
+    private @Nullable Throwable fatalAbortFailure;
     private final java.util.concurrent.atomic.AtomicBoolean abortRequested = new java.util.concurrent.atomic.AtomicBoolean();
 
     AsyncResponseOutput(Executor executor, Writer writer, Consumer<Boolean> abort, SerialApplicationTasks callbacks) {
+        this(data -> {
+            writer.write(data);
+            return CompletableFuture.completedFuture(null);
+        }, executor, abort, callbacks);
+    }
+
+    static AsyncResponseOutput asynchronous(Executor executor, AsyncWriter writer, Consumer<Boolean> abort,
+                                            SerialApplicationTasks callbacks) {
+        return new AsyncResponseOutput(writer, executor, abort, callbacks);
+    }
+
+    private AsyncResponseOutput(AsyncWriter writer, Executor executor, Consumer<Boolean> abort, SerialApplicationTasks callbacks) {
         this.executor = executor;
         this.writer = writer;
         this.abort = abort;
@@ -64,10 +84,7 @@ final class AsyncResponseOutput {
         } finally { lock.unlock(); }
         if (rejected) {
             write.finish(new IllegalStateException("The asynchronous response is already complete"));
-        } else if (schedule) {
-            try { executor.execute(this::drain); }
-            catch (RejectedExecutionException rejectedExecution) { fail(rejectedExecution); }
-        }
+        } else if (schedule) scheduleDrain();
         return write.result;
     }
 
@@ -96,6 +113,7 @@ final class AsyncResponseOutput {
             if (!activeOutput) {
                 cancelled.addAll(pending);
                 pending.clear();
+                pendingSettlements += cancelled.size();
                 draining = false;
             }
         } finally { lock.unlock(); }
@@ -103,71 +121,140 @@ final class AsyncResponseOutput {
         // acknowledge termination before active futures and callbacks can finish.
         if (abortRequested.compareAndSet(false, true)) {
             try { abort.accept(activeOutput); }
+            catch (Throwable failedAbort) {
+                suppress(terminalFailure, failedAbort);
+                if (failedAbort instanceof VirtualMachineError || failedAbort instanceof ThreadDeath) {
+                    lock.lock();
+                    try { fatalAbortFailure = failedAbort; } finally { lock.unlock(); }
+                }
+            }
             finally {
                 lock.lock();
                 try { abortFinished = true; } finally { lock.unlock(); }
             }
         }
-        for (PendingWrite write : cancelled) write.finish(terminalFailure);
+        for (PendingWrite write : cancelled) {
+            try { write.finish(terminalFailure, true); }
+            finally {
+                lock.lock();
+                try { pendingSettlements--; } finally { lock.unlock(); }
+            }
+        }
         finishIfDrained();
     }
 
+    @SuppressWarnings("ReferenceEquality") // A Throwable cannot suppress itself.
+    private static void suppress(Throwable failure, Throwable secondary) {
+        if (failure != secondary) failure.addSuppressed(secondary);
+    }
+
     private void drain() {
-        for (;;) {
+        for (int step = 0; step < 64; step++) {
             PendingWrite write;
             Throwable writeFailure;
+            CompletableFuture<@Nullable Void> io;
+            boolean start;
             lock.lock();
             try {
-                write = pending.poll();
+                write = active;
+                start = write == null;
+                if (start) write = pending.poll();
                 if (write == null) {
                     draining = false;
-                    break;
+                    io = null;
+                } else {
+                    active = write;
+                    io = activeIo;
                 }
-                active = write;
                 writeFailure = failure;
             } finally { lock.unlock(); }
-            if (writeFailure == null) {
-                try { writer.write(write.data); }
-                catch (Throwable ioFailure) {
-                    writeFailure = ioFailure;
-                    fail(ioFailure);
+            if (write == null) { finishIfDrained(); return; }
+            if (start) {
+                io = CompletableFuture.completedFuture(null);
+                if (writeFailure == null) {
+                    try { io = java.util.Objects.requireNonNull(writer.write(write.data)); }
+                    catch (Throwable ioFailure) { fail(ioFailure); }
                 }
+                lock.lock();
+                try { activeIo = io; } finally { lock.unlock(); }
+            }
+            CompletableFuture<@Nullable Void> writing = java.util.Objects.requireNonNull(io);
+            if (!writing.isDone()) {
+                // Do not touch active state after registering: an immediate completion may
+                // already have dispatched the next bounded turn on another worker.
+                writing.whenComplete((ignored, error) -> scheduleDrain());
+                return;
+            }
+            try { writing.join(); }
+            catch (Throwable ioFailure) {
+                Throwable cause = ioFailure;
+                while (cause instanceof CompletionException && cause.getCause() != null) cause = cause.getCause();
+                fail(cause);
             }
             lock.lock();
             try {
                 if (failure != null) writeFailure = failure;
             } finally { lock.unlock(); }
-            write.finish(writeFailure);
+            write.finish(writeFailure, true);
             lock.lock();
-            try { active = null; } finally { lock.unlock(); }
+            try { active = null; activeIo = null; } finally { lock.unlock(); }
             if (writeFailure instanceof VirtualMachineError || writeFailure instanceof ThreadDeath) {
                 fail(writeFailure);
                 FatalErrors.rethrow(writeFailure);
             }
         }
-        finishIfDrained();
+        scheduleDrain();
+    }
+
+    private void scheduleDrain() {
+        try { executor.execute(this::drain); }
+        catch (RejectedExecutionException rejected) {
+            // A transport future may notify us on a selector. Terminal callbacks and exchange
+            // cleanup must stay off that notifier, including with caller-runs application code.
+            Thread cleanup = new Thread(() -> {
+                fail(rejected);
+                drain();
+            }, "mu-response-rejected-writer");
+            cleanup.setDaemon(true);
+            cleanup.start();
+        }
     }
 
     private void finishIfDrained() {
         boolean finish;
         Throwable terminalFailure;
+        Throwable fatalAbort;
         lock.lock();
         try {
-            finish = completionRequested && active == null && pending.isEmpty()
+            finish = completionRequested && active == null && pending.isEmpty() && pendingSettlements == 0 && pendingCallbackDispatches == 0
                 && (failure == null || abortFinished);
             terminalFailure = failure;
+            fatalAbort = finish ? fatalAbortFailure : null;
+            if (finish) fatalAbortFailure = null;
         } finally { lock.unlock(); }
         if (finish) {
             if (terminalFailure == null) completion.complete(null);
             else completion.completeExceptionally(terminalFailure);
+            // Rethrow only after the underlying write and every queued future released ownership.
+            if (fatalAbort != null) FatalErrors.rethrow(fatalAbort);
         }
     }
 
-    private void notifyCallback(@Nullable DoneCallback callback, @Nullable Throwable error) {
-        if (callback != null) callbacks.submit(() -> {
+    private void notifyCallback(@Nullable DoneCallback callback, @Nullable Throwable error, boolean defer) {
+        if (callback == null) return;
+        Runnable notification = () -> {
             try { callback.onComplete(error); }
             catch (Throwable callbackFailure) { fail(callbackFailure); FatalErrors.rethrow(callbackFailure); }
-        }, this::fail);
+        };
+        if (defer) {
+            lock.lock();
+            try { pendingCallbackDispatches++; } finally { lock.unlock(); }
+            callbacks.submitLater(executor, notification, this::fail, () -> {
+                lock.lock();
+                try { pendingCallbackDispatches--; } finally { lock.unlock(); }
+                finishIfDrained();
+            });
+        } else callbacks.submit(notification, this::fail);
     }
 
     private final class PendingWrite {
@@ -181,9 +268,13 @@ final class AsyncResponseOutput {
         }
 
         void finish(@Nullable Throwable error) {
+            finish(error, false);
+        }
+
+        void finish(@Nullable Throwable error, boolean defer) {
             result.finish(error);
             // Dispatch from the response, so delayed callbacks do not capture this payload entry.
-            notifyCallback(callback, error);
+            notifyCallback(callback, error, defer);
         }
     }
 
