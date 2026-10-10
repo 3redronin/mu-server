@@ -56,6 +56,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     private final CompletableFuture<@Nullable Void> retainedApplicationsEnded = new CompletableFuture<>();
     private boolean resumableReader;
     private volatile @Nullable OutputStream writerOutput;
+    private volatile @Nullable AsyncWriteDriver asyncWriter;
     private @Nullable Http2WriteBatch writeBatch;
     private final ArrayList<BatchFrame> pendingWriteBatch = new ArrayList<>();
     private static final int MAX_WRITE_BATCH_FRAMES = 64;
@@ -566,7 +567,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     }
 
     void initializeHandshakePeerSettings(Http2Settings settings) {
-        if (writerOutput != null) {
+        if (writerOutput != null || asyncWriter != null) {
             throw new IllegalStateException("The HTTP/2 writer has already started");
         }
         clientSettings = settings;
@@ -752,21 +753,25 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         while (!pendingWriteBatch.isEmpty()) {
             BatchFrame entry = pendingWriteBatch.get(0);
             if (entry.endOffset > flushed) break;
-            if (entry.settingsAck != null) startSettingsAckTimeout(entry.settingsAck);
-            if (GO_AWAY_WARNING.equals(entry.frame)) lifecycle.recordInitialGoAwayWritten();
-            entry.candidate.complete();
-            if (entry.frame instanceof Http2ResetStreamFrame) {
-                stateLock.lock();
-                try {
-                    if (streamRegistry.removeRejectedRequestBody(entry.frame.streamId())) {
-                        inboundFlowControl.closeStream(entry.frame.streamId());
-                        writeCoordinator.forgetStream(entry.frame.streamId());
-                    }
-                } finally {
-                    stateLock.unlock();
-                }
-            }
+            completeFrame(entry);
             pendingWriteBatch.remove(0);
+        }
+    }
+
+    private void completeFrame(BatchFrame entry) throws IOException {
+        if (entry.settingsAck != null) startSettingsAckTimeout(entry.settingsAck);
+        if (GO_AWAY_WARNING.equals(entry.frame)) lifecycle.recordInitialGoAwayWritten();
+        entry.candidate.complete();
+        if (entry.frame instanceof Http2ResetStreamFrame) {
+            stateLock.lock();
+            try {
+                if (streamRegistry.removeRejectedRequestBody(entry.frame.streamId())) {
+                    inboundFlowControl.closeStream(entry.frame.streamId());
+                    writeCoordinator.forgetStream(entry.frame.streamId());
+                }
+            } finally {
+                stateLock.unlock();
+            }
         }
     }
 
@@ -854,7 +859,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         }
     }
 
-    ReadDriver readDriver(TransportInputBuffer input, OutputStream output) {
+    ReadDriver readDriver(TransportInputBuffer input, AsyncTransportOutput output) {
         resumableReader = true;
         return new ReadDriver(input, output);
     }
@@ -866,7 +871,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     final class ReadDriver {
         private static final int FRAMES_PER_TURN = 64;
         private final TransportInputBuffer input;
-        private final OutputStream output;
+        private final AsyncTransportOutput output;
         private final AtomicBoolean scheduled = new AtomicBoolean();
         private final CompletableFuture<@Nullable Void> readEnded = new CompletableFuture<>();
         private final CompletableFuture<Void> completion =
@@ -876,11 +881,14 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         private boolean prefaceRead;
         private boolean handshaken;
         private boolean needsInput = true;
+        private volatile @Nullable CompletableFuture<@Nullable Void> initialWrite;
+        private int initialWriteBytes;
+        private boolean initialWriteIsError;
         private @Nullable Http2FrameHeader pendingHeader;
         private @Nullable Http2FrameHeader firstHeader;
         private @Nullable Http2HeaderBlockDecoder headerBlock;
 
-        private ReadDriver(TransportInputBuffer input, OutputStream output) {
+        private ReadDriver(TransportInputBuffer input, AsyncTransportOutput output) {
             this.input = input;
             this.output = output;
         }
@@ -888,7 +896,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         CompletableFuture<Void> completion() { return completion; }
 
         void inputAvailable() {
-            if (!readEnded.isDone() && (input.readable() || !lifecycle.readState.canSendFrames)) schedule();
+            CompletableFuture<?> pending = initialWrite;
+            if (!readEnded.isDone() && (pending != null ? pending.isDone()
+                : input.readable() || !lifecycle.readState.canSendFrames)) schedule();
         }
 
         private void schedule() {
@@ -910,6 +920,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         private void run() {
             needsInput = false;
             try {
+                if (!finishInitialWrite()) return;
                 for (int count = 0; count < FRAMES_PER_TURN && lifecycle.readState.canSendFrames; count++) {
                     try { if (!readOne()) break; }
                     catch (Http2Exception error) {
@@ -926,12 +937,38 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 failUnexpectedly(failure);
                 FatalErrors.rethrow(failure);
             } finally {
-                if (!lifecycle.readState.canSendFrames) finishReading();
+                if (!lifecycle.readState.canSendFrames && initialWrite == null) finishReading();
                 scheduled.set(false);
                 // Recheck after releasing ownership: an offer racing the last empty read must
                 // either schedule here or observe scheduled=false on the transport owner.
-                if (!readEnded.isDone() && (!needsInput || input.readable() || !lifecycle.readState.canSendFrames)) schedule();
+                CompletableFuture<?> pending = initialWrite;
+                if (!readEnded.isDone() && (pending != null ? pending.isDone()
+                    : !needsInput || input.readable() || !lifecycle.readState.canSendFrames)) schedule();
             }
+        }
+
+        private void writeInitial(LogicalHttp2Frame... frames) throws IOException {
+            var encoded = new NiceByteArrayOutputStream(64);
+            for (LogicalHttp2Frame frame : frames) frame.writeTo(Http2Connection.this, encoded);
+            initialWriteBytes = encoded.size();
+            initialWrite = output.write(ByteBuffer.wrap(encoded.rawBuffer(), 0, encoded.size()));
+            initialWrite.whenComplete((ignored, failure) -> schedule());
+        }
+
+        private boolean finishInitialWrite() throws IOException {
+            CompletableFuture<?> pending = initialWrite;
+            if (pending == null) return true;
+            if (!pending.isDone()) return false;
+            initialWrite = null;
+            checkCompletedWrite(pending);
+            onBytesSent(initialWriteBytes);
+            if (initialWriteIsError || !lifecycle.readState.canSendFrames) return false;
+            // Register before consuming a peer ACK already buffered behind its SETTINGS.
+            registerInitialSettingsAck();
+            handshaken = true;
+            asyncWriter = new AsyncWriteDriver(output);
+            requestWriteRun();
+            return true;
         }
 
         private boolean ensure(int length) throws IOException {
@@ -980,14 +1017,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 Http2Settings settings = Http2Settings.readFrom(header, buffer);
                 if (settings.isAck) throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "Client acked settings before sent");
                 initializeHandshakePeerSettings(settings.copyIfChanged(clientSettings));
-                // The output adapter still waits for socket drain; this small initial write is
-                // off the selector. Reader resumption begins only after ACK registration.
-                serverSettings.writeTo(Http2Connection.this, output);
-                Http2Settings.ACK.writeTo(Http2Connection.this, output);
-                output.flush();
-                registerInitialSettingsAck();
-                handshaken = true;
-                startWriteLoop(output);
+                writeInitial(serverSettings, Http2Settings.ACK);
+                return false;
             } else if (headerBlock != null) {
                 Http2HeaderBlockDecoder decoder = headerBlock;
                 try { readHeaders(Objects.requireNonNull(firstHeader), () -> decoder.payload(buffer)); }
@@ -1008,8 +1039,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     failConnection(new WriteTask(goAway, false), reason);
                     for (Http2Stream stream : streamRegistry.applicationStreams()) stream.onConnectionTerminated(reason, ResponseState.ERRORED);
                 } else {
-                    goAway.writeTo(Http2Connection.this, output);
-                    output.flush();
+                    initialWriteIsError = true;
+                    writeInitial(goAway);
                 }
             } finally { setReadStateAndSignal(HState.ERRORED); }
         }
@@ -1460,20 +1491,28 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     }
 
     private void requestWriteRun() {
-        if (writerOutput == null || writeLoopEnded.isDone()
+        if ((writerOutput == null && asyncWriter == null) || writeLoopEnded.isDone()
             || !writerTaskScheduled.compareAndSet(false, true)) {
             return;
         }
         try {
             writerExecutor.execute(this::runWriteTask);
         } catch (RejectedExecutionException e) {
-            writerTaskScheduled.set(false);
-            failWriteLoop(new IOException("HTTP/2 writer executor rejected connection work", e));
+            // A readiness callback can be the submitter. Keep coordinator ownership and
+            // application cancellation off that transport thread even after executor failure.
+            Thread cleanup = new Thread(() -> {
+                try { failWriteLoop(new IOException("HTTP/2 writer executor rejected connection work", e)); }
+                finally { writerTaskScheduled.set(false); }
+            }, "mu-http2-rejected-writer");
+            cleanup.setDaemon(true);
+            cleanup.start();
         }
     }
 
     private void runWriteTask() {
         try {
+            AsyncWriteDriver asynchronous = asyncWriter;
+            if (asynchronous != null) { asynchronous.run(); return; }
             OutputStream clientOut = Objects.requireNonNull(writerOutput, "HTTP/2 writer output is not initialized");
             while (lifecycle.writeState.canSendFrames) {
                 writeCoordinator.processAvailableCommands();
@@ -1481,40 +1520,113 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     continue;
                 }
 
-                long now = System.nanoTime();
-                boolean continueWriting = false;
-                stateLock.lock();
-                try {
-                    if (lifecycle.shouldQueueFinalGoAwayLocked(now)) {
-                        lifecycle.queueFinalGoAwayLocked();
-                        continueWriting = true;
-                    } else if (lifecycle.isTerminalAndDrainedLocked()) {
-                        lifecycle.completeShutdownLocked();
-                    } else {
-                        long waitTime = lifecycle.nanosUntilNextWriteActionLocked(now);
-                        if (waitTime > 0L && !lifecycle.finalGoAwayWakeScheduled) {
-                            scheduleFinalGoAwayWakeLocked(waitTime);
-                        }
-                    }
-                } finally {
-                    stateLock.unlock();
-                }
-                if (!continueWriting) {
-                    break;
-                }
+                if (!nextWriteAction()) break;
             }
             if (!lifecycle.writeState.canSendFrames) {
                 finishWriteLoop(new IOException("HTTP/2 connection write loop closed"));
             }
-        } catch (Exception e) {
-            failWriteLoop(e);
+        } catch (Throwable failure) {
+            failWriteLoop(failure instanceof Exception ? (Exception) failure : new IOException("HTTP/2 writer failed", failure));
+            FatalErrors.rethrow(failure);
         } finally {
             writerTaskScheduled.set(false);
             if (!writeLoopEnded.isDone()
-                && (writeCoordinator.hasCommands() || !lifecycle.writeState.canSendFrames)) {
+                && (writeCoordinator.hasCommands() || (asyncWriter != null
+                    ? asyncWriter.ready() : !lifecycle.writeState.canSendFrames))) {
                 requestWriteRun();
             }
         }
+    }
+
+    /** Decide shutdown/timer work only when no immediately writable candidate remains. */
+    private boolean nextWriteAction() {
+        long now = System.nanoTime();
+        stateLock.lock();
+        try {
+            if (lifecycle.shouldQueueFinalGoAwayLocked(now)) {
+                lifecycle.queueFinalGoAwayLocked();
+                return true;
+            }
+            if (lifecycle.isTerminalAndDrainedLocked()) lifecycle.completeShutdownLocked();
+            else {
+                long waitTime = lifecycle.nanosUntilNextWriteActionLocked(now);
+                if (waitTime > 0L && !lifecycle.finalGoAwayWakeScheduled) scheduleFinalGoAwayWakeLocked(waitTime);
+            }
+            return false;
+        } finally { stateLock.unlock(); }
+    }
+
+    private static void checkCompletedWrite(CompletableFuture<?> write) throws IOException {
+        try { write.join(); }
+        catch (CompletionException | CancellationException failure) {
+            Throwable cause = completionCause(failure);
+            if (cause instanceof IOException) throw (IOException) cause;
+            throw new IOException("HTTP/2 transport write failed", cause);
+        }
+    }
+
+    /** Serialized by writerTaskScheduled; no worker remains assigned during socket/TLS backpressure. */
+    private final class AsyncWriteDriver {
+        private final AsyncTransportOutput output;
+        private @Nullable BatchFrame current;
+        private volatile @Nullable CompletableFuture<@Nullable Void> pending;
+        private volatile boolean yielded;
+        private int pendingBytes;
+
+        private AsyncWriteDriver(AsyncTransportOutput output) { this.output = output; }
+
+        private boolean ready() {
+            CompletableFuture<?> write = pending;
+            return write == null ? yielded || !lifecycle.writeState.canSendFrames : write.isDone();
+        }
+
+        private void run() throws IOException {
+            yielded = false;
+            for (int turn = 0; turn < MAX_WRITE_BATCH_FRAMES; turn++) {
+                writeCoordinator.processAvailableCommands();
+                CompletableFuture<?> write = pending;
+                if (write != null) {
+                    if (!write.isDone()) return;
+                    checkCompletedWrite(write);
+                    onBytesSent(pendingBytes);
+                    BatchFrame completed = Objects.requireNonNull(current);
+                    completed.candidate.publishAfterWrite(completed.frame);
+                    completeFrame(completed);
+                    pending = null;
+                    current = null;
+                }
+                if (!lifecycle.writeState.canSendFrames) {
+                    finishWriteLoop(new IOException("HTTP/2 connection write loop closed"));
+                    return;
+                }
+                Http2WriteCoordinator.WritableFrame candidate = writeCoordinator.pollWritable();
+                if (candidate == null) {
+                    if (nextWriteAction()) continue;
+                    if (!lifecycle.writeState.canSendFrames) finishWriteLoop(new IOException("HTTP/2 connection write loop closed"));
+                    return;
+                }
+                if (!candidate.beginWrite()) continue;
+                Http2Exception protocolError = candidate.protocolError();
+                LogicalHttp2Frame frame = protocolError == null ? candidate.frame() : prepareCoordinatorErrorFrame(protocolError);
+                PendingSettingsAck ack = frame instanceof Http2Settings && !((Http2Settings) frame).isAck
+                    ? registerPendingSettingsAck() : null;
+                current = new BatchFrame(candidate, frame, ack);
+                if (frame instanceof Http2WindowUpdate) {
+                    Http2WindowUpdate update = (Http2WindowUpdate) frame;
+                    inboundFlowControl.windowUpdateWriting(update.streamId(), update.windowSizeIncrement());
+                }
+                // OutputStream encoders may reuse their arrays as soon as write() returns.
+                // Own this encoding, rather than retaining borrowed frame/caller storage.
+                var encoded = new NiceByteArrayOutputStream(256);
+                frame.writeTo(Http2Connection.this, encoded);
+                pendingBytes = encoded.size();
+                pending = output.write(ByteBuffer.wrap(encoded.rawBuffer(), 0, encoded.size()));
+                pending.whenComplete((ignored, failure) -> requestWriteRun());
+            }
+            yielded = true;
+        }
+
+        private void discard() { pending = null; current = null; pendingBytes = 0; }
     }
 
     private void scheduleFinalGoAwayWakeLocked(long delayNanos) {
@@ -1565,6 +1677,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         if (writeLoopEnded.isDone()) {
             return;
         }
+        AsyncWriteDriver asynchronous = asyncWriter;
+        if (asynchronous != null) asynchronous.discard();
         cancelPendingSettingsAckTimeouts();
         writeCoordinator.failAll(reason);
         // Application completion may have been queued before the connection failed,

@@ -247,7 +247,7 @@ final class ChannelConnection implements ConnectionTransport {
             http1 = ((Http1Connection) promoted).readDriver(input, clientOut, this::schedule);
             protocolCompletion = http1.completion();
         } else {
-            http2 = ((Http2Connection) promoted).readDriver(input, clientOut);
+            http2 = ((Http2Connection) promoted).readDriver(input, output.asynchronousWriter());
             protocolCompletion = http2.completion();
             http2.inputAvailable();
         }

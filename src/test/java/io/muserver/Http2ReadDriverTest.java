@@ -158,6 +158,80 @@ class Http2ReadDriverTest {
         }
     }
 
+    @Test
+    void pendingHandshakeAndFinalResponseDoNotPublishCompletionBeforeDrain() throws Exception {
+        CompletableFuture<Http2Connection> handled = new CompletableFuture<>();
+        CompletableFuture<ResponseInfo> completed = new CompletableFuture<>();
+        try (var fixture = new Fixture((req, res) -> {
+            res.addCompletionListener(completed::complete);
+            res.status(204);
+            handled.complete((Http2Connection) req.connection());
+            return true;
+        })) {
+            Session session = fixture.add(1024, true);
+            long before = fixture.server.stats().bytesSent();
+            session.offer(preface());
+            session.offer(requestBytes(1));
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            fixture.barrier();
+            for (int i = 0; i < 1000; i++) session.driver.inputAvailable();
+            fixture.barrier();
+            assertFalse(handled.isDone(), "Queued input must wait for the initial SETTINGS to drain");
+            assertEquals(before, fixture.server.stats().bytesSent());
+            assertTrue(session.connection.testProbe().pendingSettingsAcks().isEmpty());
+            session.completeOutput();
+            handled.get(3, TimeUnit.SECONDS);
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            fixture.internal.submit(() -> {}).get(3, TimeUnit.SECONDS);
+            assertFalse(completed.isDone());
+            assertEquals(before + 48, fixture.server.stats().bytesSent());
+            session.end(); // The in-flight final response retains its own output outcome.
+            fixture.internal.submit(() -> {}).get(3, TimeUnit.SECONDS);
+            assertFalse(session.driver.completion().isDone());
+            session.completeOutput();
+            assertTrue(completed.get(3, TimeUnit.SECONDS).completedSuccessfully());
+            session.driver.completion().get(3, TimeUnit.SECONDS);
+            assertEquals(before + session.output.size(), fixture.server.stats().bytesSent());
+        }
+    }
+
+    @Test
+    void shutdownReleasesAStalledInitialSettingsWriteWithoutDispatchingBufferedHeaders() throws Exception {
+        try (var fixture = new Fixture((req, res) -> { fail("Shutdown must prevent dispatch"); return true; })) {
+            Session session = fixture.add(1024, true);
+            long before = fixture.server.stats().bytesSent();
+            session.offer(preface());
+            session.offer(requestBytes(1));
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            fixture.barrier();
+            session.connection.forceShutdown();
+            session.driver.completion().get(3, TimeUnit.SECONDS);
+            assertTrue(session.closed);
+            assertTrue(session.pendingOutput.isEmpty());
+            assertTrue(session.connection.testProbe().pendingSettingsAcks().isEmpty());
+            assertEquals(before, fixture.server.stats().bytesSent());
+        }
+    }
+
+    @Test
+    void malformedPrefaceDrainsItsGoAwayBeforeRetirement() throws Exception {
+        try (var fixture = new Fixture((req, res) -> { fail("Malformed preface dispatched a request"); return true; })) {
+            Session session = fixture.add(1024, true);
+            session.offer(Arrays.copyOf(preface(), 24));
+            session.offer(rawFrame(Http2FrameType.PING, 0, 0, new byte[8]));
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            fixture.barrier();
+            assertFalse(session.closed);
+            assertFalse(session.driver.completion().isDone());
+            session.completeOutput();
+            session.driver.completion().get(3, TimeUnit.SECONDS);
+            ByteBuffer bytes = ByteBuffer.wrap(session.output.toByteArray());
+            Http2FrameHeader header = Http2FrameHeader.readFrom(bytes);
+            assertEquals(Http2FrameType.GOAWAY, header.frameType());
+            assertEquals(Http2ErrorCode.PROTOCOL_ERROR.code(), Http2GoAway.readFrom(header, bytes).errorCode());
+        }
+    }
+
     private static byte[] rawFrame(Http2FrameType type, int flags, int id, byte[] payload) {
         return ByteBuffer.allocate(9 + payload.length).put((byte) (payload.length >> 16))
             .put((byte) (payload.length >> 8)).put((byte) payload.length).put(type.byteCode())
@@ -198,7 +272,10 @@ class Http2ReadDriverTest {
             config = captured.get();
             barrier();
         }
-        Session add(int capacity) { Session result = new Session(this, capacity); sessions.add(result); return result; }
+        Session add(int capacity) { return add(capacity, false); }
+        Session add(int capacity, boolean delayed) {
+            Session result = new Session(this, capacity, delayed); sessions.add(result); return result;
+        }
         void barrier() throws Exception {
             internal.submit(() -> {}).get(3, TimeUnit.SECONDS);
             application.submit(() -> {}).get(3, TimeUnit.SECONDS);
@@ -228,15 +305,33 @@ class Http2ReadDriverTest {
         final Semaphore capacity = new Semaphore(0);
         final TransportInputBuffer input;
         final ByteArrayOutputStream output = new ByteArrayOutputStream();
+        final Queue<PendingOutput> pendingOutput = new ConcurrentLinkedQueue<>();
         final Http2Connection connection;
         final Http2Connection.ReadDriver driver;
         volatile boolean closed;
-        Session(Fixture fixture, int capacity) {
+        Session(Fixture fixture, int capacity, boolean delayed) {
             input = new TransportInputBuffer(capacity, this.capacity::release);
             connection = new Http2Connection(fixture.config.server, fixture.config.creator, this,
                 ConnectionAcceptedTime.now(), null, Http2Settings.DEFAULT_CLIENT_SETTINGS, 30000,
                 fixture.application, fixture.internal);
-            driver = connection.readDriver(input, new HttpConnectionOutputStream(connection, output));
+            driver = connection.readDriver(input, source -> {
+                if (delayed) {
+                    var write = new PendingOutput(source);
+                    pendingOutput.add(write);
+                    return write.completion;
+                }
+                byte[] bytes = new byte[source.remaining()];
+                source.duplicate().get(bytes);
+                output.write(bytes);
+                return CompletableFuture.completedFuture(null);
+            });
+        }
+        void completeOutput() {
+            PendingOutput write = java.util.Objects.requireNonNull(pendingOutput.poll());
+            byte[] bytes = new byte[write.bytes.remaining()];
+            write.bytes.get(bytes);
+            output.writeBytes(bytes);
+            write.completion.complete(null);
         }
         void offer(byte[] bytes) throws IOException {
             assertEquals(bytes.length, input.offer(ByteBuffer.wrap(bytes)));
@@ -263,6 +358,19 @@ class Http2ReadDriverTest {
         @Override public void readTimeoutMillis(int timeoutMillis) { input.readTimeoutMillis(timeoutMillis); }
         @Override public void shutdownInput() { end(); }
         @Override public void close() { closed = true; end(); }
-        @Override public void abort() { closed = true; input.fail(new IOException("Transport aborted")); driver.inputAvailable(); }
+        @Override public void abort() {
+            closed = true;
+            IOException failure = new IOException("Transport aborted");
+            input.fail(failure);
+            PendingOutput pending;
+            while ((pending = pendingOutput.poll()) != null) pending.completion.completeExceptionally(failure);
+            driver.inputAvailable();
+        }
+    }
+
+    private static final class PendingOutput {
+        final ByteBuffer bytes;
+        final CompletableFuture<Void> completion = new CompletableFuture<>();
+        PendingOutput(ByteBuffer bytes) { this.bytes = bytes.duplicate(); }
     }
 }

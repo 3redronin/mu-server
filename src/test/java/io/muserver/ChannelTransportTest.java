@@ -363,6 +363,61 @@ class ChannelTransportTest {
         }
     }
 
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void stalledHttp2WritesLeaveTheInternalWorkerAvailable(boolean secure) throws Exception {
+        var application = Executors.newCachedThreadPool();
+        var internal = Executors.newSingleThreadExecutor();
+        var timer = Executors.newSingleThreadScheduledExecutor();
+        Queue<ChannelConnection> stalled = new ConcurrentLinkedQueue<>();
+        Queue<ResponseInfo> completed = new ConcurrentLinkedQueue<>();
+        List<H2ClientConnection> peers = new ArrayList<>();
+        byte[] body = new byte[8 * 1024 * 1024];
+        MuServerBuilder builder = builder(secure, true).withHandlerExecutor(application);
+        builder.executionResourcesFactory = (supplied, mode) -> new ExecutionResources(application, false, internal, timer);
+        try (MuServer server = builder.addHandler((req, res) -> {
+            if (req.uri().getPath().equals("/slow")) {
+                var transport = (ChannelConnection) ((BaseHttpConnection) req.connection()).transport;
+                transport.socket.setSendBufferSize(4096);
+                res.addCompletionListener(completed::add);
+                stalled.add(transport);
+                res.contentType("application/octet-stream");
+                res.outputStream().write(body);
+            } else res.write("healthy");
+            return true;
+        }).start(); H2Client client = new H2Client()) {
+            try {
+                var settings = new Http2Settings(false, 4096, 100, 16 * 1024 * 1024, 16384, 32768);
+                for (int i = 0; i < 3; i++) {
+                    var peer = secure ? client.connect(server) : client.connectClearText(server);
+                    peers.add(peer);
+                    peer.socket().setReceiveBufferSize(4096);
+                    FieldBlock headers = RFCTestUtils.getHelloHeaders(secure ? "https" : "http", server.uri().getPort());
+                    headers.set(":path", "/slow");
+                    peer.handshake(settings).writeFrame(new Http2WindowUpdate(0, 16 * 1024 * 1024 - 65535))
+                        .writeFrame(new Http2HeadersFrame(1, true, headers)).flush();
+                }
+                until(() -> stalled.size() == 3);
+                var field = ChannelConnection.class.getDeclaredField("output");
+                field.setAccessible(true);
+                List<TransportOutputBuffer> outputs = new ArrayList<>();
+                for (var connection : stalled) outputs.add((TransportOutputBuffer) field.get(connection));
+                until(() -> outputs.stream().allMatch(output -> output.pendingBytes() > 0));
+                internal.submit(() -> {}).get(2, TimeUnit.SECONDS);
+                try (var healthy = secure ? client.connect(server) : client.connectClearText(server)) {
+                    healthy.handshake().writeFrame(new Http2HeadersFrame(1, true,
+                        RFCTestUtils.getHelloHeaders(secure ? "https" : "http", server.uri().getPort()))).flush();
+                    assertEquals("200", RFCTestUtils.readIgnoringWindowUpdates(healthy, Http2HeadersFrame.class).headers().get(":status"));
+                    assertEquals("healthy", RFCTestUtils.readIgnoringWindowUpdates(healthy, Http2DataFrame.class).toUTF8());
+                }
+                assertTrue(completed.isEmpty(), "Unread responses must still own their completion");
+                for (var connection : stalled) connection.abort();
+                until(() -> completed.size() == 3);
+                for (var info : completed) assertFalse(info.completedSuccessfully());
+                until(() -> server.stats().completedRequests() == 4);
+            } finally { for (var peer : peers) peer.close(); }
+        } finally { application.shutdownNow(); internal.shutdownNow(); timer.shutdownNow(); }
+    }
+
     @Test
     void partialProxyPreambleExpiresAndReleasesTheOnlyConnectionSlot() throws Exception {
         try (MuServer server = builder(false, true).withMaxConnections(1)

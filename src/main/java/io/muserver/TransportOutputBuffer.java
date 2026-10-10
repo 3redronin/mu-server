@@ -8,14 +8,16 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
- * Bounded plaintext output with blocking write completion and nonblocking transport drain.
+ * Bounded plaintext output with blocking or asynchronous write completion and nonblocking drain.
  * A successful write means all its bytes were consumed by the supplied transport sink, not merely
- * copied into this buffer, and does not imply peer receipt. Only blocking workers may write/flush,
- * never the transport loop.
+ * copied into this buffer, and does not imply peer receipt. Blocking write/flush belongs on workers.
+ * The exclusive asynchronous writer retains at most one source until its completion; transport
+ * drain refills the ring without reserving a waiting worker. Internal futures only schedule work.
  * The internal output notification must schedule transport work without blocking or throwing.
  */
 final class TransportOutputBuffer extends OutputStream {
@@ -28,6 +30,56 @@ final class TransportOutputBuffer extends OutputStream {
     private int head;
     private int size;
     private boolean closed;
+    private boolean asynchronous;
+    private @Nullable PendingAsyncWrite pendingAsyncWrite;
+
+    private static final class PendingAsyncWrite {
+        final ByteBuffer source;
+        final CompletableFuture<@Nullable Void> completion = new CompletableFuture<>();
+        PendingAsyncWrite(ByteBuffer source) { this.source = source.duplicate(); }
+    }
+
+    /** Claim before first use; a connection's blocking and asynchronous byte writers cannot mix. */
+    AsyncTransportOutput asynchronousWriter() throws IOException {
+        lock.lock();
+        try {
+            ensureOpen();
+            if (asynchronous || writers.isLocked() || size != 0) throw new IllegalStateException("Output already has a writer");
+            asynchronous = true;
+            return this::writeAsync;
+        } finally { lock.unlock(); }
+    }
+
+    private CompletableFuture<@Nullable Void> writeAsync(ByteBuffer source) throws IOException {
+        PendingAsyncWrite write = new PendingAsyncWrite(source);
+        boolean empty;
+        lock.lock();
+        try {
+            ensureOpen();
+            if (pendingAsyncWrite != null) throw new IllegalStateException("An asynchronous write is still pending");
+            empty = !source.hasRemaining();
+            if (!empty) {
+                pendingAsyncWrite = write;
+                refillAsync();
+            }
+        } finally { lock.unlock(); }
+        if (empty) write.completion.complete(null);
+        else outputAvailable.run();
+        return write.completion;
+    }
+
+    // Only the ring is passed to the sink. No caller storage is borrowed outside this lock.
+    private void refillAsync() {
+        PendingAsyncWrite write = pendingAsyncWrite;
+        if (write == null) return;
+        int count = Math.min(write.source.remaining(), bytes.length - size);
+        int tail = (head + size) % bytes.length;
+        int first = Math.min(count, bytes.length - tail);
+        write.source.get(bytes, tail, first);
+        write.source.get(bytes, 0, count - first);
+        size += count;
+    }
+
     private @Nullable IOException failure;
 
     TransportOutputBuffer(int capacity, Runnable outputAvailable) {
@@ -51,6 +103,8 @@ final class TransportOutputBuffer extends OutputStream {
      */
     int drainTo(WritableByteChannel sink, int maxBytes) throws IOException {
         if (maxBytes < 1) throw new IllegalArgumentException("Positive drain budget required");
+        PendingAsyncWrite finished = null;
+        IOException failed = null;
         lock.lock();
         try {
             checkFailure();
@@ -59,27 +113,47 @@ final class TransportOutputBuffer extends OutputStream {
             try {
                 count = sink.write(ByteBuffer.wrap(bytes, head, Math.min(maxBytes, Math.min(size, bytes.length - head))));
             } catch (IOException | RuntimeException failedWrite) {
-                fail(failedWrite instanceof IOException ? (IOException) failedWrite
-                    : new IOException("Transport output failed", failedWrite));
+                failed = failedWrite instanceof IOException ? (IOException) failedWrite
+                    : new IOException("Transport output failed", failedWrite);
+                finished = failLocked(failed);
                 throw failedWrite;
             }
             head = (head + count) % bytes.length;
             size -= count;
+            refillAsync();
+            if (size == 0 && pendingAsyncWrite != null) {
+                finished = pendingAsyncWrite;
+                pendingAsyncWrite = null;
+            }
             if (count > 0) changed.signalAll();
             return count;
-        } finally { lock.unlock(); }
+        } finally {
+            lock.unlock();
+            if (finished != null) {
+                if (failed == null) finished.completion.complete(null);
+                else finished.completion.completeExceptionally(failed);
+            }
+        }
     }
 
     /** Does not acquire the writer lock: it must release writers waiting for capacity or completion. */
     void fail(IOException cause) {
+        PendingAsyncWrite finished;
         lock.lock();
-        try {
-            if (failure == null) failure = cause;
-            // No ring storage is borrowed outside this lock; terminal failure can release it.
-            bytes = new byte[0];
-            size = 0;
-            changed.signalAll();
-        } finally { lock.unlock(); }
+        try { finished = failLocked(cause); }
+        finally { lock.unlock(); }
+        if (finished != null) finished.completion.completeExceptionally(cause);
+    }
+
+    private @Nullable PendingAsyncWrite failLocked(IOException cause) {
+        if (failure == null) failure = cause;
+        // The sink borrows ring storage under this lock. Release source ownership before completion.
+        PendingAsyncWrite write = pendingAsyncWrite;
+        pendingAsyncWrite = null;
+        bytes = new byte[0];
+        size = 0;
+        changed.signalAll();
+        return write;
     }
 
     @Override
@@ -140,6 +214,13 @@ final class TransportOutputBuffer extends OutputStream {
             Thread.currentThread().interrupt();
             throw new InterruptedIOException("Interrupted while waiting to write transport output");
         }
+        lock.lock();
+        try {
+            if (asynchronous) {
+                writers.unlock();
+                throw new IllegalStateException("The transport has an asynchronous writer");
+            }
+        } finally { lock.unlock(); }
     }
 
     private void awaitDrained() throws IOException {
