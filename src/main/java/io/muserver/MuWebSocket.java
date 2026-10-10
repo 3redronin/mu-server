@@ -109,9 +109,6 @@ public interface MuWebSocket {
      *     <li>The client sends an invalid frame</li>
      * </ul>
      *
-     * <p>Calling {@link MuWebSocketSession#abort()} does not itself trigger this callback.
-     * An error queued before the abort may still be delivered.</p>
-     *
      * @param cause The cause of the error
      * @throws Exception Any exceptions thrown will result in the connection being closed.
      */

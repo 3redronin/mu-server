@@ -212,23 +212,6 @@ public interface MuWebSocketSession {
     }
 
     /**
-     * Immediately terminates this session's transport without sending a WebSocket close frame
-     * or performing a TLS closing handshake.
-     * <p>This method may be called from any thread, including a WebSocket callback. It does not
-     * wait for an in-progress write, a peer response, or application callbacks to finish.
-     * Repeated calls are harmless. The session becomes {@link WebsocketSessionState#DISCONNECTED},
-     * unless it already has a terminal state, which is preserved.</p>
-     * <p>Subsequent sends fail, and interrupted asynchronous writes report failure through their
-     * normal completion callbacks. Callbacks already running may finish after this method returns.
-     * An explicit abort does not itself invoke {@link MuWebSocket#onError(Throwable)} or
-     * {@link MuWebSocket#onClientClosed(int, String)}; an error already queued may still be delivered.</p>
-     * <p>A peer that has not completed the WebSocket closing handshake observes an abnormal
-     * closure. This method does not guarantee a TCP reset or prevent previously written data
-     * from reaching the peer.</p>
-     */
-    void abort();
-
-    /**
      * Initiates a graceful shutdown with the client with no reason code specified
      * @throws IOException Thrown if there is an error writing to the client, for example if the user has closed their browser.
      */
