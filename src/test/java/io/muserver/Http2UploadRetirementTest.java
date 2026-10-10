@@ -30,7 +30,7 @@ class Http2UploadRetirementTest {
         var completed = new CompletableFuture<ResponseInfo>();
         var notifications = new AtomicInteger();
         var application = Executors.newSingleThreadExecutor();
-        var server = httpsServerForTest("http")
+        var builder = httpsServerForTest("http")
             .withHttp2Config(Http2ConfigBuilder.http2Enabled())
             .withMaxConcurrentRequests(1)
             .withHandlerExecutor(application)
@@ -42,7 +42,11 @@ class Http2UploadRetirementTest {
                 accepted.complete((Http2Connection) request.connection());
                 response.status(204);
                 return true;
-            }).start();
+            });
+        // This fixture injects failures through Socket.shutdownOutput and a blocked socket reader.
+        // The channel driver's corresponding ownership paths have controlled-transport tests.
+        builder.useChannelTransport = false;
+        var server = builder.start();
         Http2Stream stream = null;
         try (var client = new H2Client(); var con = client.connectClearText(server)) {
             var headers = getHelloHeaders("http", server.uri().getPort());

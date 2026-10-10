@@ -26,6 +26,10 @@ final class AsyncResponseRenderer {
     }
 
     CompletableFuture<@Nullable Void> write(ByteBuffer source) {
+        return write(source, null);
+    }
+
+    CompletableFuture<@Nullable Void> write(ByteBuffer source, @Nullable Operation preparation) {
         // Preserve the public adapter's existing position behavior for each buffer kind.
         ByteBuffer input = source.hasArray() ? source.duplicate() : source;
         byte[] copy = input.hasArray() ? new byte[0] : new byte[Math.min(input.remaining(), SOURCE_BYTES)];
@@ -42,15 +46,15 @@ final class AsyncResponseRenderer {
             if (input.hasRemaining()) return false;
             stream.flush();
             return true;
-        });
+        }, preparation);
     }
 
     CompletableFuture<@Nullable Void> render(Operation operation) {
-        return start(() -> { operation.run(); return true; });
+        return start(() -> { operation.run(); return true; }, null);
     }
 
-    private CompletableFuture<@Nullable Void> start(Step step) {
-        Task task = new Task(step);
+    private CompletableFuture<@Nullable Void> start(Step step, @Nullable Operation preparation) {
+        Task task = new Task(step, preparation);
         task.run();
         return task.completion;
     }
@@ -61,9 +65,10 @@ final class AsyncResponseRenderer {
         private ResponseOutputCapture.@Nullable Capture capture;
         private @Nullable CompletableFuture<@Nullable Void> pending;
         private @Nullable Throwable renderFailure;
+        private @Nullable Operation preparation;
         private boolean rendered;
 
-        private Task(Step step) { this.step = step; }
+        private Task(Step step, @Nullable Operation preparation) { this.step = step; this.preparation = preparation; }
 
         @Override public void run() {
             try {
@@ -90,7 +95,12 @@ final class AsyncResponseRenderer {
                     if (rendered) { completion.complete(null); return; }
                     current = output.begin();
                     capture = current;
-                    try { rendered = step.render(); }
+                    try {
+                        Operation initial = preparation;
+                        preparation = null;
+                        if (initial != null) initial.run();
+                        else rendered = step.render();
+                    }
                     catch (Throwable failure) { renderFailure = failure; }
                     finally {
                         try { current.finishRendering(); }

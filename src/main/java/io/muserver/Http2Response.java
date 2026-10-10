@@ -15,11 +15,29 @@ class Http2Response extends BaseResponse {
 
     private final Http2Stream stream;
     private final FieldBlock fields;
+    private final Http2ResponseOutput output;
+    private final AsyncResponseRenderer asynchronousRenderer;
+    private @Nullable ContentEncoder preparedEncoder;
+    private boolean outputPrepared;
 
     Http2Response(Http2Stream stream, FieldBlock headers, Mu3Request request) {
         super(request, headers);
         this.fields = headers;
         this.stream = stream;
+        this.output = new Http2ResponseOutput(stream, request.server().tempDir());
+        this.asynchronousRenderer = new AsyncResponseRenderer(request.serverImpl()::executeInternalTask, output, this::outputStream);
+    }
+
+    @Override AsyncResponseOutput.AsyncWriter asynchronousWriter() {
+        return source -> asynchronousRenderer.write(source, wrappedOut == null ? this::prepareAsynchronousOutput : null);
+    }
+
+    private void prepareAsynchronousOutput() throws IOException, InterruptedException {
+        ensureOutputOpen();
+        if (wrappedOut != null || outputPrepared) return;
+        preparedEncoder = status().canHaveContent() || status().code() == 304 ? contentEncoder() : null;
+        if (responseState() == ResponseState.NOTHING) writeStatusAndHeaders(suppressContent());
+        outputPrepared = true;
     }
 
     @Override
@@ -45,7 +63,7 @@ class Http2Response extends BaseResponse {
     }
 
     private void writeStatusAndHeaders(boolean endOfStream) throws InterruptedException, IOException {
-        stream.blockingWrite(prepareStatusAndHeaders(endOfStream));
+        output.write(prepareStatusAndHeaders(endOfStream));
     }
 
     private Http2HeadersFrame prepareStatusAndHeaders(boolean endOfStream) {
@@ -86,7 +104,7 @@ class Http2Response extends BaseResponse {
         // Match the closed output stream left by write(String), including cleanup.
         wrappedOut = DiscardingOutputStream.CLOSED;
         try {
-            stream.blockingWrite(new Http2ResponseFrame(headers, true, bytes, 0, bytes.length));
+            output.write(new Http2ResponseFrame(headers, true, bytes, 0, bytes.length));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException(new InterruptedIOException("Interrupted while writing response"));
@@ -114,7 +132,7 @@ class Http2Response extends BaseResponse {
         responseHeaders.add(0, new FieldLine(HeaderNames.PSEUDO_STATUS, HeaderString.valueOf(Integer.toString(status.code()), HeaderString.Type.VALUE)));
 
         try {
-            stream.blockingWrite(new Http2HeadersFrame(stream.id, false, responseHeaders));
+            output.write(new Http2HeadersFrame(stream.id, false, responseHeaders));
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException(new InterruptedIOException("Interrupted while writing informational response"));
@@ -131,8 +149,8 @@ class Http2Response extends BaseResponse {
         ensureOutputOpen();
         if (wrappedOut == null) {
             // A 304 still negotiates metadata for the selected representation.
-            ContentEncoder responseEncoder = status().canHaveContent() || status().code() == 304
-                ? contentEncoder() : null;
+            ContentEncoder responseEncoder = outputPrepared ? preparedEncoder
+                : status().canHaveContent() || status().code() == 304 ? contentEncoder() : null;
             return createOutputStream(bufferSize, responseEncoder);
         } else {
             throw new IllegalStateException("Cannot specify buffer size for response output stream when it has already been created");
@@ -151,7 +169,7 @@ class Http2Response extends BaseResponse {
             throw new UncheckedIOException(e);
         }
         OutputStream os = suppressContent() ? new DiscardingOutputStream()
-            : new Http2DataFrameOutputStream(stream);
+            : new Http2DataFrameOutputStream(output);
         boolean buffered = !suppressContent() && bufferSize > 0;
         if (buffered) {
             os = new BufferedOutputStream(os, bufferSize);
@@ -163,6 +181,7 @@ class Http2Response extends BaseResponse {
                 encoded = new CloseGuardedOutputStream(encoded);
             }
             wrappedOut = encoded;
+            preparedEncoder = null;
         } catch (IOException e) {
             throw new UncheckedIOException("Error while setting up output stream", e);
         }

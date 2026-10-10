@@ -11,6 +11,8 @@ import java.io.UncheckedIOException;
 class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
     private final OutputStream socketOut;
     private final @Nullable AsyncResponseRenderer asynchronousRenderer;
+    private @Nullable OutputStream preparedBody;
+    private @Nullable ContentEncoder preparedEncoder;
     @Nullable
     private WebsocketConnection websocket;
     @Nullable
@@ -35,7 +37,13 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
 
     @Override AsyncResponseOutput.@Nullable AsyncWriter asynchronousWriter() {
         AsyncResponseRenderer renderer = asynchronousRenderer;
-        return renderer == null ? null : renderer::write;
+        return renderer == null ? null : source -> renderer.write(source,
+            wrappedOut == null ? this::prepareAsynchronousOutput : null);
+    }
+
+    private void prepareAsynchronousOutput() {
+        ensureOutputOpen();
+        if (wrappedOut == null && preparedBody == null) prepareOutput(8192);
     }
 
     private byte[] statusAndHeaders() throws IOException {
@@ -80,53 +88,12 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
         }
         ensureOutputOpen();
         if (wrappedOut == null) {
-            // A 304 still negotiates metadata for the selected representation.
-            ContentEncoder responseEncoder = status().canHaveContent() || status().code() == 304
-                ? contentEncoder() : null;
-
-            long fixedLen = headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), -1);
-            if (suppressContent()) {
-                if (request.method().isHead() && status().canHaveContent()
-                    && fixedLen == -1L && request.httpVersion() == HttpVersion.HTTP_1_1) {
-                    headers().set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
-                }
-            } else if (fixedLen == -1L) {
-                if (request.httpVersion() == HttpVersion.HTTP_1_1) {
-                    headers().set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
-                } else {
-                    if (!request.method().isHead() && status().canHaveContent()) {
-                        shouldCloseConnectionAfterResponse = true;
-                        headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
-                    }
-                }
-            }
-
+            if (preparedBody == null) prepareOutput(bufferSize);
+            wrappedOut = java.util.Objects.requireNonNull(preparedBody);
+            preparedBody = null;
+            ContentEncoder responseEncoder = preparedEncoder;
+            preparedEncoder = null;
             try {
-                byte[] headerBytes = statusAndHeaders();
-                OutputStream rawOut = socketOut;
-                if (!suppressContent() && bufferSize > 0) {
-                    // A small fixed response needs room only for its headers and body.
-                    // Avoid allocating the full default buffer for every tiny response.
-                    int capacity = bufferSize;
-                    if (fixedLen >= 0 && fixedLen < bufferSize) {
-                        capacity = (int) Math.min(bufferSize, headerBytes.length + fixedLen);
-                    }
-                    rawOut = capacity == 8192
-                        ? new BufferedOutputStream(socketOut)
-                        : new BufferedOutputStream(socketOut, capacity);
-                }
-                rawOut.write(headerBytes);
-                if (suppressContent()) {
-                    // Representation lengths on HEAD/304 do not describe bytes to write.
-                    wrappedOut = new DiscardingOutputStream();
-                    socketOut.flush();
-                } else if (fixedLen != -1L) {
-                    wrappedOut = new FixedSizeOutputStream(fixedLen, rawOut);
-                } else if (request.httpVersion() == HttpVersion.HTTP_1_1) {
-                    wrappedOut = new ChunkedOutputStream(rawOut);
-                } else {
-                    wrappedOut = new CloseDelimitedOutputStream(rawOut);
-                }
                 if (responseEncoder != null) {
                     OutputStream encoded = responseEncoder.wrapStream(request, this, wrappedOut);
                     wrappedOut = encoded == null ? null : new CloseGuardedOutputStream(encoded);
@@ -138,6 +105,58 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
             throw new IllegalStateException("Cannot specify buffer size for response output stream when it has already been created");
         }
         return java.util.Objects.requireNonNull(wrappedOut);
+    }
+
+    private void prepareOutput(int bufferSize) {
+        // A 304 still negotiates metadata for the selected representation.
+        preparedEncoder = status().canHaveContent() || status().code() == 304 ? contentEncoder() : null;
+
+        long fixedLen = headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), -1);
+        if (suppressContent()) {
+            if (request.method().isHead() && status().canHaveContent()
+                && fixedLen == -1L && request.httpVersion() == HttpVersion.HTTP_1_1) {
+                headers().set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
+            }
+        } else if (fixedLen == -1L) {
+            if (request.httpVersion() == HttpVersion.HTTP_1_1) {
+                headers().set(HeaderNames.TRANSFER_ENCODING, HeaderValues.CHUNKED);
+            } else {
+                if (!request.method().isHead() && status().canHaveContent()) {
+                    shouldCloseConnectionAfterResponse = true;
+                    headers().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+                }
+            }
+        }
+
+        try {
+            byte[] headerBytes = statusAndHeaders();
+            OutputStream rawOut = socketOut;
+            if (!suppressContent() && bufferSize > 0) {
+                // A small fixed response needs room only for its headers and body.
+                // Avoid allocating the full default buffer for every tiny response.
+                int capacity = bufferSize;
+                if (fixedLen >= 0 && fixedLen < bufferSize) {
+                    capacity = (int) Math.min(bufferSize, headerBytes.length + fixedLen);
+                }
+                rawOut = capacity == 8192
+                    ? new BufferedOutputStream(socketOut)
+                    : new BufferedOutputStream(socketOut, capacity);
+            }
+            rawOut.write(headerBytes);
+            if (suppressContent()) {
+                // Representation lengths on HEAD/304 do not describe bytes to write.
+                preparedBody = new DiscardingOutputStream();
+                socketOut.flush();
+            } else if (fixedLen != -1L) {
+                preparedBody = new FixedSizeOutputStream(fixedLen, rawOut);
+            } else if (request.httpVersion() == HttpVersion.HTTP_1_1) {
+                preparedBody = new ChunkedOutputStream(rawOut);
+            } else {
+                preparedBody = new CloseDelimitedOutputStream(rawOut);
+            }
+        } catch (IOException e) {
+            throw new UncheckedIOException("Error while setting up output stream", e);
+        }
     }
 
     @Override

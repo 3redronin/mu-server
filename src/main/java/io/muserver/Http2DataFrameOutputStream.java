@@ -8,11 +8,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 class Http2DataFrameOutputStream extends OutputStream {
 
-    private final Http2Stream stream;
+    private final Http2ResponseOutput output;
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
-    Http2DataFrameOutputStream(Http2Stream stream) {
-        this.stream = stream;
+    Http2DataFrameOutputStream(Http2ResponseOutput output) {
+        this.output = output;
     }
 
     @Override
@@ -22,14 +22,14 @@ class Http2DataFrameOutputStream extends OutputStream {
     }
 
     /**
-     * Blockingly writes a data frame to the http2 connection - flushing does nothing. So this
-     * is designed to be wrapped by a buffered output stream
+     * Emits DATA through the response's blocking or capturing view. Flushing does nothing,
+     * so this is designed to be wrapped by a buffered output stream.
      */
     @Override
     public void write(byte[] b, int off, int len) throws IOException {
         ensureOpen();
         try {
-            stream.blockingWriteData(b, off, len);
+            output.writeData(b, off, len);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new InterruptedIOException("Interrupted while writing data frame");
@@ -46,7 +46,7 @@ class Http2DataFrameOutputStream extends OutputStream {
     public void close() throws IOException {
         if (closed.compareAndSet(false, true)) {
             try {
-                stream.blockingWrite(Http2DataFrame.eos(stream.id));
+                output.endStream();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 throw new InterruptedIOException("Interrupted while writing data frame");
