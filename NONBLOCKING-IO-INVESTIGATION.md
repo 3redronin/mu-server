@@ -4,7 +4,7 @@ Mu4 can reduce the number of waiting transport workers without replacing its blo
 
 The difficult parts are buffer ownership, backpressure, partial output, TLS progression, and connection lifecycle. HTTP/1 already has a stateful parser worth retaining. HTTP/2 already has a serialized output coordinator worth retaining. Neither connection implementation can currently run on a shared event loop because both perform blocking reads and waits.
 
-Source baseline: `50ad1a7072fffe959770531204a09b2ddd3b4637`, inspected on 10 October 2026. Investigation branch: `investigate/nonblocking-io`. The ownership map and migration analysis below describe that baseline. The numerical observations come from the saved 5 October experiment at the same source baseline; they are not new benchmark runs. The first decoder extraction on this branch is described below; socket transport and thread policy remain unchanged.
+Source baseline: `50ad1a7072fffe959770531204a09b2ddd3b4637`, inspected on 10 October 2026. Investigation branch: `investigate/nonblocking-io`. The ownership map and migration analysis below describe that baseline. The hybrid-transport measurements come from the saved 5 October experiment at the same source baseline. The decoder extraction and test-only plaintext prototype on this branch are described below; the published server's socket transport and thread policy remain unchanged.
 
 ## Separate transport scaling from application pinning
 
@@ -156,3 +156,50 @@ The main choices are whether to own the NIO/TLS driver or use a narrow transport
 `Http1MessageDecoderTest` exercises every split point in representative fixed/chunked and pipelined requests, informational and HEAD responses, one-byte and random feeds, malformed and truncated messages, explicit EOF, heap/direct/read-only/sliced input, borrowed/copied body ownership, and coalesced WebSocket takeover bytes. Existing parser, field, framing and response-boundary suites continue to exercise the same blocking driver.
 
 Validation on 10 October 2026: Java 21 `mvn -Pnullaway clean verify` passed with 4,723 tests, zero failures/errors and nine skips, including Error Prone/NullAway, Javadocs, packaging and dependency analysis. The affected `Http1*` suites passed on Java 11, 17 and 25 with 679 tests each and no failures/errors/skips. The new decoder suite contributes 23 test cases; split-point and randomized-feed loops exercise additional boundaries within those cases. No transport-capacity or throughput claim follows from these correctness checks.
+
+## Review and first plaintext experiment
+
+A review of the extraction found one behavioral regression in the blocking adapter: its exception boundary only covered `IOException` from the source. The old parser also made `HttpException` and `IllegalArgumentException` from a stream terminal. The adapter now preserves that boundary, with a test that supplies each unchecked failure and verifies that subsequent calls cannot read the source again. The grammar, accessible-array offsets, direct/read-only copies, explicit EOF and single-event boundaries remain suitable for the next experiment.
+
+The decoder's WebSocket takeover test establishes only that unread bytes remain in its supplied buffer. The existing live handoff in `Http1Connection.start()` passes only `requestParser.readBuffer` to `WebsocketConnection.runAndBlockUntilDone()`, which wraps it as an empty buffer. Thus it does not transfer the unread range. This predates the extraction. WebSocket clients must wait for and validate the server handshake before sending frames ([RFC 6455 section 4.1](https://www.rfc-editor.org/rfc/rfc6455.html#section-4.1)); the current live handoff test explicitly follows that sequence. A future handoff must carry position/limit and establish who owns the buffer, and needs an integration test in addition to the decoder test.
+
+[`NioHttp1Prototype`](src/test/java/io/muserver/NioHttp1Prototype.java) is now an executable, test-only experiment using `Selector`, `SocketChannel`, the real HTTP/1 decoder, and a small raw-response handler. It has no connection to `MuServerBuilder` or the published server implementation. The purpose is to exercise the ownership and bounded-buffer contract before selecting a transport implementation.
+
+### Contract exercised by the experiment
+
+| Concern | Implemented rule |
+| --- | --- |
+| Input ownership | The selector thread alone advances the decoder. Each connection owns an 8 KiB network buffer. Body events are copied into a fixed 8 KiB ring before that network buffer can be reused. Application reads copy out of the ring. |
+| Receive demand | Decoder input is limited to free body capacity. Full rings disable read interest. Consumption schedules a coalesced continuation and wakes the selector; already-buffered bytes resume without requiring a new socket event. |
+| Sequential exchanges | At most one handler runs per connection. Pipelined bytes remain in the bounded network buffer until handler completion and output drain permit the next exchange. |
+| Output ownership | A fixed 8 KiB output ring owns copies of application bytes. `write()` waits for space as necessary and returns when all supplied bytes have been copied; `flush()` waits for the ring to drain to the channel. Channel writes advance only by their actual return value, including zero. |
+| Completion | Copy admission and channel drain are distinct. Neither proves peer receipt. This prototype's buffered `write()` boundary is not a proposed change to Mu's successful-write accounting or async completion contracts. Production integration needs per-write completion records and accounting at the correct boundary. |
+| Scheduling | One platform selector thread runs no handlers or user callbacks. A fixed platform worker pool runs blocking handlers. Parser events, accepts and queued commands have per-turn quotas; each socket write attempts at most 8 KiB. Pipe locks cover bounded copies and nonblocking channel writes, never application calls or capacity waits. |
+| Admission | Connection count, worker count and queued handler count are explicitly capped. Worker notifications coalesce to one queued command per connection. Production request admission and server-wide retained-byte accounting are still separate work. |
+| EOF and abort | Input EOF is separate from an empty read. A complete half-closed upload can still receive a response. Truncation fails its body reader. Closing fails the rings and wakes body, output-capacity and flush waiters. Channel drain retains the ring lock, so abort cannot release its storage while a write is using it. |
+| Early response | If the handler finishes before the body boundary is decoded, the prototype closes after draining its response. It does not wait indefinitely for the rest of the upload. Production unread-body draining and Expect behavior still require their own implementation. |
+| Deadlines | A monotonic network-progress idle deadline remains active while reads or writes are stalled. Stop closes connections, then interrupts and awaits workers within bounded joins. Arbitrary handlers that ignore interruption can still outlive shutdown; the harness reports that failure. |
+
+These rules retain 16 KiB of fixed input/output array storage per idle connection and another 8 KiB for an active body bridge, excluding parser token storage, objects, application allocations and kernel buffers. Removing native readers therefore has a memory tradeoff even before TLS. Those array sizes are experiment parameters, not proposed defaults or measured total memory usage.
+
+### Evidence and limits
+
+[`NioHttp1PrototypeTest`](src/test/java/io/muserver/NioHttp1PrototypeTest.java) verifies 128 simultaneous keepalive connections, sends and checks two responses on each, and observes one selector thread plus two created application workers. It checks connection retirement after clients close. This is a count of the prototype's own threads, not a process-wide native-thread measurement or a throughput comparison.
+
+Other tests verify 100,000-byte fixed and chunked bodies followed by pipelined requests; a full body ring while another client gets a response; a real non-reading response consumer that causes zero-progress writes while another client completes; shutdown waking its blocked writer; complete half-close and truncated input; early response without the remaining upload; connection admission and a partial-header deadline. Ring tests force zero/partial writes, wraparound and caller-buffer reuse, and verify that abort wakes readers, producers and flush waiters. Ring high-water checks enforce the 8 KiB capacities.
+
+The experiment omits TLS/PROXY, H2, WebSockets, Mu's handler/request/response API, structured error responses, request-body size admission, request trailers exposed to applications, async callbacks, cancellation futures, compression, file serving and production timeout/statistics integration. Unsupported Expect and upgrade requests fail closed. It uses two platform workers, so it supplies no evidence about application progress under Java 21 carrier pinning. A stalled handler still occupies an application worker; enough stalled handlers exhaust that pool even though the selector remains available.
+
+The socket-specific integration boundary is now concrete: `ConnectionAcceptor` owns accepted-socket admission, PROXY, TLS configuration, protocol selection and stream lifetime; `BaseHttpConnection` obtains local/remote addresses, TLS protocol/cipher and SNI from sockets; `Http1Connection` switches read timeouts and closes or shuts down sockets; `Http2Connection` closes sockets on retirement; the connection stream wrappers publish plaintext byte counts and transport failures. A production transport interface must supply those metadata, deadline, close and accounting operations without pretending a `SocketChannel` can be substituted under the existing blocking lifetime.
+
+The next comparison should place a narrow transport-library adapter behind the same byte-ownership and completion rules, then prove HTTPS early on both viable candidates. Choose an implementation only after TLS progression, delegated tasks, slow-peer isolation, retained memory and completion semantics are measured. H2's frame/payload/continuation driver and WebSocket receive acknowledgement then remain distinct protocol migration steps. The plaintext result alone does not settle those decisions.
+
+Reproduce the focused experiment with Java 11 or later:
+
+```sh
+mvn -Dtest=Http1MessageDecoderTest,NioHttp1PrototypeTest test
+```
+
+All test listeners bind to `127.0.0.1` on ephemeral ports.
+
+Validation on 10 October 2026: full Java 21 `mvn -Pnullaway clean verify` passed with 4,733 tests, zero failures/errors and nine skips, including Error Prone/NullAway, Javadocs, packaging and dependency analysis. After isolating the cancellation test's workers from the common pool, the final `Http1*` plus `NioHttp1PrototypeTest` suites passed on Java 11, 17, 21 and 25 with 689 tests each and no failures/errors/skips; the Java 21 run also enabled NullAway. The prototype contributes nine tests. These results establish the stated correctness cases, not total memory savings or a performance advantage over the existing server.
