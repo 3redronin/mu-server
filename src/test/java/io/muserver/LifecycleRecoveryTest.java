@@ -7,6 +7,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import scaffolding.Http1Client;
 
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
 import javax.net.ssl.TrustManager;
 import java.io.BufferedInputStream;
 import java.net.InetSocketAddress;
@@ -164,6 +165,7 @@ class LifecycleRecoveryTest {
     }
 
     private static class Peer implements AutoCloseable {
+        final Socket transportSocket;
         final Socket socket;
         final Http1Client http;
         final H2ClientConnection h2;
@@ -171,22 +173,31 @@ class LifecycleRecoveryTest {
 
         Peer(MuServer server, String protocol) throws Exception {
             this.server = server;
+            transportSocket = new Socket();
+            transportSocket.setReceiveBufferSize(8192);
+            transportSocket.connect(new InetSocketAddress(server.uri().getHost(), server.uri().getPort()), 20000);
+            if (protocol.startsWith("h2") || protocol.equals("wss") || protocol.equals("https")) {
+                SSLContext context = SSLContext.getInstance("TLS");
+                context.init(null, new TrustManager[]{veryTrustingTrustManager()}, null);
+                var ssl = (SSLSocket) context.getSocketFactory().createSocket(transportSocket,
+                    server.uri().getHost(), server.uri().getPort(), true);
+                ssl.setSoTimeout(20000);
+                if (protocol.startsWith("h2")) {
+                    var parameters = ssl.getSSLParameters();
+                    parameters.setApplicationProtocols(new String[]{"h2"});
+                    ssl.setSSLParameters(parameters);
+                    ssl.startHandshake();
+                    assertEquals("h2", ssl.getApplicationProtocol());
+                }
+                socket = ssl;
+            } else socket = transportSocket;
             if (protocol.startsWith("h2")) {
-                h2 = new H2Client().connect(server); socket = h2.socket(); http = null;
-                socket.setReceiveBufferSize(8192);
+                h2 = new H2ClientConnection(socket); http = null;
                 boolean socketBackpressure = protocol.equals("h2-socket");
                 h2.handshake(new Http2Settings(false, 4096, 100, socketBackpressure ? 1024 * 1024 : 0, 16384, 32768));
                 if (socketBackpressure) h2.writeFrame(new Http2WindowUpdate(0, 1024 * 1024)).flush();
             } else {
                 h2 = null;
-                Socket raw = new Socket();
-                raw.setReceiveBufferSize(8192);
-                raw.connect(new InetSocketAddress(server.uri().getHost(), server.uri().getPort()), 20000);
-                if (protocol.equals("wss") || protocol.equals("https")) {
-                    SSLContext context = SSLContext.getInstance("TLS");
-                    context.init(null, new TrustManager[]{veryTrustingTrustManager()}, null);
-                    socket = context.getSocketFactory().createSocket(raw, server.uri().getHost(), server.uri().getPort(), true);
-                } else socket = raw;
                 http = new Http1Client(socket, new BufferedInputStream(socket.getInputStream()), socket.getOutputStream(), server.uri());
             }
             socket.setSoTimeout(20000);
@@ -219,7 +230,8 @@ class LifecycleRecoveryTest {
                 assertEquals("HTTP/1.1 200 OK", http.readLine()); http.readHeaders();
             }
         }
-        void abort() throws Exception { socket.setSoLinger(true, 0); socket.close(); }
+        // SSLSocket.close() can drain incoming data, allowing the pending write to finish.
+        void abort() throws Exception { transportSocket.setSoLinger(true, 0); transportSocket.close(); }
         @Override public void close() throws Exception { socket.close(); }
     }
 }
