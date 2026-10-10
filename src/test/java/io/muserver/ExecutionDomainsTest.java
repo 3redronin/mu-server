@@ -2127,6 +2127,9 @@ class ExecutionDomainsTest {
         server = null;
 
         for (ExecutorService executor : serverOwnedExecutors) {
+            // Final I/O callbacks must be submitted before the application executor closes.
+            assertThat("Owned executor did not terminate: " + executor,
+                executor.awaitTermination(5, TimeUnit.SECONDS), is(true));
             assertThat(executor.isShutdown(), is(true));
         }
     }

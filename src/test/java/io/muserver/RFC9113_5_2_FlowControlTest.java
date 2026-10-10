@@ -41,6 +41,7 @@ class RFC9113_5_2_FlowControlTest {
                     liveConnection.server,
                     liveConnection.creator,
                     liveConnection.clientSocket,
+                    liveConnection.transportSocket,
                     liveConnection.clientCertificate,
                     ConnectionAcceptedTime.now(),
                     liveConnection.proxyInfo().orElse(null),

@@ -25,6 +25,7 @@ abstract class BaseHttpConnection implements HttpConnection {
     protected final Mu3ServerImpl server;
     protected final ConnectionAcceptor creator;
     protected final Socket clientSocket;
+    protected final Socket transportSocket;
     @Nullable
     protected final Certificate clientCertificate;
     private final ConnectionAcceptedTime acceptedTime;
@@ -48,6 +49,7 @@ abstract class BaseHttpConnection implements HttpConnection {
         Mu3ServerImpl server,
         ConnectionAcceptor creator,
         Socket clientSocket,
+        Socket transportSocket,
         @Nullable Certificate clientCertificate,
         ConnectionAcceptedTime acceptedTime,
         @Nullable ProxiedConnectionInfo proxiedConnectionInfo
@@ -55,12 +57,21 @@ abstract class BaseHttpConnection implements HttpConnection {
         this.server = server;
         this.creator = creator;
         this.clientSocket = clientSocket;
+        this.transportSocket = transportSocket;
         this.clientCertificate = clientCertificate;
         this.acceptedTime = acceptedTime;
         this.proxiedConnectionInfo = proxiedConnectionInfo;
         remoteAddress = (InetSocketAddress) clientSocket.getRemoteSocketAddress();
         localAddress = (InetSocketAddress) clientSocket.getLocalSocketAddress();
         requestTimeout = (int) Math.min(Integer.MAX_VALUE, server.requestIdleTimeoutMillis());
+    }
+
+    /** A forced close must bypass TLS close-notify, which may wait behind a stalled write. */
+    protected final void forceTransportClose() {
+        try {
+            transportSocket.close();
+        } catch (IOException ignored) {
+        }
     }
 
     public abstract void start(InputStream clientIn, OutputStream clientOut) throws Throwable;
