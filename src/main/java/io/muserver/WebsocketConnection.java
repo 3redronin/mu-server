@@ -121,10 +121,10 @@ class WebsocketConnection implements MuWebSocketSession {
         }, settings.pingIntervalMillis, TimeUnit.MILLISECONDS);
     }
 
-    public void runAndBlockUntilDone(InputStream inputStream, OutputStream outputStream, byte[] readBuffer) throws InterruptedException, ApplicationEventFailure {
+    public void runAndBlockUntilDone(InputStream inputStream, OutputStream outputStream, ByteBuffer readBuffer) throws InterruptedException, ApplicationEventFailure {
         this.inputStream = inputStream;
         this.outputStream = outputStream;
-        this.buffer = ByteBuffer.wrap(readBuffer).flip();
+        this.buffer = readBuffer;
 
         try {
             lifecycle.onConnected();

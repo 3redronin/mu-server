@@ -8,12 +8,16 @@ import java.nio.ByteBuffer;
 import java.text.ParseException;
 import java.util.Queue;
 
-/** Blocking stream driver for the transport-independent HTTP/1 decoder. */
+/** Stream adapter with blocking reads and bounded polling for the transport-independent decoder. */
 class Http1MessageParser implements Http1MessageReader {
     private final InputStream source;
     private final Http1MessageDecoder decoder;
-    final byte[] readBuffer = new byte[8192];
+    private final byte[] readBuffer = new byte[8192];
     private final ByteBuffer input = ByteBuffer.wrap(readBuffer).flip();
+    private boolean handedOff;
+
+    @FunctionalInterface
+    interface AvailableRead { int read(byte[] target) throws IOException; }
 
     Http1MessageParser(HttpMessageType type, Queue<HttpRequestTemp> requestQueue, InputStream source,
                        int maxHeadersLength, int maxUrlLength) {
@@ -23,6 +27,7 @@ class Http1MessageParser implements Http1MessageReader {
 
     @Override
     public Http1ConnectionMsg readNext() throws IOException, ParseException {
+        checkOwnership();
         try {
             for (;;) {
                 Http1ConnectionMsg next = decoder.decode(input);
@@ -36,6 +41,37 @@ class Http1MessageParser implements Http1MessageReader {
             decoder.fail();
             throw e;
         }
+    }
+
+    /**
+     * Decode buffered input, then attempt at most one nonblocking source read. The supplied reader
+     * must consume the same source as readNext. Ownership passes between the transport and active
+     * exchange, never concurrently. A turn consumes at most two read-buffer lengths.
+     */
+    @Nullable Http1ConnectionMsg readAvailable(AvailableRead read) throws IOException, ParseException {
+        checkOwnership();
+        try {
+            Http1ConnectionMsg next = decoder.decode(input);
+            if (next != null) return next;
+            input.clear();
+            int count = read.read(readBuffer);
+            input.limit(Math.max(0, count));
+            return count == -1 ? decoder.endOfInput() : decoder.decode(input);
+        } catch (IOException | ParseException | HttpException | IllegalArgumentException error) {
+            decoder.fail();
+            throw error;
+        }
+    }
+
+    /** Transfer the full owned buffer, including its unread range, to the upgraded protocol. */
+    ByteBuffer takeInputForUpgrade() {
+        checkOwnership();
+        handedOff = true;
+        return input;
+    }
+
+    private void checkOwnership() {
+        if (handedOff) throw new IllegalStateException("HTTP parser input belongs to the upgraded protocol");
     }
 
     @Override

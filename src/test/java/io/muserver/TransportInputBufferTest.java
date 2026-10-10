@@ -18,6 +18,27 @@ import static org.junit.jupiter.api.Assertions.*;
 @Timeout(10)
 class TransportInputBufferTest {
     @Test
+    void nonblockingReadsDistinguishTemporaryEmptinessFromEofAndReleaseCapacity() throws Exception {
+        AtomicInteger wakeups = new AtomicInteger();
+        try (var input = new TransportInputBuffer(2, wakeups::incrementAndGet)) {
+            byte[] target = new byte[4];
+            assertEquals(0, input.readAvailable(target));
+            input.offer(ByteBuffer.wrap(new byte[]{1, 2}));
+            assertEquals(2, input.readAvailable(target));
+            assertArrayEquals(new byte[]{1, 2, 0, 0}, target);
+            assertEquals(1, wakeups.get());
+            assertEquals(0, input.readAvailable(target));
+            input.offer(ByteBuffer.wrap(new byte[]{3}));
+            input.endOfInput();
+            assertEquals(1, input.readAvailable(target));
+            assertEquals(-1, input.readAvailable(target));
+            IOException failure = new IOException("aborted");
+            input.fail(failure);
+            assertSame(failure, assertThrows(IOException.class, () -> input.readAvailable(target)));
+        }
+    }
+
+    @Test
     void offersAreBoundedAndCopiedAndCapacityNotificationsResumeAfterFullBuffers() throws Exception {
         AtomicInteger wakeups = new AtomicInteger();
         try (var input = new TransportInputBuffer(4, wakeups::incrementAndGet)) {

@@ -90,6 +90,15 @@ final class TransportInputBuffer extends InputStream {
 
     @Override
     public int read(byte[] target, int offset, int length) throws IOException {
+        return read(target, offset, length, true);
+    }
+
+    /** One nonblocking read: zero is temporarily empty; minus one is drained EOF. */
+    int readAvailable(byte[] target) throws IOException {
+        return read(target, 0, target.length, false);
+    }
+
+    private int read(byte[] target, int offset, int length, boolean wait) throws IOException {
         Objects.checkFromIndexSize(offset, length, target.length);
         if (length == 0) return 0;
         boolean notifyCapacity = false;
@@ -98,6 +107,7 @@ final class TransportInputBuffer extends InputStream {
             boolean timed = timeoutMillis != 0;
             long remainingNanos = TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
             while (size == 0 && !ended && failure == null) {
+                if (!wait) return 0;
                 try {
                     if (!timed) changed.await();
                     else {

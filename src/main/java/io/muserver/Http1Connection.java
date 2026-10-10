@@ -13,6 +13,7 @@ import java.text.ParseException;
 import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -62,21 +63,13 @@ class Http1Connection extends BaseHttpConnection {
         }
     }
 
-    private static final class HandlerExecution {
-        private final boolean accepted;
-        private final @Nullable CompletableFuture<@Nullable Void> asyncCompletion;
+    static final class ExchangeResult {
+        final boolean closeConnection;
+        final @Nullable WebsocketConnection websocket;
 
-        private HandlerExecution(boolean accepted, @Nullable CompletableFuture<@Nullable Void> asyncCompletion) {
-            this.accepted = accepted;
-            this.asyncCompletion = asyncCompletion;
-        }
-
-        private static HandlerExecution accepted(@Nullable CompletableFuture<@Nullable Void> asyncCompletion) {
-            return new HandlerExecution(true, asyncCompletion);
-        }
-
-        private static HandlerExecution rejected() {
-            return new HandlerExecution(false, null);
+        ExchangeResult(boolean closeConnection, @Nullable WebsocketConnection websocket) {
+            this.closeConnection = closeConnection;
+            this.websocket = websocket;
         }
     }
 
@@ -85,6 +78,155 @@ class Http1Connection extends BaseHttpConnection {
                     @Nullable ProxiedConnectionInfo proxyInfo, ExecutorService handlerExecutor) {
         super(server, creator, transport, acceptedTime, proxyInfo);
         this.handlerExecutor = handlerExecutor;
+    }
+
+    /**
+     * A readiness owner calls advance and supplies input to the bounded buffer. It accounts for
+     * input when admitting bytes; the body reader uses the same unwrapped buffer. Output retains
+     * the usual successful-write accounting wrapper. Transport close/abort must be nonblocking.
+     * The continuation only queues transport work; it must not block, throw, or reenter the driver.
+     */
+    ReadDriver readDriver(TransportInputBuffer input, OutputStream output, Runnable continuation) {
+        return new ReadDriver(input, output, continuation);
+    }
+
+    final class ReadDriver {
+        private final TransportInputBuffer input;
+        private final OutputStream output;
+        private final Runnable continuation;
+        private final Http1MessageParser parser;
+        private final Http1MessageParser.AvailableRead availableRead;
+        private final CompletableFuture<Void> ended = new CompletableFuture<>();
+        private @Nullable CompletableFuture<ExchangeResult> pending;
+
+        private ReadDriver(TransportInputBuffer input, OutputStream output, Runnable continuation) {
+            this.input = input;
+            this.output = output;
+            this.continuation = continuation;
+            this.availableRead = input::readAvailable;
+            this.parser = new Http1MessageParser(HttpMessageType.REQUEST, requestPipeline, input,
+                server.maxRequestHeadersSize(), server.maxUrlSize());
+        }
+
+        CompletableFuture<Void> completion() { return ended; }
+
+        /** Bounded header progression only. The caller limits advances per transport turn. */
+        boolean advance() {
+            if (ended.isDone()) return false;
+            boolean progress = false;
+            try {
+                if (pending != null) {
+                    if (!pending.isDone()) return false;
+                    ExchangeResult result = pending.join();
+                    pending = null;
+                    progress = true;
+                    if (result.closeConnection || closed.get() || state.get() != HttpConnectionState.OPEN) {
+                        end(null);
+                        return true;
+                    }
+                    WebsocketConnection websocket = result.websocket;
+                    if (websocket != null) {
+                        // The WebSocket receive loop still needs its own resumable driver. Its
+                        // existing blocking adapter runs off the readiness owner in the meantime.
+                        activateWebsocket(websocket);
+                        var takeover = new CompletableFuture<ExchangeResult>();
+                        pending = takeover;
+                        var remainingInput = parser.takeInputForUpgrade();
+                        server.executeInternalTask(() -> {
+                            try {
+                                websocket.runAndBlockUntilDone(input, output, remainingInput);
+                                takeover.complete(new ExchangeResult(true, null));
+                            } catch (Throwable failure) {
+                                if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
+                                takeover.completeExceptionally(failure);
+                                FatalErrors.rethrow(failure);
+                            }
+                        });
+                        takeover.whenComplete((ignored, failure) -> continuation.run());
+                        return true;
+                    }
+                }
+                if (closed.get() || state.get() != HttpConnectionState.OPEN) { end(null); return true; }
+                int buffered = input.available();
+                Http1ConnectionMsg message;
+                try { message = parser.readAvailable(availableRead); }
+                catch (ParseException malformed) { message = parser.rejectInvalidRequest(malformed); }
+                if (message == null) return progress || input.available() < buffered;
+                if (MessageBodyBit.isEof(message)) {
+                    markRemoteClosed();
+                    transport.shutdownInput();
+                    end(null);
+                } else {
+                    pending = executeExchange((HttpRequestTemp) message, parser, output);
+                    pending.whenComplete((ignored, failure) -> continuation.run());
+                }
+                return true;
+            } catch (Throwable failure) {
+                Throwable cause = failure instanceof CompletionException && failure.getCause() != null ? failure.getCause() : failure;
+                end(cause);
+                FatalErrors.rethrow(cause);
+                return true;
+            }
+        }
+
+        private void end(@Nullable Throwable failure) {
+            pending = null;
+            activeExchange.set(null);
+            requestPipeline.clear();
+            if (failure != null) forceTransportClose();
+            closeTransportQuietly();
+            if (failure == null) ended.complete(null);
+            else ended.completeExceptionally(failure);
+        }
+    }
+
+    private CompletableFuture<ExchangeResult> executeExchange(HttpRequestTemp request, Http1MessageReader reader,
+                                                               OutputStream output) {
+        var completion = new CompletableFuture<ExchangeResult>();
+        try {
+            // Submitting to a user-supplied handler executor can itself run application code.
+            // Keep preparation, submission, rejection writes and body cleanup off the selector.
+            server.executeInternalTask(() -> {
+                if (closed.get()) {
+                    completion.complete(new ExchangeResult(true, null));
+                    return;
+                }
+                Exchange exchange;
+                try { exchange = prepareExchange(request, reader, output); }
+                catch (Throwable failure) {
+                    completion.completeExceptionally(failure);
+                    FatalErrors.rethrow(failure);
+                    return;
+                }
+                try {
+                    exchange.execute().whenComplete((accepted, failure) -> finishExchangeLater(exchange, accepted, failure, completion));
+                } catch (Throwable failure) {
+                    finishExchangeLater(exchange, null, failure, completion);
+                    FatalErrors.rethrow(failure);
+                }
+            });
+        } catch (RuntimeException | Error failure) {
+            completion.completeExceptionally(failure);
+            FatalErrors.rethrow(failure);
+        }
+        return completion;
+    }
+
+    private void finishExchangeLater(Exchange exchange, @Nullable Boolean accepted, @Nullable Throwable failure,
+                                      CompletableFuture<ExchangeResult> completion) {
+        try {
+            server.executeInternalTask(() -> {
+                try { completion.complete(exchange.finish(accepted, failure)); }
+                catch (Throwable error) {
+                    completion.completeExceptionally(error);
+                    FatalErrors.rethrow(error);
+                }
+            });
+        } catch (RuntimeException | Error rejected) {
+            try { exchange.abandon(accepted); }
+            finally { completion.completeExceptionally(rejected); }
+            FatalErrors.rethrow(rejected);
+        }
     }
 
     @Override
@@ -116,133 +258,22 @@ class Http1Connection extends BaseHttpConnection {
                     transport.shutdownInput();
                     break;
                 }
-                var request = (HttpRequestTemp)msg;
-                // The shared parser queues requests for response parsing. The server writes
-                // responses directly, so consume the entry when we take ownership of the
-                // request; otherwise every completed request lives as long as the connection.
-                requestPipeline.remove(request);
-
-                var rejectException = request.getRejectRequest();
-                String relativeUrl;
-                URI target;
-                try {
-                    target = request.requestTarget();
-                    relativeUrl = Mutils.getRelativeUrl(target);
-                } catch (HttpException e) {
-                    if (rejectException == null) {
-                        rejectException = e;
-                    }
-                    rejectException.responseHeaders().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
-                    target = null;
-                    relativeUrl = "/";
+                Exchange exchange = prepareExchange((HttpRequestTemp) msg, requestParser, outputStream);
+                Boolean accepted = null;
+                Throwable failure = null;
+                try { accepted = exchange.execute().get(); }
+                catch (Throwable error) {
+                    if (error instanceof InterruptedException) Thread.currentThread().interrupt();
+                    failure = error instanceof ExecutionException && error.getCause() != null ? error.getCause() : error;
                 }
-
-                URI serverUri = creator.uri().resolve(relativeUrl);
-                URI requestUri;
-                try {
-                    URI defaultUri = target != null && target.isAbsolute()
-                        ? URI.create(target.getScheme() + "://" + target.getRawAuthority() + relativeUrl)
-                        : serverUri;
-                    requestUri = Headtils.getUri(log, request.headers(), relativeUrl, defaultUri);
-                } catch (HttpException e) {
-                    if (rejectException == null) {
-                        rejectException = e;
-                    }
-                    // A rejected Expect: 100-continue request may never send its body,
-                    // including when an earlier rejection determined the response status.
-                    rejectException.responseHeaders().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
-                    requestUri = serverUri;
+                ExchangeResult result = exchange.finish(accepted, failure);
+                closeConnection = result.closeConnection;
+                WebsocketConnection websocket = result.websocket;
+                if (!closeConnection && websocket != null) {
+                    activateWebsocket(websocket);
+                    websocket.runAndBlockUntilDone(inputStream, outputStream, requestParser.takeInputForUpgrade());
+                    closeConnection = true;
                 }
-                Method method = java.util.Objects.requireNonNull(request.getMethod(), "No HTTP method was parsed");
-                if (rejectException == null) {
-                    try {
-                        QueryRequestValidation.validate(method, request.headers());
-                    } catch (HttpException e) {
-                        // The peer might be waiting for 100 Continue instead of sending its body.
-                        e.responseHeaders().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
-                        rejectException = e;
-                    }
-                }
-                HttpVersion httpVersion = java.util.Objects.requireNonNull(request.getHttpVersion(), "No HTTP version was parsed");
-                BodySize bodySize = java.util.Objects.requireNonNull(request.getBodySize(), "No body size was parsed");
-                InputStream requestBody = BodySize.NONE.equals(bodySize) ? EmptyInputStream.INSTANCE : new Http1BodyStream(requestParser, server.maxRequestBodySize());
-                var muRequest = new Mu3Request(this, method, requestUri, serverUri, httpVersion, request.headers(), bodySize, requestBody);
-                transport.readTimeoutMillis(requestTimeout);
-
-                var muResponse = new Http1Response(muRequest, outputStream);
-                muRequest.setResponse(muResponse);
-                closeConnection = muRequest.headers().closeConnectionRequested(httpVersion);
-
-                if (rejectException != null) {
-                    onInvalidRequest(rejectException);
-                    String rejectedMethod = method.name();
-                    String rejectReason = rejectException.getMessage() != null ? rejectException.getMessage() : rejectException.status().toString();
-                    var rejectedRequest = new RejectedRequestImpl(
-                        rejectException.status().code(),
-                        rejectReason,
-                        rejectedMethod,
-                        requestUri.toString(),
-                        this
-                    );
-                    try {
-                        muResponse.status(rejectException.status());
-                        muResponse.headers().set(rejectException.responseHeaders());
-                        if (rejectException.getMessage() != null) {
-                            muResponse.write(rejectException.getMessage());
-                        }
-                        if (rejectException.responseHeaders().closeConnectionRequested(httpVersion)) {
-                            // Do not block draining a body that an Expect: 100-continue peer never sent.
-                            muResponse.cleanup();
-                            closeConnection = true;
-                        } else {
-                            closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest);
-                        }
-                    } finally {
-                        // Rejection listeners are also an audit/metrics hook. Notify after
-                        // attempting the response even when the client aborts during its write.
-                        server.onRequestRejected(rejectedRequest);
-                    }
-                } else {
-
-                    onRequestStarted(muRequest);
-
-                    boolean rejectedByHandlerExecutor = false;
-                    try {
-                        HandlerExecution execution = handleExchangeOnHandlerExecutor(muRequest, muResponse);
-                        if (execution.accepted) {
-                            CompletableFuture<@Nullable Void> asyncCompletion = execution.asyncCompletion;
-                            if (asyncCompletion != null) {
-                                awaitAsyncCompletion(asyncCompletion, muRequest, muResponse);
-                            }
-                            closeConnection = cleanUpNicely(closeConnection, muResponse, muRequest);
-                        } else {
-                            rejectedByHandlerExecutor = true;
-                            closeConnection = rejectRequestDueToHandlerOverload(muRequest, outputStream);
-                        }
-                    } catch (Throwable e) {
-                        if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-                        FatalErrors.rethrow(e);
-                        closeConnection = true;
-                        log.warn("Unrecoverable error for " + muRequest, e);
-                        muResponse.setState(ResponseState.ERRORED);
-                    } finally {
-                        if (muRequest.wasRateLimitRejected()) {
-                            onApplicationRequestRejected(muRequest);
-                            server.onRequestRejected(rateLimitRejection(muRequest));
-                        } else if (!rejectedByHandlerExecutor) {
-                            onExchangeEndedOnHandler(muResponse);
-                        }
-                        transport.readTimeoutMillis(0);
-                    }
-                    var websocket = muResponse.getWebsocket();
-                    if (!closeConnection && websocket != null) {
-                        activeExchange.set(ActiveExchange.forWebsocket(websocket));
-                        transport.readTimeoutMillis(websocket.settings.idleReadTimeoutMillis);
-                        websocket.runAndBlockUntilDone(inputStream, outputStream, requestParser.readBuffer);
-                        closeConnection = true;
-                    }
-                }
-                closeConnection = closeConnection || state.get() != HttpConnectionState.OPEN || closed.get();
             }
         } catch (Exception e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
@@ -254,62 +285,206 @@ class Http1Connection extends BaseHttpConnection {
         }
     }
 
-    private HandlerExecution handleExchangeOnHandlerExecutor(Mu3Request request, Http1Response response) throws Throwable {
-        if (!server.tryAdmit(request)) return HandlerExecution.rejected();
-        CompletableFuture<@Nullable CompletableFuture<@Nullable Void>> completion = new CompletableFuture<>();
+    private Exchange prepareExchange(HttpRequestTemp request, Http1MessageReader requestParser,
+                                     OutputStream outputStream) throws IOException {
+        // The shared parser queues requests for response parsing. The server writes
+        // responses directly, so consume the entry when we take ownership of the
+        // request; otherwise every completed request lives as long as the connection.
+        requestPipeline.remove(request);
+
+        var rejectException = request.getRejectRequest();
+        String relativeUrl;
+        URI target;
+        try {
+            target = request.requestTarget();
+            relativeUrl = Mutils.getRelativeUrl(target);
+        } catch (HttpException e) {
+            if (rejectException == null) {
+                rejectException = e;
+            }
+            rejectException.responseHeaders().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+            target = null;
+            relativeUrl = "/";
+        }
+
+        URI serverUri = creator.uri().resolve(relativeUrl);
+        URI requestUri;
+        try {
+            URI defaultUri = target != null && target.isAbsolute()
+                ? URI.create(target.getScheme() + "://" + target.getRawAuthority() + relativeUrl)
+                : serverUri;
+            requestUri = Headtils.getUri(log, request.headers(), relativeUrl, defaultUri);
+        } catch (HttpException e) {
+            if (rejectException == null) {
+                rejectException = e;
+            }
+            // A rejected Expect: 100-continue request may never send its body,
+            // including when an earlier rejection determined the response status.
+            rejectException.responseHeaders().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+            requestUri = serverUri;
+        }
+        Method method = java.util.Objects.requireNonNull(request.getMethod(), "No HTTP method was parsed");
+        if (rejectException == null) {
+            try {
+                QueryRequestValidation.validate(method, request.headers());
+            } catch (HttpException e) {
+                // The peer might be waiting for 100 Continue instead of sending its body.
+                e.responseHeaders().set(HeaderNames.CONNECTION, HeaderValues.CLOSE);
+                rejectException = e;
+            }
+        }
+        HttpVersion httpVersion = java.util.Objects.requireNonNull(request.getHttpVersion(), "No HTTP version was parsed");
+        BodySize bodySize = java.util.Objects.requireNonNull(request.getBodySize(), "No body size was parsed");
+        InputStream requestBody = BodySize.NONE.equals(bodySize) ? EmptyInputStream.INSTANCE : new Http1BodyStream(requestParser, server.maxRequestBodySize());
+        var muRequest = new Mu3Request(this, method, requestUri, serverUri, httpVersion, request.headers(), bodySize, requestBody);
+        transport.readTimeoutMillis(requestTimeout);
+
+        var muResponse = new Http1Response(muRequest, outputStream);
+        muRequest.setResponse(muResponse);
+        boolean closeConnection = muRequest.headers().closeConnectionRequested(httpVersion);
+
+        return new Exchange(muRequest, muResponse, outputStream, closeConnection, rejectException);
+    }
+
+    /** One exchange owns the body reader until finish returns; the transport must not parse ahead. */
+    private final class Exchange {
+        final Mu3Request request;
+        final Http1Response response;
+        final OutputStream output;
+        final boolean requestedClose;
+        final @Nullable HttpException rejection;
+        boolean started;
+
+        Exchange(Mu3Request request, Http1Response response, OutputStream output,
+                 boolean requestedClose, @Nullable HttpException rejection) {
+            this.request = request;
+            this.response = response;
+            this.output = output;
+            this.requestedClose = requestedClose;
+            this.rejection = rejection;
+        }
+
+        CompletableFuture<Boolean> execute() {
+            if (rejection != null) return CompletableFuture.completedFuture(true);
+            onRequestStarted(request);
+            started = true;
+            return handleExchangeOnHandlerExecutor(request, response);
+        }
+
+        /** Retirement still releases admission when shutdown prevents scheduling normal cleanup. */
+        void abandon(@Nullable Boolean accepted) {
+            if (!started) return;
+            response.setState(ResponseState.ERRORED);
+            if (Boolean.FALSE.equals(accepted)) {
+                rejectedDueToOverload.incrementAndGet();
+                server.getStatsImpl().onRejectedDueToOverload();
+                onApplicationRequestRejected(request);
+            } else if (request.wasRateLimitRejected()) {
+                onApplicationRequestRejected(request);
+                server.onRequestRejected(rateLimitRejection(request));
+            } else onExchangeEndedOnHandler(response);
+        }
+
+        ExchangeResult finish(@Nullable Boolean accepted, @Nullable Throwable failure) throws IOException {
+            boolean closeConnection = requestedClose;
+            if (rejection != null) {
+                onInvalidRequest(rejection);
+                String rejectReason = rejection.getMessage() != null ? rejection.getMessage() : rejection.status().toString();
+                var rejectedRequest = new RejectedRequestImpl(rejection.status().code(), rejectReason,
+                    request.method().name(), request.uri().toString(), Http1Connection.this);
+                try {
+                    response.status(rejection.status());
+                    response.headers().set(rejection.responseHeaders());
+                    if (rejection.getMessage() != null) response.write(rejection.getMessage());
+                    if (rejection.responseHeaders().closeConnectionRequested(request.httpVersion())) {
+                        // An Expect peer may never send its rejected body.
+                        response.cleanup();
+                        closeConnection = true;
+                    } else closeConnection = cleanUpNicely(closeConnection, response, request);
+                } finally { server.onRequestRejected(rejectedRequest); }
+            } else {
+                boolean rejectedByHandlerExecutor = failure == null && Boolean.FALSE.equals(accepted);
+                try {
+                    if (failure != null) throw failure;
+                    closeConnection = rejectedByHandlerExecutor
+                        ? rejectRequestDueToHandlerOverload(request, output)
+                        : cleanUpNicely(closeConnection, response, request);
+                } catch (Throwable error) {
+                    if (error instanceof InterruptedException) Thread.currentThread().interrupt();
+                    FatalErrors.rethrow(error);
+                    closeConnection = true;
+                    log.warn("Unrecoverable error for " + request, error);
+                    response.setState(ResponseState.ERRORED);
+                } finally {
+                    if (request.wasRateLimitRejected()) {
+                        onApplicationRequestRejected(request);
+                        server.onRequestRejected(rateLimitRejection(request));
+                    } else if (!rejectedByHandlerExecutor) onExchangeEndedOnHandler(response);
+                    transport.readTimeoutMillis(0);
+                }
+            }
+            closeConnection |= state.get() != HttpConnectionState.OPEN || closed.get();
+            return new ExchangeResult(closeConnection, response.getWebsocket());
+        }
+    }
+
+    private void activateWebsocket(WebsocketConnection websocket) throws IOException {
+        activeExchange.set(ActiveExchange.forWebsocket(websocket));
+        transport.readTimeoutMillis(websocket.settings.idleReadTimeoutMillis);
+    }
+
+    /** Completes when application handling (including any async exchange) has ended, without waiting. */
+    private CompletableFuture<Boolean> handleExchangeOnHandlerExecutor(Mu3Request request, Http1Response response) {
+        if (!server.tryAdmit(request)) return CompletableFuture.completedFuture(false);
+        CompletableFuture<Boolean> completion = new CompletableFuture<>();
         try {
             handlerExecutor.execute(server.handlerApplicationTask(() -> {
                 try {
-                    completion.complete(response.responseState().endState() ? null : handleExchange(request, response));
-                } catch (Throwable t) {
-                    completion.completeExceptionally(t);
-                    FatalErrors.rethrow(t);
+                    if (closed.get()) response.setState(ResponseState.CLIENT_DISCONNECTED);
+                    CompletableFuture<@Nullable Void> async = response.responseState().endState() ? null : handleExchange(request, response);
+                    if (async == null) completion.complete(true);
+                    else async.whenComplete((ignored, error) -> {
+                        Throwable failure = error instanceof CompletionException && error.getCause() != null ? error.getCause() : error;
+                        if (failure == null) completion.complete(true);
+                        else if (failure instanceof Exception) {
+                            try {
+                                handleAsyncExceptionOnHandler(request, response, (Exception) failure)
+                                    .whenComplete((handled, handlerFailure) -> {
+                                        if (handlerFailure == null) completion.complete(true);
+                                        else completion.completeExceptionally(handlerFailure);
+                                    });
+                            } catch (Throwable taskFailure) {
+                                completion.completeExceptionally(taskFailure);
+                                FatalErrors.rethrow(taskFailure);
+                            }
+                        } else completion.completeExceptionally(failure);
+                    });
+                } catch (Throwable error) {
+                    completion.completeExceptionally(error);
+                    FatalErrors.rethrow(error);
                 }
             }));
         } catch (RejectedExecutionException rejected) {
-            return HandlerExecution.rejected();
+            completion.complete(false);
         }
-        try {
-            return HandlerExecution.accepted(completion.get());
-        } catch (ExecutionException e) {
-            throw e.getCause();
-        }
+        return completion;
     }
 
-    private void awaitAsyncCompletion(CompletableFuture<@Nullable Void> completion, Mu3Request request,
-                                      Http1Response response) throws Throwable {
-        try {
-            completion.get();
-        } catch (ExecutionException e) {
-            Throwable failure = e.getCause();
-            if (!(failure instanceof Exception)) {
-                throw failure;
-            }
-            handleAsyncExceptionOnHandler(request, response, (Exception) failure);
-        }
-    }
-
-    private void handleAsyncExceptionOnHandler(Mu3Request request, Http1Response response,
-                                               Exception failure) throws Throwable {
+    private CompletableFuture<@Nullable Void> handleAsyncExceptionOnHandler(Mu3Request request, Http1Response response,
+                                                                          Exception failure) {
         CompletableFuture<@Nullable Void> handled = new CompletableFuture<>();
         Runnable task = () -> {
             try {
                 handleExchangeException(request, response, failure);
                 handled.complete(null);
-            } catch (Throwable t) {
-                handled.completeExceptionally(t);
-                FatalErrors.rethrow(t);
+            } catch (Throwable error) {
+                handled.completeExceptionally(error);
+                FatalErrors.rethrow(error);
             }
         };
         RejectedExecutionException rejected = server.tryExecuteHandlerTask(task);
-        if (rejected != null) {
-            handled.completeExceptionally(rejected);
-        }
-        try {
-            handled.get();
-        } catch (ExecutionException e) {
-            throw e.getCause();
-        }
+        if (rejected != null) handled.completeExceptionally(rejected);
+        return handled;
     }
 
     private void onExchangeEndedOnHandler(Http1Response response) {
@@ -461,7 +636,9 @@ class Http1Connection extends BaseHttpConnection {
 
     @Override
     void forceShutdown() {
-        state.set(HttpConnectionState.CLOSED);
+        if (state.getAndSet(HttpConnectionState.CLOSED) != HttpConnectionState.CLOSED) {
+            terminateActiveRequest(ResponseState.ERRORED, new IOException("Connection forcibly closed"));
+        }
         forceTransportClose();
         closeTransportQuietly();
     }

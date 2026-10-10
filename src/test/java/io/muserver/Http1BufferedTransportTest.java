@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.IOException;
 import java.io.ByteArrayInputStream;
@@ -30,15 +31,15 @@ import static scaffolding.ClientUtils.request;
 @Timeout(15)
 class Http1BufferedTransportTest {
     @ParameterizedTest
-    @ValueSource(booleans = {false, true})
-    void bodiesTrailersAndPipelinesSurviveBoundedFeedsAndPartialOutput(boolean chunked) throws Exception {
+    @CsvSource({"false,false", "false,true", "true,false", "true,true"})
+    void bodiesTrailersAndPipelinesSurviveBoundedFeedsAndPartialOutput(boolean chunked, boolean readiness) throws Exception {
         List<String> handled = new ArrayList<>();
         try (var test = new Harness(200_000, (request, response) -> {
             String body = request.readBodyAsString();
             handled.add(body + "|" + request.trailers().get("checksum"));
             response.write(Integer.toString(body.length()));
             return true;
-        })) {
+        }, readiness)) {
             String body = "x".repeat(20_000);
             String framing = chunked ? "Transfer-Encoding: chunked\r\n" : "Content-Length: 20000\r\n";
             String payload = chunked ? "4e20\r\n" + body + "\r\n0\r\nChecksum: good\r\n\r\n" : body;
@@ -66,8 +67,8 @@ class Http1BufferedTransportTest {
     }
 
     @ParameterizedTest
-    @ValueSource(booleans = {false, true})
-    void queuedResponseBytesDoNotAdvanceAccountingOrCompletion(boolean async) throws Exception {
+    @CsvSource({"false,false", "false,true", "true,false", "true,true"})
+    void queuedResponseBytesDoNotAdvanceAccountingOrCompletion(boolean async, boolean readiness) throws Exception {
         CompletableFuture<ResponseInfo> completed = new CompletableFuture<>();
         CompletableFuture<Future<?>> submitted = new CompletableFuture<>();
         try (var test = new Harness(1000, (request, response) -> {
@@ -78,12 +79,13 @@ class Http1BufferedTransportTest {
                 handle.complete();
             } else response.write("hello");
             return true;
-        })) {
+        }, readiness)) {
             ByteBuffer request = ByteBuffer.wrap("GET /one HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n".getBytes(US_ASCII));
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
             while (test.output.pendingBytes() == 0) {
                 assertTrue(System.nanoTime() < deadline);
-                if (request.hasRemaining()) test.input.offer(request);
+                if (request.hasRemaining()) test.offer(request);
+                test.advance();
                 test.changed.tryAcquire(1, TimeUnit.MILLISECONDS);
             }
             assertEquals(test.sentBefore, test.server.stats().bytesSent());
@@ -97,8 +99,9 @@ class Http1BufferedTransportTest {
         }
     }
 
-    @Test
-    void unreadChunkedBodyIsDiscardedBeforeTheNextPipelinedRequest() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void unreadChunkedBodyIsDiscardedBeforeTheNextPipelinedRequest(boolean readiness) throws Exception {
         List<String> paths = new ArrayList<>();
         AtomicReference<MuRequest> first = new AtomicReference<>();
         try (var test = new Harness(200_000, (request, response) -> {
@@ -106,7 +109,7 @@ class Http1BufferedTransportTest {
             if (request.uri().getPath().equals("/one")) first.set(request);
             response.write("ok");
             return true;
-        })) {
+        }, readiness)) {
             String request = "POST /one HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n"
                 + "4e20\r\n" + "x".repeat(20_000) + "\r\n0\r\nChecksum: discarded\r\n\r\n"
                 + "GET /two HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
@@ -118,15 +121,15 @@ class Http1BufferedTransportTest {
     }
 
     @ParameterizedTest
-    @ValueSource(booleans = {false, true})
-    void completeHalfClosedBodiesFinishButTruncatedBodiesFail(boolean truncated) throws Exception {
+    @CsvSource({"false,false", "false,true", "true,false", "true,true"})
+    void completeHalfClosedBodiesFinishButTruncatedBodiesFail(boolean truncated, boolean readiness) throws Exception {
         CompletableFuture<String> body = new CompletableFuture<>();
         try (var test = new Harness(1000, (request, response) -> {
             try { body.complete(request.readBodyAsString()); }
             catch (Exception failure) { body.completeExceptionally(failure); throw failure; }
             response.write("ok");
             return true;
-        })) {
+        }, readiness)) {
             String request = "POST /one HTTP/1.1\r\nHost: localhost\r\nContent-Length: 3\r\n\r\n"
                 + (truncated ? "ab" : "abc");
             test.drive(ByteBuffer.wrap(request.getBytes(US_ASCII)), true);
@@ -138,12 +141,13 @@ class Http1BufferedTransportTest {
         }
     }
 
-    @Test
-    void requestBodyLimitsStillRejectExternallyFedUploads() throws Exception {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void requestBodyLimitsStillRejectExternallyFedUploads(boolean readiness) throws Exception {
         try (var test = new Harness(3, (request, response) -> {
             response.write(request.readBodyAsString());
             return true;
-        })) {
+        }, readiness)) {
             String request = "POST /one HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
                 + "4\r\nlong\r\n0\r\n\r\n";
             test.drive(ByteBuffer.wrap(request.getBytes(US_ASCII)), false);
@@ -152,8 +156,8 @@ class Http1BufferedTransportTest {
     }
 
     @ParameterizedTest
-    @ValueSource(booleans = {false, true})
-    void forcedCloseOrAsyncCancellationReleasesBlockedOutput(boolean async) throws Exception {
+    @CsvSource({"false,false", "false,true", "true,false", "true,true"})
+    void forcedCloseOrAsyncCancellationReleasesBlockedOutput(boolean async, boolean readiness) throws Exception {
         CompletableFuture<ResponseInfo> completed = new CompletableFuture<>();
         CompletableFuture<Future<?>> submitted = new CompletableFuture<>();
         try (var test = new Harness(1000, (request, response) -> {
@@ -164,17 +168,18 @@ class Http1BufferedTransportTest {
                 handle.complete();
             } else response.write("x".repeat(10000));
             return true;
-        })) {
+        }, readiness)) {
             ByteBuffer request = ByteBuffer.wrap("GET /one HTTP/1.1\r\nHost: localhost\r\n\r\n".getBytes(US_ASCII));
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
             while (test.output.pendingBytes() == 0) {
                 assertTrue(System.nanoTime() < deadline);
-                if (request.hasRemaining()) test.input.offer(request);
+                if (request.hasRemaining()) test.offer(request);
+                test.advance();
                 test.changed.tryAcquire(1, TimeUnit.MILLISECONDS);
             }
             if (async) assertTrue(submitted.get(2, TimeUnit.SECONDS).cancel(true));
             else test.connection.forceShutdown();
-            test.running.get(2, TimeUnit.SECONDS);
+            test.awaitEnd();
             assertFalse(completed.get(2, TimeUnit.SECONDS).completedSuccessfully());
             assertEquals(test.sentBefore, test.server.stats().bytesSent());
         }
@@ -185,13 +190,15 @@ class Http1BufferedTransportTest {
         final TransportInputBuffer input = new TransportInputBuffer(31, changed::release);
         final TransportOutputBuffer output = new TransportOutputBuffer(17, changed::release);
         final TransportOutputBufferTest.Sink sink = new TransportOutputBufferTest.Sink(3);
-        final ExecutorService workers = Executors.newFixedThreadPool(2);
+        final ExecutorService workers;
+        final Http1Connection.ReadDriver driver;
         final MuServer server;
         final Http1Connection connection;
         final Future<?> running;
         final long sentBefore;
 
-        Harness(long maxBodySize, MuHandler handler) throws Exception {
+        Harness(long maxBodySize, MuHandler handler, boolean readiness) throws Exception {
+            workers = Executors.newFixedThreadPool(readiness ? 1 : 2);
             AtomicReference<BaseHttpConnection> fixture = new AtomicReference<>();
             CompletableFuture<Void> fixtureDone = new CompletableFuture<>();
             server = MuServerBuilder.httpServer().withMaxRequestSize(maxBodySize)
@@ -211,8 +218,34 @@ class Http1BufferedTransportTest {
             BaseHttpConnection config = fixture.get();
             connection = new Http1Connection(config.server, config.creator, new Controls(), ConnectionAcceptedTime.now(), null, workers);
             sentBefore = server.stats().bytesSent();
-            running = workers.submit(() -> connection.start(new HttpConnectionInputStream(connection, input),
-                new HttpConnectionOutputStream(connection, output)));
+            if (readiness) {
+                driver = connection.readDriver(input, new HttpConnectionOutputStream(connection, output), changed::release);
+                running = driver.completion();
+            } else {
+                driver = null;
+                running = workers.submit(() -> connection.start(new HttpConnectionInputStream(connection, input),
+                    new HttpConnectionOutputStream(connection, output)));
+            }
+        }
+
+        int offer(ByteBuffer source) throws IOException {
+            int count = input.offer(source);
+            if (driver != null && count > 0) connection.onBytesRead(count);
+            return count;
+        }
+
+        void advance() {
+            if (driver != null) for (int i = 0; i < 8 && driver.advance(); i++) { }
+        }
+
+        void awaitEnd() throws Exception {
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+            while (!running.isDone()) {
+                assertTrue(System.nanoTime() < deadline, "Connection failed to retire");
+                advance();
+                changed.tryAcquire(1, TimeUnit.MILLISECONDS);
+            }
+            running.get(2, TimeUnit.SECONDS);
         }
 
         void drive(ByteBuffer request, boolean halfClose) throws Exception {
@@ -221,8 +254,9 @@ class Http1BufferedTransportTest {
             while (!running.isDone()) {
                 assertTrue(System.nanoTime() < deadline, "Connection failed to finish");
                 int progress = 0;
-                if (request.hasRemaining() && input.remainingCapacity() > 0) progress += input.offer(request);
+                if (request.hasRemaining() && input.remainingCapacity() > 0) progress += offer(request);
                 if (halfClose && !request.hasRemaining() && !eof) { input.endOfInput(); eof = true; }
+                advance();
                 if (output.pendingBytes() > 0) progress += output.drainTo(sink, 5);
                 assertTrue(input.available() <= 31);
                 assertTrue(output.pendingBytes() <= 17);
