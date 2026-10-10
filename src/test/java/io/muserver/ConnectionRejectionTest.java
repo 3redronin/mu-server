@@ -28,8 +28,9 @@ import static scaffolding.MuAssert.assertEventually;
 
 @Timeout(20)
 class ConnectionRejectionTest {
-    @ParameterizedTest @CsvSource({"false,false", "false,true", "true,false", "true,true"})
-    void internalRejectionClosesSilentConnectionsAndAcceptorRecovers(boolean tls, boolean proxy) throws Exception {
+    @ParameterizedTest @CsvSource({"false,false,0", "false,true,0", "true,false,0", "true,true,0",
+        "false,false,1", "false,true,1", "true,false,1", "true,true,1"})
+    void internalRejectionClosesSilentConnectionsAndAcceptorRecovers(boolean tls, boolean proxy, int maxConnections) throws Exception {
         AtomicBoolean reject = new AtomicBoolean(true);
         AtomicInteger handled = new AtomicInteger();
         ThreadPoolExecutor executor = new ThreadPoolExecutor(0, Integer.MAX_VALUE, 60, TimeUnit.SECONDS,
@@ -40,7 +41,7 @@ class ConnectionRejectionTest {
             }
         };
         MuServerBuilder builder = tls ? MuServerBuilder.httpsServer() : MuServerBuilder.httpServer();
-        try (MuServer server = TestExecutionResources.configure(builder, executor, null, null, null)
+        try (MuServer server = TestExecutionResources.configure(builder, executor, null, null, null).withMaxConnections(maxConnections)
             .withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config().withEnabled(proxy))
             .addHandler((req, resp) -> { handled.incrementAndGet(); resp.write("ok"); return true; }).start()) {
             for (int i = 1; i <= 3; i++) {
@@ -51,6 +52,7 @@ class ConnectionRejectionTest {
                 }
                 assertEquals(i, server.stats().rejectedDueToOverload());
                 assertNoPendingSockets(server);
+                assertEventually(() -> ((Mu3ServerImpl) server).connectionAdmission.admittedCount(), equalTo(0));
                 assertEquals(0, handled.get());
                 assertTrue(server.activeConnections().isEmpty());
             }
