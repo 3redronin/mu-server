@@ -65,7 +65,7 @@ class Http2UploadRetirementTest {
             if (readerProcessingFrame) {
                 failWriterWhileReaderProcessesAPing(connection, con);
             } else {
-                connection.clientSocket.shutdownOutput();
+                ((SocketConnectionTransport) connection.transport).socket.shutdownOutput();
                 connection.write(new Http2Ping(false, new byte[8]));
             }
 

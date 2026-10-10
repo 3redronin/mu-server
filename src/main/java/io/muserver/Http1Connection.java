@@ -7,10 +7,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.net.URI;
-import java.security.cert.Certificate;
 import java.text.ParseException;
 import java.util.Queue;
 import java.util.Set;
@@ -82,10 +80,10 @@ class Http1Connection extends BaseHttpConnection {
         }
     }
 
-    Http1Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, Socket transportSocket,
-                    @Nullable Certificate clientCertificate, ConnectionAcceptedTime acceptedTime,
+    Http1Connection(Mu3ServerImpl server, ConnectionAcceptor creator, ConnectionTransport transport,
+                    ConnectionAcceptedTime acceptedTime,
                     @Nullable ProxiedConnectionInfo proxyInfo, ExecutorService handlerExecutor) {
-        super(server, creator, clientSocket, transportSocket, clientCertificate, acceptedTime, proxyInfo);
+        super(server, creator, transport, acceptedTime, proxyInfo);
         this.handlerExecutor = handlerExecutor;
     }
 
@@ -115,7 +113,7 @@ class Http1Connection extends BaseHttpConnection {
                 if (MessageBodyBit.isEof(msg)) {
 //                    reqStream.closeQuietly() // TODO: confirm if the input stream should be closed
                     markRemoteClosed();
-                    clientSocket.shutdownInput();
+                    transport.shutdownInput();
                     break;
                 }
                 var request = (HttpRequestTemp)msg;
@@ -169,7 +167,7 @@ class Http1Connection extends BaseHttpConnection {
                 BodySize bodySize = java.util.Objects.requireNonNull(request.getBodySize(), "No body size was parsed");
                 InputStream requestBody = BodySize.NONE.equals(bodySize) ? EmptyInputStream.INSTANCE : new Http1BodyStream(requestParser, server.maxRequestBodySize());
                 var muRequest = new Mu3Request(this, method, requestUri, serverUri, httpVersion, request.headers(), bodySize, requestBody);
-                clientSocket.setSoTimeout(requestTimeout);
+                transport.readTimeoutMillis(requestTimeout);
 
                 var muResponse = new Http1Response(muRequest, outputStream);
                 muRequest.setResponse(muResponse);
@@ -234,12 +232,12 @@ class Http1Connection extends BaseHttpConnection {
                         } else if (!rejectedByHandlerExecutor) {
                             onExchangeEndedOnHandler(muResponse);
                         }
-                        clientSocket.setSoTimeout(0);
+                        transport.readTimeoutMillis(0);
                     }
                     var websocket = muResponse.getWebsocket();
                     if (!closeConnection && websocket != null) {
                         activeExchange.set(ActiveExchange.forWebsocket(websocket));
-                        clientSocket.setSoTimeout(websocket.settings.idleReadTimeoutMillis);
+                        transport.readTimeoutMillis(websocket.settings.idleReadTimeoutMillis);
                         websocket.runAndBlockUntilDone(inputStream, outputStream, requestParser.readBuffer);
                         closeConnection = true;
                     }
@@ -421,7 +419,7 @@ class Http1Connection extends BaseHttpConnection {
             );
             state.set(HttpConnectionState.CLOSED);
             forceTransportClose();
-            clientSocket.close();
+            transport.close();
         } else {
             state.set(HttpConnectionState.CLOSED);
         }
@@ -437,7 +435,7 @@ class Http1Connection extends BaseHttpConnection {
             notifyWebsocketTimeout();
             state.set(HttpConnectionState.CLOSED);
             forceTransportClose();
-            clientSocket.close();
+            transport.close();
         } else {
             state.set(HttpConnectionState.CLOSED);
         }
@@ -484,7 +482,7 @@ class Http1Connection extends BaseHttpConnection {
     private void closeTransportQuietly() {
         if (closed.compareAndSet(false, true)) {
             try {
-                clientSocket.close();
+                transport.close();
             } catch (IOException ignored) {
             } finally {
                 state.set(HttpConnectionState.CLOSED);

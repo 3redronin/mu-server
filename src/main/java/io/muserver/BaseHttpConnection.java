@@ -2,17 +2,10 @@ package io.muserver;
 
 import org.jspecify.annotations.Nullable;
 
-import javax.net.ssl.ExtendedSSLSession;
-import javax.net.ssl.SNIHostName;
-import javax.net.ssl.SSLSession;
-import javax.net.ssl.SSLSocket;
-import javax.net.ssl.SNIServerName;
-import javax.net.ssl.StandardConstants;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.net.Socket;
 import java.security.cert.Certificate;
 import java.time.Instant;
 import java.util.Optional;
@@ -24,10 +17,7 @@ abstract class BaseHttpConnection implements HttpConnection {
 
     protected final Mu3ServerImpl server;
     protected final ConnectionAcceptor creator;
-    protected final Socket clientSocket;
-    protected final Socket transportSocket;
-    @Nullable
-    protected final Certificate clientCertificate;
+    protected final ConnectionTransport transport;
     private final ConnectionAcceptedTime acceptedTime;
     private final long connectionReadyNanos = System.nanoTime();
     protected final InetSocketAddress remoteAddress;
@@ -48,28 +38,24 @@ abstract class BaseHttpConnection implements HttpConnection {
     BaseHttpConnection(
         Mu3ServerImpl server,
         ConnectionAcceptor creator,
-        Socket clientSocket,
-        Socket transportSocket,
-        @Nullable Certificate clientCertificate,
+        ConnectionTransport transport,
         ConnectionAcceptedTime acceptedTime,
         @Nullable ProxiedConnectionInfo proxiedConnectionInfo
     ) {
         this.server = server;
         this.creator = creator;
-        this.clientSocket = clientSocket;
-        this.transportSocket = transportSocket;
-        this.clientCertificate = clientCertificate;
+        this.transport = transport;
         this.acceptedTime = acceptedTime;
         this.proxiedConnectionInfo = proxiedConnectionInfo;
-        remoteAddress = (InetSocketAddress) clientSocket.getRemoteSocketAddress();
-        localAddress = (InetSocketAddress) clientSocket.getLocalSocketAddress();
+        remoteAddress = transport.remoteAddress();
+        localAddress = transport.localAddress();
         requestTimeout = (int) Math.min(Integer.MAX_VALUE, server.requestIdleTimeoutMillis());
     }
 
     /** A forced close must bypass TLS close-notify, which may wait behind a stalled write. */
     protected final void forceTransportClose() {
         try {
-            transportSocket.close();
+            transport.abort();
         } catch (IOException ignored) {
         }
     }
@@ -189,23 +175,15 @@ abstract class BaseHttpConnection implements HttpConnection {
     }
     @Override
     public boolean isHttps() {
-        return creator.isHttps();
+        return transport.isSecure();
     }
     @Override
     public @Nullable String httpsProtocol() {
-        if (clientSocket instanceof SSLSocket) {
-            return ((SSLSocket)clientSocket).getSession().getProtocol();
-        } else {
-            return null;
-        }
+        return transport.tlsProtocol();
     }
     @Override
     public @Nullable String cipher() {
-        if (clientSocket instanceof SSLSocket) {
-            return ((SSLSocket)clientSocket).getSession().getCipherSuite();
-        } else {
-            return null;
-        }
+        return transport.cipherSuite();
     }
 
     @Override
@@ -245,7 +223,7 @@ abstract class BaseHttpConnection implements HttpConnection {
 
     @Override
     public Optional<Certificate> clientCertificate() {
-        return Optional.ofNullable(clientCertificate);
+        return Optional.ofNullable(transport.clientCertificate());
     }
 
     public boolean isClosed() {
@@ -296,18 +274,6 @@ abstract class BaseHttpConnection implements HttpConnection {
 
     @Override
     public Optional<String> sniHostName() {
-        if (!(clientSocket instanceof SSLSocket)) {
-            return Optional.empty();
-        }
-        SSLSession session = ((SSLSocket) clientSocket).getSession();
-        if (!(session instanceof ExtendedSSLSession)) {
-            return Optional.empty();
-        }
-        for (SNIServerName serverName : ((ExtendedSSLSession) session).getRequestedServerNames()) {
-            if (serverName.getType() == StandardConstants.SNI_HOST_NAME) {
-                return Optional.of(((SNIHostName) serverName).getAsciiName());
-            }
-        }
-        return Optional.empty();
+        return Optional.ofNullable(transport.sniHostName());
     }
 }

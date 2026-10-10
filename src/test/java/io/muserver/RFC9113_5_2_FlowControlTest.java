@@ -40,9 +40,7 @@ class RFC9113_5_2_FlowControlTest {
                 var writerConnection = new Http2Connection(
                     liveConnection.server,
                     liveConnection.creator,
-                    liveConnection.clientSocket,
-                    liveConnection.transportSocket,
-                    liveConnection.clientCertificate,
+                    liveConnection.transport,
                     ConnectionAcceptedTime.now(),
                     liveConnection.proxyInfo().orElse(null),
                     Http2Settings.DEFAULT_CLIENT_SETTINGS,

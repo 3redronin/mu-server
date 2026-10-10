@@ -490,6 +490,7 @@ class ConnectionAcceptor {
         @Nullable InputStream providedInputStream,
         @Nullable ProxiedConnectionInfo proxyInfo
     ) {
+        SocketConnectionTransport transport = new SocketConnectionTransport(socket, acceptedSocket, clientCert);
         BaseHttpConnection con;
         if (httpVersion == HttpVersion.HTTP_2) {
             if (http2Config == null) {
@@ -498,9 +499,7 @@ class ConnectionAcceptor {
             con = new Http2Connection(
                 server,
                 this,
-                socket,
-                acceptedSocket,
-                clientCert,
+                transport,
                 acceptedTime,
                 proxyInfo,
                 http2Config.initialSettings(),
@@ -512,9 +511,7 @@ class ConnectionAcceptor {
             con = new Http1Connection(
                 server,
                 this,
-                socket,
-                acceptedSocket,
-                clientCert,
+                transport,
                 acceptedTime,
                 proxyInfo,
                 handlerExecutor
@@ -526,10 +523,10 @@ class ConnectionAcceptor {
         }
         server.getStatsImpl().onConnectionOpened(con);
         try {
-            InputStream requestIn = providedInputStream == null ? socket.getInputStream() : providedInputStream;
+            InputStream requestIn = transport.input(providedInputStream);
             try (OutputStream clientOut = new HttpConnectionOutputStream(
                      con,
-                     socket.getOutputStream()
+                     transport.output()
                  );
                  InputStream clientIn = new HttpConnectionInputStream(con, requestIn)) {
                 con.start(clientIn, clientOut);

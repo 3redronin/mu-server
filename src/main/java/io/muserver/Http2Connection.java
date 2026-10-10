@@ -5,11 +5,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
-import java.net.Socket;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
-import java.security.cert.Certificate;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -272,9 +270,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     Http2Connection(
         Mu3ServerImpl server,
         ConnectionAcceptor creator,
-        Socket clientSocket,
-        Socket transportSocket,
-        @Nullable Certificate clientCertificate,
+        ConnectionTransport transport,
         ConnectionAcceptedTime acceptedTime,
         @Nullable ProxiedConnectionInfo proxyInfo,
         Http2Settings initialServerSettings,
@@ -282,7 +278,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         ExecutorService handlerExecutor,
         ExecutorService writerExecutor
     ) {
-        super(server, creator, clientSocket, transportSocket, clientCertificate, acceptedTime, proxyInfo);
+        super(server, creator, transport, acceptedTime, proxyInfo);
         this.serverSettings = initialServerSettings;
         this.settingsAckTimeoutMillis = settingsAckTimeoutMillis;
         this.handlerExecutor = handlerExecutor;
@@ -590,10 +586,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         }
     }
 
-    private void closeSocketQuietly() {
+    private void closeTransportQuietly() {
         if (closed.compareAndSet(false, true)) {
             try {
-                clientSocket.close();
+                transport.close();
             } catch (IOException e) {
             }
         }
@@ -1419,7 +1415,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 retireStoppedStreamAfterRequestEnd(stream);
             }
         }
-        closeSocketQuietly();
+        closeTransportQuietly();
         // Don't close the output stream here because that closes the TLS connection in Java.
         writeLoopEnded.complete(null);
         signalRetainedApplicationsEnded();
@@ -1705,7 +1701,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         }
         signalWriteLoop();
         forceTransportClose();
-        closeSocketQuietly();
+        closeTransportQuietly();
     }
 
     @Override

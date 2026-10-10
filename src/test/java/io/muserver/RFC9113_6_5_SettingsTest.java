@@ -777,9 +777,7 @@ class RFC9113_6_5_SettingsTest {
                 var queuedOnlyConnection = new Http2Connection(
                     liveConnection.server,
                     liveConnection.creator,
-                    liveConnection.clientSocket,
-                    liveConnection.transportSocket,
-                    liveConnection.clientCertificate,
+                    liveConnection.transport,
                     ConnectionAcceptedTime.now(),
                     liveConnection.proxyInfo().orElse(null),
                     Http2Settings.DEFAULT_CLIENT_SETTINGS,
