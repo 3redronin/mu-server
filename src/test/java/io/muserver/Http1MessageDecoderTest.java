@@ -224,6 +224,25 @@ class Http1MessageDecoderTest {
         assertThrows(ParseException.class, parser::readNext);
     }
 
+    @Test
+    void uncheckedTransportFailureAlsoMakesBlockingDriverTerminal() {
+        for (RuntimeException failure : List.of(new IllegalArgumentException("broken input"),
+            HttpException.badRequest("broken input"))) {
+            InputStream input = new InputStream() {
+                private boolean failed;
+                @Override public int read() {
+                    if (failed) throw new AssertionError("A failed source must not be read again");
+                    failed = true;
+                    throw failure;
+                }
+            };
+            Http1MessageParser parser = new Http1MessageParser(HttpMessageType.REQUEST,
+                new ConcurrentLinkedQueue<>(), input, 8192, 8192);
+            assertSame(failure, assertThrows(failure.getClass(), parser::readNext));
+            assertThrows(ParseException.class, parser::readNext);
+        }
+    }
+
     private static Http1MessageDecoder decoder(HttpMessageType type, Queue<HttpRequestTemp> requests) {
         return new Http1MessageDecoder(type, requests, 8192, 8192);
     }

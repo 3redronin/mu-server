@@ -32,7 +32,7 @@ class Http1MessageParser implements Http1MessageReader {
                 input.limit(Math.max(0, read));
                 if (read == -1) return decoder.endOfInput();
             }
-        } catch (IOException e) {
+        } catch (IOException | ParseException | HttpException | IllegalArgumentException e) {
             decoder.fail();
             throw e;
         }

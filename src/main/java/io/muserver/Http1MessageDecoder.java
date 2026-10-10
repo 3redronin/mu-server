@@ -371,7 +371,7 @@ class Http1MessageDecoder {
                 }
 
                 case FIXED_SIZE_BODY:
-                    case UNSPECIFIED_BODY: {
+                case UNSPECIFIED_BODY: {
                     return sendContent(input);
                 }
 
