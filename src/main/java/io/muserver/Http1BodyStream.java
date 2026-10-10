@@ -190,16 +190,32 @@ class Http1BodyStream extends InputStream implements RequestTrailersAccessor, As
      * <p>This can be called multiple times</p>
      */
     State discardRemaining(boolean throwIfTooBig) {
-        if (status.compareAndSet(State.READING, State.DISCARDING)) {
+        return discard(throwIfTooBig, true);
+    }
+
+    /** Returns DISCARDING when the exclusive cleanup owner must await more input or yield. */
+    State discardAvailable(boolean throwIfTooBig) { return discard(throwIfTooBig, false); }
+
+    void discardFailed() {
+        bb = null;
+        status.set(State.IO_EXCEPTION);
+    }
+
+    private State discard(boolean throwIfTooBig, boolean wait) {
+        if (status.compareAndSet(State.READING, State.DISCARDING) || status.get() == State.DISCARDING) {
+            bb = null;
             var drained = lastBitReceived;
+            int steps = 0;
             while (!drained) {
+                if (!wait && steps++ == 64) return state();
                 Http1ConnectionMsg last;
                 try {
-                    last = parser.readNext();
+                    last = wait ? parser.readNext() : java.util.Objects.requireNonNull(availableReader).readAvailable();
                 } catch (IOException | ParseException | HttpException | IllegalArgumentException e) {
                     status.set(State.IO_EXCEPTION);
                     break;
                 }
+                if (last == null) return state();
                 if (MessageBodyBit.isEndOfBody(last)) {
                     trailers = parser.takeTrailers();
                     drained = true;
@@ -208,7 +224,7 @@ class Http1BodyStream extends InputStream implements RequestTrailersAccessor, As
                     break;
                 } else if (last instanceof MessageBodyBit) {
                     var mbb = (MessageBodyBit) last;
-                    drained = mbb.isLast();
+                    drained = lastBitReceived = mbb.isLast();
                     bytesReceived += mbb.length();
                     if (throwIfTooBig && tooBig()) {
                         status.set(State.IO_EXCEPTION);

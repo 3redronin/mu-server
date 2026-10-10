@@ -22,6 +22,33 @@ import static org.junit.jupiter.api.Assertions.*;
 @Timeout(10)
 class AsyncBodyInputTest {
     @ParameterizedTest @ValueSource(booleans = {false, true})
+    void pollingDiscardPreservesPartiallyConsumedDataAndEveryFramingBoundary(boolean chunked) throws Exception {
+        var source = new TransportInputBuffer(256, () -> {});
+        var parser = pollingParser(source);
+        String header = "POST / HTTP/1.1\r\nHost: localhost\r\n" +
+            (chunked ? "Transfer-Encoding: chunked\r\n" : "Content-Length: 5\r\n") + "\r\n";
+        source.offer(ByteBuffer.wrap((header + (chunked ? "3\r\nabc" : "abc")).getBytes(StandardCharsets.US_ASCII)));
+        assertInstanceOf(HttpRequestTemp.class, parser.readAvailable(source::readAvailable));
+        var body = new Http1BodyStream(parser, 5);
+        assertEquals(1, body.asynchronousInput().readAvailable(new byte[1]));
+        assertEquals(Http1BodyStream.State.DISCARDING, body.discardAvailable(true));
+        assertEquals(0, body.available());
+        assertThrows(IOException.class, body::read);
+        String remaining = chunked ? "\r\n2\r\nde\r\n0\r\nx-check: yes\r\n\r\n" : "de";
+        for (int i = 0; i < remaining.length(); i++) {
+            source.offer(ByteBuffer.wrap(new byte[]{(byte) remaining.charAt(i)}));
+            assertEquals(i == remaining.length() - 1 ? Http1BodyStream.State.EOF : Http1BodyStream.State.DISCARDING,
+                body.discardAvailable(true));
+        }
+        assertEquals(5, body.bytesReceived());
+        assertTrue(body.isRequestBodyComplete());
+        if (chunked) assertEquals("yes", body.trailers().get("x-check"));
+        source.offer(ByteBuffer.wrap("GET /next HTTP/1.1\r\nHost: localhost\r\n\r\n".getBytes(StandardCharsets.US_ASCII)));
+        assertEquals(Http1BodyStream.State.EOF, body.discardAvailable(true));
+        assertInstanceOf(HttpRequestTemp.class, parser.readAvailable(source::readAvailable));
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {false, true})
     void pollingHttp1RetainsBodyAndTrailerStateAcrossEveryInputSplit(boolean chunked) throws Exception {
         String encoded = chunked ? "3\r\nabc\r\n2\r\nde\r\n0\r\nx-check: yes\r\n\r\n" : "abcde";
         byte[] bytes = encoded.getBytes(StandardCharsets.US_ASCII);

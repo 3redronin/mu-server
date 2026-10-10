@@ -9,6 +9,8 @@ import java.io.InputStreamReader;
 import java.net.URI;
 import java.nio.charset.Charset;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 import static java.lang.Math.min;
 
@@ -358,18 +360,37 @@ class Mu3Request implements MuRequest {
         try {
             if (body instanceof Http1BodyStream) {
                 var http1Body = (Http1BodyStream) body;
-                boolean throwIfTooBig = !Objects.requireNonNull(response, "The response has not been initialized").status()
-                    .sameCode(HttpStatus.CONTENT_TOO_LARGE_413);
-                var bodyState = http1Body.discardRemaining(throwIfTooBig);
+                var bodyState = http1Body.discardRemaining(throwIfBodyTooBig());
                 return bodyState == Http1BodyStream.State.EOF && !http1Body.tooBig();
             } else {
                 return true;
             }
         } finally {
-            if (form instanceof MultipartForm) {
-                ((MultipartForm) form).cleanup();
-            }
+            cleanupForm();
         }
+    }
+
+    /** Optional channel cleanup; its completed result replaces the subsequent blocking cleanup call. */
+    @Nullable CompletableFuture<Boolean> cleanupAsynchronously(HttpStatus responseStatus) {
+        if (!(body instanceof Http1BodyStream)) return null;
+        var http1Body = (Http1BodyStream) body;
+        if (http1Body.asynchronousInput() == null) return null;
+        boolean throwIfTooBig = !responseStatus.sameCode(HttpStatus.CONTENT_TOO_LARGE_413);
+        return new Http1BodyDiscarder(serverImpl(), http1Body, throwIfTooBig).start().handle((state, failure) -> {
+            try {
+                if (failure != null) throw new CompletionException(failure);
+                return state == Http1BodyStream.State.EOF && !http1Body.tooBig();
+            } finally { cleanupForm(); }
+        });
+    }
+
+    private boolean throwIfBodyTooBig() {
+        return !Objects.requireNonNull(response, "The response has not been initialized").status()
+            .sameCode(HttpStatus.CONTENT_TOO_LARGE_413);
+    }
+
+    private void cleanupForm() {
+        if (form instanceof MultipartForm) ((MultipartForm) form).cleanup();
     }
 
     public boolean completedSuccessfully() {

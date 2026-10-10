@@ -224,9 +224,24 @@ class Http1Connection extends BaseHttpConnection {
 
     private void finishExchangeLater(Exchange exchange, @Nullable Boolean accepted, @Nullable Throwable failure,
                                       CompletableFuture<ExchangeResult> completion) {
+        finishExchangeLater(exchange, accepted, failure, completion, true);
+    }
+
+    private void finishExchangeLater(Exchange exchange, @Nullable Boolean accepted, @Nullable Throwable failure,
+                                      CompletableFuture<ExchangeResult> completion, boolean prepareCleanup) {
         try {
             server.executeInternalTask(() -> {
-                try { completion.complete(exchange.finish(accepted, failure)); }
+                try {
+                    if (prepareCleanup) {
+                        CompletableFuture<Boolean> cleanup = exchange.startCleanup(accepted, failure);
+                        if (cleanup != null && !cleanup.isDone()) {
+                            cleanup.whenComplete((ignored, cleanupFailure) ->
+                                finishExchangeLater(exchange, accepted, failure, completion, false));
+                            return;
+                        }
+                    }
+                    completion.complete(exchange.finish(accepted, failure));
+                }
                 catch (Throwable error) {
                     completion.completeExceptionally(error);
                     FatalErrors.rethrow(error);
@@ -364,6 +379,8 @@ class Http1Connection extends BaseHttpConnection {
         final boolean requestedClose;
         final @Nullable HttpException rejection;
         boolean started;
+        private boolean invalidRequestRecorded;
+        private @Nullable CompletableFuture<Boolean> completedCleanup;
 
         Exchange(Mu3Request request, Http1Response response, OutputStream output,
                  boolean requestedClose, @Nullable HttpException rejection) {
@@ -379,6 +396,26 @@ class Http1Connection extends BaseHttpConnection {
             onRequestStarted(request);
             started = true;
             return handleExchangeOnHandlerExecutor(request, response);
+        }
+
+        @Nullable CompletableFuture<Boolean> startCleanup(@Nullable Boolean accepted, @Nullable Throwable failure) {
+            recordRejection();
+            // Preserve rejection paths whose peers may never send a body (notably Expect requests).
+            if (failure != null || Boolean.FALSE.equals(accepted)
+                || (rejection != null && rejection.responseHeaders().closeConnectionRequested(request.httpVersion()))) return null;
+            try { completedCleanup = request.cleanupAsynchronously(rejection == null ? response.status() : rejection.status()); }
+            catch (Throwable cleanupFailure) {
+                completedCleanup = new CompletableFuture<>();
+                completedCleanup.completeExceptionally(cleanupFailure);
+            }
+            return completedCleanup;
+        }
+
+        private void recordRejection() {
+            if (rejection != null && !invalidRequestRecorded) {
+                invalidRequestRecorded = true;
+                onInvalidRequest(rejection);
+            }
         }
 
         /** Retirement still releases admission when shutdown prevents scheduling normal cleanup. */
@@ -398,7 +435,7 @@ class Http1Connection extends BaseHttpConnection {
         ExchangeResult finish(@Nullable Boolean accepted, @Nullable Throwable failure) throws IOException {
             boolean closeConnection = requestedClose;
             if (rejection != null) {
-                onInvalidRequest(rejection);
+                recordRejection();
                 String rejectReason = rejection.getMessage() != null ? rejection.getMessage() : rejection.status().toString();
                 var rejectedRequest = new RejectedRequestImpl(rejection.status().code(), rejectReason,
                     request.method().name(), request.uri().toString(), Http1Connection.this);
@@ -410,7 +447,7 @@ class Http1Connection extends BaseHttpConnection {
                         // An Expect peer may never send its rejected body.
                         response.cleanup();
                         closeConnection = true;
-                    } else closeConnection = cleanUpNicely(closeConnection, response, request);
+                    } else closeConnection = cleanUpNicely(closeConnection, response, request, completedCleanup);
                 } finally { server.onRequestRejected(rejectedRequest); }
             } else {
                 boolean rejectedByHandlerExecutor = failure == null && Boolean.FALSE.equals(accepted);
@@ -418,7 +455,7 @@ class Http1Connection extends BaseHttpConnection {
                     if (failure != null) throw failure;
                     closeConnection = rejectedByHandlerExecutor
                         ? rejectRequestDueToHandlerOverload(request, output)
-                        : cleanUpNicely(closeConnection, response, request);
+                        : cleanUpNicely(closeConnection, response, request, completedCleanup);
                 } catch (Throwable error) {
                     if (error instanceof InterruptedException) Thread.currentThread().interrupt();
                     FatalErrors.rethrow(error);
@@ -527,7 +564,8 @@ class Http1Connection extends BaseHttpConnection {
         );
     }
 
-    private boolean cleanUpNicely(Boolean closeConnection, Http1Response muResponse, Mu3Request muRequest) {
+    private boolean cleanUpNicely(Boolean closeConnection, Http1Response muResponse, Mu3Request muRequest,
+                                  @Nullable CompletableFuture<Boolean> completedCleanup) {
         var reallyClose = closeConnection;
         if (!reallyClose) {
             reallyClose = muResponse.headers().closeConnectionRequested(muRequest.httpVersion());
@@ -536,7 +574,10 @@ class Http1Connection extends BaseHttpConnection {
             reallyClose = true;
         }
         try {
-            if (!muRequest.cleanup()) {
+            // The async result retains exceptions as well as false results: they historically
+            // have different effects on completion of an already-started response.
+            if (completedCleanup != null && !completedCleanup.isDone()) throw new IllegalStateException("Body cleanup is still pending");
+            if (!(completedCleanup == null ? muRequest.cleanup() : cleanupResult(completedCleanup))) {
                 reallyClose = true;
                 if (!muRequest.completedSuccessfully() && muResponse.hasStartedSendingData()) {
                     // A malformed upload cannot turn an already-started response into
@@ -555,6 +596,17 @@ class Http1Connection extends BaseHttpConnection {
             reallyClose = true;
         }
         return reallyClose;
+    }
+
+    private static boolean cleanupResult(CompletableFuture<Boolean> completed) {
+        try { return completed.join(); }
+        catch (CompletionException failure) {
+            Throwable cause = failure;
+            while (cause instanceof CompletionException && cause.getCause() != null) cause = cause.getCause();
+            // A future must not turn a fatal/unchecked Error into the ordinary cleanup-exception path.
+            if (cause instanceof Error) throw (Error) cause;
+            throw failure;
+        }
     }
 
     @Override

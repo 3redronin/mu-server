@@ -74,7 +74,7 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
         private boolean stopRequested;
         private boolean stopInitialized;
         private @Nullable Throwable stopFailure;
-        private @Nullable BodyReadWait waiting;
+        private @Nullable InputWait waiting;
         private @Nullable Throwable readFailure;
         private boolean readTimedOut;
 
@@ -152,7 +152,7 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
         }
 
         private void awaitInput(AsyncBodyInput input) {
-            BodyReadWait next = new BodyReadWait(input.whenReadable());
+            InputWait next = new InputWait(input.whenReadable());
             long timeoutMillis = input.readTimeoutMillis();
             synchronized (ownership) {
                 if (!finished.get()) waiting = next;
@@ -161,45 +161,23 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
                 next.cancel();
                 return;
             }
-            next.readiness.whenComplete((ignored, failure) -> next.resume(failure, false));
-            if (timeoutMillis > 0 && !next.claimed.get()) {
-                try {
-                    next.timer = server.scheduleTimerCallback(() -> next.resume(null, true), timeoutMillis, TimeUnit.MILLISECONDS);
-                    // Input or cancellation can win before the timer has been published.
-                    if (next.claimed.get()) next.timer.cancel(false);
-                } catch (RejectedExecutionException rejected) { next.resume(rejected, false); }
-            }
+            next.start(timeoutMillis, (task, timeout) -> server.scheduleTimerCallback(task, timeout, TimeUnit.MILLISECONDS),
+                (failure, timedOut) -> resume(next, failure, timedOut));
         }
 
-        private final class BodyReadWait {
-            final CompletableFuture<Void> readiness;
-            final AtomicBoolean claimed = new AtomicBoolean();
-            volatile @Nullable ScheduledFuture<?> timer;
-
-            BodyReadWait(CompletableFuture<Void> readiness) { this.readiness = readiness; }
-
-            void resume(@Nullable Throwable failure, boolean timedOut) {
-                if (!claimed.compareAndSet(false, true)) return;
-                cancel();
-                synchronized (ownership) {
-                    if (waiting != this || finished.get()) return;
-                    waiting = null;
-                    readFailure = failure;
-                    readTimedOut = timedOut;
-                }
-                scheduleNextRead();
+        @SuppressWarnings("ReferenceEquality") // Only the currently owned wait can resume this reader.
+        private void resume(InputWait ready, @Nullable Throwable failure, boolean timedOut) {
+            synchronized (ownership) {
+                if (waiting != ready || finished.get()) return;
+                waiting = null;
+                readFailure = failure;
+                readTimedOut = timedOut;
             }
-
-            void cancel() {
-                claimed.set(true);
-                readiness.cancel(false);
-                ScheduledFuture<?> scheduled = timer;
-                if (scheduled != null) scheduled.cancel(false);
-            }
+            scheduleNextRead();
         }
 
         private CompletableFuture<Void> stop() {
-            BodyReadWait pending;
+            InputWait pending;
             synchronized (ownership) {
                 if (stopRequested) return stopped;
                 stopRequested = true;

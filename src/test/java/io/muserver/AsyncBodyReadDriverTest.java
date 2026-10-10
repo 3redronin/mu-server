@@ -17,6 +17,99 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Timeout(20)
 class AsyncBodyReadDriverTest {
+    @ParameterizedTest @ValueSource(strings = {"plain-fixed-sync", "plain-chunked-sync", "tls-fixed-sync", "tls-chunked-sync",
+        "plain-fixed-async", "plain-chunked-async", "tls-fixed-async", "tls-chunked-async"})
+    void unreadHttp1BodiesDrainWithoutWorkersAndPreserveTheNextPipelinedRequest(String mode) throws Exception {
+        boolean chunked = mode.contains("chunked");
+        var cleaned = new AtomicInteger();
+        try (var fixture = new Fixture(mode.startsWith("tls"), (request, response) -> {
+            response.status(request.uri().getPath().equals("/next") ? 202 : 204);
+            if (request.method() == Method.POST) {
+                response.addCompletionListener(result -> {
+                    assertTrue(result.completedSuccessfully());
+                    if (chunked) assertEquals("yes", request.trailers().get("x-finished"));
+                    cleaned.incrementAndGet();
+                });
+                if (mode.endsWith("async")) request.handleAsync().complete();
+            }
+            return true;
+        })) {
+            List<scaffolding.Http1Client> clients = new ArrayList<>();
+            List<Deadline> deadlines = new ArrayList<>();
+            try {
+                for (int i = 0; i < 8; i++) {
+                    var client = fixture.connectHttp1();
+                    clients.add(client);
+                    client.writeRequestLine(Method.POST, "/")
+                        .writeHeader(chunked ? "Transfer-Encoding" : "Content-Length", chunked ? "chunked" : "3").flushHeaders();
+                    deadlines.add(fixture.timer.next());
+                }
+                fixture.barrier();
+                assertEquals(8, fixture.server.stats().activeRequests().size());
+                try (var healthy = fixture.connectHttp1()) {
+                    healthy.writeRequestLine(Method.GET, "/").writeHeader("Connection", "close").flushHeaders();
+                    assertEquals("HTTP/1.1 204 No Content", healthy.readLine());
+                    healthy.readHeaders();
+                    assertEquals(-1, healthy.in().read());
+                }
+                for (var client : clients) {
+                    client.writeAscii(chunked ? "1\r\na\r\n2\r\nbc\r\n0\r\nx-finished: yes\r\n\r\n" : "abc")
+                        .writeAscii("GET /next HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").flush();
+                }
+                for (var client : clients) {
+                    assertEquals("HTTP/1.1 204 No Content", client.readLine());
+                    client.readHeaders();
+                    assertEquals("HTTP/1.1 202 Accepted", client.readLine());
+                    assertEquals("", client.readBody(client.readHeaders()));
+                    assertEquals(-1, client.in().read());
+                }
+                fixture.barrier();
+                assertEquals(8, cleaned.get());
+                assertEquals(17, fixture.server.stats().completedRequests());
+                for (Deadline deadline : deadlines) {
+                    assertTrue(deadline.future.isCancelled());
+                    deadline.task.run();
+                }
+                fixture.barrier();
+                assertEquals(17, fixture.server.stats().completedRequests());
+            } finally { for (var client : clients) client.close(); }
+        }
+    }
+
+    @ParameterizedTest @ValueSource(strings = {"timeout", "timer-rejected", "worker-rejected", "eof", "shutdown"})
+    void failedHttp1DiscardRetiresItsExchange(String ending) throws Exception {
+        var completed = new CompletableFuture<ResponseInfo>();
+        try (var fixture = new Fixture(false, (request, response) -> {
+            response.status(204);
+            response.addCompletionListener(completed::complete);
+            return true;
+        }); var client = fixture.connectHttp1()) {
+            fixture.timer.rejectBodyDeadline = ending.equals("timer-rejected");
+            client.writeRequestLine(Method.POST, "/").writeHeader("Content-Length", 3).flushHeaders();
+            Deadline deadline = ending.equals("timer-rejected") ? null : fixture.timer.next();
+            fixture.barrier();
+            switch (ending) {
+                case "timeout": deadline.task.run(); break;
+                case "timer-rejected": break;
+                case "worker-rejected":
+                    fixture.internal.shutdown();
+                    assertTrue(fixture.internal.awaitTermination(3, TimeUnit.SECONDS));
+                    client.writeAscii("a").flush();
+                    break;
+                case "eof": client.shutdownOutput(); break;
+                case "shutdown": fixture.server.stop(0, TimeUnit.MILLISECONDS); break;
+                default: throw new AssertionError(ending);
+            }
+            assertFalse(completed.get(3, TimeUnit.SECONDS).completedSuccessfully());
+            if (ending.equals("timeout") || ending.equals("timer-rejected")) {
+                assertEquals("HTTP/1.1 204 No Content", client.readLine());
+                client.readHeaders();
+            }
+            assertEquals(-1, client.in().read());
+            if (deadline != null) assertTrue(deadline.future.isCancelled());
+        }
+    }
+
     @ParameterizedTest @ValueSource(strings = {"plain-fixed", "plain-chunked", "tls-fixed", "tls-chunked"})
     void stalledHttp1BodiesReleaseTheWorkerAndResumeThroughTheirExistingFraming(String mode) throws Exception {
         boolean chunked = mode.endsWith("chunked");
