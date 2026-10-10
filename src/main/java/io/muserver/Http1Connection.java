@@ -82,10 +82,10 @@ class Http1Connection extends BaseHttpConnection {
         }
     }
 
-    Http1Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket,
+    Http1Connection(Mu3ServerImpl server, ConnectionAcceptor creator, Socket clientSocket, Socket transportSocket,
                     @Nullable Certificate clientCertificate, ConnectionAcceptedTime acceptedTime,
                     @Nullable ProxiedConnectionInfo proxyInfo, ExecutorService handlerExecutor) {
-        super(server, creator, clientSocket, clientCertificate, acceptedTime, proxyInfo);
+        super(server, creator, clientSocket, transportSocket, clientCertificate, acceptedTime, proxyInfo);
         this.handlerExecutor = handlerExecutor;
     }
 
@@ -420,6 +420,7 @@ class Http1Connection extends BaseHttpConnection {
                 new MuException("Connection aborted")
             );
             state.set(HttpConnectionState.CLOSED);
+            forceTransportCloseAndReleaseWebsocket();
             clientSocket.close();
         } else {
             state.set(HttpConnectionState.CLOSED);
@@ -435,6 +436,7 @@ class Http1Connection extends BaseHttpConnection {
             );
             notifyWebsocketTimeout();
             state.set(HttpConnectionState.CLOSED);
+            forceTransportCloseAndReleaseWebsocket();
             clientSocket.close();
         } else {
             state.set(HttpConnectionState.CLOSED);
@@ -462,12 +464,18 @@ class Http1Connection extends BaseHttpConnection {
     @Override
     void forceShutdown() {
         state.set(HttpConnectionState.CLOSED);
-        try {
-            // A forced TLS close must not wait for an unfinished upload or the peer's close_notify.
-            clientSocket.shutdownInput();
-        } catch (IOException ignored) {
-        }
+        forceTransportCloseAndReleaseWebsocket();
         closeTransportQuietly();
+    }
+
+    private void forceTransportCloseAndReleaseWebsocket() {
+        var cur = activeExchange.get();
+        // Close the raw socket before releasing a reader that may close the TLS wrapper
+        // in its finally block. Otherwise wrapper closure could wait behind a stalled write.
+        forceTransportClose();
+        if (cur != null && cur.websocket != null) {
+            cur.websocket.onTransportClosed();
+        }
     }
 
     private void requestLocalShutdown() {

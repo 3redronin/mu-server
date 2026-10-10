@@ -273,6 +273,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         Mu3ServerImpl server,
         ConnectionAcceptor creator,
         Socket clientSocket,
+        Socket transportSocket,
         @Nullable Certificate clientCertificate,
         ConnectionAcceptedTime acceptedTime,
         @Nullable ProxiedConnectionInfo proxyInfo,
@@ -281,7 +282,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         ExecutorService handlerExecutor,
         ExecutorService writerExecutor
     ) {
-        super(server, creator, clientSocket, clientCertificate, acceptedTime, proxyInfo);
+        super(server, creator, clientSocket, transportSocket, clientCertificate, acceptedTime, proxyInfo);
         this.serverSettings = initialServerSettings;
         this.settingsAckTimeoutMillis = settingsAckTimeoutMillis;
         this.handlerExecutor = handlerExecutor;
@@ -1703,6 +1704,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             stream.onConnectionTerminated(reason, terminalState);
         }
         signalWriteLoop();
+        forceTransportClose();
         closeSocketQuietly();
     }
 
