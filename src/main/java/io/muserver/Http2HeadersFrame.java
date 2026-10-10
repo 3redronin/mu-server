@@ -11,8 +11,6 @@ import java.util.Objects;
  */
 class Http2HeadersFrame implements LogicalHttp2Frame {
 
-    private static final int MAX_EMPTY_CONTINUATION_FRAMES = 128;
-
     private final int streamId;
     private final boolean endStream;
     private final FieldBlock headers;
@@ -52,165 +50,16 @@ class Http2HeadersFrame implements LogicalHttp2Frame {
         InputStream clientIn,
         int maxBufferedFieldBlockSize
     ) throws HttpException, Http2Exception, IOException {
-        if (maxBufferedFieldBlockSize < 1) {
-            throw new IllegalArgumentException(
-                "The maximum buffered field block size must be positive"
-            );
+        Http2HeaderBlockDecoder decoder = new Http2HeaderBlockDecoder(frameHeader, fieldBlockDecoder, maxBufferedFieldBlockSize);
+        Http2HeadersFrame decoded = decoder.payload(buffer);
+        while (decoded == null) {
+            Mutils.readAtLeast(buffer, clientIn, Http2FrameHeader.FRAME_HEADER_LENGTH);
+            Http2FrameHeader continuation = Http2FrameHeader.readFrom(buffer);
+            decoder.continuation(continuation);
+            Mutils.readAtLeast(buffer, clientIn, continuation.length());
+            decoded = decoder.payload(buffer);
         }
-        // figure out the fields
-        var priority = (frameHeader.flags() & 0b00100000) > 0;
-        var padded = (frameHeader.flags() & 0b00001000) > 0;
-        var endHeaders = (frameHeader.flags() & 0b00000100) > 0;
-        var endStream = (frameHeader.flags() & 0b0000001) > 0;
-        int hpackLength = frameHeader.length();
-        Http2Exception deferredStreamError = null;
-
-        int padLength = 0;
-        if (padded) {
-            if (hpackLength < 1) {
-                throw Http2Exception.connection(Http2ErrorCode.FRAME_SIZE_ERROR, "HEADERS frame missing pad length");
-            }
-            padLength = buffer.get() & 0xff;
-            hpackLength -= 1;
-            if (padLength > hpackLength) {
-                throw Http2Exception.connection(Http2ErrorCode.PROTOCOL_ERROR, "padding is longer than remaining payload");
-            }
-            hpackLength -= padLength;
-        }
-
-        if (priority) {
-            if (hpackLength < 5) {
-                throw Http2Exception.connection(Http2ErrorCode.FRAME_SIZE_ERROR, "HEADERS priority fields require 5 bytes");
-            }
-            hpackLength -= 5;
-            int streamDependency = buffer.getInt() & 0x7FFFFFFF;
-            buffer.get();
-            if (streamDependency == frameHeader.streamId()) {
-                // This is a stream error, so the connection remains usable. Consume and
-                // decode the complete field block before throwing to preserve HPACK state
-                // and leave the reader positioned at the next frame.
-                deferredStreamError = Http2Exception.stream(
-                    Http2ErrorCode.PROTOCOL_ERROR,
-                    "HEADERS stream cannot depend on itself",
-                    frameHeader.streamId()
-                );
-            }
-        }
-
-        // add name/value strings as:
-        FieldBlock headers;
-
-        NiceByteArrayOutputStream baos = null;
-        HttpException invalidRequestException = null;
-
-        if (endHeaders) {
-            if (hpackLength > 0) {
-                var slice = buffer.slice().limit(hpackLength);
-                try {
-                    headers = fieldBlockDecoder.decodeFrom(slice);
-                } catch (HttpException e) {
-                    // we need to process everything and get the buffer in the right place, which is why it is not thrown
-                    invalidRequestException = e;
-                    headers = new FieldBlock();
-                }
-            } else {
-                headers = new FieldBlock();
-            }
-        } else {
-            requireFieldBlockCapacity(
-                0,
-                hpackLength,
-                maxBufferedFieldBlockSize
-            );
-            baos = new NiceByteArrayOutputStream(
-                Math.min(
-                    maxBufferedFieldBlockSize,
-                    Math.max(32, hpackLength)
-                )
-            );
-            if (hpackLength > 0) {
-                if (buffer.hasArray()) {
-                    baos.write(buffer.array(), buffer.arrayOffset() + buffer.position(), hpackLength);
-                } else {
-                    // TODO: support non-array buffer
-                    throw new IllegalStateException("Not supported");
-                }
-            }
-            headers = null;
-        }
-        buffer.position(buffer.position() + hpackLength);
-
-        if (padLength > 0) {
-            buffer.position(buffer.position() + padLength);
-        }
-
-        if (baos != null) {
-            var ended = false;
-            int emptyContinuationCount = 0;
-            while (!ended) {
-                Mutils.readAtLeast(buffer, clientIn, Http2FrameHeader.FRAME_HEADER_LENGTH);
-                var hf = Http2FrameHeader.readFrom(buffer);
-                if (hf.frameType() != Http2FrameType.CONTINUATION) {
-                    throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "invalid frame type: expected CONTINUATION");
-                }
-                if (hf.streamId() != frameHeader.streamId()) {
-                    throw new Http2Exception(Http2ErrorCode.PROTOCOL_ERROR, "stream id mismatch");
-                }
-                // Data-bearing fragments are bounded by maxBufferedFieldBlockSize; empty ones are not.
-                if (hf.length() == 0 && ++emptyContinuationCount > MAX_EMPTY_CONTINUATION_FRAMES) {
-                    throw Http2Exception.connection(Http2ErrorCode.COMPRESSION_ERROR,
-                        "Too many empty CONTINUATION frames in one field block");
-                }
-                requireFieldBlockCapacity(
-                    baos.size(),
-                    hf.length(),
-                    maxBufferedFieldBlockSize
-                );
-                Mutils.readAtLeast(buffer, clientIn, hf.length());
-                if (buffer.hasArray()) {
-                    baos.write(
-                        buffer.array(),
-                        buffer.arrayOffset() + buffer.position(),
-                        hf.length()
-                    );
-                    buffer.position(buffer.position() + hf.length());
-                } else {
-                    throw new IllegalStateException("Not supported");
-                }
-                ended = (hf.flags() & 0b00000100) > 0;
-            }
-            try {
-                headers = fieldBlockDecoder.decodeFrom(baos.toByteBuffer());
-            } catch (HttpException e) {
-                invalidRequestException = e;
-                headers = new FieldBlock();
-            }
-        }
-
-        if (deferredStreamError != null) {
-            throw deferredStreamError;
-        }
-        if (invalidRequestException != null) {
-            throw invalidRequestException;
-        }
-
-        return new Http2HeadersFrame(frameHeader.streamId(), endStream, java.util.Objects.requireNonNull(headers));
-    }
-
-    private static void requireFieldBlockCapacity(
-        int currentSize,
-        int fragmentSize,
-        int maximumSize
-    ) throws Http2Exception {
-        if (fragmentSize > maximumSize - currentSize) {
-            // RFC 9113 Sections 4.3 and 10.5.1 require either processing the
-            // complete field block or closing the connection. Closing bounds
-            // memory without leaving the shared HPACK context inconsistent.
-            throw Http2Exception.connection(
-                Http2ErrorCode.COMPRESSION_ERROR,
-                "Encoded field block exceeds the configured buffering limit"
-            );
-        }
+        return decoded;
     }
 
     @Override
