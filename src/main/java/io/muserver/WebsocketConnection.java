@@ -8,10 +8,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.net.ProtocolException;
 import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
-import java.nio.charset.CharacterCodingException;
 import java.nio.charset.StandardCharsets;
 import java.util.Queue;
 import java.util.Objects;
@@ -49,12 +47,7 @@ class WebsocketConnection implements MuWebSocketSession {
     private volatile boolean closeSent = false;
     private final Lock writeLock = new ReentrantLock();
     private final @Nullable WebsocketPingTracker pingTracker;
-    private ReadState readState = ReadState.NONE;
     private volatile @Nullable ScheduledFuture<?> pingFuture;
-
-    private enum ReadState {
-        NONE, TEXT, BINARY
-    }
 
     @FunctionalInterface
     private interface ApplicationEvent {
@@ -134,155 +127,21 @@ class WebsocketConnection implements MuWebSocketSession {
                 startPinging();
             }
 
-            long messageLength = 0;
-            var utf8 = new WebsocketUtf8Validator();
+            var decoder = new WebsocketFrameDecoder(settings.maxFramePayloadLength, settings.maxMessageLength);
             while (!closeReceived) {
-
-                // make sure we at least have the minimum sized buffer
-                readAtLeast(2);
-                int firstByte = buffer.get() & 0xFF;
-                boolean fin = (firstByte & 0x80) != 0;
-                boolean rsv1 = (firstByte & 0x40) != 0;
-                boolean rsv2 = (firstByte & 0x20) != 0;
-                boolean rsv3 = (firstByte & 0x10) != 0;
-                if (rsv1 || rsv2 || rsv3) {
-                    throw frameError(1002, "Unsupported websocket reserved keywords");
+                WebsocketFrameDecoder.Frame frame;
+                try {
+                    frame = decoder.decode(readBuffer);
+                } catch (WebsocketFrameDecoder.InvalidFrame invalid) {
+                    close(invalid.closeCode, invalid.getMessage());
+                    throw invalid;
                 }
-
-                int opcode = firstByte & 0x0F;
-                if (opcode > 0x2 && opcode != 0x8 && opcode != 0x9 && opcode != 0xA) {
-                    throw frameError(1002, "Unsupported websocket opcode: " + opcode);
+                if (frame == null) {
+                    readAtLeast(1);
+                    continue;
                 }
-
-                int secondByte = buffer.get() & 0xFF;
-                boolean masked = (secondByte & 0x80) != 0;
-                long payloadLength = secondByte & 0b01111111;
-
-                if (!masked) {
-                    throw frameError(1002, "Unmasked client data");
-                }
-                if (payloadLength == 126) {
-                    readAtLeast(2);
-                    payloadLength = buffer.getShort() & 0xFFFF;
-                } else if (payloadLength == 127) {
-                    readAtLeast(8);
-                    payloadLength = buffer.getLong();
-                }
-                if (payloadLength < 0) {
-                    throw frameError(1002, "Invalid payload length");
-                }
-
-                boolean controlFrame = (opcode & 0x08) != 0;
-                if (controlFrame) {
-                    if (!fin) {
-                        throw frameError(1002, "Fragmented control frame");
-                    }
-                    if (payloadLength > 125) {
-                        throw frameError(1002, "Control frame payload cannot exceed 125 bytes");
-                    }
-                }
-                if (payloadLength > settings.maxFramePayloadLength) {
-                    throw frameError(1009, "Max payload length of " + settings.maxFramePayloadLength + " exceeded with frame size " + payloadLength);
-                }
-                if (messageLength + payloadLength > settings.maxMessageLength) {
-                    throw frameError(1009, "Max message length of " + settings.maxMessageLength + " exceeded");
-                }
-
-                if (opcode == 0x0 && readState == ReadState.NONE) {
-                    throw frameError(1002, "Continuation frame received unexpectedly");
-                }
-                if (opcode == 0x1 && readState != ReadState.NONE) {
-                    throw frameError(1002, "New text message sent while expecting continuation frame");
-                }
-                if (opcode == 0x2 && readState != ReadState.NONE) {
-                    throw frameError(1002, "New binary message received while expecting continuation frame");
-                }
-                boolean textPayload = opcode == 0x1 || (opcode == 0x0 && readState == ReadState.TEXT);
-                if (opcode == 0x1) utf8.reset();
-
-                byte[] maskingKey = new byte[4];
-                readAtLeast(4);
-                buffer.get(maskingKey, 0, 4);
-
-                // in practice, the max length is an int so fits in a byte array
-                int payloadLen = (int) payloadLength;
-                var slice = readAndUnmaskPayload(payloadLen, maskingKey, 0, textPayload ? utf8 : null);
-                if (textPayload && fin && !utf8.isComplete()) {
-                    throw frameError(1007, "Non UTF-8 data in text frame");
-                }
-
-
-                if (closeReceived) {
-                } else if (opcode == 0x0) {
-                    // continuation frame
-                    messageLength += payloadLength;
-                    if (readState == ReadState.TEXT) {
-                        invokeApplicationEvent(() -> webSocket.onTextFragment(slice, fin));
-                    } else if (readState == ReadState.BINARY) {
-                        invokeApplicationEvent(() -> webSocket.onBinaryFragment(slice, fin));
-                    } else {
-                        throw frameError(1002, "Continuation frame received unexpectedly");
-                    }
-                    if (fin) {
-                        messageLength = 0L;
-                        readState = ReadState.NONE;
-                    }
-                } else if (opcode == 0x1) {
-                    // text frame
-                    messageLength = payloadLength;
-                    if (fin) {
-                        var text = StandardCharsets.UTF_8.newDecoder().decode(slice).toString();
-                        invokeApplicationEvent(() -> webSocket.onText(text));
-                    } else {
-                        readState = ReadState.TEXT;
-                        invokeApplicationEvent(() -> webSocket.onTextFragment(slice, false));
-                    }
-                } else if (opcode == 0x2) {
-                    // binary frame
-                    messageLength = payloadLength;
-                    if (fin) {
-                        invokeApplicationEvent(() -> webSocket.onBinary(slice));
-                    } else {
-                        readState = ReadState.BINARY;
-                        invokeApplicationEvent(() -> webSocket.onBinaryFragment(slice, false));
-                    }
-                } else if (opcode == 0x8) {
-                    if (payloadLen == 1) {
-                        throw frameError(1002, "Close frame payload of 1 byte is invalid");
-                    }
-                    // Validate the entire close payload before publishing a peer close.
-                    int closeCode;
-                    String reason = "";
-                    if (payloadLen >= 2) {
-                        closeCode = slice.getShort() & 0xFFFF;
-                        // RFC 6455 section 7.4 and the registered 1012-1014 codes.
-                        // 1004-1006 and 1015 are reserved; no extension defines 1016-2999 here.
-                        if (closeCode < 1000 || closeCode >= 5000
-                            || (closeCode >= 1004 && closeCode <= 1006)
-                            || (closeCode >= 1015 && closeCode < 3000)) {
-                            throw frameError(1002, "Invalid websocket close code: " + closeCode);
-                        }
-                        if (slice.hasRemaining()) {
-                            try {
-                                reason = StandardCharsets.UTF_8.newDecoder().decode(slice).toString();
-                            } catch (CharacterCodingException invalidReason) {
-                                throw frameError(1007, "Non UTF-8 data in close reason");
-                            }
-                        }
-                    } else {
-                        closeCode = 1005;
-                    }
-                    lifecycle.onClientCloseStarted();
-                    closeReceived = true;
-                    String closeReason = reason;
-                    invokeApplicationEvent(() -> webSocket.onClientClosed(closeCode, closeReason));
-                    completeCloseHandshakeIfCloseSent();
-                } else if (opcode == 0x9) {
-                    invokeApplicationEvent(() -> webSocket.onPing(slice));
-                } else if (opcode == 0xA) {
-                    invokeApplicationEvent(() -> webSocket.onPong(slice));
-                }
-
+                invokeApplicationEvent(frameEvent(frame));
+                if (closeReceived) completeCloseHandshakeIfCloseSent();
             }
 
             // it's finished - the TCP connection will be closed
@@ -319,48 +178,31 @@ class WebsocketConnection implements MuWebSocketSession {
         }
     }
 
-    private void unmask(ByteBuffer buffer, byte[] maskingKey, int start, int length, int maskOffset,
-                        @Nullable WebsocketUtf8Validator utf8) throws IOException {
-        int offset = buffer.position() + start;
-        for (int i = 0; i < length; i++) {
-            int pos = offset + i;
-            byte unmasked = (byte) (buffer.get(pos) ^ maskingKey[(maskOffset + i) & 3]);
-            buffer.put(pos, unmasked);
-            if (utf8 != null && !utf8.accept(unmasked & 0xFF)) {
-                throw frameError(1007, "Non UTF-8 data in text frame");
-            }
-        }
-    }
-
-    private ByteBuffer readAndUnmaskPayload(int len, byte[] maskingKey, int maskOffset,
-                                           @Nullable WebsocketUtf8Validator utf8) throws IOException {
-        ByteBuffer readBuffer = java.util.Objects.requireNonNull(buffer);
-        if (len <= readBuffer.capacity()) {
-            int processed = 0;
-            while (processed < len) {
-                // Text must be validated after each read, before waiting for the rest of a frame.
-                // Preserve the buffer slice and whole-frame callback behavior for applications.
-                readAtLeast(utf8 == null ? len : processed + 1);
-                int available = Math.min(len, readBuffer.remaining()) - processed;
-                unmask(readBuffer, maskingKey, processed, available, maskOffset + processed, utf8);
-                processed += available;
-            }
-            var tempLimit = readBuffer.limit();
-            readBuffer.limit(readBuffer.position() + len);
-            var slice = readBuffer.slice();
-            readBuffer.position(readBuffer.limit());
-            readBuffer.limit(tempLimit);
-            return slice;
-        } else {
-            var full = ByteBuffer.allocate(len);
-            var toRead = len;
-            while (toRead > 0) {
-                int nextLen = Math.min(toRead, readBuffer.capacity());
-                var slice = readAndUnmaskPayload(nextLen, maskingKey, maskOffset + len - toRead, utf8);
-                full.put(slice);
-                toRead = toRead - nextLen;
-            }
-            return full.flip();
+    /** Called by the serial reader after the complete frame has been validated. */
+    private ApplicationEvent frameEvent(WebsocketFrameDecoder.Frame frame) {
+        switch (frame.opcode) {
+            case 0:
+                return frame.text
+                    ? () -> webSocket.onTextFragment(frame.payload, frame.fin)
+                    : () -> webSocket.onBinaryFragment(frame.payload, frame.fin);
+            case 1:
+                return frame.fin
+                    ? () -> webSocket.onText(StandardCharsets.UTF_8.decode(frame.payload).toString())
+                    : () -> webSocket.onTextFragment(frame.payload, false);
+            case 2:
+                return frame.fin
+                    ? () -> webSocket.onBinary(frame.payload)
+                    : () -> webSocket.onBinaryFragment(frame.payload, false);
+            case 8:
+                lifecycle.onClientCloseStarted();
+                closeReceived = true;
+                return () -> webSocket.onClientClosed(frame.closeCode, frame.closeReason);
+            case 9:
+                return () -> webSocket.onPing(frame.payload);
+            case 10:
+                return () -> webSocket.onPong(frame.payload);
+            default:
+                throw new IllegalStateException("Unexpected decoded opcode: " + frame.opcode);
         }
     }
 
@@ -397,11 +239,6 @@ class WebsocketConnection implements MuWebSocketSession {
             }
             readBuffer.limit(readBuffer.limit() + read);
         }
-    }
-
-    private ProtocolException frameError(int code, String reason) throws IOException {
-        close(code, reason);
-        return new ProtocolException(reason);
     }
 
     private void completeCloseHandshakeIfCloseSent() {

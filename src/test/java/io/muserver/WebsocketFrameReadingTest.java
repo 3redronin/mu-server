@@ -4,6 +4,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -13,6 +14,7 @@ import static io.muserver.MuServerBuilder.httpServer;
 import static io.muserver.WebSocketHandlerBuilder.webSocketHandler;
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static scaffolding.MuAssert.assertEventually;
 
 @Timeout(15)
@@ -41,6 +43,55 @@ class WebsocketFrameReadingTest {
     @AfterEach
     void stop() {
         if (server != null) server.stop();
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void messageLimitsResetAndControlFramesDoNotConsumeMessageBudget(boolean channel) throws Exception {
+        MuServerBuilder builder = httpServer();
+        builder.useChannelTransport = channel;
+        server = builder.addHandler(webSocketHandler((request, headers) -> new SimpleWebSocket() {
+            @Override public void onText(String message) throws Exception { session().sendText(message); }
+            @Override public void onBinary(ByteBuffer message) throws Exception { session().sendBinary(message); }
+        }).withMaxMessageLength(1024).withPingInterval(0, TimeUnit.MILLISECONDS)).start();
+        try (WebSocketWireTestSupport client = new WebSocketWireTestSupport(server)) {
+            byte[] text = "a".repeat(600).getBytes(StandardCharsets.UTF_8);
+            for (int i = 0; i < 3; i++) {
+                client.send(true, 1, text);
+                assertArrayEquals(text, client.readFrame(1));
+            }
+            byte[] full = "b".repeat(1024).getBytes(StandardCharsets.UTF_8);
+            client.send(false, 1, full);
+            client.send(true, 9, new byte[]{1});
+            assertArrayEquals(new byte[]{1}, client.readFrame(10));
+            client.send(true, 0, new byte[0]);
+            assertArrayEquals(full, client.readFrame(1));
+            client.send(true, 2, full);
+            assertArrayEquals(full, client.readFrame(2));
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void rejectsNonminimalLengthsBeforeReceivingMaskAndPayload(boolean channel) throws Exception {
+        MuServerBuilder builder = httpServer();
+        builder.useChannelTransport = channel;
+        server = builder.addHandler(webSocketHandler((request, headers) -> new SimpleWebSocket() {
+            @Override public void onText(String message) { org.junit.jupiter.api.Assertions.fail("Invalid frame delivered"); }
+            @Override public void onBinary(ByteBuffer message) { org.junit.jupiter.api.Assertions.fail("Invalid frame delivered"); }
+        })
+            .withPingInterval(0, TimeUnit.MILLISECONDS)).start();
+        for (byte[] frame : new byte[][]{
+            {(byte) 0x81, (byte) 0xfe, 0, 1},
+            {(byte) 0x82, (byte) 0xff, 0, 0, 0, 0, 0, 0, (byte) 0xff, (byte) 0xff}
+        }) {
+            try (WebSocketWireTestSupport client = new WebSocketWireTestSupport(server)) {
+                client.output.write(frame);
+                client.output.flush();
+                byte[] close = client.readFrame(8);
+                assertEquals(1002, ByteBuffer.wrap(close).getShort() & 0xffff);
+            }
+        }
     }
 
     @ParameterizedTest(name = "opcode {0}, payload {1} bytes, split {2}")
