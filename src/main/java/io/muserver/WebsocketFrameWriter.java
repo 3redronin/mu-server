@@ -265,13 +265,13 @@ final class WebsocketFrameWriter {
     private void fail(IOException failure) {
         state.fail(failure);
         terminate(failure);
-        abortTransport.run();
-        // A transport future owns the payload until it acknowledges failure. A synchronous
-        // submission failure did not borrow storage and can release the active command now.
-        if (pending == null) completeActive(failure);
         if (!failureReported) {
             failureReported = true;
             events.failed(failure);
         }
+        abortTransport.run();
+        // A transport future owns the payload until it acknowledges failure. A synchronous
+        // submission failure did not borrow storage and can release the active command now.
+        if (pending == null) completeActive(failure);
     }
 }

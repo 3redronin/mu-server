@@ -18,6 +18,9 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
     private final AsyncResponseOutput output;
     private final Mu3ServerImpl server;
     private final SerialApplicationTasks callbacks;
+    private final Object bodyReaderLock = new Object();
+    private @Nullable AsyncBodyReader bodyReader;
+    private final CompletableFuture<@Nullable Void> exchangeFinished = new CompletableFuture<>();
 
     Mu3AsyncHandleImpl(Mu3Request request, BaseResponse response, Mu3ServerImpl server) {
         this.request = request;
@@ -26,9 +29,20 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
         this.callbacks = new SerialApplicationTasks(server);
         this.output = new AsyncResponseOutput(server::executeInternalTask,
             this::copyBufferToResponseOutput, response::abortAsyncOutput, callbacks);
+        output.completion().whenComplete((ignored, failure) -> {
+            AsyncBodyReader reader;
+            synchronized (bodyReaderLock) { reader = bodyReader; }
+            CompletableFuture<?> bodyStopped = reader == null ? CompletableFuture.completedFuture(null) : reader.stop();
+            bodyStopped.whenComplete((unused, bodyFailure) -> {
+                synchronized (bodyReaderLock) { bodyReader = null; }
+                Throwable terminal = failure == null ? bodyFailure : failure;
+                if (terminal == null) exchangeFinished.complete(null);
+                else exchangeFinished.completeExceptionally(terminal);
+            });
+        });
     }
 
-    CompletableFuture<@Nullable Void> exchangeCompletion() { return output.completion(); }
+    CompletableFuture<@Nullable Void> exchangeCompletion() { return exchangeFinished; }
 
     boolean completionIsPending() { return output.completionIsPending(); }
 
@@ -37,7 +51,13 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
         Objects.requireNonNull(readListener, "readListener");
         // Claim body ownership before asynchronous dispatch so a blocking read
         // or second listener cannot race the first reader task.
-        new AsyncBodyReader(readListener, request.body()).scheduleNextRead();
+        AsyncBodyReader reader;
+        synchronized (bodyReaderLock) {
+            if (!output.completionIsPending()) throw new IllegalStateException("The asynchronous response is already complete");
+            reader = new AsyncBodyReader(readListener, request.body());
+            bodyReader = reader;
+        }
+        reader.scheduleNextRead();
     }
 
     private final class AsyncBodyReader {
@@ -45,6 +65,14 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
         private final byte[] buffer = new byte[8192];
         private final AtomicBoolean finished = new AtomicBoolean();
         private final InputStream clientIn;
+        private final Object ownership = new Object();
+        private final CompletableFuture<Void> stopped = new CompletableFuture<>();
+        // Guarded by ownership. A read task may also dispatch an inline application callback.
+        private int activeReads;
+        private int pendingCallbacks;
+        private boolean stopRequested;
+        private boolean stopInitialized;
+        private @Nullable Throwable stopFailure;
 
         private AsyncBodyReader(
             RequestBodyListener readListener,
@@ -66,9 +94,18 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
         }
 
         private void readNext() {
-            if (finished.get()) {
-                return;
+            synchronized (ownership) {
+                if (finished.get()) return;
+                activeReads++;
             }
+            try { readAndDispatch(); }
+            finally {
+                synchronized (ownership) { activeReads--; }
+                finishStopIfIdle();
+            }
+        }
+
+        private void readAndDispatch() {
             final int read;
             try {
                 read = clientIn.read(buffer);
@@ -78,7 +115,7 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
                 return;
             }
             if (read == -1) {
-                callbacks.submit(this::finishReading, rejected -> fail(rejected, false));
+                dispatchCallback(this::finishReading);
                 return;
             }
             if (read == 0) {
@@ -86,7 +123,68 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
                 return;
             }
 
-            callbacks.submit(() -> deliver(read), rejected -> fail(rejected, false));
+            dispatchCallback(() -> deliver(read));
+        }
+
+        private CompletableFuture<Void> stop() {
+            synchronized (ownership) {
+                if (stopRequested) return stopped;
+                stopRequested = true;
+                // A late data acknowledgement cannot refill its buffer or resume parser access.
+                finished.set(true);
+            }
+            try {
+                if (clientIn instanceof Http2BodyInputStream) {
+                    // H2 has a separate frame producer: return queued credit and wake a waiting reader.
+                    ((Http2BodyInputStream) clientIn).discardRemaining();
+                }
+            } catch (RuntimeException failure) {
+                synchronized (ownership) { stopFailure = failure; }
+            } finally {
+                synchronized (ownership) { stopInitialized = true; }
+                finishStopIfIdle();
+            }
+            return stopped;
+        }
+
+        private void finishStopIfIdle() {
+            boolean done;
+            Throwable failure;
+            synchronized (ownership) {
+                done = stopInitialized && activeReads == 0 && pendingCallbacks == 0;
+                failure = stopFailure;
+            }
+            if (done) {
+                if (failure == null) stopped.complete(null);
+                else stopped.completeExceptionally(failure);
+            }
+        }
+
+        private void dispatchCallback(Runnable callback) {
+            dispatchCallback(callback, rejected -> fail(rejected, false));
+        }
+
+        private void dispatchCallback(Runnable callback, java.util.function.Consumer<RejectedExecutionException> rejectedCallback) {
+            synchronized (ownership) {
+                if (stopRequested) return;
+                pendingCallbacks++;
+            }
+            var released = new AtomicBoolean();
+            Runnable release = () -> {
+                if (!released.compareAndSet(false, true)) return;
+                synchronized (ownership) { pendingCallbacks--; }
+                finishStopIfIdle();
+            };
+            callbacks.submit(() -> {
+                try {
+                    boolean invoke;
+                    synchronized (ownership) { invoke = !stopRequested; }
+                    if (invoke) callback.run();
+                } finally { release.run(); }
+            }, rejected -> {
+                try { rejectedCallback.accept(rejected); }
+                finally { release.run(); }
+            });
         }
 
         private void deliver(int read) {
@@ -124,7 +222,7 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
             }
             Mutils.closeSilently(clientIn);
             if (notifyListener) {
-                callbacks.submit(() -> {
+                dispatchCallback(() -> {
                     try {
                         readListener.onError(failure);
                     } catch (Throwable listenerFailure) {
@@ -133,7 +231,7 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
                     } finally {
                         complete(failure);
                     }
-                }, thisFailure -> complete(failure));
+                }, rejected -> complete(failure));
             } else {
                 complete(failure);
             }

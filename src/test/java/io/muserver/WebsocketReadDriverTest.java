@@ -33,6 +33,25 @@ import static scaffolding.ClientUtils.request;
 @Timeout(15)
 class WebsocketReadDriverTest {
     @Test
+    void readTimeoutReservesItsErrorBeforeAbortCanPublishAnotherTimeout() throws Exception {
+        var error = new CompletableFuture<Throwable>();
+        try (var fixture = new Fixture(new BaseWebSocket() {
+            @Override public void onError(Throwable failure) { error.complete(failure); }
+        }, 77)) {
+            fixture.start();
+            fixture.until(() -> fixture.timer.waits.size() == 1);
+            // A connection deadline can race the reader's own abort. It must not replace
+            // the read timeout that caused termination in the first place.
+            fixture.abortHook = fixture.websocket::onTimeout;
+            fixture.timer.waits.get(0).fire();
+            fixture.until(fixture.driver.completion()::isDone);
+            fixture.driver.completion().get();
+            assertInstanceOf(SocketTimeoutException.class, error.get());
+            assertEquals(WebsocketSessionState.TIMED_OUT, fixture.websocket.state());
+        }
+    }
+
+    @Test
     void retirementWaitsForAnErrorCallbackFromALateTransportWriteFailure() throws Exception {
         var output = new ControlledOutput();
         var errorEntered = new CompletableFuture<Throwable>();
@@ -467,6 +486,7 @@ class WebsocketReadDriverTest {
         final ByteArrayOutputStream output = new ByteArrayOutputStream();
         final AtomicInteger aborts = new AtomicInteger();
         final AtomicInteger closes = new AtomicInteger();
+        Runnable abortHook = () -> { };
         final ControlledOutput asyncOutput;
         final MuServer server;
         final Http1Connection connection;
@@ -538,7 +558,9 @@ class WebsocketReadDriverTest {
                 @Override public Certificate clientCertificate() { return null; }
                 @Override public void readTimeoutMillis(int timeoutMillis) { input.readTimeoutMillis(timeoutMillis); }
                 @Override public void shutdownInput() { input.endOfInput(); }
-                @Override public void abort() { aborts.incrementAndGet(); input.fail(new IOException("Transport aborted")); }
+                @Override public void abort() {
+                    aborts.incrementAndGet(); input.fail(new IOException("Transport aborted")); abortHook.run();
+                }
                 @Override public void close() { closes.incrementAndGet(); input.endOfInput(); }
             };
         }

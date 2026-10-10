@@ -25,6 +25,22 @@ import static org.junit.jupiter.api.Assertions.*;
 @Timeout(20)
 class WebsocketFrameWriterTest {
     @Test
+    void failureIsPublishedBeforeReturningOwnershipToTheWriteCaller() throws Exception {
+        try (var fixture = new Fixture(7)) {
+            IOException expected = new IOException("Write failed before receive callback returns");
+            var write = fixture.writer.write(2, true, false, ByteBuffer.wrap(new byte[]{42}));
+            var released = write.handle((ignored, failure) -> {
+                assertSame(expected, failure);
+                assertSame(expected, fixture.errors.peek(), "A receive callback must not overtake write-error publication");
+                return null;
+            });
+            fixture.awaitWithoutDraining(() -> fixture.output.pendingBytes() > 0);
+            fixture.output.fail(expected);
+            released.get(2, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
     void automaticPingIsGeneratedAtDequeueAndSkippedAfterClose() throws Exception {
         try (var fixture = new Fixture(1)) {
             var generated = new AtomicInteger();

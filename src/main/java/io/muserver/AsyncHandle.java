@@ -25,13 +25,15 @@ public interface AsyncHandle {
      * with each chunk when that chunk is no longer needed; Mu can then reuse its buffer and read
      * the next chunk. Registering this listener prevents other request-body reading methods from being used.</p>
      * @param readListener The listener.
-     * @throws IllegalStateException if request-body access has already been claimed
+     * @throws IllegalStateException if request-body access has already been claimed or response completion was requested
      */
     void setReadListener(RequestBodyListener readListener);
 
     /**
      * Finishes the response after all writes already submitted to this handle have finished.
      * Later writes are rejected. This method does not wait for those writes or their callbacks.
+     * When output finishes, further asynchronous body delivery stops. Cleanup waits for any
+     * body read or listener method already running; a late chunk acknowledgement cannot resume reading.
      */
     void complete();
 

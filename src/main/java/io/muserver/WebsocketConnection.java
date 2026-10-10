@@ -190,7 +190,8 @@ class WebsocketConnection implements MuWebSocketSession {
         FatalErrors.rethrow(cause);
         if ((!serverShutdownRequested.get() || applicationFailure)
             && !errorEventQueued.get()
-            && lifecycle.state() != WebsocketSessionState.TIMED_OUT) {
+            && lifecycle.state() != WebsocketSessionState.TIMED_OUT
+            && errorEventQueued.compareAndSet(false, true)) {
             WebsocketSessionState errorState = cause instanceof TimeoutException || cause instanceof SocketTimeoutException
                 ? WebsocketSessionState.TIMED_OUT : WebsocketSessionState.ERRORED;
             if (errorState == WebsocketSessionState.TIMED_OUT) {
@@ -199,7 +200,7 @@ class WebsocketConnection implements MuWebSocketSession {
                 lifecycle.terminateWith(errorState);
                 httpConnection.forceShutdown();
             }
-            if (errorEventQueued.compareAndSet(false, true)) return errorEvent(cause, errorState);
+            return errorEvent(cause, errorState);
         }
         return null;
     }
@@ -220,9 +221,12 @@ class WebsocketConnection implements MuWebSocketSession {
                     @Override public void closeWritten() { closeSent = true; }
                     @Override public void failed(IOException failure) {
                         httpConnection.onTransportOutputFailure(failure);
+                        // Reserve the error before releasing a blocking send's caller. Otherwise
+                        // its receive event can return and report the resulting disconnect first.
+                        if (!errorEventQueued.compareAndSet(false, true)) return;
                         var notified = new CompletableFuture<@Nullable Void>();
                         writerErrorCompletion = notified;
-                        dispatchInternalContinuation(() -> enqueueApplicationError(failure, WebsocketSessionState.ERRORED)
+                        dispatchInternalContinuation(() -> enqueueApplicationEvent(errorEvent(failure, WebsocketSessionState.ERRORED))
                             .whenComplete((ignored, error) -> {
                                 if (error == null) notified.complete(null);
                                 else notified.completeExceptionally(error);

@@ -33,6 +33,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -82,7 +83,9 @@ class ExecutionDomainsTest {
         });
         assertThat(blockerStarted.await(5, TimeUnit.SECONDS), is(true));
 
-        server = io.muserver.TestExecutionResources.configure(httpServer(), connectionExecutor, null, null, null)
+        var builder = httpServer();
+        builder.useChannelTransport = false; // This fixture exercises the socket adapter's connection task queue.
+        server = io.muserver.TestExecutionResources.configure(builder, connectionExecutor, null, null, null)
             .withHandlerExecutor(handlerExecutor)
             .addHandler((request, response) -> {
                 handledRequests.incrementAndGet();
@@ -918,12 +921,11 @@ class ExecutionDomainsTest {
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
         var blockerStarted = new CountDownLatch(1);
         var releaseBlocker = new CountDownLatch(1);
-        Future<?> blocker = asyncExecutor.submit(() -> {
+        FutureTask<Void> blocker = new FutureTask<>(() -> {
             blockerStarted.countDown();
             releaseBlocker.await();
             return null;
         });
-        assertThat(blockerStarted.await(5, TimeUnit.SECONDS), is(true));
 
         var suspendedHandle = new CompletableFuture<AsyncHandle>();
         server = TestExecutionResources.configure(httpServer(),
@@ -940,6 +942,9 @@ class ExecutionDomainsTest {
             AsyncHandle handle = suspendedHandle.get(5, TimeUnit.SECONDS);
             handlerExecutor.submit(() -> {
             }).get(5, TimeUnit.SECONDS);
+            // Channel request preparation also uses the internal domain; block only after dispatch.
+            asyncExecutor.execute(blocker);
+            assertThat(blockerStarted.await(5, TimeUnit.SECONDS), is(true));
 
             Future<@Nullable Void> acceptedWrite = handle.write(ByteBuffer.wrap(new byte[]{'a'}));
             handle.complete();
@@ -1041,18 +1046,19 @@ class ExecutionDomainsTest {
         var asyncExecutor = track(Executors.newSingleThreadExecutor(namedThreads("async-")));
         var blockerStarted = new CountDownLatch(1);
         var releaseBlocker = new CountDownLatch(1);
-        Future<?> blocker = asyncExecutor.submit(() -> {
+        FutureTask<Void> blocker = new FutureTask<>(() -> {
             blockerStarted.countDown();
             releaseBlocker.await();
             return null;
         });
-        assertThat(blockerStarted.await(5, TimeUnit.SECONDS), is(true));
 
         var competingReadFailure = new CompletableFuture<Throwable>();
         server = TestExecutionResources.configure(httpServer(),
             track(Executors.newCachedThreadPool()), null, asyncExecutor, null)
             .addHandler(Method.POST, "/", (request, response, pathParams) -> {
                 AsyncHandle handle = request.handleAsync();
+                asyncExecutor.execute(blocker);
+                assertThat(blockerStarted.await(5, TimeUnit.SECONDS), is(true));
                 handle.setReadListener(new RequestBodyListener() {
                     @Override
                     public void onDataReceived(
@@ -1080,14 +1086,16 @@ class ExecutionDomainsTest {
             })
             .start();
 
-        try (Response response = call(
+        var clientExecutor = track(Executors.newSingleThreadExecutor());
+        Future<Response> pendingResponse = clientExecutor.submit(() -> call(
             request(server.uri()).post(RequestBody.create("body", null))
-        )) {
-            assertThat(response.code(), is(200));
-            assertThat(
-                competingReadFailure.get(5, TimeUnit.SECONDS),
-                instanceOf(IllegalStateException.class)
-            );
+        ));
+        try {
+            assertThat(competingReadFailure.get(5, TimeUnit.SECONDS), instanceOf(IllegalStateException.class));
+            releaseBlocker.countDown();
+            try (Response response = pendingResponse.get(5, TimeUnit.SECONDS)) {
+                assertThat(response.code(), is(200));
+            }
         } finally {
             releaseBlocker.countDown();
             blocker.get(5, TimeUnit.SECONDS);
@@ -1937,7 +1945,7 @@ class ExecutionDomainsTest {
         }
     }
 
-    @Test
+    @RepeatedTest(5)
     void sharedExecutorDrainsAWriteFailureCaughtInsideAWebSocketCallback() throws Exception {
         var sharedExecutor = track(Executors.newSingleThreadExecutor(namedThreads("shared-")));
         var textEntered = new CountDownLatch(1);
