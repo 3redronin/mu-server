@@ -22,16 +22,24 @@ final class SerialApplicationTasks {
             if (scheduled) return;
             scheduled = true;
         }
-        RejectedExecutionException rejected = server.executeTrackedApplicationTask(this::drain, "async callback");
-        if (rejected != null) {
-            Queue<Entry> rejectedTasks;
-            synchronized (lock) {
-                rejectedTasks = new ArrayDeque<>(tasks);
-                tasks.clear();
-                scheduled = false;
-            }
-            for (Entry entry : rejectedTasks) entry.onRejected.accept(rejected);
+        RejectedExecutionException rejected;
+        try { rejected = server.executeTrackedApplicationTask(this::drain, "async callback"); }
+        catch (RuntimeException | Error failure) {
+            reject(new RejectedExecutionException("Async callback dispatch failed", failure));
+            FatalErrors.rethrow(failure);
+            return;
         }
+        if (rejected != null) reject(rejected);
+    }
+
+    private void reject(RejectedExecutionException rejected) {
+        Queue<Entry> rejectedTasks;
+        synchronized (lock) {
+            rejectedTasks = new ArrayDeque<>(tasks);
+            tasks.clear();
+            scheduled = false;
+        }
+        for (Entry entry : rejectedTasks) entry.onRejected.accept(rejected);
     }
 
     private void drain() {

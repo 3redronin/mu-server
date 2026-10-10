@@ -190,6 +190,105 @@ class ChannelTransportTest {
         }
     }
 
+    @ParameterizedTest @ValueSource(strings = {"plain", "TLSv1.2", "TLSv1.3"})
+    void stalledAsyncWebsocketSendsAndPingsLeaveTheInternalWorkerAvailable(String protocol) throws Exception {
+        boolean secure = !protocol.equals("plain");
+        var application = Executors.newSingleThreadExecutor();
+        var internal = Executors.newSingleThreadExecutor();
+        var timer = Executors.newSingleThreadScheduledExecutor();
+        Queue<ChannelConnection> stalled = new ConcurrentLinkedQueue<>();
+        Queue<Throwable> failures = new ConcurrentLinkedQueue<>();
+        List<WebSocketWireTestSupport> peers = new ArrayList<>();
+        byte[] payload = new byte[8 * 1024 * 1024];
+        MuServerBuilder builder = builder(secure, false).withHandlerExecutor(application);
+        builder.executionResourcesFactory = (supplied, mode) -> new ExecutionResources(application, false, internal, timer);
+        builder.addHandler((req, res) -> {
+            if (req.headers().get("Upgrade") == null) { res.write("healthy"); return true; }
+            var transport = (ChannelConnection) ((BaseHttpConnection) req.connection()).transport;
+            transport.socket.setSendBufferSize(4096);
+            stalled.add(transport);
+            return false;
+        }).addHandler(WebSocketHandlerBuilder.webSocketHandler((req, headers) -> new BaseWebSocket() {
+            @Override public void onText(String text, boolean last, DoneCallback done) {
+                session().sendBinary(ByteBuffer.wrap(payload).asReadOnlyBuffer(), error -> {
+                    assertNotNull(error);
+                    failures.add(error);
+                    done.onComplete(error);
+                });
+            }
+        }).withPingInterval(20, TimeUnit.MILLISECONDS));
+        try (MuServer server = builder.start()) {
+            try {
+                for (int i = 0; i < 3; i++) {
+                    Socket socket = secure ? sslContextForTesting(veryTrustingTrustManager()).getSocketFactory()
+                        .createSocket("localhost", server.uri().getPort()) : connect(server);
+                    if (secure) ((SSLSocket) socket).setEnabledProtocols(new String[]{protocol});
+                    var peer = new WebSocketWireTestSupport(server, socket, Integer.MAX_VALUE);
+                    peers.add(peer);
+                    peer.socket.setReceiveBufferSize(4096);
+                    peer.send(true, 1, "go".getBytes(US_ASCII));
+                }
+                until(() -> stalled.size() == 3);
+                var field = ChannelConnection.class.getDeclaredField("output");
+                field.setAccessible(true);
+                List<TransportOutputBuffer> outputs = new ArrayList<>();
+                for (var connection : stalled) outputs.add((TransportOutputBuffer) field.get(connection));
+                until(() -> outputs.stream().allMatch(output -> output.pendingBytes() > 0));
+                // Let the automatic ping timers also enqueue behind the stalled data frames.
+                timer.schedule(() -> {}, 100, TimeUnit.MILLISECONDS).get(2, TimeUnit.SECONDS);
+                internal.submit(() -> {}).get(2, TimeUnit.SECONDS);
+                application.submit(() -> {}).get(2, TimeUnit.SECONDS);
+                try (var response = call(request(server.uri()).header("Connection", "close"))) {
+                    assertEquals("healthy", response.body().string());
+                }
+                assertTrue(failures.isEmpty());
+                for (var connection : stalled) connection.abort();
+                until(() -> failures.size() == 3);
+                until(() -> server.stats().activeConnections() == 0);
+                assertEquals(4, server.stats().completedConnections());
+            } finally { for (var peer : peers) peer.close(); }
+        } finally { application.shutdownNow(); internal.shutdownNow(); timer.shutdownNow(); }
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void inlineWriteCallbackCanPerformAnotherBlockingWebsocketSend(boolean secure) throws Exception {
+        var application = new java.util.concurrent.ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS,
+            new java.util.concurrent.SynchronousQueue<>(), new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+        var occupied = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        application.execute(() -> {
+            occupied.countDown();
+            try { release.await(); } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+        });
+        assertTrue(occupied.await(2, TimeUnit.SECONDS));
+        var completed = new CompletableFuture<Void>();
+        try (MuServer server = builder(secure, false).withHandlerExecutor(application)
+            .addHandler(WebSocketHandlerBuilder.webSocketHandler((req, headers) -> new BaseWebSocket() {
+                @Override public void onText(String text, boolean last, DoneCallback done) {
+                    session().sendText("first", error -> {
+                        try {
+                            if (error != null) throw new IOException("Initial write failed", error);
+                            session().sendText("nested");
+                            done.onComplete(null);
+                            completed.complete(null);
+                        } catch (Throwable failure) { done.onComplete(failure); completed.completeExceptionally(failure); }
+                    });
+                }
+            }).withPingInterval(0, TimeUnit.MILLISECONDS)).start()) {
+            Socket socket = secure ? sslContextForTesting(veryTrustingTrustManager()).getSocketFactory()
+                .createSocket("localhost", server.uri().getPort()) : connect(server);
+            try (var peer = new WebSocketWireTestSupport(server, socket, Integer.MAX_VALUE)) {
+                peer.send(true, 1, "go".getBytes(US_ASCII));
+                assertArrayEquals("first".getBytes(US_ASCII), peer.readFrame(1));
+                assertArrayEquals("nested".getBytes(US_ASCII), peer.readFrame(1));
+                completed.get(2, TimeUnit.SECONDS);
+                peer.send(true, 8, new byte[]{3, (byte) 232});
+                peer.readFrame(8);
+                until(() -> server.stats().activeConnections() == 0);
+            }
+        } finally { release.countDown(); application.shutdownNow(); }
+    }
+
     @ParameterizedTest @ValueSource(booleans = {false, true})
     void http2RunsThroughChannelTransportWithAlpnOrCleartextPreface(boolean secure) throws Exception {
         var client = scaffolding.ClientUtils.client.newBuilder().dispatcher(new okhttp3.Dispatcher())

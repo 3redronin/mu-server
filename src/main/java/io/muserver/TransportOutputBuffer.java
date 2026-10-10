@@ -39,7 +39,7 @@ final class TransportOutputBuffer extends OutputStream {
         PendingAsyncWrite(ByteBuffer source) { this.source = source.duplicate(); }
     }
 
-    /** Claim before first use; a connection's blocking and asynchronous byte writers cannot mix. */
+    /** Claim an idle buffer exclusively; prior blocking writes must have finished and cannot resume. */
     AsyncTransportOutput asynchronousWriter() throws IOException {
         lock.lock();
         try {

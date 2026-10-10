@@ -62,7 +62,9 @@ public abstract class BaseWebSocket implements MuWebSocket {
         // A peer can respond before the server's close write has returned.
         if (sesh.state() != WebsocketSessionState.SERVER_CLOSING
             && !sesh.closeSent()) {
-            if (statusCode == 1005) {
+            if (sesh instanceof WebsocketConnection) {
+                ((WebsocketConnection) sesh).closeForEvent(statusCode, reason);
+            } else if (statusCode == 1005) {
                 // the client didn't send a code so we won't either
                 sesh.close();
             } else {
@@ -210,7 +212,12 @@ public abstract class BaseWebSocket implements MuWebSocket {
      */
     @Override
     public void onPing(ByteBuffer payload) throws Exception {
-        session().sendPong(payload);
+        var completion = new CompletableFuture<@Nullable Void>();
+        session().sendPong(payload, failure -> {
+            if (failure == null) completion.complete(null);
+            else completion.completeExceptionally(failure);
+        });
+        WebSocketEventCompletion.awaitOrDefer(completion);
     }
 
     /**
@@ -254,13 +261,19 @@ public abstract class BaseWebSocket implements MuWebSocket {
     public void onError(Throwable cause) throws Exception {
         if (!state().endState() && !session().closeSent()) {
             if (cause instanceof TimeoutException || cause instanceof SocketTimeoutException) {
-                session().close(3008, WebsocketSessionState.TIMED_OUT.name());
+                closeForEvent(3008, WebsocketSessionState.TIMED_OUT.name());
             } else if (cause instanceof CharacterCodingException) {
-                session().close(1007, "Non UTF-8 data in text frame");
+                closeForEvent(1007, "Non UTF-8 data in text frame");
             } else if (session != null && !(cause instanceof ClientDisconnectedException)) {
-                session().close(1011, WebsocketSessionState.ERRORED.name());
+                closeForEvent(1011, WebsocketSessionState.ERRORED.name());
             }
         }
+    }
+
+    private void closeForEvent(int code, String reason) throws Exception {
+        MuWebSocketSession current = session();
+        if (current instanceof WebsocketConnection) ((WebsocketConnection) current).closeForEvent(code, reason);
+        else current.close(code, reason);
     }
 
     /**

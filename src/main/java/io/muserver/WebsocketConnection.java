@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.SocketTimeoutException;
@@ -49,6 +50,8 @@ class WebsocketConnection implements MuWebSocketSession {
     private final Lock writeLock = new ReentrantLock();
     private final @Nullable WebsocketPingTracker pingTracker;
     private volatile @Nullable ScheduledFuture<?> pingFuture;
+    private volatile @Nullable WebsocketFrameWriter frameWriter;
+    private volatile CompletableFuture<@Nullable Void> writerErrorCompletion = CompletableFuture.completedFuture(null);
 
     @FunctionalInterface
     private interface ApplicationEvent {
@@ -96,6 +99,19 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     private void startPinging() {
+        WebsocketFrameWriter writer = frameWriter;
+        if (writer != null) {
+            pingFuture = server.scheduleTimerCallback(() -> writer.automaticPing(() ->
+                lifecycle.state() == WebsocketSessionState.OPEN
+                    ? Objects.requireNonNull(pingTracker).newPingPayload() : null
+            ).whenComplete((ignored, failure) -> dispatchInternalContinuation(() -> {
+                if (lifecycle.state() == WebsocketSessionState.OPEN) {
+                    if (failure == null) startPinging();
+                    else httpConnection.forceShutdown();
+                }
+            })), settings.pingIntervalMillis, TimeUnit.MILLISECONDS);
+            return;
+        }
         pingFuture = httpConnection.serverImpl().scheduleConnectionTask(() -> {
             writeLock.lock();
             try {
@@ -189,8 +205,31 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     ReadDriver readDriver(TransportInputBuffer input, OutputStream output, ByteBuffer prefetched) {
+        return readDriver(input, output, prefetched, null);
+    }
+
+    ReadDriver readDriver(TransportInputBuffer input, OutputStream output, ByteBuffer prefetched,
+                          @Nullable AsyncTransportOutput asyncOutput) {
         inputStream = input;
         outputStream = output;
+        if (asyncOutput != null) {
+            frameWriter = new WebsocketFrameWriter(server.internalExecutor(), asyncOutput,
+                httpConnection::forceShutdown, new WebsocketFrameWriter.Events() {
+                    @Override public void bytesSent(int count) { httpConnection.onBytesSent(count); }
+                    @Override public void closeStarted() { lifecycle.onServerCloseStarted(); }
+                    @Override public void closeWritten() { closeSent = true; }
+                    @Override public void failed(IOException failure) {
+                        httpConnection.onTransportOutputFailure(failure);
+                        var notified = new CompletableFuture<@Nullable Void>();
+                        writerErrorCompletion = notified;
+                        dispatchInternalContinuation(() -> enqueueApplicationError(failure, WebsocketSessionState.ERRORED)
+                            .whenComplete((ignored, error) -> {
+                                if (error == null) notified.complete(null);
+                                else notified.completeExceptionally(error);
+                            }));
+                    }
+                });
+        }
         return new ReadDriver(input, prefetched);
     }
 
@@ -203,13 +242,17 @@ class WebsocketConnection implements MuWebSocketSession {
             new WebsocketFrameDecoder(settings.maxFramePayloadLength, settings.maxMessageLength);
         private final AtomicBoolean scheduled = new AtomicBoolean();
         private final CompletableFuture<Void> ended = new CompletableFuture<>();
-        private volatile @Nullable CompletableFuture<@Nullable Void> pending;
+        private volatile @Nullable CompletableFuture<?> pending;
+        private boolean pendingIsApplication;
         private volatile @Nullable ReadDeadline deadline;
         private volatile @Nullable Throwable submissionFailure;
         private volatile boolean needsInput;
         private boolean connected;
         private boolean connectCompleted;
         private boolean finishing;
+        private volatile boolean finishingTransport;
+        private boolean waitedForClose;
+        private WebsocketFrameDecoder.@Nullable InvalidFrame invalidFrame;
 
         private ReadDriver(TransportInputBuffer input, ByteBuffer prefetched) {
             this.input = input;
@@ -228,7 +271,7 @@ class WebsocketConnection implements MuWebSocketSession {
         }
 
         private boolean ready() {
-            if (ended.isDone()) return false;
+            if (ended.isDone() || finishingTransport) return false;
             CompletableFuture<?> work = pending;
             if (work != null) return work.isDone();
             ReadDeadline waiting = deadline;
@@ -237,7 +280,7 @@ class WebsocketConnection implements MuWebSocketSession {
         }
 
         private void schedule() {
-            if (ended.isDone() || !scheduled.compareAndSet(false, true)) return;
+            if (ended.isDone() || finishingTransport || !scheduled.compareAndSet(false, true)) return;
             try { server.executeInternalTask(this::run); }
             catch (RejectedExecutionException rejected) {
                 submissionFailure = rejected;
@@ -265,16 +308,25 @@ class WebsocketConnection implements MuWebSocketSession {
                         pending = null;
                         try { work.join(); }
                         catch (java.util.concurrent.CompletionException failure) {
-                            throw new ApplicationEventFailure(Objects.requireNonNull(failure.getCause()));
+                            Throwable cause = Objects.requireNonNull(failure.getCause());
+                            throw pendingIsApplication ? new ApplicationEventFailure(cause) : cause;
                         }
                         if (finishing) { finish(null); return; }
                     }
                     if (submissionFailure != null) throw submissionFailure;
+                    if (invalidFrame != null) throw invalidFrame;
                     if (!connectCompleted) {
                         connectCompleted = true;
                         if (settings.pingIntervalMillis > 0) startPinging();
                     }
                     if (closeReceived) {
+                        WebsocketFrameWriter writer = frameWriter;
+                        CompletableFuture<?> close = writer == null ? null : writer.closeCompletion();
+                        if (!waitedForClose && close != null) {
+                            waitedForClose = true;
+                            await(close, false);
+                            continue;
+                        }
                         completeCloseHandshakeIfCloseSent();
                         endAfterEvents(null);
                         return;
@@ -288,9 +340,14 @@ class WebsocketConnection implements MuWebSocketSession {
                     WebsocketFrameDecoder.Frame frame;
                     try { frame = decoder.decode(bytes); }
                     catch (WebsocketFrameDecoder.InvalidFrame invalid) {
-                        // The output migration replaces this remaining protocol-error write wait.
-                        close(invalid.closeCode, invalid.getMessage());
-                        throw invalid;
+                        WebsocketFrameWriter writer = frameWriter;
+                        if (writer == null) {
+                            close(invalid.closeCode, invalid.getMessage());
+                            throw invalid;
+                        }
+                        invalidFrame = invalid;
+                        await(writer.write(8, true, false, closePayload(invalid.closeCode, invalid.getMessage())), false);
+                        continue;
                     }
                     if (frame != null) {
                         cancelReadDeadline();
@@ -328,6 +385,11 @@ class WebsocketConnection implements MuWebSocketSession {
         }
 
         private void await(CompletableFuture<@Nullable Void> work) {
+            await(work, true);
+        }
+
+        private void await(CompletableFuture<?> work, boolean application) {
+            pendingIsApplication = application;
             pending = work;
             work.whenComplete((ignored, failure) -> schedule());
         }
@@ -344,6 +406,18 @@ class WebsocketConnection implements MuWebSocketSession {
             cancelReadDeadline();
             stopPinging();
             pending = null;
+            finishingTransport = true;
+            WebsocketFrameWriter writer = frameWriter;
+            if (writer == null) { complete(failure); return; }
+            CompletableFuture<Void> outputEnded = writer.finish();
+            // Closure must precede joining the writer: its borrowed source may need the
+            // transport's bounded drain/abort to finish. Keep the exchange/resource lease.
+            httpConnection.closeWebsocketTransport();
+            outputEnded.thenCompose(ignored -> writerErrorCompletion).whenComplete((ignored, error) ->
+                complete(failure == null ? error : failure));
+        }
+
+        private void complete(@Nullable Throwable failure) {
             if (failure == null) ended.complete(null);
             else ended.completeExceptionally(failure);
         }
@@ -443,6 +517,10 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
     private void completeCloseHandshakeIfCloseSent() {
+        if (frameWriter != null) {
+            if (closeSent) lifecycle.onCloseHandshakeCompleted();
+            return;
+        }
         // Synchronize with the close-frame writer before publishing that both
         // sides of the closing handshake have completed.
         writeLock.lock();
@@ -466,8 +544,7 @@ class WebsocketConnection implements MuWebSocketSession {
     }
 
 
-    private MessageWritingState messageWritingState = MessageWritingState.NONE;
-    private @Nullable IOException writeFailure;
+    private final WebsocketWriteState writeState = new WebsocketWriteState();
 
     void onTimeout() {
         if (errorEventQueued.compareAndSet(false, true)) {
@@ -516,10 +593,11 @@ class WebsocketConnection implements MuWebSocketSession {
         return WebSocketEventCompletion.invoke(event::run);
     }
 
-    private void enqueueApplicationError(Throwable cause, WebsocketSessionState errorState) {
+    private CompletableFuture<@Nullable Void> enqueueApplicationError(Throwable cause, WebsocketSessionState errorState) {
         if (errorEventQueued.compareAndSet(false, true)) {
-            enqueueApplicationEvent(errorEvent(cause, errorState));
+            return enqueueApplicationEvent(errorEvent(cause, errorState));
         }
+        return CompletableFuture.completedFuture(null);
     }
 
     private ApplicationEvent errorEvent(Throwable cause, WebsocketSessionState errorState) {
@@ -638,108 +716,49 @@ class WebsocketConnection implements MuWebSocketSession {
         }
     }
 
-    private enum MessageWritingState {
-        NONE, TEXT, BINARY, ERROR
-    }
-
     @Override
     public void sendText(String message) throws IOException {
-        var payload = message.getBytes(StandardCharsets.UTF_8);
-        writeFragment((byte)0b10000001, payload, 0, payload.length, MessageWritingState.NONE, MessageWritingState.NONE);
+        writeFrame(1, true, false, ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8)));
     }
 
     @Override
     public void sendTextFragment(ByteBuffer fragment, boolean isLastFragment) throws IOException {
-        writeLock.lock();
-        try {
-            throwStoredWriteFailure();
-            var payload = arrayBuffer(fragment);
-            int off = payload.arrayOffset() + payload.position();
-            int len = payload.remaining();
-            if (isLastFragment && messageWritingState == MessageWritingState.NONE) {
-                // this is just a non-fragmented full message, so use the plain send
-                writeFragment((byte) 0b10000001, payload.array(), off, len, MessageWritingState.NONE, MessageWritingState.NONE);
-            } else {
-                if (!isLastFragment && messageWritingState == MessageWritingState.NONE) {
-                    // the first message of a fragmented text message
-                    writeFragment((byte) 0b00000001, payload.array(), off, len, MessageWritingState.NONE, MessageWritingState.TEXT);
-                } else if (!isLastFragment && messageWritingState == MessageWritingState.TEXT) {
-                    // a middle fragment of a text message
-                    writeFragment((byte) 0b00000000, payload.array(), off, len, MessageWritingState.TEXT, MessageWritingState.TEXT);
-                } else if (isLastFragment && messageWritingState == MessageWritingState.TEXT) {
-                    // the last fragment of a text message
-                    writeFragment((byte) 0b10000000, payload.array(), off, len, MessageWritingState.TEXT, MessageWritingState.NONE);
-                }
-            }
-        } finally {
-            writeLock.unlock();
-        }
+        writeFrame(1, isLastFragment, true, fragment);
     }
 
     @Override
     public void sendBinary(ByteBuffer message) throws IOException {
-        var payload = arrayBuffer(message);
-        writeFragment((byte)0b10000010, payload.array(), payload.arrayOffset() + payload.position(), payload.remaining(), MessageWritingState.NONE, MessageWritingState.NONE);
+        writeFrame(2, true, false, message);
     }
 
     @Override
     public void sendBinaryFragment(ByteBuffer message, boolean isLastFragment) throws IOException {
-        writeLock.lock();
-        try {
-            throwStoredWriteFailure();
-            if (isLastFragment && messageWritingState == MessageWritingState.NONE) {
-                // this is just a non-fragmented full message, so use the plain send
-                sendBinary(message);
-            } else {
-                var payload = arrayBuffer(message);
-                int off = payload.arrayOffset() + payload.position();
-                int len = payload.remaining();
-                if (!isLastFragment && messageWritingState == MessageWritingState.NONE) {
-                    // the first message of a fragmented binary message
-                    writeFragment((byte) 0b00000010, payload.array(), off, len, MessageWritingState.NONE, MessageWritingState.BINARY);
-                } else if (!isLastFragment && messageWritingState == MessageWritingState.BINARY) {
-                    // a middle fragment of a binary message
-                    writeFragment((byte) 0b00000000, payload.array(), off, len, MessageWritingState.BINARY, MessageWritingState.BINARY);
-                } else if (isLastFragment && messageWritingState == MessageWritingState.BINARY) {
-                    // the last fragment of a binary message
-                    writeFragment((byte) 0b10000000, payload.array(), off, len, MessageWritingState.BINARY, MessageWritingState.NONE);
-                }
-            }
-        } finally {
-            writeLock.unlock();
-        }
+        writeFrame(2, isLastFragment, true, message);
     }
 
     @Override
     public void sendPing(ByteBuffer payload) throws IOException {
         requireControlPayloadSize(payload.remaining());
-        payload = arrayBuffer(payload);
-        writeFragment((byte)0b10001001, payload.array(), payload.arrayOffset() + payload.position(), payload.remaining(), null, null);
+        writeFrame(9, true, false, payload);
     }
 
     @Override
     public void sendPong(ByteBuffer payload) throws IOException {
         requireControlPayloadSize(payload.remaining());
-        payload = arrayBuffer(payload);
-        writeFragment((byte)0b10001010, payload.array(), payload.arrayOffset() + payload.position(), payload.remaining(), null, null);
+        writeFrame(10, true, false, payload);
     }
 
     @Override
     public void close() throws IOException {
-        writeLock.lock();
-        try {
-            lifecycle.onServerCloseStarted();
-            writeFragment((byte)0b10001000, null, 0, 0, null, null);
-            if (!closeSent) {
-                closeSent = true;
-            }
-        } finally {
-            writeLock.unlock();
-        }
+        writeFrame(8, true, false, ByteBuffer.allocate(0));
     }
 
     @Override
     public void close(int statusCode, @Nullable String reason) throws IOException {
+        writeFrame(8, true, false, closePayload(statusCode, reason));
+    }
+
+    private static ByteBuffer closePayload(int statusCode, @Nullable String reason) {
         if (statusCode < 1000 || statusCode > 4999) {
             throw new IllegalArgumentException("Websocket closure codes must be between 1000 and 4999 (inclusive)");
         }
@@ -752,16 +771,7 @@ class WebsocketConnection implements MuWebSocketSession {
         payload[1] = (byte) (statusCode & 0xFF);
         System.arraycopy(reasonBytes, 0, payload, 2, reasonBytes.length);
 
-        writeLock.lock();
-        try {
-            lifecycle.onServerCloseStarted();
-            writeFragment((byte)0b10001000, payload, 0, payload.length, null, null);
-            if (!closeSent) {
-                closeSent = true;
-            }
-        } finally {
-            writeLock.unlock();
-        }
+        return ByteBuffer.wrap(payload);
     }
 
     private static void requireControlPayloadSize(int payloadLength) {
@@ -781,35 +791,30 @@ class WebsocketConnection implements MuWebSocketSession {
         return ByteBuffer.wrap(arr);
     }
 
-    private void writeFragment(byte firstByte, byte@Nullable[] payload, int payloadOffset, int payloadLen, @Nullable MessageWritingState expectedState, @Nullable MessageWritingState endState) throws IOException {
-        if ((firstByte & 0x08) != 0) {
-            requireControlPayloadSize(payloadLen);
+    private void writeFrame(int opcode, boolean fin, boolean fragment, ByteBuffer payload) throws IOException {
+        WebsocketFrameWriter writer = frameWriter;
+        if (writer != null) {
+            awaitWrite(writer, writer.write(opcode, fin, fragment, payload));
+            return;
         }
-        var header = header(firstByte, payloadLen);
-        OutputStream output = java.util.Objects.requireNonNull(outputStream);
+        OutputStream output = Objects.requireNonNull(outputStream);
         IOException failure = null;
         writeLock.lock();
         try {
-            throwStoredWriteFailure();
-            if (expectedState != null && messageWritingState != expectedState) {
-                throw new IllegalStateException("Expected state " + expectedState + " but was " + messageWritingState);
-            }
-            if (closeSent) {
-                throw new IllegalStateException("Cannot write websocket messages after close frame sent");
-            }
+            WebsocketWriteState.Frame frame = writeState.prepare(opcode, fin, fragment, payload.remaining());
+            ByteBuffer source = arrayBuffer(payload);
+            if (frame.close) lifecycle.onServerCloseStarted();
             try {
-                output.write(header, 0, header.length);
-                if (payloadLen > 0) {
-                    output.write(java.util.Objects.requireNonNull(payload), payloadOffset, payloadLen);
+                output.write(frame.header, 0, frame.header.length);
+                if (source.hasRemaining()) {
+                    output.write(source.array(), source.arrayOffset() + source.position(), source.remaining());
                 }
                 output.flush();
-                if (endState != null) {
-                    messageWritingState = endState;
-                }
-            } catch (IOException e) {
-                writeFailure = e;
-                messageWritingState = MessageWritingState.ERROR;
-                failure = e;
+                writeState.written(frame);
+                if (frame.close) closeSent = true;
+            } catch (IOException error) {
+                writeState.fail(error);
+                failure = error;
             }
         } finally {
             writeLock.unlock();
@@ -820,39 +825,96 @@ class WebsocketConnection implements MuWebSocketSession {
         }
     }
 
-    private void throwStoredWriteFailure() throws IOException {
-        if (writeFailure != null) {
-            throw new IOException("Cannot write websocket messages after a previous write failed", writeFailure);
+    private void awaitWrite(WebsocketFrameWriter writer, CompletableFuture<?> completion) throws IOException {
+        try { completion.get(); }
+        catch (InterruptedException interrupted) {
+            httpConnection.forceShutdown();
+            writer.finish();
+            // Interruption cannot return the caller's buffer while transport IO still borrows it.
+            boolean released = false;
+            while (!released) {
+                try { completion.get(); released = true; }
+                catch (InterruptedException again) { /* Wait until ownership actually returns. */ }
+                catch (ExecutionException finished) { released = true; }
+            }
+            Thread.currentThread().interrupt();
+            InterruptedIOException failure = new InterruptedIOException("WebSocket write interrupted");
+            failure.initCause(interrupted);
+            throw failure;
+        } catch (ExecutionException failed) {
+            Throwable cause = Objects.requireNonNull(failed.getCause());
+            if (cause instanceof IOException) throw (IOException) cause;
+            if (cause instanceof RuntimeException) throw (RuntimeException) cause;
+            FatalErrors.rethrow(cause);
+            throw new IOException("WebSocket write failed", cause);
         }
     }
 
-    private byte[] header(byte type, int payloadLength) {
-        if (payloadLength <= 125) {
-            // 1-byte case
-            return new byte[] { type, (byte) payloadLength };
-        } else if (payloadLength <= 65535) {
-            // 3-byte case (first byte 126 + 2 bytes for length)
-            return new byte[] {
-                type,
-                (byte) 126,
-                (byte) ((payloadLength >> 8) & 0xFF),   // Higher byte
-                (byte) (payloadLength & 0xFF)           // Lower byte
-            };
-        } else {
-            // 9-byte case (first byte 127 + 8 bytes for length)
-            return new byte[] {
-                type,
-                (byte) 127,
-                (byte) 0,
-                (byte) 0,
-                (byte) 0,
-                (byte) 0,
-                (byte) ((payloadLength >> 24) & 0xFF),
-                (byte) ((payloadLength >> 16) & 0xFF),
-                (byte) ((payloadLength >> 8) & 0xFF),
-                (byte) (payloadLength & 0xFF)
-            };
+    // A CallerRuns application executor can run a callback that performs a blocking send.
+    // Always give it a separate task, outside the serial writer's ownership and the selector.
+    private void dispatchInternalContinuation(Runnable continuation) {
+        try { server.executeInternalTask(continuation); }
+        catch (RejectedExecutionException rejected) {
+            Thread cleanup = new Thread(continuation, "mu-websocket-rejected-continuation");
+            cleanup.setDaemon(true);
+            cleanup.start();
         }
+    }
+
+    private void sendAsync(WebsocketFrameWriter writer, int opcode, boolean fin, boolean fragment,
+                           ByteBuffer payload, DoneCallback callback) {
+        writer.write(opcode, fin, fragment, payload).whenComplete((ignored, failure) ->
+            dispatchInternalContinuation(() -> dispatchWriteCallback(callback, failure)));
+    }
+
+    /** Base handler control replies participate in the same deferred receive acknowledgement. */
+    void closeForEvent(int statusCode, @Nullable String reason) throws Exception {
+        ByteBuffer payload = statusCode == 1005 ? ByteBuffer.allocate(0) : closePayload(statusCode, reason);
+        WebsocketFrameWriter writer = frameWriter;
+        if (writer == null) { writeFrame(8, true, false, payload); return; }
+        var completion = new CompletableFuture<@Nullable Void>();
+        writer.write(8, true, false, payload).whenComplete((ignored, failure) ->
+            dispatchInternalContinuation(() -> {
+                if (failure == null) completion.complete(null);
+                else completion.completeExceptionally(failure);
+            }));
+        WebSocketEventCompletion.awaitOrDefer(completion);
+    }
+
+    @Override public void sendText(String message, DoneCallback callback) {
+        WebsocketFrameWriter writer = frameWriter;
+        if (writer == null) MuWebSocketSession.super.sendText(message, callback);
+        else sendAsync(writer, 1, true, false, ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8)), callback);
+    }
+
+    @Override public void sendText(String message, boolean last, DoneCallback callback) {
+        WebsocketFrameWriter writer = frameWriter;
+        if (writer == null) MuWebSocketSession.super.sendText(message, last, callback);
+        else sendAsync(writer, 1, last, true, ByteBuffer.wrap(message.getBytes(StandardCharsets.UTF_8)), callback);
+    }
+
+    @Override public void sendBinary(ByteBuffer message, DoneCallback callback) {
+        WebsocketFrameWriter writer = frameWriter;
+        if (writer == null) MuWebSocketSession.super.sendBinary(message, callback);
+        else sendAsync(writer, 2, true, false, message, callback);
+    }
+
+    @Override public void sendBinary(ByteBuffer message, boolean last, DoneCallback callback) {
+        WebsocketFrameWriter writer = frameWriter;
+        if (writer == null) MuWebSocketSession.super.sendBinary(message, last, callback);
+        else sendAsync(writer, 2, last, true, message, callback);
+    }
+
+    @Override public void sendPing(ByteBuffer payload, DoneCallback callback) {
+        WebsocketFrameWriter writer = frameWriter;
+        if (writer == null) MuWebSocketSession.super.sendPing(payload, callback);
+        else sendAsync(writer, 9, true, false, payload, callback);
+    }
+
+    @Override public void sendPong(ByteBuffer payload, DoneCallback callback) {
+        WebsocketFrameWriter writer = frameWriter;
+        if (writer == null) MuWebSocketSession.super.sendPong(payload, callback);
+        else sendAsync(writer, 10, true, false, payload, callback);
     }
 
     @Override

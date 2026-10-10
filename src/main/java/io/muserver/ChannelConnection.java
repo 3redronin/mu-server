@@ -249,7 +249,7 @@ final class ChannelConnection implements ConnectionTransport {
         if (protocolPrefix.hasRemaining()) promoted.onBytesRead(input.offer(protocolPrefix));
         var clientOut = new HttpConnectionOutputStream(promoted, output);
         if (promoted instanceof Http1Connection) {
-            http1 = ((Http1Connection) promoted).readDriver(input, clientOut, this::schedule);
+            http1 = ((Http1Connection) promoted).readDriver(input, clientOut, this::schedule, output);
             protocolCompletion = http1.completion();
         } else {
             http2 = ((Http2Connection) promoted).readDriver(input, output.asynchronousWriter());

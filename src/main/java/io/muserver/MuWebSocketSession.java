@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
  * <p>Extend {@link SimpleWebSocket} for blocking receive methods or {@link BaseWebSocket} for
  * asynchronous receive methods. Both expose the session through their {@code session()} method.</p>
  * <p>Send methods with a {@link DoneCallback} return without waiting for the write. Mu performs
- * the write on its internal IO executor and invokes the callback on the configured application
+ * the write through internal IO tasks and invokes the callback on the configured application
  * executor, passing null on success or the failure. Chain sends through their completion callbacks
  * when their order matters. Mu does not cap pending asynchronous sends: chain sends through
  * callbacks to bound retained messages and tasks when a client reads slowly. A rejected completion callback closes the connection and may not be delivered.</p>

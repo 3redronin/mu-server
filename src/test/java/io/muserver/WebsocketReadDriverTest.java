@@ -2,6 +2,9 @@ package io.muserver;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.jspecify.annotations.Nullable;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -29,6 +32,179 @@ import static scaffolding.ClientUtils.request;
 
 @Timeout(15)
 class WebsocketReadDriverTest {
+    @Test
+    void retirementWaitsForAnErrorCallbackFromALateTransportWriteFailure() throws Exception {
+        var output = new ControlledOutput();
+        var errorEntered = new CompletableFuture<Throwable>();
+        var releaseError = new java.util.concurrent.CountDownLatch(1);
+        var writeFinished = new CompletableFuture<Throwable>();
+        try (var fixture = new Fixture(new BaseWebSocket() {
+            @Override public void onClientClosed(int code, String reason) { }
+            @Override public void onError(Throwable failure) throws Exception {
+                errorEntered.complete(failure);
+                releaseError.await();
+            }
+        }, 0, output)) {
+            try {
+                fixture.start();
+                fixture.until(() -> fixture.websocket.state() == WebsocketSessionState.OPEN);
+                fixture.websocket.sendBinary(ByteBuffer.wrap(new byte[]{42}), writeFinished::complete);
+                output.next().completion.complete(null);
+                var payload = output.next();
+                fixture.offer(WebSocketWireTestSupport.frame(true, 8, new byte[]{3, (byte) 232}));
+                fixture.until(() -> fixture.closes.get() == 1);
+                fixture.barrier();
+                assertFalse(fixture.driver.completion().isDone());
+                IOException lateFailure = new IOException("Close deadline aborted the borrowed write");
+                payload.completion.completeExceptionally(lateFailure);
+                assertSame(lateFailure, errorEntered.get(2, TimeUnit.SECONDS));
+                fixture.internal.submit(() -> {}).get(2, TimeUnit.SECONDS);
+                assertFalse(fixture.driver.completion().isDone(), "An executing error callback still belongs to the exchange");
+                releaseError.countDown();
+                fixture.driver.completion().get(2, TimeUnit.SECONDS);
+                assertSame(lateFailure, writeFinished.get(2, TimeUnit.SECONDS));
+                assertEquals(WebsocketSessionState.ERRORED, fixture.websocket.state());
+            } finally { releaseError.countDown(); }
+        }
+    }
+
+    @ParameterizedTest @ValueSource(ints = {8, 9})
+    void defaultControlRepliesSuspendWithoutHoldingTheApplicationWorker(int opcode) throws Exception {
+        var output = new ControlledOutput();
+        try (var fixture = new Fixture(new BaseWebSocket() {}, 0, output)) {
+            fixture.start();
+            byte[] payload = new byte[]{3, (byte) 232};
+            fixture.offer(WebSocketWireTestSupport.frame(true, opcode, payload));
+            var header = output.next();
+            assertEquals(ByteBuffer.wrap(new byte[]{(byte) (opcode == 8 ? 0x88 : 0x8a), 2}), header.bytes);
+            fixture.barrier(); // Both executors must remain available while the control reply is blocked.
+            assertFalse(fixture.driver.completion().isDone());
+            header.completion.complete(null);
+            var body = output.next();
+            assertEquals(ByteBuffer.wrap(payload), body.bytes);
+            fixture.barrier();
+            body.completion.complete(null);
+            if (opcode == 8) {
+                fixture.driver.completion().get(2, TimeUnit.SECONDS);
+                assertEquals(WebsocketSessionState.CLIENT_CLOSED, fixture.websocket.state());
+            } else {
+                fixture.barrier();
+                assertEquals(WebsocketSessionState.OPEN, fixture.websocket.state());
+            }
+        }
+    }
+
+    @Test
+    void unexpectedWriteCallbackExecutorFailureClosesTheSessionAndDoesNotStrandItsMailbox() throws Exception {
+        var output = new ControlledOutput();
+        try (var fixture = new Fixture(new BaseWebSocket() {}, 0, output)) {
+            fixture.start();
+            fixture.until(() -> fixture.websocket.state() == WebsocketSessionState.OPEN);
+            fixture.barrier();
+            fixture.application.failure = new IllegalArgumentException("Executor failed to submit callback");
+            fixture.websocket.sendBinary(ByteBuffer.allocate(0), error -> fail("Rejected callback ran"));
+            output.next().completion.complete(null);
+            fixture.until(() -> fixture.aborts.get() > 0);
+            fixture.until(fixture.driver.completion()::isDone);
+            assertEquals(WebsocketSessionState.ERRORED, fixture.websocket.state());
+            assertTrue(fixture.driver.completion().isCompletedExceptionally());
+        }
+    }
+
+    @Test
+    void peerCloseWaitsForTheServerClosePayloadWithoutHoldingTheInternalWorker() throws Exception {
+        var output = new ControlledOutput();
+        var peerClosed = new CompletableFuture<Void>();
+        try (var fixture = new Fixture(new BaseWebSocket() {
+            @Override public void onClientClosed(int code, String reason) { peerClosed.complete(null); }
+        }, 0, output)) {
+            fixture.start();
+            fixture.until(() -> fixture.websocket.state() == WebsocketSessionState.OPEN);
+            var closer = Executors.newSingleThreadExecutor();
+            try {
+                var close = closer.submit(() -> { fixture.websocket.close(1000, "bye"); return null; });
+                var header = output.next();
+                assertEquals(ByteBuffer.wrap(new byte[]{(byte) 0x88, 5}), header.bytes);
+                fixture.offer(WebSocketWireTestSupport.frame(true, 8, new byte[]{3, (byte) 232}));
+                peerClosed.get(2, TimeUnit.SECONDS);
+                fixture.barrier();
+                assertFalse(fixture.driver.completion().isDone());
+                assertFalse(fixture.websocket.closeSent());
+                header.completion.complete(null);
+                var payload = output.next();
+                fixture.barrier();
+                assertFalse(fixture.driver.completion().isDone());
+                payload.completion.complete(null);
+                close.get(2, TimeUnit.SECONDS);
+                fixture.driver.completion().get(2, TimeUnit.SECONDS);
+                assertTrue(fixture.websocket.closeSent());
+                assertEquals(WebsocketSessionState.SERVER_CLOSED, fixture.websocket.state());
+                assertEquals(1, fixture.closes.get());
+                assertEquals(2, output.writes.size());
+            } finally { output.fail(); closer.shutdownNow(); }
+        }
+    }
+
+    @Test
+    void protocolErrorCloseSuspendsUntilOutputDrainsBeforeReportingTheInvalidFrame() throws Exception {
+        var output = new ControlledOutput();
+        var error = new CompletableFuture<Throwable>();
+        try (var fixture = new Fixture(new BaseWebSocket() {
+            @Override public void onError(Throwable failure) { error.complete(failure); }
+        }, 0, output)) {
+            fixture.start();
+            fixture.offer(new byte[]{(byte) 0x81, 0}); // Client frames must be masked.
+            var header = output.next();
+            fixture.barrier();
+            assertFalse(error.isDone());
+            header.completion.complete(null);
+            var payload = output.next();
+            assertEquals(1002, payload.bytes.getShort(0));
+            fixture.barrier();
+            assertFalse(error.isDone());
+            payload.completion.complete(null);
+            fixture.driver.completion().get(2, TimeUnit.SECONDS);
+            assertInstanceOf(WebsocketFrameDecoder.InvalidFrame.class, error.get());
+            assertEquals(WebsocketSessionState.ERRORED, fixture.websocket.state());
+        }
+    }
+
+    @Test
+    void interruptedBlockingSendRetainsItsBorrowUntilTransportAcknowledgesAbort() throws Exception {
+        var output = new ControlledOutput();
+        var writeReturned = new CompletableFuture<Throwable>();
+        var interruptedOnReturn = new CompletableFuture<Boolean>();
+        try (var fixture = new Fixture(new BaseWebSocket() {
+            @Override public void onError(Throwable failure) { }
+        }, 0, output)) {
+            fixture.start();
+            fixture.until(() -> fixture.websocket.state() == WebsocketSessionState.OPEN);
+            ByteBuffer source = ByteBuffer.allocateDirect(1024).putInt(42).flip();
+            Thread caller = new Thread(() -> {
+                try { fixture.websocket.sendBinary(source); writeReturned.complete(null); }
+                catch (Throwable failure) { writeReturned.complete(failure); }
+                finally { interruptedOnReturn.complete(Thread.currentThread().isInterrupted()); }
+            }, "blocking-websocket-caller");
+            try {
+                caller.start();
+                output.next().completion.complete(null);
+                var payload = output.next();
+                caller.interrupt();
+                fixture.until(() -> fixture.aborts.get() > 0);
+                fixture.driver.inputAvailable(); // The real transport owner supplies this failure notification.
+                fixture.barrier();
+                assertFalse(writeReturned.isDone(), "The caller cannot reuse storage while output still borrows it");
+                assertFalse(fixture.driver.completion().isDone());
+                assertEquals(42, payload.bytes.getInt(0));
+                payload.completion.completeExceptionally(new IOException("Abort acknowledged"));
+                assertInstanceOf(java.io.InterruptedIOException.class, writeReturned.get(2, TimeUnit.SECONDS));
+                assertTrue(interruptedOnReturn.get(2, TimeUnit.SECONDS));
+                fixture.driver.completion().get(2, TimeUnit.SECONDS);
+                assertEquals(0, source.position());
+            } finally { output.fail(); caller.interrupt(); caller.join(2000); }
+        }
+    }
+
     @Test
     void readTimeoutTracksPartialInputButPausesForDeferredCallbacksAndIgnoresOldTimers() throws Exception {
         var acknowledgement = new CompletableFuture<DoneCallback>();
@@ -263,6 +439,25 @@ class WebsocketReadDriverTest {
         }
     }
 
+    private static final class ControlledOutput implements AsyncTransportOutput {
+        final List<PendingWrite> writes = new CopyOnWriteArrayList<>();
+        final java.util.concurrent.BlockingQueue<PendingWrite> pending = new java.util.concurrent.LinkedBlockingQueue<>();
+        @Override public CompletableFuture<@Nullable Void> write(ByteBuffer bytes) {
+            var write = new PendingWrite(bytes.duplicate());
+            writes.add(write);
+            pending.add(write);
+            return write.completion;
+        }
+        PendingWrite next() throws Exception { return java.util.Objects.requireNonNull(pending.poll(2, TimeUnit.SECONDS)); }
+        void fail() { for (var write : writes) write.completion.completeExceptionally(new IOException("fixture closed")); }
+    }
+
+    private static final class PendingWrite {
+        final ByteBuffer bytes;
+        final CompletableFuture<@Nullable Void> completion = new CompletableFuture<>();
+        PendingWrite(ByteBuffer bytes) { this.bytes = bytes; }
+    }
+
     private static final class Fixture implements AutoCloseable {
         final ExecutorService internal = Executors.newSingleThreadExecutor(r -> new Thread(r, "websocket-driver-internal"));
         final ApplicationExecutor application = new ApplicationExecutor();
@@ -271,12 +466,19 @@ class WebsocketReadDriverTest {
         final TransportInputBuffer input = new TransportInputBuffer(8192, changed::release);
         final ByteArrayOutputStream output = new ByteArrayOutputStream();
         final AtomicInteger aborts = new AtomicInteger();
+        final AtomicInteger closes = new AtomicInteger();
+        final ControlledOutput asyncOutput;
         final MuServer server;
         final Http1Connection connection;
         final WebsocketConnection websocket;
         final WebsocketConnection.ReadDriver driver;
 
         Fixture(MuWebSocket handler, int timeoutMillis) throws Exception {
+            this(handler, timeoutMillis, null);
+        }
+
+        Fixture(MuWebSocket handler, int timeoutMillis, ControlledOutput asyncOutput) throws Exception {
+            this.asyncOutput = asyncOutput;
             var captured = new AtomicReference<BaseHttpConnection>();
             var builder = MuServerBuilder.httpServer().withHandlerExecutor(application)
                 .addHandler((req, res) -> { captured.set((BaseHttpConnection) req.connection()); res.write("ready"); return true; });
@@ -288,7 +490,7 @@ class WebsocketReadDriverTest {
             BaseHttpConnection config = captured.get();
             connection = new Http1Connection(config.server, config.creator, transport(), ConnectionAcceptedTime.now(), null, application);
             websocket = new WebsocketConnection(connection, handler, new WebSocketHandlerBuilder.Settings(0, 1024, 1024, timeoutMillis));
-            driver = websocket.readDriver(input, output, ByteBuffer.allocate(8192).flip());
+            driver = websocket.readDriver(input, output, ByteBuffer.allocate(8192).flip(), asyncOutput);
             barrier();
         }
 
@@ -312,6 +514,7 @@ class WebsocketReadDriverTest {
         }
         @Override public void close() throws Exception {
             try {
+                if (asyncOutput != null) asyncOutput.fail();
                 driver.ownerFailed(new IOException("fixture closed"));
                 until(driver.completion()::isDone);
             } finally {
@@ -336,7 +539,7 @@ class WebsocketReadDriverTest {
                 @Override public void readTimeoutMillis(int timeoutMillis) { input.readTimeoutMillis(timeoutMillis); }
                 @Override public void shutdownInput() { input.endOfInput(); }
                 @Override public void abort() { aborts.incrementAndGet(); input.fail(new IOException("Transport aborted")); }
-                @Override public void close() { input.endOfInput(); }
+                @Override public void close() { closes.incrementAndGet(); input.endOfInput(); }
             };
         }
     }

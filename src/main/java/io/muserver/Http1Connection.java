@@ -87,23 +87,31 @@ class Http1Connection extends BaseHttpConnection {
      * The continuation only queues transport work; it must not block, throw, or reenter the driver.
      */
     ReadDriver readDriver(TransportInputBuffer input, OutputStream output, Runnable continuation) {
-        return new ReadDriver(input, output, continuation);
+        return readDriver(input, output, continuation, null);
+    }
+
+    ReadDriver readDriver(TransportInputBuffer input, OutputStream output, Runnable continuation,
+                          @Nullable TransportOutputBuffer upgradeOutput) {
+        return new ReadDriver(input, output, continuation, upgradeOutput);
     }
 
     final class ReadDriver {
         private final TransportInputBuffer input;
         private final OutputStream output;
         private final Runnable continuation;
+        private final @Nullable TransportOutputBuffer upgradeOutput;
         private final Http1MessageParser parser;
         private final Http1MessageParser.AvailableRead availableRead;
         private final CompletableFuture<Void> ended = new CompletableFuture<>();
         private @Nullable CompletableFuture<ExchangeResult> pending;
         private WebsocketConnection.@Nullable ReadDriver websocketReader;
 
-        private ReadDriver(TransportInputBuffer input, OutputStream output, Runnable continuation) {
+        private ReadDriver(TransportInputBuffer input, OutputStream output, Runnable continuation,
+                           @Nullable TransportOutputBuffer upgradeOutput) {
             this.input = input;
             this.output = output;
             this.continuation = continuation;
+            this.upgradeOutput = upgradeOutput;
             this.availableRead = input::readAvailable;
             this.parser = new Http1MessageParser(HttpMessageType.REQUEST, requestPipeline,
                 new HttpConnectionInputStream(Http1Connection.this, input, false),
@@ -138,7 +146,8 @@ class Http1Connection extends BaseHttpConnection {
                     WebsocketConnection websocket = result.websocket;
                     if (websocket != null) {
                         activateWebsocket(websocket);
-                        WebsocketConnection.ReadDriver reader = websocket.readDriver(input, output, parser.takeInputForUpgrade());
+                        WebsocketConnection.ReadDriver reader = websocket.readDriver(input, output, parser.takeInputForUpgrade(),
+                            upgradeOutput == null ? null : upgradeOutput.asynchronousWriter());
                         websocketReader = reader;
                         pending = reader.completion().thenApply(ignored -> new ExchangeResult(true, null));
                         pending.whenComplete((ignored, failure) -> continuation.run());
@@ -655,6 +664,11 @@ class Http1Connection extends BaseHttpConnection {
         if (state.get() == HttpConnectionState.CLOSED_LOCAL) {
             state.compareAndSet(HttpConnectionState.CLOSED_LOCAL, HttpConnectionState.CLOSED);
         }
+    }
+
+    // Begin physical closure while retaining the WebSocket exchange until its borrowed writes retire.
+    void closeWebsocketTransport() {
+        closeTransportQuietly();
     }
 
     private void closeTransportQuietly() {
