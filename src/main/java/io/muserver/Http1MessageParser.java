@@ -15,15 +15,34 @@ class Http1MessageParser implements Http1MessageReader {
     private final byte[] readBuffer = new byte[8192];
     private final ByteBuffer input = ByteBuffer.wrap(readBuffer).flip();
     private boolean handedOff;
+    private final Http1MessageReader.@Nullable Available asynchronousReader;
 
     @FunctionalInterface
     interface AvailableRead { int read(byte[] target) throws IOException; }
 
     Http1MessageParser(HttpMessageType type, Queue<HttpRequestTemp> requestQueue, InputStream source,
                        int maxHeadersLength, int maxUrlLength) {
+        this(type, requestQueue, source, maxHeadersLength, maxUrlLength, null, null);
+    }
+
+    Http1MessageParser(HttpMessageType type, Queue<HttpRequestTemp> requestQueue, InputStream source,
+                       int maxHeadersLength, int maxUrlLength, @Nullable TransportInputBuffer availableSource,
+                       @Nullable AvailableRead availableRead) {
         this.source = source;
         this.decoder = new Http1MessageDecoder(type, requestQueue, maxHeadersLength, maxUrlLength);
+        this.asynchronousReader = availableSource == null || availableRead == null ? null : new Http1MessageReader.Available() {
+            @Override public @Nullable Http1ConnectionMsg readAvailable() throws IOException, ParseException {
+                return Http1MessageParser.this.readAvailable(availableRead);
+            }
+            @Override public java.util.concurrent.CompletableFuture<Void> whenReadable() {
+                // A bounded body turn can yield while a further event remains in parser storage.
+                return input.hasRemaining() ? java.util.concurrent.CompletableFuture.completedFuture(null) : availableSource.whenReadable();
+            }
+            @Override public long readTimeoutMillis() { return availableSource.readTimeoutMillis(); }
+        };
     }
+
+    @Override public Http1MessageReader.@Nullable Available asynchronousReader() { return asynchronousReader; }
 
     @Override
     public Http1ConnectionMsg readNext() throws IOException, ParseException {

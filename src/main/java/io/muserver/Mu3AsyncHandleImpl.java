@@ -65,6 +65,7 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
         private final byte[] buffer = new byte[8192];
         private final AtomicBoolean finished = new AtomicBoolean();
         private final InputStream clientIn;
+        private final @Nullable AsyncBodyInput asynchronousInput;
         private final Object ownership = new Object();
         private final CompletableFuture<Void> stopped = new CompletableFuture<>();
         // Guarded by ownership. A read task may also dispatch an inline application callback.
@@ -73,6 +74,9 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
         private boolean stopRequested;
         private boolean stopInitialized;
         private @Nullable Throwable stopFailure;
+        private @Nullable BodyReadWait waiting;
+        private @Nullable Throwable readFailure;
+        private boolean readTimedOut;
 
         private AsyncBodyReader(
             RequestBodyListener readListener,
@@ -80,6 +84,8 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
         ) {
             this.readListener = readListener;
             this.clientIn = clientIn;
+            this.asynchronousInput = clientIn instanceof AsyncBodyInput.Provider
+                ? ((AsyncBodyInput.Provider) clientIn).asynchronousInput() : null;
         }
 
         private void scheduleNextRead() {
@@ -89,7 +95,11 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
             try {
                 server.executeInternalTask(this::readNext);
             } catch (RejectedExecutionException rejected) {
-                fail(rejected, true);
+                // Readiness and timer notifications may originate on transport threads. Even a
+                // supplied CallerRuns executor must never put application callbacks on those threads.
+                Thread cleanup = new Thread(() -> fail(rejected, true), "mu-body-rejected-reader");
+                cleanup.setDaemon(true);
+                cleanup.start();
             }
         }
 
@@ -108,7 +118,22 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
         private void readAndDispatch() {
             final int read;
             try {
-                read = clientIn.read(buffer);
+                Throwable failure;
+                boolean timedOut;
+                synchronized (ownership) {
+                    failure = readFailure;
+                    timedOut = readTimedOut;
+                    readFailure = null;
+                    readTimedOut = false;
+                }
+                if (failure != null) throw failure;
+                AsyncBodyInput input = asynchronousInput;
+                if (timedOut) throw Objects.requireNonNull(input).timeoutFailure();
+                read = input == null ? clientIn.read(buffer) : input.readAvailable(buffer);
+                if (read == 0 && input != null) {
+                    awaitInput(input);
+                    return;
+                }
             } catch (Throwable t) {
                 fail(t, true);
                 FatalErrors.rethrow(t);
@@ -126,14 +151,65 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
             dispatchCallback(() -> deliver(read));
         }
 
+        private void awaitInput(AsyncBodyInput input) {
+            BodyReadWait next = new BodyReadWait(input.whenReadable());
+            long timeoutMillis = input.readTimeoutMillis();
+            synchronized (ownership) {
+                if (!finished.get()) waiting = next;
+            }
+            if (finished.get()) {
+                next.cancel();
+                return;
+            }
+            next.readiness.whenComplete((ignored, failure) -> next.resume(failure, false));
+            if (timeoutMillis > 0 && !next.claimed.get()) {
+                try {
+                    next.timer = server.scheduleTimerCallback(() -> next.resume(null, true), timeoutMillis, TimeUnit.MILLISECONDS);
+                    // Input or cancellation can win before the timer has been published.
+                    if (next.claimed.get()) next.timer.cancel(false);
+                } catch (RejectedExecutionException rejected) { next.resume(rejected, false); }
+            }
+        }
+
+        private final class BodyReadWait {
+            final CompletableFuture<Void> readiness;
+            final AtomicBoolean claimed = new AtomicBoolean();
+            volatile @Nullable ScheduledFuture<?> timer;
+
+            BodyReadWait(CompletableFuture<Void> readiness) { this.readiness = readiness; }
+
+            void resume(@Nullable Throwable failure, boolean timedOut) {
+                if (!claimed.compareAndSet(false, true)) return;
+                cancel();
+                synchronized (ownership) {
+                    if (waiting != this || finished.get()) return;
+                    waiting = null;
+                    readFailure = failure;
+                    readTimedOut = timedOut;
+                }
+                scheduleNextRead();
+            }
+
+            void cancel() {
+                claimed.set(true);
+                readiness.cancel(false);
+                ScheduledFuture<?> scheduled = timer;
+                if (scheduled != null) scheduled.cancel(false);
+            }
+        }
+
         private CompletableFuture<Void> stop() {
+            BodyReadWait pending;
             synchronized (ownership) {
                 if (stopRequested) return stopped;
                 stopRequested = true;
                 // A late data acknowledgement cannot refill its buffer or resume parser access.
                 finished.set(true);
+                pending = waiting;
+                waiting = null;
             }
             try {
+                if (pending != null) pending.cancel();
                 if (clientIn instanceof Http2BodyInputStream) {
                     // H2 has a separate frame producer: return queued credit and wake a waiting reader.
                     ((Http2BodyInputStream) clientIn).discardRemaining();

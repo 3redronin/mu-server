@@ -102,10 +102,16 @@ class AsyncBodyOwnershipTest {
             return thread;
         });
         var application = Executors.newSingleThreadExecutor();
-        var timer = Executors.newSingleThreadScheduledExecutor();
+        var waiting = new CompletableFuture<Void>();
+        var timer = new java.util.concurrent.ScheduledThreadPoolExecutor(1) {
+            @Override public java.util.concurrent.ScheduledFuture<?> schedule(Runnable task, long delay, TimeUnit unit) {
+                if (unit.toMillis(delay) == 12345) waiting.complete(null);
+                return super.schedule(task, delay, unit);
+            }
+        };
         var handle = new CompletableFuture<AsyncHandle>();
         var deliveries = new AtomicInteger();
-        var builder = MuServerBuilder.httpServer().withHandlerExecutor(application);
+        var builder = MuServerBuilder.httpServer().withHandlerExecutor(application).withRequestTimeout(12345, TimeUnit.MILLISECONDS);
         builder.useChannelTransport = channel;
         builder.executionResourcesFactory = (supplied, mode) -> new ExecutionResources(application, false, internal, timer);
         builder.addHandler((request, response) -> {
@@ -131,7 +137,8 @@ class AsyncBodyOwnershipTest {
             AsyncHandle async = handle.get(2, TimeUnit.SECONDS);
             // Establish the offending interleaving: the reader already owns parser storage and
             // is waiting for input when response completion asks cleanup to discard the body.
-            until(() -> workers.stream().anyMatch(AsyncBodyOwnershipTest::readingBody));
+            if (channel) waiting.get(2, TimeUnit.SECONDS);
+            else until(() -> workers.stream().anyMatch(AsyncBodyOwnershipTest::readingBody));
             async.complete();
             socket.setSoTimeout(100);
             assertThrows(SocketTimeoutException.class, () -> client.in().read(), "Cleanup must await the real request body");

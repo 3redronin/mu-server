@@ -9,6 +9,7 @@ import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -29,6 +30,7 @@ final class TransportInputBuffer extends InputStream {
     private int timeoutMillis;
     private boolean ended;
     private @Nullable IOException failure;
+    private final InputReadiness readiness = new InputReadiness();
 
     TransportInputBuffer(int capacity, Runnable capacityAvailable) {
         this(capacity, capacityAvailable, () -> { });
@@ -49,6 +51,7 @@ final class TransportInputBuffer extends InputStream {
 
     int offer(ByteBuffer source) throws IOException {
         boolean notifyInput = false;
+        CompletableFuture<Void> ready = null;
         lock.lock();
         try {
             checkFailure();
@@ -59,11 +62,13 @@ final class TransportInputBuffer extends InputStream {
             source.get(bytes, tail, first);
             source.get(bytes, 0, count - first);
             notifyInput = size == 0 && count > 0;
+            if (notifyInput) ready = readiness.take();
             size += count;
             if (count > 0) changed.signalAll();
             return count;
         } finally {
             lock.unlock();
+            InputReadiness.signal(ready);
             if (notifyInput) inputAvailable.run();
         }
     }
@@ -71,15 +76,21 @@ final class TransportInputBuffer extends InputStream {
     /** Buffered data remains readable before EOF. Input half-close does not close output. */
     void endOfInput() {
         boolean notifyInput;
+        CompletableFuture<Void> ready;
         lock.lock();
-        try { notifyInput = !ended && failure == null; ended = true; changed.signalAll(); }
+        try {
+            notifyInput = !ended && failure == null; ended = true; changed.signalAll();
+            ready = readiness.take();
+        }
         finally { lock.unlock(); }
+        InputReadiness.signal(ready);
         if (notifyInput) inputAvailable.run();
     }
 
     /** Abort wins over queued bytes and EOF, and wakes blocked readers. The first failure is retained. */
     void fail(IOException cause) {
         boolean notifyInput;
+        CompletableFuture<Void> ready;
         lock.lock();
         try {
             notifyInput = failure == null;
@@ -88,7 +99,9 @@ final class TransportInputBuffer extends InputStream {
             bytes = new byte[0];
             size = 0;
             changed.signalAll();
+            ready = readiness.take();
         } finally { lock.unlock(); }
+        InputReadiness.signal(ready);
         if (notifyInput) inputAvailable.run();
     }
 
@@ -97,6 +110,18 @@ final class TransportInputBuffer extends InputStream {
         if (timeoutMillis < 0) throw new IllegalArgumentException("Negative timeout");
         lock.lock();
         try { this.timeoutMillis = timeoutMillis; }
+        finally { lock.unlock(); }
+    }
+
+    int readTimeoutMillis() {
+        lock.lock();
+        try { return timeoutMillis; }
+        finally { lock.unlock(); }
+    }
+
+    CompletableFuture<Void> whenReadable() {
+        lock.lock();
+        try { return readiness.whenReadable(size > 0 || ended || failure != null); }
         finally { lock.unlock(); }
     }
 

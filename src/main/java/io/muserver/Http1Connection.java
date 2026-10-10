@@ -112,10 +112,10 @@ class Http1Connection extends BaseHttpConnection {
             this.output = output;
             this.continuation = continuation;
             this.upgradeOutput = upgradeOutput;
-            this.availableRead = input::readAvailable;
+            var connectionInput = new HttpConnectionInputStream(Http1Connection.this, input, false);
+            this.availableRead = bytes -> connectionInput.readAvailable(input, bytes);
             this.parser = new Http1MessageParser(HttpMessageType.REQUEST, requestPipeline,
-                new HttpConnectionInputStream(Http1Connection.this, input, false),
-                server.maxRequestHeadersSize(), server.maxUrlSize());
+                connectionInput, server.maxRequestHeadersSize(), server.maxUrlSize(), input, availableRead);
         }
 
         CompletableFuture<Void> completion() { return ended; }

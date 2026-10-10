@@ -8,11 +8,12 @@ import java.util.LinkedList;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-class Http2BodyInputStream extends InputStream implements RequestTrailersAccessor {
+class Http2BodyInputStream extends InputStream implements RequestTrailersAccessor, AsyncBodyInput, AsyncBodyInput.Provider {
 
     private static class PendingDataFrame {
         final Http2DataFrame dataFrame;
@@ -49,6 +50,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
     private @org.jspecify.annotations.Nullable FieldBlock trailers;
     // Guarded by lock.
     private long bytesRead;
+    private final InputReadiness readiness = new InputReadiness();
 
     private static final class EndOfStreamMarker {
         private EndOfStreamMarker() {
@@ -85,6 +87,26 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
 
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
+        return read(b, off, len, true);
+    }
+
+    @Override public AsyncBodyInput asynchronousInput() { return this; }
+
+    @Override public int readAvailable(byte[] target) throws IOException {
+        return read(target, 0, target.length, false);
+    }
+
+    @Override public CompletableFuture<Void> whenReadable() {
+        lock.lock();
+        try { return readiness.whenReadable(!frames.isEmpty()); }
+        finally { lock.unlock(); }
+    }
+
+    @Override public long readTimeoutMillis() { return readTimeoutMillis; }
+
+    @Override public RuntimeException timeoutFailure() { return new HttpException(HttpStatus.REQUEST_TIMEOUT_408); }
+
+    private int read(byte[] b, int off, int len, boolean wait) throws IOException {
         Objects.checkFromIndexSize(off, len, b.length);
         if (len == 0) {
             return 0;
@@ -98,6 +120,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
             while (true) {
                 Object frame;
                 while ((frame = frames.peek()) == null) {
+                    if (!wait) return 0;
                     try {
                         if (readTimeoutMillis == 0) {
                             hasData.await();
@@ -179,6 +202,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
     public void onData(Http2DataFrame dataFrame, int flowControlSize) {
         int discardedCredit = 0;
         int resetCredit = 0;
+        CompletableFuture<Void> ready = null;
         lock.lock();
         try {
             if (failure != null) {
@@ -206,8 +230,10 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
                 }
                 hasData.signal();
             }
+            if (!frames.isEmpty()) ready = readiness.take();
         } finally {
             lock.unlock();
+            InputReadiness.signal(ready);
         }
         returnReusableCredit(discardedCredit);
         refundDiscardedCredit(resetCredit);
@@ -215,6 +241,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
 
     void discardRemaining() {
         int discardedCredit = 0;
+        CompletableFuture<Void> ready = null;
         lock.lock();
         try {
             if (!discarding && !isErrored()) {
@@ -228,13 +255,16 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
                 frames.add(DISCARDING);
                 hasData.signalAll();
             }
+            if (!frames.isEmpty()) ready = readiness.take();
         } finally {
             lock.unlock();
+            InputReadiness.signal(ready);
         }
         returnReusableCredit(discardedCredit);
     }
 
     void onTrailers(FieldBlock trailers) {
+        CompletableFuture<Void> ready = null;
         lock.lock();
         try {
             this.trailers = trailers;
@@ -243,8 +273,10 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
                 frames.add(END_OF_STREAM);
                 hasData.signal();
             }
+            if (!frames.isEmpty()) ready = readiness.take();
         } finally {
             lock.unlock();
+            InputReadiness.signal(ready);
         }
     }
 
@@ -258,6 +290,7 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
 
     private void setErrored(IOException ex, UnreadDataCredit refundUnreadData) {
         int discardedCredit = 0;
+        CompletableFuture<Void> ready = null;
         lock.lock();
         try {
             if (!isErrored()) {
@@ -273,8 +306,10 @@ class Http2BodyInputStream extends InputStream implements RequestTrailersAccesso
                 frames.add(ex);
                 hasData.signalAll();
             }
+            if (!frames.isEmpty()) ready = readiness.take();
         } finally {
             lock.unlock();
+            InputReadiness.signal(ready);
         }
         refundDiscardedCredit(discardedCredit);
     }

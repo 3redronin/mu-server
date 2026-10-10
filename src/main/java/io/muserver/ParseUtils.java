@@ -120,6 +120,14 @@ class MessageBodyBit implements Http1ConnectionMsg {
 interface Http1MessageReader {
     Http1ConnectionMsg readNext() throws IOException, ParseException;
 
+    interface Available {
+        @Nullable Http1ConnectionMsg readAvailable() throws IOException, ParseException;
+        java.util.concurrent.CompletableFuture<Void> whenReadable();
+        long readTimeoutMillis();
+    }
+
+    default @Nullable Available asynchronousReader() { return null; }
+
     /** Transfers the trailers associated with the most recently delivered end-of-body event. */
     default @Nullable FieldBlock takeTrailers() { return null; }
 }

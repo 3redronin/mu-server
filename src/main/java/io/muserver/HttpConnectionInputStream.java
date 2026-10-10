@@ -42,6 +42,21 @@ class HttpConnectionInputStream extends FilterInputStream {
         return read(b, 0, b.length);
     }
 
+    /** Polling counterpart for an exclusively owned channel input; accounting stays identical. */
+    int readAvailable(TransportInputBuffer input, byte[] target) throws IOException {
+        if (httpConnection.isClosed()) throw new IOException("The connection is closed");
+        int read;
+        try { read = input.readAvailable(target); }
+        catch (IOException failure) {
+            httpConnection.onTransportInputFailure(failure);
+            throw failure;
+        }
+        if (read > 0) {
+            if (countBytes) httpConnection.onBytesRead(read);
+        } else if (read == -1) httpConnection.onTransportInputEnd();
+        return read;
+    }
+
     @Override
     public int read(byte[] b, int off, int len) throws IOException {
         if (httpConnection.isClosed()) throw new IOException("The connection is closed");
