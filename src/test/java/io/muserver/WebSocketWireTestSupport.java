@@ -22,8 +22,12 @@ final class WebSocketWireTestSupport implements AutoCloseable {
     }
 
     WebSocketWireTestSupport(MuServer server, int handshakeWriteSize) throws IOException {
+        this(server, new Socket(server.uri().getHost(), server.uri().getPort()), handshakeWriteSize);
+    }
+
+    WebSocketWireTestSupport(MuServer server, Socket socket, int handshakeWriteSize) throws IOException {
         if (handshakeWriteSize < 1) throw new IllegalArgumentException("handshakeWriteSize must be positive");
-        socket = new Socket(server.uri().getHost(), server.uri().getPort());
+        this.socket = socket;
         socket.setSoTimeout(3000);
         socket.setTcpNoDelay(true);
         input = new DataInputStream(socket.getInputStream());

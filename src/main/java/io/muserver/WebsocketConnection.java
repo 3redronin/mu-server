@@ -22,6 +22,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -56,6 +57,8 @@ class WebsocketConnection implements MuWebSocketSession {
 
     private static final class ApplicationEventTask {
         private final ApplicationEvent event;
+        // 0 queued, 1 invoking application code, 2 deferred acknowledgement, 3 completed.
+        private final AtomicInteger phase = new AtomicInteger();
         private final CompletableFuture<@Nullable Void> completion = new CompletableFuture<>();
 
         private ApplicationEventTask(ApplicationEvent event) {
@@ -150,32 +153,230 @@ class WebsocketConnection implements MuWebSocketSession {
                 Thread.currentThread().interrupt();
                 throw (InterruptedException) failure;
             }
-            boolean applicationFailure = failure instanceof ApplicationEventFailure;
-            Throwable e = applicationFailure ? Objects.requireNonNull(failure.getCause()) : failure;
-            FatalErrors.rethrow(e);
-            if ((!serverShutdownRequested.get() || applicationFailure)
-                && !errorEventQueued.get()
-                && lifecycle.state() != WebsocketSessionState.TIMED_OUT) {
-                WebsocketSessionState errorState =
-                    e instanceof TimeoutException || e instanceof SocketTimeoutException
-                        ? WebsocketSessionState.TIMED_OUT
-                        : WebsocketSessionState.ERRORED;
-                if (errorState == WebsocketSessionState.TIMED_OUT) {
-                    // A read timeout must also release a pending send. Publishing the
-                    // terminal state first prevents the default error callback from
-                    // waiting to send a close frame behind that unfinished message.
-                    lifecycle.terminateWith(errorState);
-                    httpConnection.forceShutdown();
-                }
-                invokeApplicationError(e, errorState);
-            }
+            ApplicationEvent error = prepareError(failure);
+            if (error != null) invokeApplicationEvent(error);
         } finally {
-            ScheduledFuture<?> currentPing = pingFuture;
-            if (currentPing != null) {
-                currentPing.cancel(false);
-                pingFuture = null;
+            stopPinging();
+        }
+    }
+
+    private void stopPinging() {
+        ScheduledFuture<?> currentPing = pingFuture;
+        if (currentPing != null) {
+            currentPing.cancel(false);
+            pingFuture = null;
+        }
+    }
+
+    private @Nullable ApplicationEvent prepareError(Throwable failure) {
+        boolean applicationFailure = failure instanceof ApplicationEventFailure;
+        Throwable cause = applicationFailure ? Objects.requireNonNull(failure.getCause()) : failure;
+        FatalErrors.rethrow(cause);
+        if ((!serverShutdownRequested.get() || applicationFailure)
+            && !errorEventQueued.get()
+            && lifecycle.state() != WebsocketSessionState.TIMED_OUT) {
+            WebsocketSessionState errorState = cause instanceof TimeoutException || cause instanceof SocketTimeoutException
+                ? WebsocketSessionState.TIMED_OUT : WebsocketSessionState.ERRORED;
+            if (errorState == WebsocketSessionState.TIMED_OUT) {
+                // Publish termination before onError so a default callback cannot wait to send
+                // a close frame behind a pending write. Aborting also releases that write.
+                lifecycle.terminateWith(errorState);
+                httpConnection.forceShutdown();
+            }
+            if (errorEventQueued.compareAndSet(false, true)) return errorEvent(cause, errorState);
+        }
+        return null;
+    }
+
+    ReadDriver readDriver(TransportInputBuffer input, OutputStream output, ByteBuffer prefetched) {
+        inputStream = input;
+        outputStream = output;
+        return new ReadDriver(input, prefetched);
+    }
+
+    /** Readiness callbacks only schedule work; decoding and application dispatch stay off the selector. */
+    final class ReadDriver {
+        private static final int STEPS_PER_TURN = 64;
+        private final TransportInputBuffer input;
+        private final ByteBuffer bytes;
+        private final WebsocketFrameDecoder decoder =
+            new WebsocketFrameDecoder(settings.maxFramePayloadLength, settings.maxMessageLength);
+        private final AtomicBoolean scheduled = new AtomicBoolean();
+        private final CompletableFuture<Void> ended = new CompletableFuture<>();
+        private volatile @Nullable CompletableFuture<@Nullable Void> pending;
+        private volatile @Nullable ReadDeadline deadline;
+        private volatile @Nullable Throwable submissionFailure;
+        private volatile boolean needsInput;
+        private boolean connected;
+        private boolean connectCompleted;
+        private boolean finishing;
+
+        private ReadDriver(TransportInputBuffer input, ByteBuffer prefetched) {
+            this.input = input;
+            this.bytes = prefetched;
+        }
+
+        CompletableFuture<Void> completion() { return ended; }
+
+        void inputAvailable() {
+            if (ready()) schedule();
+        }
+
+        void ownerFailed(IOException failure) {
+            input.fail(failure);
+            inputAvailable();
+        }
+
+        private boolean ready() {
+            if (ended.isDone()) return false;
+            CompletableFuture<?> work = pending;
+            if (work != null) return work.isDone();
+            ReadDeadline waiting = deadline;
+            return submissionFailure != null || !needsInput || input.readable()
+                || (waiting != null && waiting.expired);
+        }
+
+        private void schedule() {
+            if (ended.isDone() || !scheduled.compareAndSet(false, true)) return;
+            try { server.executeInternalTask(this::run); }
+            catch (RejectedExecutionException rejected) {
+                submissionFailure = rejected;
+                // Normally prevented by the transport's resource lease. Exceptional cleanup
+                // must still avoid invoking application callbacks on the notifying selector.
+                Thread cleanup = new Thread(this::run, "mu-websocket-rejected-reader");
+                cleanup.setDaemon(true);
+                cleanup.start();
             }
         }
+
+        private void run() {
+            needsInput = false;
+            try {
+                if (!connected) {
+                    connected = true;
+                    if (submissionFailure != null) throw submissionFailure;
+                    lifecycle.onConnected();
+                    await(enqueueApplicationEvent(() -> webSocket.onConnect(WebsocketConnection.this)));
+                }
+                for (int step = 0; step < STEPS_PER_TURN && !ended.isDone(); step++) {
+                    CompletableFuture<?> work = pending;
+                    if (work != null) {
+                        if (!work.isDone()) return;
+                        pending = null;
+                        try { work.join(); }
+                        catch (java.util.concurrent.CompletionException failure) {
+                            throw new ApplicationEventFailure(Objects.requireNonNull(failure.getCause()));
+                        }
+                        if (finishing) { finish(null); return; }
+                    }
+                    if (submissionFailure != null) throw submissionFailure;
+                    if (!connectCompleted) {
+                        connectCompleted = true;
+                        if (settings.pingIntervalMillis > 0) startPinging();
+                    }
+                    if (closeReceived) {
+                        completeCloseHandshakeIfCloseSent();
+                        endAfterEvents(null);
+                        return;
+                    }
+                    ReadDeadline waiting = deadline;
+                    if (waiting != null && waiting.expired) throw new SocketTimeoutException("WebSocket read timed out");
+                    // Failure wins over any prefetched frame after an outstanding callback returns.
+                    try { input.available(); }
+                    catch (java.io.InterruptedIOException failure) { throw failure; }
+                    catch (IOException failure) { throw disconnected(failure); }
+                    WebsocketFrameDecoder.Frame frame;
+                    try { frame = decoder.decode(bytes); }
+                    catch (WebsocketFrameDecoder.InvalidFrame invalid) {
+                        // The output migration replaces this remaining protocol-error write wait.
+                        close(invalid.closeCode, invalid.getMessage());
+                        throw invalid;
+                    }
+                    if (frame != null) {
+                        cancelReadDeadline();
+                        await(enqueueApplicationEvent(frameEvent(frame)));
+                        continue;
+                    }
+                    bytes.clear();
+                    int count;
+                    try { count = input.readAvailable(bytes.array(), bytes.arrayOffset(), bytes.capacity()); }
+                    catch (java.io.InterruptedIOException failure) { throw failure; }
+                    catch (IOException failure) { throw disconnected(failure); }
+                    finally { bytes.flip(); }
+                    if (count == -1) decoder.endOfInput();
+                    if (count == 0) {
+                        needsInput = true;
+                        armReadDeadline();
+                        return;
+                    }
+                    bytes.limit(count);
+                    cancelReadDeadline();
+                }
+            } catch (Throwable failure) {
+                if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
+                if (finishing) finish(failure);
+                else {
+                    try { endAfterEvents(prepareError(failure)); }
+                    catch (Throwable errorFailure) { finish(errorFailure); FatalErrors.rethrow(errorFailure); }
+                }
+                FatalErrors.rethrow(failure);
+            } finally {
+                scheduled.set(false);
+                // An offer or event completion racing suspension cannot be lost.
+                if (ready()) schedule();
+            }
+        }
+
+        private void await(CompletableFuture<@Nullable Void> work) {
+            pending = work;
+            work.whenComplete((ignored, failure) -> schedule());
+        }
+
+        private void endAfterEvents(@Nullable ApplicationEvent error) {
+            finishing = true;
+            cancelReadDeadline();
+            stopPinging();
+            // A barrier also retains an error/shutdown callback already queued by another task.
+            await(enqueueApplicationEvent(error == null ? () -> { } : error));
+        }
+
+        private void finish(@Nullable Throwable failure) {
+            cancelReadDeadline();
+            stopPinging();
+            pending = null;
+            if (failure == null) ended.complete(null);
+            else ended.completeExceptionally(failure);
+        }
+
+        @SuppressWarnings("ReferenceEquality") // Each timer owns exactly one read-wait generation.
+        private void armReadDeadline() {
+            if (deadline != null || settings.idleReadTimeoutMillis == 0) return;
+            ReadDeadline waiting = new ReadDeadline();
+            deadline = waiting;
+            waiting.timer = server.scheduleTimerCallback(() -> {
+                if (deadline == waiting) {
+                    waiting.expired = true;
+                    schedule();
+                }
+            }, settings.idleReadTimeoutMillis, TimeUnit.MILLISECONDS);
+        }
+
+        private void cancelReadDeadline() {
+            ReadDeadline waiting = deadline;
+            deadline = null;
+            if (waiting != null && waiting.timer != null) waiting.timer.cancel(false);
+        }
+    }
+
+    private static final class ReadDeadline {
+        private volatile boolean expired;
+        private @Nullable ScheduledFuture<?> timer;
+    }
+
+    private static ClientDisconnectedException disconnected(IOException failure) {
+        ClientDisconnectedException disconnected = new ClientDisconnectedException();
+        disconnected.initCause(failure);
+        return disconnected;
     }
 
     /** Called by the serial reader after the complete frame has been validated. */
@@ -315,12 +516,6 @@ class WebsocketConnection implements MuWebSocketSession {
         return WebSocketEventCompletion.invoke(event::run);
     }
 
-    private void invokeApplicationError(Throwable cause, WebsocketSessionState errorState) throws InterruptedException, ApplicationEventFailure {
-        if (errorEventQueued.compareAndSet(false, true)) {
-            invokeApplicationEvent(errorEvent(cause, errorState));
-        }
-    }
-
     private void enqueueApplicationError(Throwable cause, WebsocketSessionState errorState) {
         if (errorEventQueued.compareAndSet(false, true)) {
             enqueueApplicationEvent(errorEvent(cause, errorState));
@@ -359,9 +554,12 @@ class WebsocketConnection implements MuWebSocketSession {
         if (!applicationEventRunnerScheduled.compareAndSet(false, true)) {
             return;
         }
-        RejectedExecutionException rejected = server.tryExecuteHandlerTask(this::runApplicationEvents);
-        if (rejected != null) {
-            failApplicationEvents(rejected);
+        try {
+            RejectedExecutionException rejected = server.tryExecuteHandlerTask(this::runApplicationEvents);
+            if (rejected != null) failApplicationEvents(rejected);
+        } catch (RuntimeException | Error failure) {
+            failApplicationEvents(new RejectedExecutionException("WebSocket event dispatch failed", failure));
+            FatalErrors.rethrow(failure);
         }
     }
 
@@ -374,8 +572,29 @@ class WebsocketConnection implements MuWebSocketSession {
         httpConnection.forceShutdown();
         ApplicationEventTask task;
         while ((task = applicationEvents.poll()) != null) {
-            task.completion.completeExceptionally(failure);
+            rejectApplicationEvent(task, failure);
         }
+    }
+
+    private void rejectApplicationEvent(ApplicationEventTask task, RejectedExecutionException failure) {
+        for (;;) {
+            int phase = task.phase.get();
+            // Keep accounting while the application method actually runs. Once it returns,
+            // rejection cancels a deferred wait; owned frame storage is never reused afterward.
+            if (phase == 1 || phase == 3) return;
+            if (task.phase.compareAndSet(phase, 3)) {
+                applicationEvents.remove(task);
+                task.completion.completeExceptionally(failure);
+                return;
+            }
+        }
+    }
+
+    private void completeApplicationEvent(ApplicationEventTask task, @Nullable Throwable failure) {
+        if (task.phase.getAndSet(3) == 3) return;
+        applicationEvents.remove(task);
+        if (failure == null) task.completion.complete(null);
+        else task.completion.completeExceptionally(failure);
     }
 
     private void runApplicationEvents() {
@@ -388,24 +607,31 @@ class WebsocketConnection implements MuWebSocketSession {
                     || !applicationEventRunnerScheduled.compareAndSet(false, true)) return;
                 continue;
             }
+            if (!task.phase.compareAndSet(0, 1)) continue;
+            RejectedExecutionException rejected = applicationEventRejection;
+            if (rejected != null) {
+                completeApplicationEvent(task, rejected);
+                return;
+            }
             try {
                 CompletableFuture<@Nullable Void> deferred = callApplicationEvent(task.event);
                 if (deferred != null && !deferred.isDone()) {
+                    task.phase.set(2);
+                    // Rejection during invocation must wait for the method to return, but an
+                    // acknowledgement chained to a rejected write callback may never arrive.
+                    rejected = applicationEventRejection;
+                    if (rejected != null) rejectApplicationEvent(task, rejected);
                     deferred.whenComplete((ignored, failure) -> {
-                        applicationEvents.remove(task);
-                        if (failure == null) task.completion.complete(null);
-                        else task.completion.completeExceptionally(failure);
+                        completeApplicationEvent(task, failure);
                         applicationEventRunnerScheduled.set(false);
                         if (!applicationEvents.isEmpty()) scheduleApplicationEventRunner();
                     });
                     return;
                 }
                 if (deferred != null) deferred.join();
-                applicationEvents.remove(task);
-                task.completion.complete(null);
+                completeApplicationEvent(task, null);
             } catch (Throwable failure) {
-                applicationEvents.remove(task);
-                task.completion.completeExceptionally(failure);
+                completeApplicationEvent(task, failure);
                 if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
                 FatalErrors.rethrow(failure);
             }

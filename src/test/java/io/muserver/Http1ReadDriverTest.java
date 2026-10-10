@@ -111,6 +111,62 @@ class Http1ReadDriverTest {
     }
 
     @Test
+    void idleWebsocketsAndDeferredReceivesReleaseBothWorkersAndRetainFramesUntilAcknowledged() throws Exception {
+        AtomicInteger connected = new AtomicInteger();
+        AtomicInteger pings = new AtomicInteger();
+        Queue<DoneCallback> acknowledgements = new ConcurrentLinkedQueue<>();
+        Queue<ByteBuffer> retained = new ConcurrentLinkedQueue<>();
+        try (var fixture = new Fixture(webSocketHandler((request, headers) -> new BaseWebSocket() {
+            @Override public void onConnect(MuWebSocketSession session) throws Exception {
+                super.onConnect(session);
+                connected.incrementAndGet();
+            }
+            @Override public void onBinary(ByteBuffer bytes, boolean last, DoneCallback done) {
+                retained.add(bytes);
+                acknowledgements.add(done);
+            }
+            @Override public void onPing(ByteBuffer bytes) { pings.incrementAndGet(); }
+        }).withPingInterval(0, TimeUnit.MILLISECONDS).build())) {
+            byte[] upgrade = ("GET /socket HTTP/1.1\r\nHost: localhost\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+                + "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n").getBytes(US_ASCII);
+            for (int i = 0; i < 128; i++) fixture.add(512).offer(upgrade);
+            fixture.until(() -> connected.get() == 128);
+            fixture.barrier();
+            byte[] frame = WebSocketWireTestSupport.frame(true, 2, new byte[]{1, 2, 3});
+            for (Session session : fixture.sessions) {
+                session.offer(java.util.Arrays.copyOf(frame, 1));
+            }
+            fixture.tick();
+            fixture.barrier(); // Every connection has only the first byte of its next frame.
+            for (Session session : fixture.sessions) {
+                session.offer(java.util.Arrays.copyOfRange(frame, 1, frame.length));
+                session.offer(WebSocketWireTestSupport.frame(true, 9, new byte[]{4}));
+            }
+            fixture.until(() -> acknowledgements.size() == 128);
+            fixture.barrier();
+            assertEquals(0, pings.get());
+            Session cancelled = fixture.sessions.get(0);
+            cancelled.connection.forceShutdown();
+            fixture.tick();
+            fixture.barrier();
+            assertFalse(cancelled.driver.completion().isDone(), "An outstanding receive still owns its frame");
+            assertEquals(1, cancelled.connection.activeWebsockets().size());
+            for (ByteBuffer bytes : retained) {
+                assertEquals(ByteBuffer.wrap(new byte[]{1, 2, 3}), bytes);
+            }
+            DoneCallback done;
+            while ((done = acknowledgements.poll()) != null) done.onComplete(null);
+            fixture.until(() -> pings.get() == 127 && cancelled.driver.completion().isDone());
+            fixture.barrier();
+            assertEquals(1, fixture.internalThreads.get());
+            assertEquals(1, fixture.applicationThreads.get());
+        } finally {
+            DoneCallback done;
+            while ((done = acknowledgements.poll()) != null) done.onComplete(null);
+        }
+    }
+
+    @Test
     void forcedShutdownCompletesAnAsyncRequestThatHasNoPendingIo() throws Exception {
         CompletableFuture<AsyncHandle> suspended = new CompletableFuture<>();
         CompletableFuture<ResponseInfo> completed = new CompletableFuture<>();

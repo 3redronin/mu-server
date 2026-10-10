@@ -213,11 +213,16 @@ final class ChannelConnection implements ConnectionTransport {
             if (http2 != null) http2.inputAvailable();
             if (protocolCompletion != null && protocolCompletion.isDone()) closeRequested = true;
         }
-        if (closeRequested && output.pendingBytes() == 0) {
+        if (closeRequested) {
+            // Protocol completion can leave an unawaited WebSocket send in the output ring.
+            // Bound that drain too: HTTP/1 has already published CLOSED, so its idle-timeout
+            // path cannot be relied on to abort a peer that stopped reading after input EOF.
             if (closeDeadline == 0) closeDeadline = System.nanoTime() + CLOSE_TIMEOUT_NANOS;
-            if (tls == null) { closeNetwork(); return true; }
-            if (!tlsCloseRequested) { tlsCloseRequested = true; tls.closeOutbound(); progress = true; }
-            if (tls.outboundDone() || deadlinePassed(closeDeadline)) { closeNetwork(); return true; }
+            if (output.pendingBytes() == 0) {
+                if (tls == null) { closeNetwork(); return true; }
+                if (!tlsCloseRequested) { tlsCloseRequested = true; tls.closeOutbound(); progress = true; }
+                if (tls.outboundDone() || deadlinePassed(closeDeadline)) { closeNetwork(); return true; }
+            }
         }
         return progress;
     }

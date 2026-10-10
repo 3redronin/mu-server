@@ -90,6 +90,107 @@ class ChannelTransportTest {
     }
 
     @ParameterizedTest @ValueSource(booleans = {false, true})
+    void idleWebsocketsPartialFramesAndAsyncReceivesLeaveBothWorkersAvailable(boolean secure) throws Exception {
+        var application = Executors.newSingleThreadExecutor();
+        var internal = Executors.newSingleThreadExecutor();
+        var timer = Executors.newSingleThreadScheduledExecutor();
+        var connected = new java.util.concurrent.atomic.AtomicInteger();
+        Queue<DoneCallback> callbacks = new ConcurrentLinkedQueue<>();
+        List<WebSocketWireTestSupport> clients = new ArrayList<>();
+        MuServerBuilder builder = builder(secure, false).withHandlerExecutor(application);
+        builder.executionResourcesFactory = (supplied, mode) -> new ExecutionResources(application, false, internal, timer);
+        var ssl = sslContextForTesting(veryTrustingTrustManager());
+        try (MuServer server = builder.addHandler(WebSocketHandlerBuilder.webSocketHandler((req, headers) -> new BaseWebSocket() {
+            @Override public void onConnect(MuWebSocketSession session) throws Exception {
+                super.onConnect(session);
+                connected.incrementAndGet();
+            }
+            @Override public void onText(String text, boolean last, DoneCallback done) { callbacks.add(done); }
+        }).withPingInterval(0, TimeUnit.MILLISECONDS)).start()) {
+            try {
+                for (int i = 0; i < 128; i++) {
+                    Socket socket = secure ? ssl.getSocketFactory().createSocket("localhost", server.uri().getPort()) : connect(server);
+                    clients.add(new WebSocketWireTestSupport(server, socket, Integer.MAX_VALUE));
+                }
+                until(() -> connected.get() == 128);
+                application.submit(() -> {}).get(2, TimeUnit.SECONDS);
+                internal.submit(() -> {}).get(2, TimeUnit.SECONDS);
+                byte[] frame = WebSocketWireTestSupport.frame(true, 1, "hold".getBytes(US_ASCII));
+                long before = server.stats().bytesRead();
+                for (var client : clients) { client.output.write(frame, 0, 1); client.output.flush(); }
+                until(() -> server.stats().bytesRead() == before + 128);
+                internal.submit(() -> {}).get(2, TimeUnit.SECONDS);
+                for (var client : clients) {
+                    client.output.write(frame, 1, frame.length - 1);
+                    client.send(true, 9, new byte[]{4});
+                }
+                until(() -> callbacks.size() == 128);
+                application.submit(() -> {}).get(2, TimeUnit.SECONDS);
+                internal.submit(() -> {}).get(2, TimeUnit.SECONDS);
+                DoneCallback callback;
+                while ((callback = callbacks.poll()) != null) callback.onComplete(null);
+                for (var client : clients) assertArrayEquals(new byte[]{4}, client.readFrame(10));
+                for (var client : clients) client.send(true, 8, new byte[]{3, (byte) 232});
+                for (var client : clients) assertArrayEquals(new byte[]{3, (byte) 232}, client.readFrame(8));
+                until(() -> server.stats().activeConnections() == 0);
+                assertEquals(128, server.stats().completedConnections());
+            } finally {
+                DoneCallback callback;
+                while ((callback = callbacks.poll()) != null) callback.onComplete(null);
+                for (var client : clients) client.close();
+            }
+        } finally {
+            application.shutdownNow();
+            internal.shutdownNow();
+            timer.shutdownNow();
+        }
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void websocketInputHalfCloseBoundsStalledOutputEvenAfterProtocolRetirement(boolean secure) throws Exception {
+        var transport = new CompletableFuture<ChannelConnection>();
+        var session = new CompletableFuture<MuWebSocketSession>();
+        var completion = new CompletableFuture<Throwable>();
+        MuServerBuilder builder = builder(secure, false).withIdleTimeout(500, TimeUnit.MILLISECONDS);
+        builder.addHandler((req, res) -> {
+            var connection = (ChannelConnection) ((BaseHttpConnection) req.connection()).transport;
+            connection.socket.setSendBufferSize(4096);
+            transport.complete(connection);
+            return false;
+        });
+        builder.addHandler(WebSocketHandlerBuilder.webSocketHandler((req, headers) -> new SimpleWebSocket() {
+            @Override public void onConnect(MuWebSocketSession connected) throws Exception {
+                super.onConnect(connected);
+                session.complete(connected);
+            }
+            @Override public void onText(String text) {
+                session().sendBinary(ByteBuffer.wrap(new byte[8 * 1024 * 1024]), completion::complete);
+            }
+            @Override public void onBinary(ByteBuffer bytes) { }
+        }).withPingInterval(0, TimeUnit.MILLISECONDS).withIdleReadTimeout(0, TimeUnit.MILLISECONDS));
+        try (MuServer server = builder.start()) {
+            Socket socket = secure ? sslContextForTesting(veryTrustingTrustManager()).getSocketFactory()
+                .createSocket("localhost", server.uri().getPort()) : connect(server);
+            if (secure) ((SSLSocket) socket).setEnabledProtocols(new String[]{"TLSv1.3"});
+            try (var client = new WebSocketWireTestSupport(server, socket, Integer.MAX_VALUE)) {
+                client.socket.setReceiveBufferSize(4096);
+                client.send(true, 1, "go".getBytes(US_ASCII));
+                var field = ChannelConnection.class.getDeclaredField("output");
+                field.setAccessible(true);
+                var output = (TransportOutputBuffer) field.get(transport.get(2, TimeUnit.SECONDS));
+                until(() -> output.pendingBytes() > 0);
+                assertFalse(completion.isDone());
+                client.socket.shutdownOutput(); // EOF / TLS close_notify, with the response direction still stalled.
+                until(() -> server.stats().activeConnections() == 0);
+                assertNotNull(completion.get(2, TimeUnit.SECONDS));
+                assertTrue(session.get().state().endState());
+                assertEquals(1, server.stats().completedConnections());
+                assertEquals(0, output.pendingBytes());
+            }
+        }
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {false, true})
     void http2RunsThroughChannelTransportWithAlpnOrCleartextPreface(boolean secure) throws Exception {
         var client = scaffolding.ClientUtils.client.newBuilder().dispatcher(new okhttp3.Dispatcher())
             .connectionPool(new okhttp3.ConnectionPool()).protocols(secure

@@ -7,7 +7,7 @@ import org.jspecify.annotations.Nullable;
 /**
  * Lets an asynchronous receive callback return its application worker while the connection
  * waits for its completion callback before delivering another event or reusing the input buffer.
- * The internal connection reader still waits for completion.
+ * Channel readers resume from the future; the socket adapter waits on its reader worker.
  */
 final class WebSocketEventCompletion {
     // Passes the completion future through the unchanged void receive methods. This context

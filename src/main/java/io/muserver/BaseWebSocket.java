@@ -17,7 +17,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * <p>Override {@link #onText(String, boolean, DoneCallback)} or
  * {@link #onBinary(ByteBuffer, boolean, DoneCallback)} and call the supplied completion
  * callback when processing finishes. Returning from these methods releases the application
- * worker; the next message waits for completion. The internal connection reader still waits.</p>
+ * worker; the next message waits for completion. Channel transports suspend receive progression
+ * without retaining a waiting reader worker; the socket adapter retains its blocking reader.</p>
  * <p>For blocking message handling, extend {@link SimpleWebSocket} instead.</p>
  */
 @SuppressWarnings("RedundantThrows") // because implementing classes might throw exceptions

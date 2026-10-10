@@ -1611,7 +1611,8 @@ class ExecutionDomainsTest {
             releaseReceive.countDown();
             // Closing the socket alone cannot release a reader waiting on receive completion.
             connection.submit(() -> { }).get(2, TimeUnit.SECONDS);
-            assertThat(server.activeConnections().size(), is(0));
+            // The channel readiness owner retires independently of the socket executor.
+            assertEventually(() -> server.activeConnections().size(), is(0));
             assertThat(callbackInvoked.get(), is(false));
             assertThat(server.stop(1, TimeUnit.SECONDS), is(true));
         } finally {

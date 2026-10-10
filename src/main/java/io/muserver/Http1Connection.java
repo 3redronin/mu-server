@@ -98,6 +98,7 @@ class Http1Connection extends BaseHttpConnection {
         private final Http1MessageParser.AvailableRead availableRead;
         private final CompletableFuture<Void> ended = new CompletableFuture<>();
         private @Nullable CompletableFuture<ExchangeResult> pending;
+        private WebsocketConnection.@Nullable ReadDriver websocketReader;
 
         private ReadDriver(TransportInputBuffer input, OutputStream output, Runnable continuation) {
             this.input = input;
@@ -113,6 +114,7 @@ class Http1Connection extends BaseHttpConnection {
 
         /** Called once by a failed owner after its last advance; no further parsing is possible. */
         void ownerFailed(IOException failure) {
+            if (websocketReader != null) websocketReader.ownerFailed(failure);
             CompletableFuture<ExchangeResult> work = pending;
             if (work == null) end(failure);
             else work.whenComplete((ignored, error) -> end(failure));
@@ -124,6 +126,7 @@ class Http1Connection extends BaseHttpConnection {
             boolean progress = false;
             try {
                 if (pending != null) {
+                    if (websocketReader != null) websocketReader.inputAvailable();
                     if (!pending.isDone()) return false;
                     ExchangeResult result = pending.join();
                     pending = null;
@@ -134,23 +137,12 @@ class Http1Connection extends BaseHttpConnection {
                     }
                     WebsocketConnection websocket = result.websocket;
                     if (websocket != null) {
-                        // The WebSocket receive loop still needs its own resumable driver. Its
-                        // existing blocking adapter runs off the readiness owner in the meantime.
                         activateWebsocket(websocket);
-                        var takeover = new CompletableFuture<ExchangeResult>();
-                        pending = takeover;
-                        var remainingInput = parser.takeInputForUpgrade();
-                        server.executeInternalTask(() -> {
-                            try {
-                                websocket.runAndBlockUntilDone(input, output, remainingInput);
-                                takeover.complete(new ExchangeResult(true, null));
-                            } catch (Throwable failure) {
-                                if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
-                                takeover.completeExceptionally(failure);
-                                FatalErrors.rethrow(failure);
-                            }
-                        });
-                        takeover.whenComplete((ignored, failure) -> continuation.run());
+                        WebsocketConnection.ReadDriver reader = websocket.readDriver(input, output, parser.takeInputForUpgrade());
+                        websocketReader = reader;
+                        pending = reader.completion().thenApply(ignored -> new ExchangeResult(true, null));
+                        pending.whenComplete((ignored, failure) -> continuation.run());
+                        reader.inputAvailable();
                         return true;
                     }
                 }
@@ -179,6 +171,7 @@ class Http1Connection extends BaseHttpConnection {
 
         private void end(@Nullable Throwable failure) {
             pending = null;
+            websocketReader = null;
             activeExchange.set(null);
             requestPipeline.clear();
             if (failure != null) forceTransportClose();

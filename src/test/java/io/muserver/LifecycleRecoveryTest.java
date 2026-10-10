@@ -82,7 +82,10 @@ public class LifecycleRecoveryTest {
             })
             .addHandler((req, resp) -> {
                 if (req.uri().getPath().equals("/probe")) { resp.write("ok"); return true; }
-                ((SocketConnectionTransport) ((BaseHttpConnection) req.connection()).transport).socket.setSendBufferSize(8192);
+                ConnectionTransport transport = ((BaseHttpConnection) req.connection()).transport;
+                Socket socket = transport instanceof ChannelConnection ? ((ChannelConnection) transport).socket
+                    : ((SocketConnectionTransport) transport).socket;
+                socket.setSendBufferSize(8192);
                 return false;
             });
         builder.executionResourcesFactory = (executor, mode) -> {
