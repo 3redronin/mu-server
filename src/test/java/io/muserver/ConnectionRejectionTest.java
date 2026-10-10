@@ -41,6 +41,9 @@ class ConnectionRejectionTest {
             }
         };
         MuServerBuilder builder = tls ? MuServerBuilder.httpsServer() : MuServerBuilder.httpServer();
+        // This fault injector rejects the socket adapter's per-connection task. Channel
+        // accept/handshake readiness does not submit a blocking connection task at all.
+        builder.useChannelTransport = false;
         try (MuServer server = TestExecutionResources.configure(builder, executor, null, null, null).withMaxConnections(maxConnections)
             .withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config().withEnabled(proxy))
             .addHandler((req, resp) -> { handled.incrementAndGet(); resp.write("ok"); return true; }).start()) {

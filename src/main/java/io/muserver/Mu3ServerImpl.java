@@ -137,17 +137,39 @@ class Mu3ServerImpl implements MuServer {
     ExecutionResources.TransportLease retainTransport() { return executionResources.retainTransport(); }
 
     void executeResponseCompletionTask(Runnable task) {
-        executeTrackedApplicationTask(
-            task,
-            "response completion callback"
-        );
+        executeTrackedApplicationTaskLater(task, "response completion callback");
     }
 
     @Nullable RejectedExecutionException executeTrackedApplicationTask(
         Runnable task,
         String description
     ) {
+        return submitTrackedApplicationTask(task, description, new DetachedApplicationTask());
+    }
+
+    private void executeTrackedApplicationTaskLater(Runnable task, String description) {
+        if (applicationTaskContext.get() != null) {
+            // The current application task already owns a safe serial callback mailbox.
+            executeTrackedApplicationTask(task, description);
+            return;
+        }
+        // Reserve shutdown ownership before a connection can publish its own retirement.
         DetachedApplicationTask registration = new DetachedApplicationTask();
+        Runnable dispatch = () -> submitTrackedApplicationTask(task, description, registration);
+        try { executeInternalTask(dispatch); }
+        catch (RuntimeException | Error rejected) {
+            Thread cleanup = new Thread(() -> {
+                try { dispatch.run(); }
+                finally { FatalErrors.rethrow(rejected); }
+            }, "mu-rejected-notification-dispatch");
+            cleanup.setDaemon(true);
+            cleanup.start();
+        }
+    }
+
+    private @Nullable RejectedExecutionException submitTrackedApplicationTask(
+        Runnable task, String description, DetachedApplicationTask registration
+    ) {
         Runnable trackedTask = () -> {
             DetachedApplicationTask previous = activeDetachedApplicationTask.get();
             activeDetachedApplicationTask.set(registration);
@@ -511,10 +533,7 @@ class Mu3ServerImpl implements MuServer {
         if (requestRejectListeners.isEmpty()) {
             return;
         }
-        executeTrackedApplicationTask(
-            () -> notifyRequestRejected(info),
-            "request rejection notification"
-        );
+        executeTrackedApplicationTaskLater(() -> notifyRequestRejected(info), "request rejection notification");
     }
 
     private void notifyRequestRejected(RejectedRequest info) {

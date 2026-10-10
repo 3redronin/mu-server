@@ -221,16 +221,22 @@ abstract class BaseResponse implements MuResponse {
 
     abstract void cleanup() throws IOException, InterruptedException;
 
+    /** Called only after response writers and body callbacks have relinquished ownership. */
+    final void cleanupResources() throws IOException {
+        try { request.cleanupResources(); }
+        finally { closeDiscardedOutput(); }
+    }
+
+    abstract void closeDiscardedOutput() throws IOException;
+
     AsyncResponseOutput.@Nullable AsyncWriter asynchronousWriter() { return null; }
 
     protected void closeWriter() throws IOException {
         PrintWriter w = writer;
-        if (w != null) {
-            w.close();
-        }
-        OutputStream os = wrappedOut;
-        if (os != null) {
-            os.close();
+        // A writer can fail while flushing before it closes the underlying encoder.
+        // Close both, retaining the first failure and suppressing any close failure.
+        try (OutputStream output = wrappedOut) {
+            if (w != null) w.close();
         }
     }
 

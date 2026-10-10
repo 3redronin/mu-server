@@ -14,6 +14,7 @@ final class Http2ResponseOutput implements ResponseOutputCapture {
     private final Http2Stream stream;
     private final Path directory;
     private @Nullable Rendered rendering;
+    private boolean discarding;
 
     Http2ResponseOutput(Http2Stream stream, Path directory) {
         this.stream = stream;
@@ -21,6 +22,7 @@ final class Http2ResponseOutput implements ResponseOutputCapture {
     }
 
     void write(LogicalHttp2Frame frame) throws IOException, InterruptedException {
+        if (discarding) return;
         Rendered capture = rendering;
         if (capture == null) { stream.blockingWrite(frame); return; }
         if (frame instanceof Http2ResponseFrame) capture.headers.add(((Http2ResponseFrame) frame).headers());
@@ -39,6 +41,7 @@ final class Http2ResponseOutput implements ResponseOutputCapture {
     }
 
     void writeData(byte[] bytes, int offset, int length) throws IOException, InterruptedException {
+        if (discarding) return;
         Rendered capture = rendering;
         if (capture == null) stream.blockingWriteData(bytes, offset, length);
         else {
@@ -49,7 +52,13 @@ final class Http2ResponseOutput implements ResponseOutputCapture {
 
     void endStream() throws IOException, InterruptedException { write(Http2DataFrame.eos(stream.id)); }
 
+    void discard() {
+        if (rendering != null) throw new IllegalStateException("Response rendering is still active");
+        discarding = true;
+    }
+
     @Override public Capture begin() {
+        if (discarding) throw new IllegalStateException("Response output has been discarded");
         if (rendering != null) throw new IllegalStateException("Response rendering is already active");
         Rendered capture = new Rendered();
         rendering = capture;

@@ -366,7 +366,7 @@ class Mu3Request implements MuRequest {
                 return true;
             }
         } finally {
-            cleanupForm();
+            cleanupResources();
         }
     }
 
@@ -380,7 +380,7 @@ class Mu3Request implements MuRequest {
             try {
                 if (failure != null) throw new CompletionException(failure);
                 return state == Http1BodyStream.State.EOF && !http1Body.tooBig();
-            } finally { cleanupForm(); }
+            } finally { cleanupResources(); }
         });
     }
 
@@ -389,7 +389,8 @@ class Mu3Request implements MuRequest {
             .sameCode(HttpStatus.CONTENT_TOO_LARGE_413);
     }
 
-    private void cleanupForm() {
+    /** Releases parsed upload storage without taking ownership of the body parser. */
+    void cleanupResources() {
         if (form instanceof MultipartForm) ((MultipartForm) form).cleanup();
     }
 

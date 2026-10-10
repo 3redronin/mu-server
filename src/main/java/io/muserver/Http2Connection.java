@@ -1752,8 +1752,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 stream.onApplicationFailure();
                 write(new Http2ResetStreamFrame(stream.id, Http2ErrorCode.INTERNAL_ERROR.code()));
                 stream.cancel(new IOException("HTTP/2 handler submission failed", failure));
-                stream.abandonApplicationExchange();
-                onExchangeEnded(stream);
+                try { releaseStreamResources(stream); }
+                finally { onExchangeEnded(stream); }
             }
             FatalErrors.rethrow(failure);
             log.warn("HTTP/2 handler executor failed", failure);
@@ -1762,8 +1762,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
 
     private void startHandledStream(Http2Stream stream) {
         if (stream.resetWasInitiated()) {
-            stream.abandonApplicationExchange();
-            onExchangeEnded(stream);
+            try { releaseStreamResources(stream); }
+            finally { onExchangeEnded(stream); }
             return;
         }
         try {
@@ -1782,8 +1782,8 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         } catch (Throwable failure) {
             if (failure instanceof VirtualMachineError || failure instanceof ThreadDeath) {
                 stream.onApplicationFailure();
-                stream.abandonApplicationExchange();
-                onExchangeEnded(stream);
+                try { releaseStreamResources(stream); }
+                finally { onExchangeEnded(stream); }
                 FatalErrors.rethrow(failure);
             }
             if (stream.request.wasRateLimitRejected()) {
@@ -1802,7 +1802,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         );
         RejectedExecutionException rejected = server.tryExecuteHandlerTask(completionTask);
         if (rejected != null) {
-            abortAsyncStreamAfterDispatchFailure(stream, rejected);
+            Thread cleanup = new Thread(() -> abortAsyncStreamAfterDispatchFailure(stream, rejected),
+                "mu-http2-rejected-completion");
+            cleanup.setDaemon(true);
+            cleanup.start();
         }
     }
 
@@ -1821,9 +1824,9 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     new IOException("Application executors rejected HTTP/2 stream completion", dispatchFailure)
                 );
             }
-            stream.abandonApplicationExchange();
         } finally {
-            onExchangeEnded(stream);
+            try { releaseStreamResources(stream); }
+            finally { onExchangeEnded(stream); }
         }
     }
 
@@ -1874,11 +1877,21 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 stream.cancel(new IOException("Unhandled stream exception", e));
             }
         } finally {
-            if (completedApplicationExchange) {
-                onExchangeEnded(stream);
-            } else {
-                onRejectedApplicationExchangeEnded(stream);
+            try { releaseStreamResources(stream); }
+            finally {
+                if (completedApplicationExchange) onExchangeEnded(stream);
+                else onRejectedApplicationExchangeEnded(stream);
             }
+        }
+    }
+
+    private void releaseStreamResources(Http2Stream stream) {
+        try { stream.cleanupResources(); }
+        catch (Throwable failure) {
+            stream.onApplicationFailure();
+            stream.response().setState(ResponseState.ERRORED);
+            FatalErrors.rethrow(failure);
+            log.warn("Error releasing HTTP/2 stream resources", failure);
         }
     }
 

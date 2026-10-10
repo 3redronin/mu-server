@@ -251,9 +251,13 @@ class Http1Connection extends BaseHttpConnection {
                 }
             });
         } catch (RuntimeException | Error rejected) {
-            try { exchange.abandon(accepted); }
-            finally { completion.completeExceptionally(rejected); }
-            FatalErrors.rethrow(rejected);
+            Thread cleanup = new Thread(() -> {
+                try { exchange.abandon(accepted); }
+                finally { completion.completeExceptionally(rejected); }
+                FatalErrors.rethrow(rejected);
+            }, "mu-http1-rejected-completion");
+            cleanup.setDaemon(true);
+            cleanup.start();
         }
     }
 
@@ -423,16 +427,30 @@ class Http1Connection extends BaseHttpConnection {
 
         /** Retirement still releases admission when shutdown prevents scheduling normal cleanup. */
         void abandon(@Nullable Boolean accepted) {
-            if (!started) return;
             response.setState(ResponseState.ERRORED);
-            if (Boolean.FALSE.equals(accepted)) {
-                rejectedDueToOverload.incrementAndGet();
-                server.getStatsImpl().onRejectedDueToOverload();
-                onApplicationRequestRejected(request);
-            } else if (request.wasRateLimitRejected()) {
-                onApplicationRequestRejected(request);
-                server.onRequestRejected(rateLimitRejection(request));
-            } else onExchangeEndedOnHandler(response);
+            try { releaseResources(); }
+            finally {
+                if (started) {
+                    if (Boolean.FALSE.equals(accepted)) {
+                        rejectedDueToOverload.incrementAndGet();
+                        server.getStatsImpl().onRejectedDueToOverload();
+                        onApplicationRequestRejected(request);
+                    } else if (request.wasRateLimitRejected()) {
+                        onApplicationRequestRejected(request);
+                        server.onRequestRejected(rateLimitRejection(request));
+                    } else onExchangeEndedOnHandler(response);
+                }
+            }
+        }
+
+        private boolean releaseResources() {
+            try { response.cleanupResources(); return true; }
+            catch (Throwable failure) {
+                response.setState(ResponseState.ERRORED);
+                FatalErrors.rethrow(failure);
+                log.warn("Error releasing resources for " + request, failure);
+                return false;
+            }
         }
 
         ExchangeResult finish(@Nullable Boolean accepted, @Nullable Throwable failure) throws IOException {
@@ -451,7 +469,10 @@ class Http1Connection extends BaseHttpConnection {
                         response.cleanup();
                         closeConnection = true;
                     } else closeConnection = cleanUpNicely(closeConnection, response, request, completedCleanup);
-                } finally { server.onRequestRejected(rejectedRequest); }
+                } finally {
+                    try { if (!releaseResources()) closeConnection = true; }
+                    finally { server.onRequestRejected(rejectedRequest); }
+                }
             } else {
                 boolean rejectedByHandlerExecutor = failure == null && Boolean.FALSE.equals(accepted);
                 try {
@@ -466,11 +487,14 @@ class Http1Connection extends BaseHttpConnection {
                     log.warn("Unrecoverable error for " + request, error);
                     response.setState(ResponseState.ERRORED);
                 } finally {
-                    if (request.wasRateLimitRejected()) {
-                        onApplicationRequestRejected(request);
-                        server.onRequestRejected(rateLimitRejection(request));
-                    } else if (!rejectedByHandlerExecutor) onExchangeEndedOnHandler(response);
-                    transport.readTimeoutMillis(0);
+                    try { if (!releaseResources()) closeConnection = true; }
+                    finally {
+                        if (request.wasRateLimitRejected()) {
+                            onApplicationRequestRejected(request);
+                            server.onRequestRejected(rateLimitRejection(request));
+                        } else if (!rejectedByHandlerExecutor) onExchangeEndedOnHandler(response);
+                        transport.readTimeoutMillis(0);
+                    }
                 }
             }
             closeConnection |= state.get() != HttpConnectionState.OPEN || closed.get();

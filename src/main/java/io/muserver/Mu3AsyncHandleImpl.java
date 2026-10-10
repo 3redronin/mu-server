@@ -38,10 +38,34 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
             bodyStopped.whenComplete((unused, bodyFailure) -> {
                 synchronized (bodyReaderLock) { bodyReader = null; }
                 Throwable terminal = failure == null ? bodyFailure : failure;
-                if (terminal == null) exchangeFinished.complete(null);
-                else exchangeFinished.completeExceptionally(terminal);
+                publishExchangeCompletion(terminal);
             });
         });
+    }
+
+    /** A peer reset can finish an idle output queue on the protocol coordinator itself. */
+    private void publishExchangeCompletion(@Nullable Throwable failure) {
+        Runnable publish = () -> {
+            if (failure == null) exchangeFinished.complete(null);
+            else exchangeFinished.completeExceptionally(failure);
+        };
+        try { server.executeInternalTask(publish); }
+        catch (RuntimeException | Error rejected) {
+            // A caller-runs application executor can execute response cleanup while submitting it.
+            // Keep that submission off the notifier even when normal continuation dispatch fails.
+            Thread cleanup = new Thread(() -> {
+                if (failure == null) exchangeFinished.completeExceptionally(rejected);
+                else {
+                    @SuppressWarnings("ReferenceEquality")
+                    boolean different = failure != rejected;
+                    if (different) failure.addSuppressed(rejected);
+                    exchangeFinished.completeExceptionally(failure);
+                }
+                FatalErrors.rethrow(rejected);
+            }, "mu-rejected-exchange-completion");
+            cleanup.setDaemon(true);
+            cleanup.start();
+        }
     }
 
     CompletableFuture<@Nullable Void> exchangeCompletion() { return exchangeFinished; }

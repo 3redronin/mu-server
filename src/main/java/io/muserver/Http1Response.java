@@ -9,7 +9,7 @@ import java.io.OutputStream;
 import java.io.UncheckedIOException;
 
 class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
-    private final OutputStream socketOut;
+    private final Http1ResponseOutput socketOut;
     private final @Nullable AsyncResponseRenderer asynchronousRenderer;
     private @Nullable OutputStream preparedBody;
     private @Nullable ContentEncoder preparedEncoder;
@@ -25,14 +25,9 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
 
     Http1Response(Mu3Request muRequest, OutputStream socketOut, @Nullable AsyncTransportOutput asynchronousOutput) {
         super(muRequest, new FieldBlock());
-        if (asynchronousOutput == null) {
-            this.socketOut = socketOut;
-            asynchronousRenderer = null;
-        } else {
-            var capture = new Http1ResponseOutput(socketOut, asynchronousOutput, muRequest.server().tempDir());
-            this.socketOut = capture;
-            asynchronousRenderer = new AsyncResponseRenderer(muRequest.serverImpl()::executeInternalTask, capture, this::outputStream);
-        }
+        this.socketOut = new Http1ResponseOutput(socketOut, asynchronousOutput, muRequest.server().tempDir());
+        asynchronousRenderer = asynchronousOutput == null ? null
+            : new AsyncResponseRenderer(muRequest.serverImpl()::executeInternalTask, this.socketOut, this::outputStream);
     }
 
     @Override AsyncResponseOutput.@Nullable AsyncWriter asynchronousWriter() {
@@ -156,6 +151,17 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
             }
         } catch (IOException e) {
             throw new UncheckedIOException("Error while setting up output stream", e);
+        }
+    }
+
+    @Override void closeDiscardedOutput() throws IOException {
+        socketOut.discard();
+        try { closeWriter(); }
+        finally {
+            OutputStream prepared = preparedBody;
+            preparedBody = null;
+            preparedEncoder = null;
+            if (prepared != null) prepared.close();
         }
     }
 

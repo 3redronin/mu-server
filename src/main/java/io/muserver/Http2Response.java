@@ -48,6 +48,12 @@ class Http2Response extends BaseResponse {
         }
     }
 
+    @Override void closeDiscardedOutput() throws IOException {
+        output.discard();
+        preparedEncoder = null;
+        closeWriter();
+    }
+
     @Override
     protected void cleanup() throws IOException, InterruptedException {
         if (responseState() == ResponseState.NOTHING) {

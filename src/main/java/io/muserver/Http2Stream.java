@@ -480,20 +480,13 @@ class Http2Stream implements ResponseInfo {
     }
 
     void cleanup() throws IOException, InterruptedException {
-        try {
-            request.cleanup();
-            requiredResponse().cleanup();
-        } finally {
-            endNanos = System.nanoTime();
-        }
+        request.cleanup();
+        requiredResponse().cleanup();
     }
 
-    void abandonApplicationExchange() {
-        try {
-            request.cleanup();
-        } finally {
-            endNanos = System.nanoTime();
-        }
+    void cleanupResources() throws IOException {
+        try { requiredResponse().cleanupResources(); }
+        finally { endNanos = System.nanoTime(); }
     }
 
     private Http2Response requiredResponse() {
