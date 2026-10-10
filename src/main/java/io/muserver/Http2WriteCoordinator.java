@@ -95,7 +95,7 @@ final class Http2WriteCoordinator {
                 Http2Stream stream = applicationStreams.get(frame.streamId());
                 if (stream != null) stream.onLocalEndStreamWriteFailed();
             }
-            task.fail(reason);
+            task.writeFailed(reason);
         }
     }
 

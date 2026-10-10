@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InterruptedIOException;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -11,6 +12,7 @@ class WriteTask {
     private final LogicalHttp2Frame frame;
     private final @Nullable CountDownLatch completionCallback;
     private volatile @Nullable Exception error;
+    private @Nullable CompletableFuture<@Nullable Void> completion;
 
     WriteTask(LogicalHttp2Frame frame, boolean waitable) {
         this.frame = frame;
@@ -34,31 +36,80 @@ class WriteTask {
     synchronized boolean isCancelled() { return cancelled; }
 
     /** Returns whether transport output must be aborted to release this task's buffer. */
-    synchronized boolean cancel(IOException reason) {
-        if (finished) return false;
-        cancelled = true;
-        error = reason;
-        if (!writing) finish();
-        return writing;
+    boolean cancel(IOException reason) {
+        boolean abort;
+        synchronized (this) {
+            if (finished) return false;
+            cancelled = true;
+            if (error == null) error = reason;
+            abort = writing;
+            if (!writing) finish();
+        }
+        publishCompletion();
+        return abort;
     }
 
-    synchronized void finishPart(boolean last) {
-        writing = false;
-        if (last || cancelled) finish();
+    void finishPart(boolean last) {
+        synchronized (this) {
+            if (finished) return;
+            writing = false;
+            if (last || cancelled) finish();
+        }
+        publishCompletion();
     }
 
-    public synchronized void complete() { finishPart(true); }
+    public void complete() { finishPart(true); }
 
-    public synchronized void fail(Exception ex) {
-        if (finished) return;
-        writing = false;
-        error = ex;
-        finish();
+    /** Reject remaining output, retaining any fragment the transport still owns. */
+    public void fail(Exception ex) {
+        synchronized (this) {
+            if (finished) return;
+            cancelled = true;
+            if (error == null) error = ex;
+            if (!writing) finish();
+        }
+        publishCompletion();
+    }
+
+    /** The writer has stopped accessing the active fragment after a failure. */
+    void writeFailed(Exception ex) {
+        synchronized (this) {
+            if (finished) return;
+            writing = false;
+            cancelled = true;
+            if (error == null) error = ex;
+            finish();
+        }
+        publishCompletion();
     }
 
     private void finish() {
         finished = true;
         if (completionCallback != null) completionCallback.countDown();
+    }
+
+    /** Internal acknowledgement only: callers must not cancel or complete this future. */
+    CompletableFuture<@Nullable Void> completion() {
+        CompletableFuture<@Nullable Void> result;
+        synchronized (this) {
+            if (completion == null) completion = new CompletableFuture<>();
+            result = completion;
+        }
+        publishCompletion();
+        return result;
+    }
+
+    private void publishCompletion() {
+        CompletableFuture<@Nullable Void> target;
+        Exception failure;
+        synchronized (this) {
+            if (!finished || completion == null) return;
+            target = completion;
+            failure = error;
+        }
+        // A listener can schedule the next write. Never run it under the task monitor.
+        if (failure == null) target.complete(null);
+        else target.completeExceptionally(failure);
     }
 
     void await() throws InterruptedException, IOException {
@@ -82,7 +133,6 @@ class WriteTask {
         if (completionCallback != null) {
             if (!completionCallback.await(timeout, unit)) {
                 var tio = new IOException("Timed out waiting for completion callback");
-                error = tio;
                 throw tio;
             }
         }

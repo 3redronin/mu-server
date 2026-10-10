@@ -2004,8 +2004,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
 
     private void onExchangeEnded(Http2Stream stream) {
         stream.onApplicationExchangeEnded();
-        applicationExchangeEndedForWrites(stream);
-        signalWriteLoop();
         // Application cleanup can finish while the peer is still uploading. Completion listeners
         // observe the entire exchange, and must stay off the protocol reader that ends the request.
         stream.requestEnded().thenRun(() -> {
@@ -2013,6 +2011,10 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             recordExchangeEnded(stream);
             server.executeResponseCompletionTask(() -> notifyExchangeEnded(stream));
         });
+        // With an already-ended request this records its outcome and reserves callback dispatch
+        // before the writer may retire the stream and publish connection completion.
+        applicationExchangeEndedForWrites(stream);
+        signalWriteLoop();
     }
 
     private void onRejectedApplicationExchangeEnded(Http2Stream stream) {

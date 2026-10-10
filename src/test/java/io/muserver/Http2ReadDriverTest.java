@@ -28,9 +28,13 @@ import static scaffolding.ClientUtils.request;
 @Timeout(30)
 class Http2ReadDriverTest {
     private static byte[] preface() throws Exception {
+        return preface(Http2Settings.DEFAULT_CLIENT_SETTINGS);
+    }
+
+    private static byte[] preface(Http2Settings settings) throws Exception {
         var out = new ByteArrayOutputStream();
         out.write("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n".getBytes(US_ASCII));
-        Http2Settings.DEFAULT_CLIENT_SETTINGS.writeTo(null, out);
+        settings.writeTo(null, out);
         Http2Settings.ACK.writeTo(null, out);
         return out.toByteArray();
     }
@@ -214,6 +218,91 @@ class Http2ReadDriverTest {
     }
 
     @Test
+    void asynchronousStreamWriteResumesAcrossCreditAndWaitsForTheFinalTransportAcknowledgement() throws Exception {
+        CompletableFuture<Http2Stream> started = new CompletableFuture<>();
+        CompletableFuture<AsyncHandle> handle = new CompletableFuture<>();
+        try (var fixture = new Fixture((req, res) -> {
+            handle.complete(req.handleAsync());
+            ((BaseResponse) res).setState(ResponseState.WRITING_HEADERS);
+            started.complete(((Http2Connection) req.connection()).testProbe().streams().applicationStream(1));
+            return true;
+        })) {
+            Session session = fixture.add(1024, true);
+            session.offer(preface(new Http2Settings(false, 4096, 100, 1, 16384, 32768)));
+            session.offer(requestBytes(1));
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.completeOutput();
+            Http2Stream stream = started.get(3, TimeUnit.SECONDS);
+            var fields = new FieldBlock();
+            fields.set(":status", "200");
+            var headers = stream.writeAsynchronously(new Http2HeadersFrame(1, false, fields));
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.completeOutput();
+            headers.get(3, TimeUnit.SECONDS);
+            var written = stream.writeAsynchronously(new Http2DataFrame(1, true, new byte[]{11, 22}, 0, 2));
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            fixture.barrier();
+            assertFalse(written.isDone());
+            assertThrows(IllegalStateException.class, () -> stream.writeAsynchronously(Http2DataFrame.eos(1)));
+            Http2FrameHeader first = Http2FrameHeader.readFrom(session.pendingOutput.peek().bytes.duplicate());
+            assertEquals(1, first.length());
+            assertEquals(0, first.flags());
+            session.completeOutput();
+            fixture.barrier();
+            assertFalse(written.isDone(), "The logical write still owns its credit-blocked remainder");
+            assertTrue(session.pendingOutput.isEmpty());
+            session.offer(rawFrame(Http2FrameType.WINDOW_UPDATE, 0, 1, new byte[]{0, 0, 0, 1}));
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            fixture.barrier();
+            Http2FrameHeader last = Http2FrameHeader.readFrom(session.pendingOutput.peek().bytes.duplicate());
+            assertEquals(1, last.length());
+            assertEquals(1, last.flags());
+            assertFalse(written.isDone());
+            session.end();
+            fixture.barrier();
+            assertFalse(written.isDone(), "Input EOF cannot acknowledge the final output borrow");
+            session.completeOutput();
+            written.get(3, TimeUnit.SECONDS);
+            handle.get().complete();
+            session.driver.completion().get(3, TimeUnit.SECONDS);
+            assertEquals(1, session.connection.completedRequests());
+        }
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void resetOfAnActiveFragmentRetainsTheNativeWriteUntilTransportAbortAcknowledges(boolean peerReset) throws Exception {
+        CompletableFuture<Http2Stream> started = new CompletableFuture<>();
+        try (var fixture = new Fixture((req, res) -> {
+            req.handleAsync();
+            ((BaseResponse) res).setState(ResponseState.WRITING_HEADERS);
+            started.complete(((Http2Connection) req.connection()).testProbe().streams().applicationStream(1));
+            return true;
+        })) {
+            Session session = fixture.add(1024, true);
+            session.offer(preface(new Http2Settings(false, 4096, 100, 1, 16384, 32768)));
+            session.offer(requestBytes(1));
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.completeOutput();
+            Http2Stream stream = started.get(3, TimeUnit.SECONDS);
+            var written = stream.writeAsynchronously(new Http2DataFrame(1, true, new byte[]{11, 22}, 0, 2));
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.holdAbortedOutput = true;
+            if (peerReset) session.offer(rawFrame(Http2FrameType.RST_STREAM, 0, 1, new byte[]{0, 0, 0, 8}));
+            else stream.abortOutput(new IOException("local cancellation"));
+            fixture.until(() -> session.closed);
+            fixture.barrier();
+            assertFalse(written.isDone());
+            assertFalse(session.driver.completion().isDone());
+            session.holdAbortedOutput = false;
+            session.failOutput();
+            assertInstanceOf(IOException.class, assertThrows(ExecutionException.class,
+                () -> written.get(3, TimeUnit.SECONDS)).getCause());
+            session.driver.completion().get(3, TimeUnit.SECONDS);
+            assertThrows(IOException.class, () -> stream.writeAsynchronously(Http2DataFrame.eos(1)));
+        }
+    }
+
+    @Test
     void malformedPrefaceDrainsItsGoAwayBeforeRetirement() throws Exception {
         try (var fixture = new Fixture((req, res) -> { fail("Malformed preface dispatched a request"); return true; })) {
             Session session = fixture.add(1024, true);
@@ -290,7 +379,12 @@ class Http2ReadDriverTest {
         }
         @Override public void close() throws Exception {
             try {
-                for (Session session : sessions) { session.connection.forceShutdown(); session.driver.inputAvailable(); }
+                for (Session session : sessions) {
+                    session.holdAbortedOutput = false;
+                    session.failOutput();
+                    session.connection.forceShutdown();
+                    session.driver.inputAvailable();
+                }
                 for (Session session : sessions) session.driver.completion().get(3, TimeUnit.SECONDS);
             } finally {
                 server.stop();
@@ -309,6 +403,7 @@ class Http2ReadDriverTest {
         final Http2Connection connection;
         final Http2Connection.ReadDriver driver;
         volatile boolean closed;
+        volatile boolean holdAbortedOutput;
         Session(Fixture fixture, int capacity, boolean delayed) {
             input = new TransportInputBuffer(capacity, this.capacity::release);
             connection = new Http2Connection(fixture.config.server, fixture.config.creator, this,
@@ -362,9 +457,14 @@ class Http2ReadDriverTest {
             closed = true;
             IOException failure = new IOException("Transport aborted");
             input.fail(failure);
-            PendingOutput pending;
-            while ((pending = pendingOutput.poll()) != null) pending.completion.completeExceptionally(failure);
+            if (!holdAbortedOutput) failOutput();
             driver.inputAvailable();
+        }
+        void failOutput() {
+            PendingOutput pending;
+            while ((pending = pendingOutput.poll()) != null) {
+                pending.completion.completeExceptionally(new IOException("Transport aborted"));
+            }
         }
     }
 

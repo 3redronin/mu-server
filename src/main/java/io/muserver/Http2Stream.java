@@ -516,10 +516,7 @@ class Http2Stream implements ResponseInfo {
      */
     void blockingWrite(LogicalHttp2Frame frame) throws IOException, InterruptedException {
         WriteTask writeTask = new WriteTask(frame, true);
-        synchronized (this) {
-            if (resetInitiated) throw new IOException("HTTP/2 stream output is closed");
-            activeWrite = writeTask;
-        }
+        registerWrite(writeTask);
         try {
             connection.write(writeTask);
             try {
@@ -530,8 +527,48 @@ class Http2Stream implements ResponseInfo {
                 throw interrupted;
             }
         } finally {
-            synchronized (this) { activeWrite = null; }
+            releaseWrite(writeTask);
         }
+    }
+
+    /**
+     * Borrows one logical frame until transport acknowledgement, including every credit fragment.
+     * The response continuation must only schedule work from this internal future's listeners.
+     */
+    CompletableFuture<@Nullable Void> writeAsynchronously(LogicalHttp2Frame frame) throws IOException {
+        WriteTask task = new WriteTask(frame, false);
+        registerWrite(task);
+        var submissionFailure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
+        CompletableFuture<@Nullable Void> result = new CompletableFuture<>();
+        task.completion().whenComplete((ignored, failure) -> {
+            // Clear ownership before another continuation can submit the next frame.
+            releaseWrite(task);
+            Throwable failedSubmission = submissionFailure.get();
+            if (failedSubmission != null) result.completeExceptionally(failedSubmission);
+            else if (failure != null) result.completeExceptionally(failure);
+            else result.complete(null);
+        });
+        try {
+            connection.write(task);
+        } catch (RuntimeException | Error failure) {
+            // Submission can fail after enqueueing. Cancellation prevents a queued frame
+            // from starting, but an active fragment must still acknowledge its borrow.
+            submissionFailure.set(failure);
+            task.cancel(new IOException("HTTP/2 write submission failed", failure));
+            connection.forceShutdown();
+        }
+        return result;
+    }
+
+    private synchronized void registerWrite(WriteTask task) throws IOException {
+        if (resetInitiated) throw new IOException("HTTP/2 stream output is closed");
+        if (activeWrite != null) throw new IllegalStateException("Concurrent HTTP/2 response writes are not supported");
+        activeWrite = task;
+    }
+
+    @SuppressWarnings("ReferenceEquality") // Only the task that claimed this stream may release it.
+    private synchronized void releaseWrite(WriteTask task) {
+        if (activeWrite == task) activeWrite = null;
     }
 
     void abortOutput(IOException reason) {

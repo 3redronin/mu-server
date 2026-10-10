@@ -17,6 +17,26 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class Http2WriteCoordinatorTest {
 
     @Test
+    void resetDuringACreditFragmentWaitsForItsTransportAcknowledgement() throws Exception {
+        var coordinator = coordinator(100, 1, 1);
+        var write = task(data(1, "ab"));
+        coordinator.submit(write);
+        coordinator.processAvailableCommands();
+        var fragment = java.util.Objects.requireNonNull(coordinator.pollWritable());
+        assertThat(fragment.beginWrite(), is(true));
+        assertThat(fragment.frame().flowControlSize(), is(1));
+        IOException reset = new IOException("peer reset during a fragment");
+        coordinator.resetStream(new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()), reset, null);
+        coordinator.processAvailableCommands();
+        assertThat(write.completion().isDone(), is(false));
+        assertThat(coordinator.pollWritable(), nullValue());
+        fragment.complete();
+        assertThat(assertThrows(java.util.concurrent.CompletionException.class, write.completion()::join).getCause(), is(reset));
+        assertThat(assertThrows(IOException.class, write::await), is(reset));
+        assertThat(coordinator.isIdle(), is(true));
+    }
+
+    @Test
     void rejectionResetWaitsForFlowControlledResponseAndRetiresItsState() throws Exception {
         var coordinator = coordinator(2, 1, 2, 3, 100);
         var responseHeaders = task(headers(1));
