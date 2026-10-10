@@ -379,8 +379,19 @@ class WebsocketConnection implements MuWebSocketSession {
             if (readBuffer.capacity() - readBuffer.limit() < missing) {
                 readBuffer.compact().flip();
             }
-            int read = input.read(readBuffer.array(), readBuffer.arrayOffset() + readBuffer.limit(),
-                readBuffer.capacity() - readBuffer.limit());
+            int read;
+            try {
+                read = input.read(readBuffer.array(), readBuffer.arrayOffset() + readBuffer.limit(),
+                    readBuffer.capacity() - readBuffer.limit());
+            } catch (java.io.InterruptedIOException timeoutOrInterrupt) {
+                throw timeoutOrInterrupt;
+            } catch (IOException transportFailure) {
+                // No WebSocket close frame arrived. Preserve TLS/socket diagnostics as the
+                // cause, but do not ask default error handlers to write to a failed transport.
+                ClientDisconnectedException disconnected = new ClientDisconnectedException();
+                disconnected.initCause(transportFailure);
+                throw disconnected;
+            }
             if (read == -1) {
                 throw new ClientDisconnectedException();
             }

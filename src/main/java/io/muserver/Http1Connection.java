@@ -104,11 +104,19 @@ class Http1Connection extends BaseHttpConnection {
             this.output = output;
             this.continuation = continuation;
             this.availableRead = input::readAvailable;
-            this.parser = new Http1MessageParser(HttpMessageType.REQUEST, requestPipeline, input,
+            this.parser = new Http1MessageParser(HttpMessageType.REQUEST, requestPipeline,
+                new HttpConnectionInputStream(Http1Connection.this, input, false),
                 server.maxRequestHeadersSize(), server.maxUrlSize());
         }
 
         CompletableFuture<Void> completion() { return ended; }
+
+        /** Called once by a failed owner after its last advance; no further parsing is possible. */
+        void ownerFailed(IOException failure) {
+            CompletableFuture<ExchangeResult> work = pending;
+            if (work == null) end(failure);
+            else work.whenComplete((ignored, error) -> end(failure));
+        }
 
         /** Bounded header progression only. The caller limits advances per transport turn. */
         boolean advance() {

@@ -5,7 +5,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
-import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -917,13 +916,13 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                             failAfterUnexpectedInputEnd(new IOException("Client closed an active HTTP/2 connection", e));
                         }
                     }
-                } catch (SocketException e) {
+                } catch (IOException e) {
                     boolean noActiveWork = noConnectionWorkIsActive();
                     if (noActiveWork) {
                         setReadStateIfActiveAndSignal(HState.COMPLETED);
                     } else {
-                        log.warn("Socket exception while reading HTTP/2 frames at read state {} lifecycle.writeState={}", lifecycle.readState, lifecycle.writeState, e);
-                        failAfterUnexpectedInputEnd(new IOException("Socket closed with active HTTP/2 streams", e));
+                        log.warn("Input failure while reading HTTP/2 frames at read state {} lifecycle.writeState={}", lifecycle.readState, lifecycle.writeState, e);
+                        failAfterUnexpectedInputEnd(new IOException("Input failed with active HTTP/2 streams", e));
                     }
                 }
             }

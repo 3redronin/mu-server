@@ -201,8 +201,11 @@ class ProxyProtocolTest {
     @Test void rejectedExecutorNeverParsesOnAcceptor() throws Exception {
         java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newSingleThreadExecutor();
         executor.shutdown();
-        try (MuServer server = TestExecutionResources.configure(MuServerBuilder.httpServer(), executor, null, null, null)
-            .withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config()).start()) {
+        MuServerBuilder builder = TestExecutionResources.configure(MuServerBuilder.httpServer(), executor, null, null, null);
+        // This checks the blocking adapter's per-connection executor submission. The channel
+        // listener parses the preamble on its readiness owner without submitting such a task.
+        builder.useChannelTransport = false;
+        try (MuServer server = builder.withHAProxyProtocolConfig(HAProxyProtocolConfigBuilder.config()).start()) {
             for (int i = 0; i < 3; i++) {
                 try (Socket socket = new Socket("localhost", server.uri().getPort())) {
                     socket.setSoTimeout(1000);

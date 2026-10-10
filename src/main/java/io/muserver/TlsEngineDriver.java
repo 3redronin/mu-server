@@ -42,6 +42,7 @@ final class TlsEngineDriver {
     private SSLSession session;
     private @Nullable String applicationProtocol;
     private boolean handshakeComplete;
+    private long handshakeGeneration;
     private boolean inputEnded;
     private boolean inboundDone;
     private boolean outboundDone;
@@ -72,6 +73,7 @@ final class TlsEngineDriver {
 
     long revision() { return revision; }
     boolean handshakeComplete() { return handshakeComplete; }
+    long handshakeGeneration() { return handshakeGeneration; }
     boolean tasksPending() { return tasks != null; }
     SSLSession session() { return session; }
     @Nullable String applicationProtocol() { return applicationProtocol; }
@@ -331,7 +333,10 @@ final class TlsEngineDriver {
         boolean progress = result.bytesConsumed() != 0 || result.bytesProduced() != 0
             || result.getHandshakeStatus() != before;
         if (result.getHandshakeStatus() != before) needsMoreInput = false;
-        if (result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.FINISHED) handshakeComplete = true;
+        if (result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.FINISHED) {
+            handshakeComplete = true;
+            handshakeGeneration++;
+        }
         boolean wasInboundDone = inboundDone;
         boolean wasOutboundDone = outboundDone;
         refreshSession();

@@ -23,7 +23,7 @@ final class TransportOutputBuffer extends OutputStream {
     private final ReentrantLock writers = new ReentrantLock();
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition changed = lock.newCondition();
-    private final byte[] bytes;
+    private byte[] bytes;
     private final Runnable outputAvailable;
     private int head;
     private int size;
@@ -75,6 +75,8 @@ final class TransportOutputBuffer extends OutputStream {
         lock.lock();
         try {
             if (failure == null) failure = cause;
+            // No ring storage is borrowed outside this lock; terminal failure can release it.
+            bytes = new byte[0];
             size = 0;
             changed.signalAll();
         } finally { lock.unlock(); }

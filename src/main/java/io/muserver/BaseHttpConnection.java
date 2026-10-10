@@ -255,6 +255,11 @@ abstract class BaseHttpConnection implements HttpConnection {
     }
 
     private void onIO() {
+        onNetworkProgress();
+    }
+
+    /** Network progress can precede a whole application write's successful byte accounting. */
+    void onNetworkProgress() {
         MonotonicTime.advanceIfLater(lastIONanos, System.nanoTime());
     }
 

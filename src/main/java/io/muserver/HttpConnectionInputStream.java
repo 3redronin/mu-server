@@ -6,10 +6,17 @@ import java.io.InputStream;
 
 class HttpConnectionInputStream extends FilterInputStream {
     private final BaseHttpConnection httpConnection;
+    private final boolean countBytes;
 
     public HttpConnectionInputStream(BaseHttpConnection httpConnection, InputStream in) {
+        this(httpConnection, in, true);
+    }
+
+    /** Channel transports already count plaintext on admission, but readers still report EOF/failure. */
+    HttpConnectionInputStream(BaseHttpConnection httpConnection, InputStream in, boolean countBytes) {
         super(in);
         this.httpConnection = httpConnection;
+        this.countBytes = countBytes;
     }
 
     @Override
@@ -23,7 +30,7 @@ class HttpConnectionInputStream extends FilterInputStream {
             throw failure;
         }
         if (read != -1) {
-            httpConnection.onBytesRead(1);
+            if (countBytes) httpConnection.onBytesRead(1);
         } else {
             httpConnection.onTransportInputEnd();
         }
@@ -46,7 +53,7 @@ class HttpConnectionInputStream extends FilterInputStream {
             throw failure;
         }
         if (read > 0) {
-            httpConnection.onBytesRead(read);
+            if (countBytes) httpConnection.onBytesRead(read);
         } else if (read == -1) {
             httpConnection.onTransportInputEnd();
         }

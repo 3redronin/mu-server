@@ -12,6 +12,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PushbackInputStream;
 import java.net.*;
+import java.nio.channels.ServerSocketChannel;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.Certificate;
 import java.util.ArrayList;
@@ -41,6 +42,7 @@ class ConnectionAcceptor {
     private final ExecutorService connectionExecutor;
     private final ExecutorService http2WriterExecutor;
     private final List<ContentEncoder> contentEncoders;
+    private final @Nullable ChannelTransportLoop channelLoop;
 
     public boolean isHttps() {
         return isHttps;
@@ -124,7 +126,7 @@ class ConnectionAcceptor {
                        @Nullable HttpsConfig httpsConfig, @Nullable Http2Config http2Config,
                        ExecutorService handlerExecutor, ExecutorService connectionExecutor,
                        ExecutorService http2WriterExecutor,
-                       List<ContentEncoder> contentEncoders) {
+                       List<ContentEncoder> contentEncoders) throws IOException {
         this.server = server;
         HAProxyProtocolConfig config = server.haProxyProtocolConfig;
         this.proxyConfig = config != null && config.enabled() ? config : null;
@@ -138,8 +140,8 @@ class ConnectionAcceptor {
         this.http2WriterExecutor = http2WriterExecutor;
         this.contentEncoders = contentEncoders;
         this.isHttps = httpsConfig != null;
-
         this.acceptorThread = new Thread(this::acceptLoop, toString());
+        this.channelLoop = socketServer.getChannel() == null ? null : new ChannelTransportLoop(this, server, proxyConfig);
     }
 
 
@@ -161,7 +163,8 @@ class ConnectionAcceptor {
                     if (!registerAcceptedSocket(clientSocket, proxyDeadline)) continue;
                     ConnectionAcceptedTime acceptedTime = ConnectionAcceptedTime.now();
                     try {
-                        connectionExecutor.execute(() -> runAcceptedSocket(clientSocket, acceptedTime, h2));
+                        if (channelLoop != null) channelLoop.accept(clientSocket, acceptedTime, h2);
+                        else connectionExecutor.execute(() -> runAcceptedSocket(clientSocket, acceptedTime, h2));
                         submitted = true;
                     } catch (RejectedExecutionException e) {
                         // Application request overload is handled separately with HTTP 503.
@@ -184,6 +187,7 @@ class ConnectionAcceptor {
             }
         }
         lastStopWasGraceful = shutdownConnections();
+        if (channelLoop != null) channelLoop.stopAfterConnections();
         lifecycleLock.lock();
         try {
             state = State.STOPPED;
@@ -491,32 +495,7 @@ class ConnectionAcceptor {
         @Nullable ProxiedConnectionInfo proxyInfo
     ) {
         SocketConnectionTransport transport = new SocketConnectionTransport(socket, acceptedSocket, clientCert);
-        BaseHttpConnection con;
-        if (httpVersion == HttpVersion.HTTP_2) {
-            if (http2Config == null) {
-                throw new IllegalStateException("HTTP/2 was selected but no HTTP/2 config is available");
-            }
-            con = new Http2Connection(
-                server,
-                this,
-                transport,
-                acceptedTime,
-                proxyInfo,
-                http2Config.initialSettings(),
-                http2Config.settingsAckTimeoutMillis(),
-                handlerExecutor,
-                http2WriterExecutor
-            );
-        } else {
-            con = new Http1Connection(
-                server,
-                this,
-                transport,
-                acceptedTime,
-                proxyInfo,
-                handlerExecutor
-            );
-        }
+        BaseHttpConnection con = createConnection(transport, acceptedTime, proxyInfo, httpVersion);
 
         if (!promoteAcceptedSocket(acceptedSocket, con)) {
             return;
@@ -538,6 +517,73 @@ class ConnectionAcceptor {
             server.getStatsImpl().onConnectionClosed(con);
             retireConnection(con);
         }
+    }
+
+    private BaseHttpConnection createConnection(ConnectionTransport transport, ConnectionAcceptedTime acceptedTime,
+                                                 @Nullable ProxiedConnectionInfo proxyInfo, HttpVersion httpVersion) {
+        if (httpVersion == HttpVersion.HTTP_2) {
+            if (http2Config == null) {
+                throw new IllegalStateException("HTTP/2 was selected but no HTTP/2 config is available");
+            }
+            return new Http2Connection(
+                server,
+                this,
+                transport,
+                acceptedTime,
+                proxyInfo,
+                http2Config.initialSettings(),
+                http2Config.settingsAckTimeoutMillis(),
+                handlerExecutor,
+                http2WriterExecutor
+            );
+        } else {
+            return new Http1Connection(
+                server,
+                this,
+                transport,
+                acceptedTime,
+                proxyInfo,
+                handlerExecutor
+            );
+        }
+
+    }
+
+    @Nullable BaseHttpConnection promoteChannel(Socket socket, ConnectionTransport transport,
+                                                ConnectionAcceptedTime acceptedTime, @Nullable ProxiedConnectionInfo proxyInfo,
+                                                HttpVersion version) {
+        BaseHttpConnection connection = createConnection(transport, acceptedTime, proxyInfo, version);
+        if (!promoteAcceptedSocket(socket, connection)) return null;
+        server.getStatsImpl().onConnectionOpened(connection);
+        return connection;
+    }
+
+    boolean channelPreambleFinished(Socket socket) {
+        lifecycleLock.lock();
+        try {
+            Long deadline = pendingPreambles.remove(socket);
+            if (deadline == null) return false; // Timeout or shutdown already claimed it.
+            if (state == State.STARTED && MonotonicTime.nanosUntil(deadline) > 0) return true;
+            server.getStatsImpl().onFailedToConnect();
+            return false;
+        } finally { lifecycleLock.unlock(); }
+    }
+
+    void channelSetupFailed(Socket socket) {
+        lifecycleLock.lock();
+        try {
+            if (acceptedSockets.remove(socket)) server.getStatsImpl().onFailedToConnect();
+            pendingPreambles.remove(socket);
+        } finally { lifecycleLock.unlock(); }
+    }
+
+    void channelRetired(Socket socket, @Nullable BaseHttpConnection connection) {
+        if (connection != null) {
+            server.getStatsImpl().onConnectionClosed(connection);
+            retireConnection(connection);
+        }
+        retireAcceptedSocket(socket);
+        closeAndReleaseSocket(socket);
     }
 
     private boolean promoteAcceptedSocket(
@@ -591,8 +637,10 @@ class ConnectionAcceptor {
                     TimeUnit.MILLISECONDS
                 );
             }
+            if (channelLoop != null) channelLoop.start();
             acceptorThread.start();
         } catch (RuntimeException | Error e) {
+            if (channelLoop != null) channelLoop.stopAfterConnections();
             ScheduledFuture<?> preambleTask = preambleTimeoutTask;
             if (preambleTask != null) preambleTask.cancel(false);
             preambleTimeoutTask = null;
@@ -647,6 +695,7 @@ class ConnectionAcceptor {
         } catch (IOException e) {
             log.warn("Error closing server socket", e);
         }
+        if (channelLoop != null) channelLoop.closeIfUnstarted();
         joinAcceptorUntil(callerDeadlineNanos);
         if (acceptorThread.isAlive()) {
             log.warn("Could not stop {} before the shutdown deadline", this);
@@ -713,10 +762,12 @@ class ConnectionAcceptor {
         ExecutorService handlerExecutor,
         ExecutorService connectionExecutor,
         ExecutorService http2WriterExecutor,
-        List<ContentEncoder> contentEncoders) throws IOException {
+        List<ContentEncoder> contentEncoders,
+        boolean useChannels) throws IOException {
 
-        ServerSocket socketServer = new ServerSocket(bindPort, listenBacklog, address);
+        ServerSocket socketServer = useChannels ? ServerSocketChannel.open().socket() : new ServerSocket();
         try {
+            socketServer.bind(new InetSocketAddress(address, bindPort), listenBacklog);
             configureSocketOptions(socketServer);
 
             String uriHost = address != null ? address.getHostName() : "localhost";

@@ -49,6 +49,8 @@ public class MuServerBuilder {
     private int maxConnections;
     private int listenBacklog = 50;
     ExecutionResources.Factory executionResourcesFactory = ExecutionResources::create;
+    // Internal migration switch until all protocol continuations and listener gates are validated.
+    boolean useChannelTransport;
     private long maxRequestSize = 24 * 1024 * 1024;
     private int maxMultipartParts = 1024;
     private @Nullable List<ResponseCompleteListener> responseCompleteListeners;

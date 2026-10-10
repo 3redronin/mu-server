@@ -134,6 +134,8 @@ class Mu3ServerImpl implements MuServer {
         return detachedApplicationTasks.awaitUntil(deadlineNanos);
     }
 
+    ExecutionResources.TransportLease retainTransport() { return executionResources.retainTransport(); }
+
     void executeResponseCompletionTask(Runnable task) {
         executeTrackedApplicationTask(
             task,
@@ -615,7 +617,8 @@ class Mu3ServerImpl implements MuServer {
                     handlerExecutor,
                     connectionExecutor,
                     http2WriterExecutor,
-                    contentEncoders
+                    contentEncoders,
+                    builder.useChannelTransport
                 );
                 acceptors.add(acceptor);
                 httpsConfig.setHttpsUri(acceptor.uri());
@@ -631,7 +634,8 @@ class Mu3ServerImpl implements MuServer {
                     handlerExecutor,
                     connectionExecutor,
                     http2WriterExecutor,
-                    contentEncoders
+                    contentEncoders,
+                    builder.useChannelTransport
                 ));
             }
             impl.startListening();

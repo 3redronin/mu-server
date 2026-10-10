@@ -2,6 +2,7 @@ package io.muserver;
 
 import org.jspecify.annotations.Nullable;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -13,6 +14,28 @@ class ExecutionResources {
     final ScheduledExecutorService timer;
     private final boolean ownsApplication;
     private final AtomicBoolean shutdownStarted = new AtomicBoolean();
+    private final AtomicBoolean domainsShutdownStarted = new AtomicBoolean();
+    private final Object transportLock = new Object();
+    private int transports; // Guarded by transportLock.
+
+    /** A resumable connection can own unfinished cleanup without occupying an internal worker. */
+    final class TransportLease implements AutoCloseable {
+        private final AtomicBoolean released = new AtomicBoolean();
+        @Override public void close() {
+            if (!released.compareAndSet(false, true)) return;
+            boolean finish;
+            synchronized (transportLock) { finish = --transports == 0 && shutdownStarted.get(); }
+            if (finish) shutdownDomains();
+        }
+    }
+
+    TransportLease retainTransport() {
+        synchronized (transportLock) {
+            if (shutdownStarted.get()) throw new RejectedExecutionException("Server execution resources are closing");
+            transports++;
+            return new TransportLease();
+        }
+    }
 
     @FunctionalInterface
     interface Factory {
@@ -48,6 +71,12 @@ class ExecutionResources {
     void shutdown() {
         if (!shutdownStarted.compareAndSet(false, true)) return;
         timer.shutdown();
+        synchronized (transportLock) { if (transports != 0) return; }
+        shutdownDomains();
+    }
+
+    private void shutdownDomains() {
+        if (!domainsShutdownStarted.compareAndSet(false, true)) return;
         internal.shutdown();
         if (!ownsApplication) return;
         if (internal.isTerminated()) {

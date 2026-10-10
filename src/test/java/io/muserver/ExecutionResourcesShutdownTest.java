@@ -8,6 +8,37 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class ExecutionResourcesShutdownTest {
     @Test
+    void resumableTransportRetainsCleanupExecutorsWithoutAnActiveWorker() throws Exception {
+        var application = Executors.newSingleThreadExecutor();
+        var internal = Executors.newSingleThreadExecutor();
+        var timer = Executors.newSingleThreadScheduledExecutor();
+        var resources = new ExecutionResources(application, true, internal, timer);
+        var first = resources.retainTransport();
+        var last = resources.retainTransport();
+        var callback = new CompletableFuture<Void>();
+        try {
+            resources.shutdown();
+            resources.shutdown();
+            assertTrue(timer.isShutdown());
+            assertFalse(internal.isShutdown());
+            assertFalse(application.isShutdown());
+            assertThrows(RejectedExecutionException.class, resources::retainTransport);
+            first.close();
+            first.close();
+            assertFalse(internal.isShutdown());
+            internal.submit(() -> application.execute(() -> callback.complete(null))).get(5, TimeUnit.SECONDS);
+            last.close();
+            last.close();
+            callback.get(5, TimeUnit.SECONDS);
+            assertTrue(internal.awaitTermination(5, TimeUnit.SECONDS));
+            assertTrue(application.awaitTermination(5, TimeUnit.SECONDS));
+        } finally {
+            first.close(); last.close();
+            internal.shutdownNow(); application.shutdownNow(); timer.shutdownNow();
+        }
+    }
+
+    @Test
     void finalIoCallbacksAreAcceptedBeforeOwnedApplicationExecutorShutsDown() throws Exception {
         var application = Executors.newSingleThreadExecutor(r -> new Thread(r, "shutdown-test-application"));
         var internal = Executors.newSingleThreadExecutor();

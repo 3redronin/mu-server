@@ -17,6 +17,25 @@ import static scaffolding.MuAssert.assertEventually;
 
 @Timeout(15)
 class WebsocketFrameReadingTest {
+    @org.junit.jupiter.api.Test
+    void failedTransportReadsReportDisconnectWithCauseButKeepTimeoutsDistinct() {
+        for (java.io.IOException failure : new java.io.IOException[]{new java.net.SocketException("reset"),
+            new javax.net.ssl.SSLException("truncated TLS record"), new java.io.IOException("closed")}) {
+            var input = new java.io.InputStream() {
+                @Override public int read() throws java.io.IOException { throw failure; }
+            };
+            ClientDisconnectedException disconnected = org.junit.jupiter.api.Assertions.assertThrows(ClientDisconnectedException.class,
+                () -> WebsocketConnection.readAtLeast(ByteBuffer.allocate(16).flip(), input, 2));
+            org.junit.jupiter.api.Assertions.assertSame(failure, disconnected.getCause());
+        }
+        java.io.IOException timeout = new java.net.SocketTimeoutException("deadline");
+        var input = new java.io.InputStream() {
+            @Override public int read() throws java.io.IOException { throw timeout; }
+        };
+        org.junit.jupiter.api.Assertions.assertSame(timeout, org.junit.jupiter.api.Assertions.assertThrows(java.net.SocketTimeoutException.class,
+            () -> WebsocketConnection.readAtLeast(ByteBuffer.allocate(16).flip(), input, 2)));
+    }
+
     private MuServer server;
 
     @AfterEach
