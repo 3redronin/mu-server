@@ -90,31 +90,55 @@ final class ProxyProtocol {
         byte[] header = new byte[16];
         header[0] = (byte) first;
         readExact(source, header, 1, 15);
-        for (int i = 1; i < SIGNATURE.length; i++) if (header[i] != SIGNATURE[i]) throw invalid();
-        int command = header[12] & 255;
+        V2Header parsed = parseV2Header(header, config);
+        Payload payload = new Payload(source, parsed.payloadLength);
+        if (parsed.local) {
+            payload.discard(parsed.payloadLength);
+            return parseV2Addresses(parsed, new byte[0]);
+        }
+        ProxiedConnectionInfo info = parseV2Addresses(parsed, payload.bytes(parsed.addressLength));
+        payload.tlvs();
+        return info;
+    }
+
+    static final class V2Header {
+        final int payloadLength;
+        final boolean local;
+        final int family;
+        final int addressLength;
+
+        V2Header(int payloadLength, boolean local, int family) {
+            this.payloadLength = payloadLength;
+            this.local = local;
+            this.family = family;
+            this.addressLength = local || family == 0 ? 0 : family == 1 ? 12 : family == 2 ? 36 : 216;
+        }
+    }
+
+    static V2Header parseV2Header(byte[] bytes, HAProxyProtocolConfig config) throws IOException {
+        for (int i = 0; i < SIGNATURE.length; i++) if (bytes[i] != SIGNATURE[i]) throw invalid();
+        int command = bytes[12] & 255;
         if (command != 0x20 && command != 0x21) throw invalid();
-        int length = ((header[14] & 255) << 8) | (header[15] & 255);
+        int length = unsignedShort(bytes, 14);
         if (length > config.maxV2PayloadSize()) throw new IOException("PROXY v2 payload exceeds configured limit");
-        Payload payload = new Payload(source, length);
-        if (command == 0x20) {
-            payload.discard(length);
-            return new Info(null, 0, null, 0);
+        int family = (bytes[13] & 255) >>> 4;
+        int transport = bytes[13] & 15;
+        if (command == 0x21) {
+            if (family > 3 || transport > 2) throw invalid();
+            // Accept canonical UNSPEC (0x00), not a mixed UNSPEC family/transport.
+            if ((family == 0) != (transport == 0)) throw invalid();
         }
-        int family = (header[13] & 255) >>> 4;
-        int transport = header[13] & 15;
-        if (family > 3 || transport > 2) throw invalid();
-        // Accept the canonical UNSPEC byte (0x00), not a mixed UNSPEC family/transport.
-        if (family == 0 && transport == 0) {
-            payload.tlvs();
-            return new Info(null, 0, null, 0);
-        }
-        if (family == 0 || transport == 0) throw invalid();
-        int addressSize = family == 1 ? 4 : family == 2 ? 16 : 108;
-        int required = 2 * addressSize + (family == 3 ? 0 : 4);
-        byte[] addresses = payload.bytes(required);
+        V2Header header = new V2Header(length, command == 0x20, family);
+        if (length < header.addressLength) throw invalid();
+        return header;
+    }
+
+    static ProxiedConnectionInfo parseV2Addresses(V2Header header, byte[] addresses) {
+        if (header.addressLength == 0) return new Info(null, 0, null, 0);
+        int addressSize = header.family == 1 ? 4 : header.family == 2 ? 16 : 108;
         String src, dst;
         int srcPort = 0, dstPort = 0;
-        if (family == 3) {
+        if (header.family == 3) {
             src = unixAddress(addresses, 0); dst = unixAddress(addresses, addressSize);
         } else {
             src = ipAddress(addresses, 0, addressSize);
@@ -122,7 +146,6 @@ final class ProxyProtocol {
             srcPort = unsignedShort(addresses, addressSize * 2);
             dstPort = unsignedShort(addresses, addressSize * 2 + 2);
         }
-        payload.tlvs();
         return new Info(src, srcPort, dst, dstPort);
     }
 
@@ -179,7 +202,7 @@ final class ProxyProtocol {
         return ((data[offset] & 255) << 8) | (data[offset + 1] & 255);
     }
 
-    private static ProxiedConnectionInfo parseV1(String line) throws IOException {
+    static ProxiedConnectionInfo parseV1(String line) throws IOException {
         String[] parts = line.split(" ", -1);
         if (parts.length < 2 || !parts[0].equals("PROXY")) throw invalid();
         if (parts[1].equals("UNKNOWN")) return new Info(null, 0, null, 0);
