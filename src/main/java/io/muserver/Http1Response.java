@@ -10,6 +10,7 @@ import java.io.UncheckedIOException;
 
 class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
     private final OutputStream socketOut;
+    private final @Nullable AsyncResponseRenderer asynchronousRenderer;
     @Nullable
     private WebsocketConnection websocket;
     @Nullable
@@ -17,8 +18,24 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
     private boolean shouldCloseConnectionAfterResponse;
 
     Http1Response(Mu3Request muRequest, OutputStream socketOut) {
+        this(muRequest, socketOut, null);
+    }
+
+    Http1Response(Mu3Request muRequest, OutputStream socketOut, @Nullable AsyncTransportOutput asynchronousOutput) {
         super(muRequest, new FieldBlock());
-        this.socketOut = socketOut;
+        if (asynchronousOutput == null) {
+            this.socketOut = socketOut;
+            asynchronousRenderer = null;
+        } else {
+            var capture = new Http1ResponseOutput(socketOut, asynchronousOutput, muRequest.server().tempDir());
+            this.socketOut = capture;
+            asynchronousRenderer = new AsyncResponseRenderer(muRequest.serverImpl()::executeInternalTask, capture, this::outputStream);
+        }
+    }
+
+    @Override AsyncResponseOutput.@Nullable AsyncWriter asynchronousWriter() {
+        AsyncResponseRenderer renderer = asynchronousRenderer;
+        return renderer == null ? null : renderer::write;
     }
 
     private byte[] statusAndHeaders() throws IOException {

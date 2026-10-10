@@ -221,6 +221,8 @@ abstract class BaseResponse implements MuResponse {
 
     abstract void cleanup() throws IOException, InterruptedException;
 
+    AsyncResponseOutput.@Nullable AsyncWriter asynchronousWriter() { return null; }
+
     protected void closeWriter() throws IOException {
         PrintWriter w = writer;
         if (w != null) {

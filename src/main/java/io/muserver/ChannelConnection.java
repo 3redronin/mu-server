@@ -247,12 +247,14 @@ final class ChannelConnection implements ConnectionTransport {
         connection = promoted;
         protocolPrefix.flip();
         if (protocolPrefix.hasRemaining()) promoted.onBytesRead(input.offer(protocolPrefix));
-        var clientOut = new HttpConnectionOutputStream(promoted, output);
+        AsyncTransportOutput writer = output.asynchronousWriter();
         if (promoted instanceof Http1Connection) {
-            http1 = ((Http1Connection) promoted).readDriver(input, clientOut, this::schedule, output);
+            var clientOut = new HttpConnectionOutputStream(promoted,
+                new AsyncTransportOutputStream(writer, promoted::forceShutdown));
+            http1 = ((Http1Connection) promoted).readDriver(input, clientOut, this::schedule, writer);
             protocolCompletion = http1.completion();
         } else {
-            http2 = ((Http2Connection) promoted).readDriver(input, output.asynchronousWriter());
+            http2 = ((Http2Connection) promoted).readDriver(input, writer);
             protocolCompletion = http2.completion();
             http2.inputAvailable();
         }

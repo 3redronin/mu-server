@@ -27,8 +27,10 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
         this.response = response;
         this.server = server;
         this.callbacks = new SerialApplicationTasks(server);
-        this.output = new AsyncResponseOutput(server::executeInternalTask,
-            this::copyBufferToResponseOutput, response::abortAsyncOutput, callbacks);
+        AsyncResponseOutput.AsyncWriter writer = response.asynchronousWriter();
+        this.output = writer == null ? new AsyncResponseOutput(server::executeInternalTask,
+            this::copyBufferToResponseOutput, response::abortAsyncOutput, callbacks)
+            : AsyncResponseOutput.asynchronous(server::executeInternalTask, writer, response::abortAsyncOutput, callbacks);
         output.completion().whenComplete((ignored, failure) -> {
             AsyncBodyReader reader;
             synchronized (bodyReaderLock) { reader = bodyReader; }

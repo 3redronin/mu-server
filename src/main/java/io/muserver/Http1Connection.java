@@ -28,6 +28,7 @@ class Http1Connection extends BaseHttpConnection {
     private static final Logger log = LoggerFactory.getLogger(Http1Connection.class);
     private final ExecutorService handlerExecutor;
     private final Queue<HttpRequestTemp> requestPipeline = new ConcurrentLinkedQueue<>();
+    private @Nullable AsyncTransportOutput asynchronousResponseOutput;
     // At most one active exchange exists on HTTP/1.1: either an HTTP request/response or a websocket takeover.
     private final AtomicReference<@Nullable ActiveExchange> activeExchange = new AtomicReference<>();
     // Lifecycle is cross-thread: connection loop + timeout thread + shutdown thread.
@@ -91,7 +92,7 @@ class Http1Connection extends BaseHttpConnection {
     }
 
     ReadDriver readDriver(TransportInputBuffer input, OutputStream output, Runnable continuation,
-                          @Nullable TransportOutputBuffer upgradeOutput) {
+                          @Nullable AsyncTransportOutput upgradeOutput) {
         return new ReadDriver(input, output, continuation, upgradeOutput);
     }
 
@@ -99,7 +100,7 @@ class Http1Connection extends BaseHttpConnection {
         private final TransportInputBuffer input;
         private final OutputStream output;
         private final Runnable continuation;
-        private final @Nullable TransportOutputBuffer upgradeOutput;
+        private final @Nullable AsyncTransportOutput upgradeOutput;
         private final Http1MessageParser parser;
         private final Http1MessageParser.AvailableRead availableRead;
         private final CompletableFuture<Void> ended = new CompletableFuture<>();
@@ -107,11 +108,13 @@ class Http1Connection extends BaseHttpConnection {
         private WebsocketConnection.@Nullable ReadDriver websocketReader;
 
         private ReadDriver(TransportInputBuffer input, OutputStream output, Runnable continuation,
-                           @Nullable TransportOutputBuffer upgradeOutput) {
+                           @Nullable AsyncTransportOutput upgradeOutput) {
             this.input = input;
             this.output = output;
             this.continuation = continuation;
             this.upgradeOutput = upgradeOutput;
+            asynchronousResponseOutput = upgradeOutput == null ? null
+                : HttpConnectionOutputStream.asynchronous(Http1Connection.this, upgradeOutput);
             var connectionInput = new HttpConnectionInputStream(Http1Connection.this, input, false);
             this.availableRead = bytes -> connectionInput.readAvailable(input, bytes);
             this.parser = new Http1MessageParser(HttpMessageType.REQUEST, requestPipeline,
@@ -147,7 +150,7 @@ class Http1Connection extends BaseHttpConnection {
                     if (websocket != null) {
                         activateWebsocket(websocket);
                         WebsocketConnection.ReadDriver reader = websocket.readDriver(input, output, parser.takeInputForUpgrade(),
-                            upgradeOutput == null ? null : upgradeOutput.asynchronousWriter());
+                            upgradeOutput);
                         websocketReader = reader;
                         pending = reader.completion().thenApply(ignored -> new ExchangeResult(true, null));
                         pending.whenComplete((ignored, failure) -> continuation.run());
@@ -364,7 +367,7 @@ class Http1Connection extends BaseHttpConnection {
         var muRequest = new Mu3Request(this, method, requestUri, serverUri, httpVersion, request.headers(), bodySize, requestBody);
         transport.readTimeoutMillis(requestTimeout);
 
-        var muResponse = new Http1Response(muRequest, outputStream);
+        var muResponse = new Http1Response(muRequest, outputStream, asynchronousResponseOutput);
         muRequest.setResponse(muResponse);
         boolean closeConnection = muRequest.headers().closeConnectionRequested(httpVersion);
 

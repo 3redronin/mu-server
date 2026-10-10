@@ -18,6 +18,23 @@ class HttpConnectionOutputStream extends FilterOutputStream {
         this.httpConnection = httpConnection;
     }
 
+    static AsyncTransportOutput asynchronous(BaseHttpConnection connection, AsyncTransportOutput output) {
+        return source -> {
+            int count = source.remaining();
+            try {
+                return output.write(source).whenComplete((ignored, failure) -> {
+                    if (failure == null) {
+                        if (count > 0) connection.onBytesSent(count);
+                    } else connection.onTransportOutputFailure(failure instanceof IOException
+                        ? (IOException) failure : new IOException("Transport output failed", failure));
+                });
+            } catch (IOException failure) {
+                connection.onTransportOutputFailure(failure);
+                throw failure;
+            }
+        };
+    }
+
     @Override
     public void write(int b) throws IOException {
         try {
