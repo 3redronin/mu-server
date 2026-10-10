@@ -1,5 +1,7 @@
 package io.muserver;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.IOException;
 import java.text.ParseException;
 
@@ -117,4 +119,7 @@ class MessageBodyBit implements Http1ConnectionMsg {
 
 interface Http1MessageReader {
     Http1ConnectionMsg readNext() throws IOException, ParseException;
+
+    /** Transfers the trailers associated with the most recently delivered end-of-body event. */
+    default @Nullable FieldBlock takeTrailers() { return null; }
 }

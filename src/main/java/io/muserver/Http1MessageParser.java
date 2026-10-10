@@ -38,8 +38,8 @@ class Http1MessageParser implements Http1MessageReader {
         }
     }
 
-    @Nullable
-    FieldBlock takeTrailers() {
+    @Override
+    public @Nullable FieldBlock takeTrailers() {
         return decoder.takeTrailers();
     }
 

@@ -113,7 +113,7 @@ class Http1BodyStream extends InputStream implements RequestTrailersAccessor {
                             throw invalidBody;
                         }
                         if (MessageBodyBit.isEndOfBody(next)) {
-                            trailers = parser instanceof Http1MessageParser ? ((Http1MessageParser) parser).takeTrailers() : null;
+                            trailers = parser.takeTrailers();
                             bb = null;
                             status.set(State.EOF);
                             ready = true;
@@ -187,7 +187,7 @@ class Http1BodyStream extends InputStream implements RequestTrailersAccessor {
                     break;
                 }
                 if (MessageBodyBit.isEndOfBody(last)) {
-                    trailers = parser instanceof Http1MessageParser ? ((Http1MessageParser) parser).takeTrailers() : null;
+                    trailers = parser.takeTrailers();
                     drained = true;
                 } else if (MessageBodyBit.isEof(last)) {
                     status.set(State.IO_EXCEPTION);

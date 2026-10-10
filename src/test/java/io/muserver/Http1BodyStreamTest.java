@@ -11,8 +11,28 @@ import java.util.Queue;
 
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.sameInstance;
+import static org.junit.jupiter.api.Assertions.*;
 
 class Http1BodyStreamTest {
+
+    @Test
+    void trailersComeFromTheReaderContractWhenReadingOrDiscarding() throws Exception {
+        for (boolean discard : new boolean[]{false, true}) {
+            var trailers = new FieldBlock();
+            trailers.add("checksum", "abc123");
+            Http1MessageReader reader = new Http1MessageReader() {
+                @Override public Http1ConnectionMsg readNext() { return MessageBodyBit.EndOfBodyBit; }
+                @Override public FieldBlock takeTrailers() { return trailers; }
+            };
+            try (var body = new Http1BodyStream(reader, 1024)) {
+                assertNull(body.trailers());
+                if (discard) assertEquals(Http1BodyStream.State.EOF, body.discardRemaining(true));
+                else assertEquals(-1, body.read());
+                assertTrue(body.isRequestBodyComplete());
+                assertSame(trailers, body.trailers());
+            }
+        }
+    }
 
     @Test
     void messagesAreConvertedToByteReads() throws IOException {
