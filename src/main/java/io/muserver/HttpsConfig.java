@@ -57,6 +57,22 @@ public class HttpsConfig implements SSLInfo {
      */
     public SSLParameters sslParameters() { return sslParameters; }
 
+    /** Configure the engine before any handshake work is performed. */
+    SSLEngine createEngine(boolean http2Enabled) {
+        SSLEngine engine = sslContext.createSSLEngine();
+        engine.setUseClientMode(false);
+        engine.setSSLParameters(sslParameters);
+        SSLParameters parameters = engine.getSSLParameters();
+        parameters.setApplicationProtocols(http2Enabled ? new String[]{"h2", "http/1.1"} : new String[0]);
+        engine.setSSLParameters(parameters);
+        switch (clientCertificateAuthentication) {
+            case MANDATORY: engine.setNeedClientAuth(true); break;
+            case OPTIONAL: engine.setWantClientAuth(true); break;
+            default: engine.setWantClientAuth(false);
+        }
+        return engine;
+    }
+
     String[] protocolsArray() {
         return sslParameters.getProtocols();
     }

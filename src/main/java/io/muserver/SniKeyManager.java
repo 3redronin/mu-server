@@ -7,7 +7,6 @@ import java.net.Socket;
 import java.security.Principal;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
-import java.util.Collection;
 import java.util.Map;
 
 class SniKeyManager extends X509ExtendedKeyManager {
@@ -46,26 +45,23 @@ class SniKeyManager extends X509ExtendedKeyManager {
     @Override
     public @Nullable String chooseServerAlias(String keyType, Principal[] issuers, Socket socket) {
         var sslSocket = (SSLSocket) socket;
-        var session = (ExtendedSSLSession)sslSocket.getHandshakeSession(); // Get the current handshake session
-        return chooseAlias(session.getRequestedServerNames());
+        try { return chooseAlias(sslSocket.getHandshakeSession()); }
+        catch (UnsupportedOperationException unsupported) { return defaultAlias; }
     }
 
     @Override
     public @Nullable String chooseEngineServerAlias(String keyType, Principal[] issuers, SSLEngine engine) {
-        ExtendedSSLSession session = (ExtendedSSLSession) engine.getHandshakeSession();
-        return chooseAlias(session.getRequestedServerNames());
+        try {
+            SSLSession session = engine.getHandshakeSession();
+            // Session-ticket restoration can ask for a key before the new handshake session
+            // exists. An engine's established session is safe to inspect without starting IO.
+            return chooseAlias(session == null ? engine.getSession() : session);
+        } catch (UnsupportedOperationException unsupported) { return defaultAlias; }
     }
 
-    private @Nullable String chooseAlias(Collection<SNIServerName> requestedServerNames) {
-        // Pick first SNIHostName in the list of SNI names.
-        String sniHostname = null;
-        for (SNIServerName name : requestedServerNames) {
-            if (name.getType() == StandardConstants.SNI_HOST_NAME) {
-                sniHostname = ((SNIHostName) name).getAsciiName();
-                break;
-            }
-        }
-
+    private @Nullable String chooseAlias(@Nullable SSLSession session) {
+        String sniHostname = session == null ? null : SocketConnectionTransport.requestedServerName(session);
+        if (sniHostname == null) return defaultAlias;
         String hostname = sanToAliasMap.get(sniHostname);
         if (hostname == null) {
             hostname = sniHostname;
