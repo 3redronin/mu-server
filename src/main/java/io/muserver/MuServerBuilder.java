@@ -308,7 +308,7 @@ public class MuServerBuilder {
      * all ports. Each listening socket receives the same backlog setting.</p>
      * <p>The value is passed to {@link java.net.ServerSocket#ServerSocket(int, int, java.net.InetAddress)}.
      * Its effective size is platform-dependent: the implementation may cap or ignore the
-     * requested value. It is not a socket buffer size or a total-memory limit.</p>
+     * requested value.</p>
      * @param backlog The requested queue length, greater than zero; the default is 50
      * @return This builder
      * @throws IllegalArgumentException if backlog is zero or negative
