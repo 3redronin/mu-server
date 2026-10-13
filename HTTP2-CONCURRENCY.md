@@ -8,11 +8,13 @@ request handling and shutdown.
 | Resource | Configuration and ownership | Work |
 | --- | --- | --- |
 | Application executor | `withHandlerExecutor`; caller-owned when supplied | Handlers, JAX-RS continuations, body/write callbacks, WebSocket events, completion/rejection listeners |
-| Internal task executor | Mu-owned, unbounded task dispatch | Connection readers, serialized HTTP/2 writer drains, maintenance and blocking adapter I/O |
+| Internal task executor | Mu-owned, unbounded task dispatch | Resumable protocol/body/output turns, encoding, cleanup and maintenance; blocking I/O for the internal socket adapter |
+| Channel readiness loop | One Mu-owned platform thread per listener | Bounded socket/TLS progression and scheduling protocol continuations |
+| TLS delegated tasks | Per-listener platform pool, two to eight workers and a 256-task queue | Engine tasks; rejection fails the handshake without running tasks on the readiness loop |
 | Timer | Mu-owned single scheduled thread | Determine when work is due and dispatch it |
 
 The two task executors use `withThreadingMode` to select their implementation.
-`AUTO` (the default) uses virtual threads on Java 21 or later and cached platform
+`AUTO` (the default) uses virtual threads on Java 25 or later and cached platform
 threads on earlier runtimes. `PLATFORM` always uses cached platform threads;
 `VIRTUAL` explicitly selects virtual threads and requires Java 21 or later.
 A supplied handler executor remains caller-owned and is not changed by the mode.
@@ -30,12 +32,14 @@ Java 25 or later is recommended for applications with unaudited blocking depende
 [Native/foreign calls can still pin carriers](https://docs.oracle.com/en/java/javase/25/core/virtual-threads.html). Separate virtual executors share
 the JVM's default carrier scheduler and do not isolate one another from pinning.
 
-Cached platform pools have no configured thread maximum. Each blocked connection
-reader can occupy a platform thread, increasing native thread memory as connection
-count grows. The request-admission limit does not limit idle connections. Runtime
-and mode must be included in resource/capacity evidence.
+Cached platform pools have no configured thread maximum. The default channel
+transport releases task workers while waiting for input, output capacity, HTTP/2
+credit or asynchronous application completion. Blocking application streams,
+custom encoders and other application dependencies can still occupy workers.
+The request-admission limit does not limit idle connections or their retained
+buffers. Runtime and mode must be included in resource/capacity evidence.
 
-`ApplicationCarrierProgressTest` exercises the default virtual-thread mode with one
+`ApplicationCarrierProgressTest` explicitly selects virtual-thread mode with one
 and two carriers: JAX-RS text, streaming Jackson JSON, `StreamingOutput`, `InputStream`
 and `Reader` responses (identity and gzip), SSE, and paused `InputStream`/`Reader`
 uploads. HTTP/1 clients stop reading; TLS HTTP/2 clients advertise a zero stream
@@ -62,9 +66,11 @@ This preserves nonrecursive callback delivery and avoids resubmitting work to th
 same occupied worker. Per-response write callbacks and WebSocket events also have
 serialized mailboxes. `BaseWebSocket` supports asynchronous receive callbacks with
 one completion signal; `SimpleWebSocket` supports blocking receive methods.
-Asynchronous receives release the application worker while completion is pending,
-but the internal connection reader still waits before delivering another event or
-reusing its buffer. Asynchronous sends perform their writes on internal workers.
+Asynchronous receives suspend the channel reader before delivering another event
+or reusing its buffer; no task worker waits for the event completion. Asynchronous
+sends share an ordered queue and suspend on transport acknowledgement. Blocking
+receive/send APIs retain their caller-facing waits. The internal socket adapter
+also retains its blocking reader and writer.
 The older binary overload with a separate buffer-release callback remains deprecated;
 it does not provide independent buffer and message-completion lifetimes.
 
@@ -102,8 +108,10 @@ execution and the JDK delayed-execution fallback.
 
 Multiple outstanding async writes are accepted and sent in submission order.
 Mu owns each buffer until its I/O future completes or its callback runs. Waiting
-before submitting another write provides backpressure. Blocking adapter I/O runs
-on internal workers; futures resolve without waiting for an application worker.
+before submitting another write provides backpressure. Channel rendering runs in
+bounded input turns and suspends on transport or HTTP/2 frame acknowledgement;
+blocking adapter I/O runs on internal workers. Futures resolve without waiting
+for an application worker.
 Callbacks run in order on the application executor, independently of later I/O.
 Concurrent blocking writes to the same response remain the caller's responsibility.
 
@@ -114,6 +122,13 @@ After output begins, HTTP/1 closes or HTTP/2 resets the stream. Interrupting an
 HTTP/2 waiter cancels the underlying write; cancellation of an active socket frame
 can require closing the entire transport because a partial frame cannot safely be
 followed by another frame. There is no separate two-hour waiter timeout.
+
+Final response output waits for its last transport acknowledgement before success
+accounting and completion notifications. Failure joins active output and body
+callback ownership before encoder and multipart cleanup. A handler that starts
+asynchronous work and then throws uses the same join, even after calling
+`complete()`. Failed encoder cleanup discards footer bytes instead of appending
+them to a failed response.
 
 Completion listeners added to a response before it completes run in registration
 order. Listeners added after completion have no ordering guarantee and may run
@@ -137,18 +152,23 @@ accepted sockets that have not crossed that boundary and prevents queued tasks
 from promoting them later. Live connection retirement signals a condition.
 
 Each HTTP/2 connection has one input owner and one independently runnable output
-coordinator. The reader owns socket input, HPACK decoding and wire-order validation;
+coordinator. The reader owns protocol input, HPACK decoding and wire-order validation;
 it debits receive credit and publishes DATA directly to the body buffer. The
-coordinator owns RFC stream transitions, outbound flow control and socket output.
+coordinator owns RFC stream transitions, outbound flow control, HPACK encoding
+and ordered frame submission. The channel readiness loop owns actual socket I/O
+and the TLS engine. Neither protocol owner reserves a worker while awaiting
+transport readiness.
 Reader END_STREAM/reset fences prevent later wire data from overtaking queued
-coordinator transitions. Socket wrappers publish byte counts and monotonic activity.
+coordinator transitions. Transport admission/acknowledgement publishes plaintext
+byte counts; actual network progress updates monotonic connection activity.
 
 Timers only dispatch. Periodic maintenance is coalesced so delayed work cannot
 accumulate duplicate scans. SETTINGS acknowledgement expiry uses a coordinator
 command, with the existing configurable 10-second default; zero means immediate
 expiry. Registration precedes possible peer observation, and the deadline is armed
-after successful output. Request-body read deadlines use monotonic body-condition
-waits, not timer tasks. A readable timeout may produce 408 before response output
+after successful output. Blocking request-body reads use monotonic condition
+deadlines. Resumable readers race readiness with a deadline notification and
+retire the losing registration. A readable timeout may produce 408 before response output
 begins: HTTP/1 then closes, while HTTP/2 omits Connection and resets after an already
 started response. No competing HTTP/1 disconnect reader was introduced.
 
@@ -157,8 +177,9 @@ started response. No competing HTTP/1 disconnect reader was introduced.
 | State or resource | Owner |
 | --- | --- |
 | Listener state, accepted socket admission, and live connection index | `ConnectionAcceptor` lifecycle lock |
-| Socket input, input buffer, HPACK decoder | Connection reader |
-| Connection byte accounting and idle-activity publication | Socket input/output wrappers |
+| Channel socket I/O, encrypted buffers, TLS engine | Listener readiness loop; engine access pauses while delegated tasks run |
+| Protocol input, parser state, HPACK decoder | Connection reader |
+| Connection byte accounting and idle-activity publication | Transport admission/acknowledgement and network progress; socket wrappers for the internal blocking adapter |
 | Connection shutdown and new-stream admission gate | `Http2Connection` state lock |
 | RFC stream protocol state | Coordinator |
 | Live application/rejected stream identity index | `Http2StreamRegistry` lock |
@@ -169,7 +190,7 @@ started response. No competing HTTP/1 disconnect reader was introduced.
 | Connection and stream outbound flow-control credit | Coordinator |
 | Connection and stream inbound flow-control accounting | `Http2InboundFlowControl` lock |
 | Pending outbound frames and their ordering | Coordinator |
-| HPACK encoder and socket output | Coordinator |
+| HPACK encoder and ordered frame output | Coordinator; channel loop drains the submitted transport bytes |
 | Request-body producer/consumer buffer and read deadline | `Http2BodyInputStream` lock and condition |
 | Response API call ordering and async completion terminal gate | Async output queue lock |
 | Response completion-listener registration and notification gate | `BaseResponse` completion-listener lock |
@@ -216,9 +237,11 @@ The coordinator never waits for:
 * another coordinator command; or
 * a callback scheduled on the application executor.
 
-A socket write can block because the implementation uses blocking I/O. While a
-write is in progress, bytes from that write precede commands that have not yet
-been processed by the coordinator.
+A channel write submits owned frame bytes and suspends until their transport
+acknowledgement. Commands can be processed while that write is pending, but
+another frame cannot overtake its bytes. The internal socket adapter retains
+blocking writes. TLS acknowledges plaintext only after the corresponding
+ciphertext has drained.
 
 ## Stream protocol state
 
@@ -297,14 +320,14 @@ Inbound DATA is charged before the reader exposes its payload to the
 request-body buffer. One short-held lock makes the connection and stream debit
 atomic with credit returned by body-consumer threads and its later publication
 by the writer. Debiting does not require a write-coordinator round trip: the
-socket writer can block, and input must continue reading and processing HTTP/2
+transport output can stall, and input must continue reading and processing HTTP/2
 frames promptly as required by RFC 9113 Section 5.2.2. Freed credit is not
 available for another DATA debit while its `WINDOW_UPDATE` is merely queued,
 because Section 6.9.1 defines the sender's limit in terms of the window
 advertised by the receiver. The writer publishes the credit immediately before
-writing the frame. Raw JDK socket output can expose the frame to the peer while
-the blocking write call is still in progress, so publication after that call
-can incorrectly reject DATA from a compliant peer. Conversely, the socket API
+submitting the frame to transport. Output can reach the peer before its local
+completion is observed, so publication after acknowledgement can incorrectly
+reject DATA from a compliant peer. Conversely, the transport API
 provides no local boundary that distinguishes such DATA from premature DATA
 sent before the peer observed the update. The implementation chooses
 interoperability at that unavoidable boundary: early availability is bounded by
@@ -382,8 +405,9 @@ listeners or prevent the notification gate from reaching its completed state.
 
 Permitted cross-thread primitives are deliberately narrow:
 
-* a blocking mailbox for coordinator commands;
-* a small promise backed by a latch and a result or error;
+* a multiple-producer mailbox, polled by serialized coordinator turns;
+* completion futures for resumable work and latch-backed promises for blocking
+  adapters, with ownership retained until actual I/O completion;
 * one listener lifecycle lock and condition for accepted/live connection
   admission and graceful-shutdown draining;
 * one short-held connection state lock for shutdown, admission, and atomic
@@ -418,11 +442,15 @@ period begins only after the writer flushes the initial maximum-stream-ID
 `GOAWAY`; writer scheduling or socket delay therefore cannot consume the grace
 period before the peer sees the warning. Its deadline uses monotonic time.
 
-No lock is held while:
+No protocol-state lock is held while:
 
 * writing to a socket;
 * invoking a handler, listener, callback, or exception handler; or
 * waiting for another thread.
+
+The bounded transport-output buffer retains its own lock across one nonblocking
+channel write. This prevents abort from releasing storage still borrowed by the
+channel; it does not hold a protocol lock or wait for socket readiness.
 
 ## Required invariants
 

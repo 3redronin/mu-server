@@ -1,6 +1,6 @@
 # Mu4 nonblocking IO investigation
 
-Implementation status on 13 October 2026: the branch now defaults to channel transport for HTTP/1, HTTP/2, WebSocket and TLS. Public blocking handler APIs remain available; asynchronous transport waits use resumable protocol and response work. `AUTO` selects platform task workers before Java 25 and virtual task workers from Java 25. The dated sections record the implementation and validation, including outstanding full-build and independent campaign gates. The initial assessment below describes the original source baseline.
+Implementation status on 13 October 2026: the branch now defaults to channel transport for HTTP/1, HTTP/2, WebSocket and TLS. Public blocking handler APIs remain available; asynchronous transport waits use resumable protocol and response work. `AUTO` selects platform task workers before Java 25 and virtual task workers from Java 25. The dated sections record the implementation and validation, including full-build and independent protocol results; workload validation remains in progress. The initial assessment below describes the original source baseline.
 
 Mu4 can reduce the number of waiting transport workers without replacing its blocking handler APIs. The most useful architecture to evaluate is nonblocking socket and TLS transport, resumable protocol processing, and application workers that retain the current request and response streams. The biggest benefits should be idle connections, SSE, WebSockets, slow uploads, and slow response consumers. These are expected benefits from the ownership model, not measured NIO performance results.
 
@@ -541,3 +541,59 @@ The first clean default run found two state-test fixtures that passed a null req
 The initial Java 21 clean run executed 5,215 tests with one failure, two errors and one skip; it is failure evidence, not a completed validation gate. After these corrections, the focused Java 21 default/streaming/threading checks passed 104 tests without skips, with Error Prone/NullAway enabled. An isolated replay of the HTTP/1 reset test passed on Java 11, 17, 21 and 25. Clean four-JDK verification and the independent conformance/workload campaigns follow.
 
 The corrected Java 21 `mvn -Pnullaway clean verify` run passed on 13 October 2026: 5,220 tests, zero failures/errors/skips, plus Javadocs, packaging and dependency analysis. The Java 11/17/25 clean runs and independent campaign gates remain pending at this checkpoint.
+
+## Integrated candidate and independent protocol validation
+
+The tested production candidate is `98ae1f16de03b09fd2d4b4d904c333c95cc6271e`.
+Separate immutable checkouts prevent the functional and independent campaigns
+from rebuilding each other's classes. Both use conformance harness
+`76b67b04734c4803c4be4caac091329d43005902` and Mu3 reference
+`8a52716561df73ed1f39abb4719d3ea2c8123e02`.
+
+On 13 October 2026, the default-settings functional campaign passed all 140 Mu4
+checks across Java 11, 17, 21 and 25; the matched-settings campaign also passed
+140. Each reference campaign passed 136 checks and explicitly excluded the four
+Mu4-only cleartext HTTP/2 prior-knowledge checks. Coverage includes fragmented
+HTTP/1, uploads, multipart, streaming/gzip, SSE, WebSockets, HTTP/2 credit/reset,
+completion timing, graceful/deadline shutdown and independent Java clients.
+
+Each functional comparison contains 100 paired semantic comparisons, of which
+76 retain the harness's review verdict. Every semantic difference is the addition
+of `accept-encoding` to `Vary`, including merging with REST's `origin` value;
+status codes, decoded body hashes/lengths and trailers match. This follows
+`ContentEncoder.defaultPrepare`, which predates the channel migration. No raw
+verdict was rewritten, and individual functional timings do not establish
+performance parity.
+
+The independent matrix completed against both implementations on all four JDKs:
+
+| Tool/profile | Mu4 on each JDK | Mu3 reference on each JDK |
+| --- | --- | --- |
+| h2spec 2.6.0, strict TLS/ALPN, RFC7540/7541 | 147 pass, zero failures | 133 pass, 14 failures |
+| Autobahn 25.10.1, selected 247-case WebSocket core profile | 244 pass, zero failures, three informational | 166 pass, 78 failures, three informational |
+
+All twelve candidate informational observations were inspected in their original
+JSON reports. Case 7.1.6 received both queued echoes and a clean 1000 close;
+7.13.1/7.13.2 received clean 1002 responses to invalid peer close codes 5000 and
+65535. These match the behavior already reviewed in the harness's
+`independent/decisions/websocket-informational.json`. Their INFORMATIONAL verdicts
+and the runner's strict exit status of 1 remain intact. There are no new or
+changed informational behaviors in this replay.
+
+The independent profile excludes Autobahn 9.* large-message/performance cases
+and 12.*/13.* compression-extension cases. Its WebSocket fixture uses plaintext;
+WSS is covered by the repository tests, not this external profile. h2spec 2.6.0
+is not a certification of every RFC9113 requirement. Generated-request, pressure,
+connection-capacity and sustained-traffic evidence follows separately.
+
+Raw logs, tool reports, fixture identities and the per-observation review hashes
+are retained in the workspace sibling `nonblocking-validation/`, including
+`functional-defaults-98ae/`, `functional-matched-98ae/`, `independent-98ae/` and
+`review-98ae.json`.
+
+The corrected clean verification matrix completed on 13 October 2026. Each of
+Java 11, 17, 21 and 25 ran 5,220 tests with zero failures/errors, followed by
+Javadocs, packaging and dependency analysis. Java 11/17 skipped 176 virtual-thread
+cases; Java 21/25 skipped none. Java 21 enabled Error Prone/NullAway. All four
+runs used the committed channel default, without a temporary backend override.
+The earlier failed Java 21 run remains recorded above and in its separate log.
