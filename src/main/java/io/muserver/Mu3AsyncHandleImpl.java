@@ -68,6 +68,31 @@ class Mu3AsyncHandleImpl implements AsyncHandle, io.muserver.internal.AsyncExecu
         }
     }
 
+    /** Handler unwinding must join the same output/body ownership as explicit completion. */
+    CompletableFuture<@Nullable Void> failHandler(Throwable failure) {
+        Throwable stoppingFailure = failure;
+        try { output.fail(failure); } // Also aborts after complete() requested a successful drain.
+        catch (Throwable abortFailure) {
+            if (abortFailure instanceof VirtualMachineError || abortFailure instanceof ThreadDeath) {
+                addSuppressedIfDifferent(abortFailure, failure);
+                stoppingFailure = abortFailure;
+            } else addSuppressedIfDifferent(failure, abortFailure);
+        }
+        Throwable handlerFailure = stoppingFailure;
+        return exchangeFinished.<@Nullable Void>handle((ignored, ownedFailure) -> {
+            Throwable primary = ownedFailure == null ? handlerFailure : completionCause(ownedFailure);
+            @SuppressWarnings("ReferenceEquality")
+            boolean different = primary != handlerFailure;
+            if (different) {
+                if (handlerFailure instanceof VirtualMachineError || handlerFailure instanceof ThreadDeath) {
+                    handlerFailure.addSuppressed(primary);
+                    primary = handlerFailure;
+                } else primary.addSuppressed(handlerFailure);
+            }
+            throw new CompletionException(primary);
+        });
+    }
+
     CompletableFuture<@Nullable Void> exchangeCompletion() { return exchangeFinished; }
 
     boolean completionIsPending() { return output.completionIsPending(); }

@@ -304,6 +304,39 @@ class Http1ReadDriverTest {
         }
     }
 
+    @ParameterizedTest @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void aHandlerFailureJoinsItsOutstandingAsyncWriteBeforeRetiring(boolean completeFirst) throws Exception {
+        var releaseHandler = new CountDownLatch(1);
+        var written = new CompletableFuture<java.util.concurrent.Future<@org.jspecify.annotations.Nullable Void>>();
+        var notified = new CompletableFuture<ResponseInfo>();
+        try (var fixture = new Fixture((request, response) -> {
+            response.addCompletionListener(notified::complete);
+            var async = request.handleAsync();
+            written.complete(async.write(ByteBuffer.wrap(new byte[16384]).asReadOnlyBuffer()));
+            if (completeFirst) async.complete();
+            releaseHandler.await();
+            throw new IOException("Controlled handler failure");
+        })) {
+            Session session = fixture.add(1024, true);
+            session.offer("GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n".getBytes(US_ASCII));
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.holdAbortedOutput = true;
+            releaseHandler.countDown();
+            fixture.until(() -> session.closed);
+            fixture.barrier();
+            assertEquals(0, session.connection.completedRequests(), "The transport still owns the output buffer");
+            assertFalse(notified.isDone());
+            assertFalse(written.get().isDone());
+            session.holdAbortedOutput = false;
+            session.failOutput();
+            assertThrows(java.util.concurrent.ExecutionException.class, () -> written.get().get(3, TimeUnit.SECONDS));
+            fixture.until(session.driver.completion()::isDone);
+            session.driver.completion().get();
+            assertFalse(notified.get(3, TimeUnit.SECONDS).completedSuccessfully());
+            assertEquals(1, session.connection.completedRequests());
+        } finally { releaseHandler.countDown(); }
+    }
+
     private static final class Fixture implements AutoCloseable {
         final AtomicInteger internalThreads = new AtomicInteger();
         final AtomicInteger applicationThreads = new AtomicInteger();
@@ -365,7 +398,11 @@ class Http1ReadDriverTest {
         }
 
         @Override public void close() throws Exception {
-            for (Session session : sessions) session.connection.forceShutdown();
+            for (Session session : sessions) {
+                session.holdAbortedOutput = false;
+                session.failOutput();
+                session.connection.forceShutdown();
+            }
             try { until(() -> sessions.stream().allMatch(session -> session.driver.completion().isDone())); }
             finally {
                 server.stop();
@@ -384,6 +421,8 @@ class Http1ReadDriverTest {
         final Http1Connection connection;
         final Http1Connection.ReadDriver driver;
         final Queue<PendingOutput> pendingOutput = new ConcurrentLinkedQueue<>();
+        volatile boolean closed;
+        volatile boolean holdAbortedOutput;
 
         Session(Fixture fixture, int inputCapacity, boolean delayed) {
             input = new TransportInputBuffer(inputCapacity, fixture.changed::release);
@@ -429,12 +468,14 @@ class Http1ReadDriverTest {
         @Override public void readTimeoutMillis(int timeoutMillis) { input.readTimeoutMillis(timeoutMillis); }
         @Override public void shutdownInput() { input.endOfInput(); }
         @Override public void abort() {
+            closed = true;
             IOException failure = new IOException("Transport aborted");
             input.fail(failure);
             output.fail(failure);
-            failOutput();
+            if (!holdAbortedOutput) failOutput();
         }
         @Override public void close() throws IOException {
+            closed = true;
             output.close();
             input.endOfInput();
         }

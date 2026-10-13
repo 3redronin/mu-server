@@ -382,6 +382,43 @@ class Http2ReadDriverTest {
         return false;
     }
 
+    @ParameterizedTest @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void aHandlerFailureJoinsItsOutstandingAsyncWriteBeforeRetiring(boolean completeFirst) throws Exception {
+        var releaseHandler = new CountDownLatch(1);
+        var written = new CompletableFuture<java.util.concurrent.Future<@org.jspecify.annotations.Nullable Void>>();
+        var notified = new CompletableFuture<ResponseInfo>();
+        try (var fixture = new Fixture((request, response) -> {
+            response.addCompletionListener(notified::complete);
+            var async = request.handleAsync();
+            written.complete(async.write(ByteBuffer.wrap(new byte[16384]).asReadOnlyBuffer()));
+            if (completeFirst) async.complete();
+            releaseHandler.await();
+            throw new IOException("Controlled handler failure");
+        })) {
+            Session session = fixture.add(1024, true);
+            session.offer(preface());
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.completeOutput();
+            session.offer(requestBytes(1));
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.completeOutput(); // Response headers precede the borrowed DATA fragment.
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.holdAbortedOutput = true;
+            releaseHandler.countDown();
+            fixture.until(() -> session.closed);
+            fixture.barrier();
+            assertEquals(0, session.connection.completedRequests(), "The transport still owns the output buffer");
+            assertFalse(notified.isDone());
+            assertFalse(written.get().isDone());
+            session.holdAbortedOutput = false;
+            session.failOutput();
+            assertThrows(java.util.concurrent.ExecutionException.class, () -> written.get().get(3, TimeUnit.SECONDS));
+            session.driver.completion().get(3, TimeUnit.SECONDS);
+            assertFalse(notified.get(3, TimeUnit.SECONDS).completedSuccessfully());
+            assertEquals(1, session.connection.completedRequests());
+        } finally { releaseHandler.countDown(); }
+    }
+
     private static final class Fixture implements AutoCloseable {
         final AtomicInteger internalThreads = new AtomicInteger(), applicationThreads = new AtomicInteger();
         final ExecutorService internal = Executors.newSingleThreadExecutor(r -> new Thread(r, "h2-reader-internal-" + internalThreads.incrementAndGet()));

@@ -105,8 +105,11 @@ abstract class BaseHttpConnection implements HttpConnection {
                 var asyncHandle = java.util.Objects.requireNonNull(muRequest.getAsyncHandle());
                 return asyncHandle.exchangeCompletion();
             }
-        } catch (Exception e) {
-            handleExchangeException(muRequest, muResponse, e);
+        } catch (Throwable failure) {
+            Mu3AsyncHandleImpl async = muRequest.getAsyncHandle();
+            if (async != null) return async.failHandler(failure);
+            if (failure instanceof Exception) handleExchangeException(muRequest, muResponse, (Exception) failure);
+            else throw failure;
         }
         return null;
     }

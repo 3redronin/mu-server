@@ -99,7 +99,7 @@ final class AsyncResponseOutput {
         else finishIfDrained();
     }
 
-    private void fail(Throwable cause) {
+    void fail(Throwable cause) {
         if (completion.isDone()) return;
         Queue<PendingWrite> cancelled = new ArrayDeque<>();
         boolean activeOutput;
