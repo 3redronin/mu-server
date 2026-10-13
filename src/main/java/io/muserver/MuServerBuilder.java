@@ -49,8 +49,8 @@ public class MuServerBuilder {
     private int maxConnections;
     private int listenBacklog = 50;
     ExecutionResources.Factory executionResourcesFactory = ExecutionResources::create;
-    // Internal migration switch until all protocol continuations and listener gates are validated.
-    boolean useChannelTransport;
+    // The socket adapter remains available internally for compatibility and fault-injection tests.
+    boolean useChannelTransport = true;
     private long maxRequestSize = 24 * 1024 * 1024;
     private int maxMultipartParts = 1024;
     private @Nullable List<ResponseCompleteListener> responseCompleteListeners;
@@ -263,9 +263,10 @@ public class MuServerBuilder {
     /**
      * Sets the executor that runs request handlers and application callbacks, including
      * WebSocket events, response-completion listeners and resumed asynchronous JAX-RS responses.
-     * <p>By default, Mu uses a new virtual thread per task on Java 21 or later, otherwise a cached
+     * <p>By default, Mu uses a new virtual thread per task on Java 25 or later, otherwise a cached
      * pool of platform threads with no configured maximum. Use {@link #withMaxConcurrentRequests(int)}
-     * to limit unfinished requests. Network reads and writes use separate internal workers.
+     * to limit unfinished requests. Socket readiness uses dedicated platform event loops;
+     * protocol continuations and response rendering use separate internal workers.
      * {@link #withThreadingMode(ThreadingMode)} selects the implementation of Mu-owned executors;
      * it does not change the supplied executor.</p>
      * <p>If you supply an executor, keep it running until the server has stopped; Mu does not
@@ -285,8 +286,8 @@ public class MuServerBuilder {
     }
 
     /**
-     * Selects the thread implementation for Mu-owned application and internal I/O executors.
-     * The default, {@link ThreadingMode#AUTO}, uses virtual threads on Java 21 or later and
+     * Selects the thread implementation for Mu-owned application and auxiliary task executors.
+     * The default, {@link ThreadingMode#AUTO}, uses virtual threads on Java 25 or later and
      * cached platform threads on earlier runtimes. {@link ThreadingMode#VIRTUAL} explicitly
      * enables virtual threads on Java 21 or later; starting on an earlier runtime fails.
      * <p>On Java 21–23, blocking inside a synchronized block can pin virtual-thread carriers.
@@ -294,9 +295,11 @@ public class MuServerBuilder {
      * Java 24 removed monitor-induced pinning; Java 25 or later is recommended for applications
      * with unaudited blocking dependencies. Use PLATFORM when those dependencies pin on Java 21.
      * Native calls can still pin carriers on newer runtimes.</p>
-     * <p>Platform executors have no configured thread maximum. Request admission limits do
-     * not limit idle connection readers; many connections can require substantial native
-     * thread memory. This setting does not change a caller-supplied handler executor.</p>
+     * <p>Socket readiness uses a dedicated platform event loop per listener, independently of
+     * this policy. Idle connections and asynchronous I/O waits do not retain a task worker.
+     * Platform task executors have no configured thread maximum; blocking application handlers
+     * can still require substantial native thread memory. This setting does not change a
+     * caller-supplied handler executor.</p>
      * @param mode the thread selection policy
      * @return this builder
      * @throws NullPointerException if mode is null
@@ -1027,7 +1030,7 @@ public class MuServerBuilder {
      */
     static ExecutorService defaultExecutor(ThreadingMode mode) {
         int runtime = Runtime.version().feature();
-        boolean virtual = mode == ThreadingMode.VIRTUAL || (mode == ThreadingMode.AUTO && runtime >= 21);
+        boolean virtual = mode == ThreadingMode.VIRTUAL || (mode == ThreadingMode.AUTO && runtime >= 25);
         if (!virtual) return Executors.newCachedThreadPool();
         if (runtime < 21) throw new UnsupportedOperationException("Virtual threads require Java 21 or later");
         try {

@@ -154,7 +154,7 @@ public class ApplicationCarrierProgressTest {
         // H2 has a deterministic zero stream window. HTTP/1 needs to fill the real socket buffers.
         var resource = new Resource(h2 ? 256 * 1024 : 8 * 1024 * 1024);
         var server = httpsServerForTest(h2 ? "h2" : "http")
-            .withThreadingMode(ThreadingMode.AUTO)
+            .withThreadingMode(ThreadingMode.VIRTUAL)
             .withIdleTimeout(60, TimeUnit.SECONDS).withRequestTimeout(60, TimeUnit.SECONDS)
             .addHandler((req, resp) -> {
                 if (!req.uri().getPath().equals("/probe")) return false;

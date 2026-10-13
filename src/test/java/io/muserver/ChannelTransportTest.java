@@ -32,7 +32,6 @@ class ChannelTransportTest {
         MuServerBuilder builder = MuServerBuilder.muServer().withThreadingMode(ThreadingMode.PLATFORM)
             .withHttp2Config(h2 ? Http2ConfigBuilder.http2Enabled() : Http2ConfigBuilder.http2Disabled());
         if (secure) builder.withHttpsPort(0); else builder.withHttpPort(0);
-        builder.useChannelTransport = true;
         return builder;
     }
 

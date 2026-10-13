@@ -25,7 +25,7 @@ class ThreadingModeTest {
     }
 
     private static boolean expectedVirtual(ThreadingMode mode) {
-        return mode == ThreadingMode.VIRTUAL || (mode == ThreadingMode.AUTO && Runtime.version().feature() >= 21);
+        return mode == ThreadingMode.VIRTUAL || (mode == ThreadingMode.AUTO && Runtime.version().feature() >= 25);
     }
 
     @Test void builderPolicyIsExplicitAndResettable() {

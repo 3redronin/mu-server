@@ -2,6 +2,8 @@ package io.muserver;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import scaffolding.*;
 
 import java.io.IOException;
@@ -87,13 +89,15 @@ public class SsePublisherTest {
         assertThat(listener.receivedMessages, hasItem("message=" + message2 + "        event=message        id=two"));
     }
 
-    @Test
-    public void sendThrowsAnExceptionIfTheClientDisconnects() throws InterruptedException {
+    @ParameterizedTest
+    @CsvSource({"false,http", "true,http", "false,https", "true,https", "false,h2", "true,h2"})
+    public void sendThrowsAnExceptionIfTheClientDisconnects(boolean channel, String protocol) throws InterruptedException {
         AtomicReference<Throwable> thrownException = new AtomicReference<>();
         CountDownLatch somethingPublishedLatch = new CountDownLatch(1);
         CountDownLatch exceptionThrownLatch = new CountDownLatch(1);
-        server = ServerUtils.httpsServerForTest()
-            .addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
+        var builder = ServerUtils.httpsServerForTest(protocol);
+        builder.useChannelTransport = channel;
+        server = builder.addHandler(Method.GET, "/streamer", (request, response, pathParams) -> {
 
                 SsePublisher ssePublisher = SsePublisher.start(request, response);
                 int i = 0;

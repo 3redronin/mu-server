@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
@@ -149,13 +150,24 @@ class SsePublisherImpl implements SsePublisher {
 
     @Override
     public void close() throws IOException {
-        response.outputStream().close();
+        output().close();
     }
 
     private void sendChunk(String text) throws IOException {
-        var out = response.outputStream();
+        var out = output();
         out.write(text.getBytes(StandardCharsets.UTF_8));
         out.flush();
+    }
+
+    private OutputStream output() throws IOException {
+        try { return response.outputStream(); }
+        catch (IllegalStateException failure) {
+            // Readiness can observe a disconnect before the next publisher write reaches I/O.
+            if (response.responseState().completedWithError()) {
+                throw new IOException("The SSE response has failed or disconnected", failure);
+            }
+            throw failure;
+        }
     }
 
     private static void ensureNoLineBreaks(String value, String thing) {

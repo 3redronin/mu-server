@@ -230,7 +230,6 @@ public class AsyncTest {
     }
 
     @Test
-    @Disabled("HTTP/1 waits for an async response before reading again, so it cannot observe the connection reset until the response completes")
     public void resettingAnHttp1ConnectionCompletesASuspendedRequest() throws Exception {
         var requestStarted = new CountDownLatch(1);
         var requestCompleted = new CountDownLatch(1);
