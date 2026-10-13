@@ -132,16 +132,24 @@ public class ResourceHandlerTest {
             .start();
 
         Map<String, List<String>> headersFromGET;
+        String dateFromGET;
         URL url = server.httpsUri().resolve("/a/b/c/d/index.html").toURL();
         try (Response resp = call(request().get().url(url))) {
             headersFromGET = resp.headers().toMultimap();
+            dateFromGET = resp.header("Date");
             assertThat(resp.code(), is(200));
             assertThat(resp.header("Content-Type"), is("text/html;charset=utf-8"));
             assertThat(resp.body().string(), is(readResource("/sample-static/index.html")));
         }
+        headersFromGET.remove("Date");
         try (Response resp = call(request().head().url(url))) {
             assertThat(resp.code(), is(200));
-            assertThat(resp.headers().toMultimap(), equalTo(headersFromGET));
+            Map<String, List<String>> headersFromHEAD = resp.headers().toMultimap();
+            String dateFromHEAD = resp.header("Date");
+            headersFromHEAD.remove("Date");
+            assertThat(headersFromHEAD, equalTo(headersFromGET));
+            assertThat(Math.abs(Mutils.fromHttpDate(dateFromHEAD).getTime() - Mutils.fromHttpDate(dateFromGET).getTime()),
+                lessThanOrEqualTo(5000L));
             assertThat(resp.body().contentLength(), is(0L));
         }
         try (Response resp = call(request(server.uri().resolve("/a/b/")))) {
