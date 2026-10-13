@@ -35,6 +35,45 @@ class ChannelTransportTest {
         return builder;
     }
 
+    @ParameterizedTest
+    @CsvSource({"false,PLATFORM", "true,PLATFORM", "false,AUTO", "true,AUTO"})
+    void resetPublishesDisconnectBeforeWakingOrCancellingHandlers(boolean secure, ThreadingMode mode) throws Exception {
+        var handled = new CompletableFuture<BaseHttpConnection>();
+        var stateAtFailure = new CompletableFuture<ResponseState>();
+        var completed = new CompletableFuture<ResponseInfo>();
+        var readBody = new CountDownLatch(1);
+        try (MuServer server = builder(secure, false).withThreadingMode(mode)
+            .addResponseCompleteListener(completed::complete)
+            .addHandler((request, response) -> {
+                handled.complete((BaseHttpConnection) request.connection());
+                assertTrue(readBody.await(5, TimeUnit.SECONDS));
+                try { request.readBodyAsString(); }
+                catch (IOException failure) {
+                    stateAtFailure.complete(response.responseState());
+                    throw failure;
+                }
+                return true;
+            }).start()) {
+            try (Socket network = connect(server);
+                 Socket client = secure ? sslContextForTesting(veryTrustingTrustManager()).getSocketFactory()
+                     .createSocket(network, "localhost", server.uri().getPort(), false) : network) {
+                client.getOutputStream().write("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\n\r\nx".getBytes(US_ASCII));
+                client.getOutputStream().flush();
+                BaseHttpConnection connection = handled.get(5, TimeUnit.SECONDS);
+                network.setSoLinger(true, 0);
+                network.close(); // Reset the actual TCP connection, including beneath TLS.
+                until(connection::isClosed); // Let transport cancellation win before the body read.
+                assertFalse(completed.isDone(), "The running handler still owns the exchange");
+                readBody.countDown();
+                assertEquals(ResponseState.CLIENT_DISCONNECTED, stateAtFailure.get(5, TimeUnit.SECONDS));
+                assertEquals(ResponseState.CLIENT_DISCONNECTED,
+                    completed.get(5, TimeUnit.SECONDS).response().responseState());
+                until(() -> server.stats().completedConnections() == 1);
+                assertEquals(1, server.stats().completedRequests());
+            } finally { readBody.countDown(); }
+        }
+    }
+
     @ParameterizedTest @ValueSource(booleans = {false, true})
     void http1PipelineBodyHalfCloseAndPlaintextAccounting(boolean sniffH2) throws Exception {
         try (MuServer server = builder(false, sniffH2).addHandler((request, response) -> {

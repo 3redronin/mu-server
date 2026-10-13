@@ -621,3 +621,197 @@ matrix passed 235 tests on each of Java 11, 17, 21 and 25, without failures,
 errors or skips. Java 21 enabled Error Prone/NullAway. The external workload
 campaigns remain pinned to `98ae1f16`; their results identify that revision
 explicitly rather than attributing its measurements to this allocation change.
+
+## Generated requests, transfer pressure and idle capacity
+
+The `98ae1f16` generated-request campaign used seed 9113 and 1,000 generated
+requests per implementation/runtime, plus the 29 functional socket scenarios.
+Across Java 11/17/21/25, Mu4 passed 4,116 checks; Mu3 passed 4,112 and excluded its
+four unsupported cleartext-prior-knowledge checks. The generated POST bodies
+contain 1–2,047 bytes and use plaintext or TLS with fragment sizes 0 (whole
+write), 1, 2, 7 or 64 bytes. Of 4,100 paired semantic comparisons, 1,384 match
+exactly and 2,716 retain review verdicts solely for the pre-existing `Vary`
+addition. There are no other semantic mismatches or failed cases.
+
+The separate pressure profile passed for both implementations on all four JDKs.
+Each fixture completed two rounds of eight concurrent 8 MiB upload/download
+operations with full length/digest checks, cancelled a declared 16 MiB HTTP/2
+upload and a 64 MiB response, reused the surviving connection, and delivered a
+complete 4 MiB response during graceful shutdown. Each cancelled request retired
+exactly once. No resource guard fired. These timings are diagnostic because
+other validation traffic could be active; they are not throughput comparisons.
+
+All twelve Mu4 idle-capacity cases passed with a 512 MiB maximum heap, a ten-second
+connection ramp, ten-second warm-up and twenty-second idle hold. Every case kept
+1,000 connections open throughout the hold and successfully reused all 1,000
+before teardown, with zero errors/resource violations. The table records total
+JVM platform threads at the end of the hold, including JVM, transport, delegated
+TLS and cached task workers; it is not a count of connection-specific workers.
+
+| Runtime | HTTP/1 | HTTPS/1 | TLS HTTP/2 |
+| --- | ---: | ---: | ---: |
+| Java 11 | 27 | 76 | 77 |
+| Java 17 | 22 | 58 | 62 |
+| Java 21 | 21 | 52 | 48 |
+| Java 25 | 24 | 36 | 36 |
+
+The same Java 21 reference checks passed for Mu3 with 31, 41 and 39 platform
+threads respectively. The observations establish that this workload does not
+retain one platform thread per idle connection. They do not establish a maximum
+connection capacity or a general total-memory envelope. Immediate teardown
+snapshots can precede asynchronous socket retirement; sustained recovery is
+assessed separately. Capacity diagnostics overlapped the functional campaign;
+paired throughput measurements start only after the other traffic campaigns
+and builds finish.
+
+Evidence directories are `differential-matched-98ae/`, `pressure-98ae/` and
+`capacity-{mu4,mu3}-jdk*-{http1,https1,h2}-98ae/` in the workspace validation
+sibling. The final allocation-fix candidate has its own immutable fixture for
+subsequent protocol and pressure replays.
+
+## Paired throughput diagnostics
+
+The `98ae1f16` default-settings campaign ran three alternating Mu3/Mu4 pairs per
+workload on Java 21 and 25, with eight closed-loop clients, ten seconds of warm-up
+and twenty seconds of measurement per fixture. All 48 measured fixtures completed
+without request errors or resource-guard violations. The generator checked
+15,611,458 measured responses; warm-up traffic was checked separately.
+
+| Runtime | Workload | Mu3 median responses/s | Mu4 median responses/s |
+| --- | --- | ---: | ---: |
+| Java 21 | Small HTTP/1 response | 30,091 | 30,409 |
+| Java 21 | Small HTTPS/1 response | 26,505 | 29,379 |
+| Java 21 | 1 MiB chunked HTTP/1 response | 945 | 434 |
+| Java 21 | Small TLS HTTP/2 response | 6,140 | 5,545 |
+| Java 25 | Small HTTP/1 response | 32,066 | 30,903 |
+| Java 25 | Small HTTPS/1 response | 27,052 | 27,803 |
+| Java 25 | 1 MiB chunked HTTP/1 response | 992 | 408 |
+| Java 25 | Small TLS HTTP/2 response | 6,256 | 5,326 |
+
+These workstation measurements retain the harness's inconclusive performance
+verdicts. Generator saturation and host interference are not excluded, and there
+is no open-loop latency SLA measurement. The repeatable bulk gap and smaller
+HTTP/2 gap require a comparison of the same Mu4 revision with its socket and
+channel adapters before attributing them to the migration. That diagnostic also
+compares fixed-length bulk output and records client receive-call counts. The
+HTTP/1 buffering/framing code already existed before the migration; no buffer
+size or output behavior has been changed merely to improve these figures.
+
+The raw paired measurements are in `throughput-defaults-98ae/`. Recovery and the
+final allocation-fix replay follow separately.
+
+## Final allocation-fix replay and bounded recovery
+
+The immutable `4f4a2336b5b6aa9bdebd82143b4364a35a030145` fixture repeated the
+independent checks on Java 11/17/21/25: 147 h2spec passes and 244 Autobahn passes
+plus the same three informational cases per runtime, with zero failures. All
+twelve informational observations match the preceding replay's received-message
+sequence, close code and clean-close outcome. Original verdicts remain unchanged.
+This was a candidate-only replay; the unchanged Mu3 reference results are retained
+in the preceding paired campaign. The final candidate also passed all 140
+functional checks and all four transfer-pressure fixtures.
+
+The separate `98ae1f16` recovery campaign first opened and closed progressive
+10/100/500/1,000-connection groups, then ran 24 five-second traffic cycles per
+runtime, alternating HTTP/1, HTTPS and TLS HTTP/2 with eight clients. Each fixture
+ran for 120 seconds after the ramp. All checked responses succeeded, no resource
+guard fired, and all handled requests—including the initial 1,000 requests—had
+matching completion counts after recovery.
+
+| Runtime | Checked requests during traffic cycles | File descriptors before / after | Failed requests |
+| --- | ---: | ---: | ---: |
+| Java 11 | 2,477,591 | 54 / 54 | 0 |
+| Java 17 | 2,505,214 | 49 / 49 | 0 |
+| Java 21 | 2,642,276 | 49 / 49 | 0 |
+| Java 25 | 2,571,224 | 49 / 49 | 0 |
+
+These 10,196,305 requests establish bounded-run correctness and descriptor
+recovery. Heap usage fluctuated with collection; endpoint RSS or heap alone is
+not a leak verdict. The short campaign does not satisfy a multi-day soak or
+application-deployment release gate. Raw time series and diagnostics are in
+`soak-defaults-98ae/`; final-candidate results and reviewed report hashes are in
+`independent-4f4a/`, `functional-defaults-4f4a/`, `pressure-4f4a/` and
+`review-4f4a.json`.
+
+## Controlled HTTP/1 bulk diagnosis
+
+A separate fixture compared the same `4f4a2336` production source with the socket
+and channel adapters. Its sole configuration extension selected the internal
+socket compatibility adapter; both variants otherwise used default settings.
+Java 21 ran two alternating pairs per workload, with eight clients, ten seconds
+of warm-up and twenty seconds of measurement. All responses were valid and
+resource guards remained clear.
+
+| Workload | Socket responses/s, two runs | Channel responses/s, two runs |
+| --- | ---: | ---: |
+| 1 MiB chunked HTTP/1 | 1,162 / 1,180 | 429 / 429 |
+| 1 MiB fixed-length HTTP/1 | 546 / 544 | 612 / 631 |
+| Small TLS HTTP/2 | 5,291 / 5,419 | 5,406 / 5,448 |
+
+The large channel regression is specific to chunked HTTP/1 in this comparison.
+The smaller Mu3/Mu4 HTTP/2 gap does not establish a migration regression: the two
+Mu4 adapters perform similarly here. The fixed-length control also has no
+channel regression. Client receive calls per chunked response increased from
+about 17 with the socket adapter to 207–209 with the channel adapter.
+
+`BufferedOutputStream` flushes an already buffered chunk prefix separately when
+an incoming payload is at least its capacity. An 8 KiB body write can therefore
+produce a tiny framing write followed by a payload write, each awaiting the
+channel owner. `Http1OutputBuffer` instead fills the existing buffer with the
+prefix and the beginning of the payload before handing it off. It retains the
+configured capacity, serializes buffer ownership with a `ReentrantLock`, and
+preserves explicit flushes and connection ownership. Fixed-length responses,
+HTTP/1.0 and explicitly unbuffered responses keep their existing path.
+
+An isolated comparison of this coalescing change measured 650 / 649 responses/s
+against 435 / 431 before the change, with about 107–109 client receive calls per
+response instead of 206–209. A more complicated prototype that reserved extra
+space for complete chunk frames measured 648 / 649 and was not adopted. The
+simpler coalescing change gives the same improvement without changing chunk
+encoding or allocating a larger response buffer. These are local throughput
+diagnostics, not evidence of socket-throughput parity or a latency SLA.
+
+Immutable build manifests, checked response counts and receive-call measurements
+are in `nonblocking-validation/bulk-transport-4f4a/`, `coalescing-comparison/` and
+`frame-buffer-comparison/` beside the repository. The harness source and all
+production source/classpath inventories are recorded with each fixture.
+
+The transport ring also retained its offset after draining completely. A prior
+short write could therefore split a later full-buffer write at the old offset.
+`TransportOutputBuffer` now resets that offset only when empty, while holding its
+storage lock and after the sink returns its byte acknowledgement. It does not
+move a pending TLS prefix or change the completion boundary. Four controlled
+regressions first failed with split writes, then passed with the correction;
+the isolated transport/TLS/response checks passed 143 cases on Java 21 with
+NullAway. The additional throughput effect remains to be measured separately.
+
+## Disconnect publication before cancellation
+
+The coalescing validation passed a complete Java 21 build with 5,234 tests and
+no failures/errors/skips, then 1,666 focused cases on each of Java 11 and 17 with
+no failures/errors and 170 runtime-specific skips. The Java 25 run found one
+failure in those 1,666 cases: an aborted upload could expose `ERRORED` where the
+public response state should be `CLIENT_DISCONNECTED`. This failed run remains
+recorded in `coalescing-main-jdk25.log`; it is not a passed gate.
+
+The readiness owner had detected an I/O failure, but failing the input bridge
+and scheduling generic protocol cancellation could let `Http1Connection.abort()`
+publish `ERRORED` before the body reader observed the reset. The first terminal
+state wins, so a later input-failure notification could not correct it.
+`ChannelConnection` now publishes the observed transport I/O failure before
+waking bridge consumers or scheduling cancellation. Internal unchecked failures,
+local shutdown, timeouts and HTTP/2's existing completion rules retain their
+separate paths.
+
+Four deterministic tests hold a handler before its body read, reset the actual
+TCP connection, wait for protocol cancellation, and only then release the read.
+They cover plaintext/TLS with PLATFORM and AUTO, check the state at the read
+failure and at response completion, and verify that request ownership remains
+with the running handler. All four failed before the correction on Java 25.
+The combined output/ring/disconnect changes then passed 243 Java 21 transport,
+TLS, termination, body-cleanup and finalization cases with NullAway and no skips.
+
+The Java 25 replay passed 115 channel, termination, ring and coalescing cases,
+including the original failure and all four controlled regressions, with no
+failures/errors/skips. The final clean build, broader runtime matrix and pinned
+external protocol replay follow this checkpoint.

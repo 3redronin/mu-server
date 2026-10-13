@@ -113,6 +113,10 @@ final class ChannelConnection implements ConnectionTransport {
                 if (progress) schedule();
             }
         } catch (Throwable error) {
+            // Publish a transport failure before failing the bridges wakes readers or schedules
+            // generic cancellation. Otherwise abort can win with ERRORED and hide a peer reset.
+            BaseHttpConnection current = connection;
+            if (error instanceof IOException && current != null) current.onTransportInputFailure((IOException) error);
             fail(error instanceof IOException ? (IOException) error : new IOException("Channel progression failed", error));
             FatalErrors.rethrow(error);
         }
