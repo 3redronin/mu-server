@@ -1,6 +1,6 @@
 # Mu4 nonblocking IO investigation
 
-Implementation status on 13 October 2026: the branch now defaults to channel transport for HTTP/1, HTTP/2, WebSocket and TLS. Public blocking handler APIs remain available; asynchronous transport waits use resumable protocol and response work. `AUTO` selects platform task workers before Java 25 and virtual task workers from Java 25. The dated sections record the implementation and validation, including full-build and independent protocol results; workload validation remains in progress. The initial assessment below describes the original source baseline.
+Implementation status on 14 October 2026: the channel transport migration and its scoped validation are complete on this branch. HTTP/1, HTTP/2, WebSocket and TLS use channel transport by default. Public blocking handler APIs remain available; asynchronous transport waits use resumable protocol and response work. `AUTO` selects platform task workers before Java 25 and virtual task workers from Java 25. The [final source replay](#final-source-replay-14-october-2026) records the completed build, runtime and protocol checks; the [final bulk comparison](#final-bulk-comparison-14-october-2026) records the improvement and remaining throughput tradeoff. Earlier dated sections are implementation checkpoints, and the initial assessment below describes the original source baseline.
 
 Mu4 can reduce the number of waiting transport workers without replacing its blocking handler APIs. The most useful architecture to evaluate is nonblocking socket and TLS transport, resumable protocol processing, and application workers that retain the current request and response streams. The biggest benefits should be idle connections, SSE, WebSockets, slow uploads, and slow response consumers. These are expected benefits from the ownership model, not measured NIO performance results.
 
@@ -815,3 +815,77 @@ The Java 25 replay passed 115 channel, termination, ring and coalescing cases,
 including the original failure and all four controlled regressions, with no
 failures/errors/skips. The final clean build, broader runtime matrix and pinned
 external protocol replay follow this checkpoint.
+
+## Final source replay (14 October 2026)
+
+Production revision `2eaefc8cf1f43cfb81f9e89b694ee3a9390bf18d` includes the
+coalescing/ring change and disconnect-publication correction. An immutable clean
+checkout was built with harness `76b67b04734c4803c4be4caac091329d43005902`;
+its recorded production source digest is
+`c6d9434e8f9cb26c6d7176592f6785f3e78849c9c6212d84036216d92640baac`.
+
+On each of Java 11, 17, 21 and 25, the independent replay again recorded 147
+h2spec passes and 244 Autobahn passes with three informational cases. All twelve
+informational reports were inspected: their received-message sequences, remote
+close codes and clean-close flags exactly match the reviewed `4f4a2336` reports.
+The strict harness exit remains 1, and the raw INFORMATIONAL verdicts are
+preserved. The earlier core-profile exclusions and h2spec protocol-version
+limitations still apply.
+
+The same pinned source passed all 140 default-settings functional cases and all
+four transfer-pressure fixtures. The pressure runs repeated full upload/download
+checksums, cancelled-upload and cancelled-response recovery on the same HTTP/2
+connection, exactly-once retirement, and complete response delivery during
+shutdown. The unchanged Mu3 reference was already checked in the earlier paired
+campaigns; this replay is candidate-only.
+
+Raw reports, exact build identities and reviewed report hashes are retained in
+`nonblocking-validation/independent-2eaef/`, `functional-defaults-2eaef/`,
+`pressure-2eaef/` and `review-2eaef.json` beside the repository. The 1,000-connection
+capacity and bounded-soak observations above belong to their stated `98ae1f16`
+source pin; they are not relabelled as measurements of this later revision.
+
+The final Java 21 `mvn -Pnullaway clean verify` run passed on 14 October 2026:
+5,242 tests, zero failures/errors/skips, plus Error Prone/NullAway, Javadocs,
+packaging and dependency analysis (`final-output-jdk21.log`).
+
+The final transport/protocol/response/lifecycle matrix passed 1,703 cases on
+each of Java 11, 17 and 25, with zero failures/errors. Java 11/17 skipped 170
+runtime-specific cases; Java 25 skipped none. The matrix includes the controlled
+disconnect ordering, ring alignment, framing, buffer ownership, TLS, constrained
+carriers and cancellation/shutdown cases. Logs are `final-output-jdk11.log`,
+`final-output-jdk17.log` and `final-output-jdk25.log`.
+
+## Final bulk comparison (14 October 2026)
+
+After all builds and other protocol traffic finished, a final Java 21 comparison
+ran two triples in opposite order: the original `4f4a2336` channel output, the
+isolated coalescing-only prototype, and committed `2eaefc8c` with both output
+corrections. Each fixture used eight clients, ten seconds of warm-up and twenty
+seconds of measurement, serving 1 MiB chunked HTTP/1 responses with default
+settings. All 81,312 measured responses passed status/body checks, their count
+matched the server's handled-request delta, and no resource guard fired. Warm-up
+responses were checked separately.
+
+| Variant | Responses/s, two runs | Client receive calls/response, two runs |
+| --- | ---: | ---: |
+| Original channel output (`4f4a2336`) | 431 / 432 | 203.9 / 203.8 |
+| Coalescing only (isolated prototype) | 650 / 664 | 105.9 / 103.2 |
+| Final output (`2eaefc8c`) | 1,033 / 854 | 25.8 / 17.4 |
+
+The final implementation approximately doubles throughput in both runs compared
+with the original channel output. Filling the response buffer before handing it
+off and aligning an empty transport ring remove separate sources of fragmented
+writes without increasing either buffer's capacity or acknowledging bytes early.
+The final samples still vary substantially and remain below the earlier socket
+control's 1,162–1,180 responses/s. That residual difference remains a documented
+tradeoff; these local closed-loop results do not establish throughput parity,
+an open-loop latency SLA, or performance on a deployed workload.
+
+The immutable source/class inventories, script digest, all six measurements and
+request/receive counts are in `nonblocking-validation/final-bulk-comparison/`;
+`review-2eaef.json` records the checked totals and report hashes. The earlier
+120-second recovery checks remain bounded soaks, with no claim of multi-day
+leak qualification. The supported branch implementation is validated by the
+build, protocol, ownership, cancellation and recovery checks described above;
+application-specific capacity and release criteria remain deployment concerns.
