@@ -597,3 +597,27 @@ Javadocs, packaging and dependency analysis. Java 11/17 skipped 176 virtual-thre
 cases; Java 21/25 skipped none. Java 21 enabled Error Prone/NullAway. All four
 runs used the committed channel default, without a temporary backend override.
 The earlier failed Java 21 run remains recorded above and in its separate log.
+
+## Capture allocation bound under uneven encoder writes
+
+The final memory audit found that the 32 KiB spill threshold bounded captured
+payload length but not the backing-array capacity of `ByteArrayOutputStream`.
+For example, two writes ending at the threshold could retain a 40,000-byte or
+65,534-byte array because the generic stream doubled its previous capacity.
+This did not corrupt output or create unbounded growth, but exceeded the
+intended retained-array limit.
+
+`RenderedResponseBytes` now owns its byte array directly and caps each growth at
+32 KiB. Payloads beyond the threshold still spill; borrowed drain buffers and
+file cleanup retain the same ownership boundary. Resizing can transiently hold
+both old and new arrays, so the retained-array limit is not a total-allocation
+or process-memory claim.
+
+Three uneven-write regressions failed before the change, observing capacities
+32,770, 40,000 and 65,534. The drain checks now assert the backing-storage bound
+as well as exact output and bounded chunks. The rendering, capture, finalization,
+initialization, failed-resource cleanup, custom encoder, gzip and response-stream
+matrix passed 235 tests on each of Java 11, 17, 21 and 25, without failures,
+errors or skips. Java 21 enabled Error Prone/NullAway. The external workload
+campaigns remain pinned to `98ae1f16`; their results identify that revision
+explicitly rather than attributing its measurements to this allocation change.

@@ -10,6 +10,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.Arrays;
 import java.util.Objects;
 
 /** Owned output from one synchronous encoder turn, drained later without a network wait. */
@@ -17,7 +18,7 @@ final class RenderedResponseBytes extends OutputStream {
     static final int MEMORY_LIMIT = 32768;
     static final int DRAIN_BYTES = 8192;
     private final Path directory;
-    private @Nullable NiceByteArrayOutputStream memory = new NiceByteArrayOutputStream(256);
+    private byte @Nullable [] memory = new byte[256];
     private @Nullable FileChannel file;
     private @Nullable Path temporaryFile;
     private byte @Nullable [] scratch;
@@ -40,7 +41,15 @@ final class RenderedResponseBytes extends OutputStream {
         if (count == 0) return;
         try {
             if (file == null && count <= MEMORY_LIMIT - length) {
-                Objects.requireNonNull(memory).write(bytes, offset, count);
+                byte[] buffered = Objects.requireNonNull(memory);
+                int required = (int) length + count;
+                if (required > buffered.length) {
+                    // Generic stream growth can overshoot the bound after an uneven encoder burst.
+                    buffered = Arrays.copyOf(buffered,
+                        Math.min(MEMORY_LIMIT, Math.max(required, buffered.length * 2)));
+                    memory = buffered;
+                }
+                System.arraycopy(bytes, offset, buffered, (int) length, count);
             } else {
                 FileChannel output = file;
                 if (output == null) output = spill();
@@ -59,8 +68,7 @@ final class RenderedResponseBytes extends OutputStream {
         try {
             opened = FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE,
                 StandardOpenOption.DELETE_ON_CLOSE);
-            NiceByteArrayOutputStream buffered = Objects.requireNonNull(memory);
-            writeFully(opened, ByteBuffer.wrap(buffered.rawBuffer(), 0, buffered.size()));
+            writeFully(opened, ByteBuffer.wrap(Objects.requireNonNull(memory), 0, (int) length));
             file = opened;
             temporaryFile = path;
             memory = null;
@@ -96,7 +104,7 @@ final class RenderedResponseBytes extends OutputStream {
         ByteBuffer result;
         FileChannel source = file;
         if (source == null) {
-            result = ByteBuffer.wrap(Objects.requireNonNull(memory).rawBuffer(), (int) read, count).slice();
+            result = ByteBuffer.wrap(Objects.requireNonNull(memory), (int) read, count).slice();
         } else {
             if (scratch == null) scratch = new byte[DRAIN_BYTES];
             result = ByteBuffer.wrap(scratch, 0, count);

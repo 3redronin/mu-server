@@ -50,6 +50,20 @@ class RenderedResponseBytesTest {
         assertNoTemporaryFiles();
     }
 
+    @ParameterizedTest @ValueSource(ints = {16385, 20000, 32767})
+    void unevenEncoderWritesKeepTheBackingArrayWithinTheMemoryLimit(int firstWrite) throws Exception {
+        byte[] expected = new byte[RenderedResponseBytes.MEMORY_LIMIT];
+        new Random(7654).nextBytes(expected);
+        try (var capture = new RenderedResponseBytes(directory)) {
+            capture.write(expected, 0, firstWrite);
+            capture.write(expected, firstWrite, expected.length - firstWrite);
+            assertFalse(capture.spilled());
+            capture.seal();
+            assertArrayEquals(expected, drain(capture));
+        }
+        assertNoTemporaryFiles();
+    }
+
     @Test void abortedCaptureDeletesItsSpillWithoutRequiringARead() throws Exception {
         var capture = new RenderedResponseBytes(directory);
         capture.write(new byte[100000]);
@@ -93,6 +107,8 @@ class RenderedResponseBytesTest {
         ByteBuffer next;
         while ((next = capture.next()) != null) {
             assertTrue(next.remaining() > 0 && next.remaining() <= RenderedResponseBytes.DRAIN_BYTES);
+            assertTrue(next.array().length <= RenderedResponseBytes.MEMORY_LIMIT,
+                "Capture backing storage exceeded its memory bound: " + next.array().length);
             byte[] bytes = new byte[next.remaining()];
             next.get(bytes);
             result.write(bytes);
