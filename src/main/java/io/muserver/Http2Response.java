@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.io.InterruptedIOException;
 import java.io.UncheckedIOException;
+import java.util.concurrent.CompletableFuture;
 
 class Http2Response extends BaseResponse {
 
@@ -56,6 +57,18 @@ class Http2Response extends BaseResponse {
 
     @Override
     protected void cleanup() throws IOException, InterruptedException {
+        renderCleanup();
+        setState(ResponseState.FINISHED);
+    }
+
+    CompletableFuture<@Nullable Void> cleanupAsynchronously() {
+        return asynchronousRenderer.render(this::renderCleanup).<@Nullable Void>thenApply(ignored -> {
+            setState(ResponseState.FINISHED);
+            return null;
+        });
+    }
+
+    private void renderCleanup() throws IOException, InterruptedException {
         if (responseState() == ResponseState.NOTHING) {
             // empty response body
             if (!request.method().isHead() && status().canHaveContent() && !headers().contains(HeaderNames.CONTENT_LENGTH)) {
@@ -65,7 +78,6 @@ class Http2Response extends BaseResponse {
         } else {
             closeWriter();
         }
-        setState(ResponseState.FINISHED);
     }
 
     private void writeStatusAndHeaders(boolean endOfStream) throws InterruptedException, IOException {

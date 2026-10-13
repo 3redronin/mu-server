@@ -263,11 +263,16 @@ class Mu3ServerImpl implements MuServer {
             try {
                 task.run();
             } catch (Throwable taskFailure) {
-                FatalErrors.rethrow(taskFailure);
-                if (failure == null) {
-                    failure = taskFailure;
-                } else if (failure != taskFailure) {
-                    failure.addSuppressed(taskFailure);
+                // Accepted nested cleanup/notification tasks still own shutdown registrations.
+                // Drain that mailbox before allowing a fatal task failure to escape this worker.
+                if (failure == null) failure = taskFailure;
+                else if (failure != taskFailure) {
+                    boolean fatal = taskFailure instanceof VirtualMachineError || taskFailure instanceof ThreadDeath;
+                    boolean previousFatal = failure instanceof VirtualMachineError || failure instanceof ThreadDeath;
+                    if (fatal && !previousFatal) {
+                        taskFailure.addSuppressed(failure);
+                        failure = taskFailure;
+                    } else failure.addSuppressed(taskFailure);
                 }
             }
         }

@@ -1766,32 +1766,18 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
             finally { onExchangeEnded(stream); }
             return;
         }
-        try {
-            CompletableFuture<@Nullable Void> asyncCompletion = handleExchange(stream.request, stream.response());
-            if (stream.request.wasRateLimitRejected()) {
-                finishRateLimitedStream(stream, null);
-                return;
-            }
-            if (asyncCompletion == null) {
-                finishHandledStream(stream, null, false);
-            } else {
-                asyncCompletion.whenComplete((ignored, failure) ->
-                    scheduleAsyncStreamCompletion(stream, failure)
-                );
-            }
-        } catch (Throwable failure) {
-            if (failure instanceof VirtualMachineError || failure instanceof ThreadDeath) {
-                stream.onApplicationFailure();
-                try { releaseStreamResources(stream); }
-                finally { onExchangeEnded(stream); }
-                FatalErrors.rethrow(failure);
-            }
-            if (stream.request.wasRateLimitRejected()) {
-                finishRateLimitedStream(stream, failure);
-            } else {
-                finishHandledStream(stream, failure, false);
-            }
+        CompletableFuture<@Nullable Void> asyncCompletion;
+        try { asyncCompletion = handleExchange(stream.request, stream.response()); }
+        catch (Throwable failure) {
+            if (stream.request.wasRateLimitRejected()) finishRateLimitedStream(stream, failure);
+            else finishHandledStream(stream, failure, false);
+            return;
         }
+        // Finishing owns retirement, including fatal failure. Do not catch its failure as
+        // a new handler failure and attempt to retire the same exchange again.
+        if (stream.request.wasRateLimitRejected()) finishRateLimitedStream(stream, null);
+        else if (asyncCompletion == null) finishHandledStream(stream, null, false);
+        else asyncCompletion.whenComplete((ignored, failure) -> scheduleAsyncStreamCompletion(stream, failure));
     }
 
     private void scheduleAsyncStreamCompletion(Http2Stream stream, @Nullable Throwable failure) {
@@ -1840,7 +1826,6 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         @Nullable Throwable failure
     ) {
         finishApplicationStream(stream, failure, false, false);
-        server.onRequestRejected(rateLimitRejection(stream.request));
     }
 
     private void finishApplicationStream(
@@ -1849,40 +1834,66 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
         boolean handleAsyncFailure,
         boolean completedApplicationExchange
     ) {
+        CompletableFuture<@Nullable Void> output;
         try {
             if (failure != null) {
                 if (handleAsyncFailure && failure instanceof Exception) {
                     handleExchangeException(stream.request, stream.response(), (Exception) failure);
-                } else {
-                    throw failure;
+                } else throw failure;
+            }
+            output = stream.cleanupAsynchronously();
+        } catch (Throwable error) {
+            finishApplicationAfterOutput(stream, error, completedApplicationExchange);
+            return;
+        }
+        if (output.isDone()) {
+            Throwable outputFailure = null;
+            try { output.join(); }
+            catch (Throwable error) { outputFailure = completionCause(error); }
+            finishApplicationAfterOutput(stream, outputFailure, completedApplicationExchange);
+            return;
+        }
+        output.whenComplete((ignored, error) -> {
+            Runnable finish = () -> finishApplicationAfterOutput(stream,
+                error == null ? null : completionCause(error), completedApplicationExchange);
+            try { server.executeInternalTask(finish); }
+            catch (RuntimeException | Error rejected) {
+                Thread cleanup = new Thread(() -> {
+                    try { finish.run(); }
+                    finally { FatalErrors.rethrow(rejected); }
+                }, "mu-http2-rejected-finalization");
+                cleanup.setDaemon(true);
+                cleanup.start();
+            }
+        });
+    }
+
+    private void finishApplicationAfterOutput(Http2Stream stream, @Nullable Throwable failure,
+                                               boolean completedApplicationExchange) {
+        try {
+            if (failure != null) {
+                stream.onApplicationFailure();
+                if (failure instanceof InterruptedException) Thread.currentThread().interrupt();
+                log.info("Unhandled stream exception", failure);
+                if (!stream.resetWasInitiated() && stream.response().setState(ResponseState.ERRORED)) {
+                    Http2ErrorCode errorCode = failure instanceof HttpException
+                        && ((HttpException) failure).status().sameCode(HttpStatus.REQUEST_TIMEOUT_408)
+                        ? Http2ErrorCode.CANCEL : Http2ErrorCode.INTERNAL_ERROR;
+                    try { write(new Http2ResetStreamFrame(stream.id, errorCode.code())); }
+                    finally { stream.cancel(new IOException("Unhandled stream exception", failure)); }
                 }
-            }
-            stream.cleanup();
-        } catch (Throwable e) {
-            stream.onApplicationFailure();
-            FatalErrors.rethrow(e);
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
-            log.info("Unhandled stream exception", e);
-            if (stream.response().hasStartedSendingData()
-                && !stream.resetWasInitiated()
-                && stream.response().setState(ResponseState.ERRORED)) {
-                Http2ErrorCode errorCode =
-                    e instanceof HttpException
-                        && ((HttpException) e).status().sameCode(HttpStatus.REQUEST_TIMEOUT_408)
-                        ? Http2ErrorCode.CANCEL
-                        : Http2ErrorCode.INTERNAL_ERROR;
-                write(new Http2ResetStreamFrame(stream.id, errorCode.code()));
-                stream.cancel(new IOException("Unhandled stream exception", e));
             }
         } finally {
             try { releaseStreamResources(stream); }
             finally {
                 if (completedApplicationExchange) onExchangeEnded(stream);
-                else onRejectedApplicationExchangeEnded(stream);
+                else {
+                    onRejectedApplicationExchangeEnded(stream);
+                    server.onRequestRejected(rateLimitRejection(stream.request));
+                }
             }
         }
+        if (failure != null) FatalErrors.rethrow(failure);
     }
 
     private void releaseStreamResources(Http2Stream stream) {

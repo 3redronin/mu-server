@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -318,6 +319,48 @@ class Http2ReadDriverTest {
             Http2FrameHeader header = Http2FrameHeader.readFrom(bytes);
             assertEquals(Http2FrameType.GOAWAY, header.frameType());
             assertEquals(Http2ErrorCode.PROTOCOL_ERROR.code(), Http2GoAway.readFrom(header, bytes).errorCode());
+        }
+    }
+
+    @ParameterizedTest @CsvSource({"false,false", "false,true", "true,false", "true,true"})
+    void responseFinalizationRetainsItsOutcomeUntilTheLastTransportAcknowledgement(boolean body, boolean fail) throws Exception {
+        var response = new CompletableFuture<BaseResponse>();
+        var notified = new CompletableFuture<ResponseInfo>();
+        try (var fixture = new Fixture((request, res) -> {
+            response.complete((BaseResponse) res);
+            res.addCompletionListener(notified::complete);
+            if (body) res.outputStream(8192).write(new byte[]{11, 22});
+            else res.status(204);
+            return true;
+        })) {
+            Session session = fixture.add(1024, true);
+            session.offer(preface());
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.completeOutput();
+            session.offer(requestBytes(1));
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            if (body) {
+                Http2FrameHeader initial = Http2FrameHeader.readFrom(session.pendingOutput.peek().bytes.duplicate());
+                assertEquals(Http2FrameType.HEADERS, initial.frameType());
+                assertEquals(0, initial.flags() & 1);
+                session.completeOutput();
+                fixture.until(() -> !session.pendingOutput.isEmpty());
+            }
+            fixture.barrier();
+            Http2FrameHeader terminal = Http2FrameHeader.readFrom(session.pendingOutput.peek().bytes.duplicate());
+            assertEquals(body ? Http2FrameType.DATA : Http2FrameType.HEADERS, terminal.frameType());
+            assertEquals(1, terminal.flags() & 1);
+            assertEquals(0, session.connection.completedRequests());
+            assertFalse(response.get().responseState().endState());
+            assertFalse(notified.isDone());
+            session.end();
+            fixture.barrier();
+            assertFalse(session.driver.completion().isDone());
+            assertFalse(notified.isDone());
+            if (fail) session.failOutput(); else session.completeOutput();
+            session.driver.completion().get(3, TimeUnit.SECONDS);
+            assertEquals(!fail, notified.get(3, TimeUnit.SECONDS).completedSuccessfully());
+            assertEquals(1, session.connection.completedRequests());
         }
     }
 

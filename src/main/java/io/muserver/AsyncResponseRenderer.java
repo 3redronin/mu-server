@@ -12,8 +12,8 @@ import java.util.function.Supplier;
 
 /** Runs existing stream encoders in bounded input turns and joins each owned output borrow. */
 final class AsyncResponseRenderer {
-    @FunctionalInterface interface Operation { void run() throws Exception; }
-    @FunctionalInterface private interface Step { boolean render() throws Exception; }
+    @FunctionalInterface interface Operation { void run() throws Throwable; }
+    @FunctionalInterface private interface Step { boolean render() throws Throwable; }
     private static final int SOURCE_BYTES = 8192;
     private final Executor executor;
     private final ResponseOutputCapture output;
@@ -50,7 +50,11 @@ final class AsyncResponseRenderer {
     }
 
     CompletableFuture<@Nullable Void> render(Operation operation) {
-        return start(() -> { operation.run(); return true; }, null);
+        return render(operation, null);
+    }
+
+    CompletableFuture<@Nullable Void> render(Operation operation, @Nullable Operation preparation) {
+        return start(() -> { operation.run(); return true; }, preparation);
     }
 
     private CompletableFuture<@Nullable Void> start(Step step, @Nullable Operation preparation) {

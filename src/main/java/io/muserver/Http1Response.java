@@ -7,6 +7,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
+import java.util.concurrent.CompletableFuture;
 
 class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
     private final Http1ResponseOutput socketOut;
@@ -34,6 +35,32 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
         AsyncResponseRenderer renderer = asynchronousRenderer;
         return renderer == null ? null : source -> renderer.write(source,
             wrappedOut == null ? this::prepareAsynchronousOutput : null);
+    }
+
+    CompletableFuture<@Nullable Void> renderCompletion(AsyncResponseRenderer.Operation operation,
+                                                        AsyncResponseRenderer.@Nullable Operation preparation) {
+        AsyncResponseRenderer renderer = asynchronousRenderer;
+        if (renderer != null) return renderer.render(operation, preparation);
+        try {
+            if (preparation != null) preparation.run();
+            operation.run();
+            return CompletableFuture.completedFuture(null);
+        }
+        catch (Throwable failure) { return CompletableFuture.failedFuture(failure); }
+    }
+
+    byte[] prepareRejectionMessage(String text) {
+        byte[] bytes = text.getBytes(ensureCharsetSet());
+        headers.set(HeaderNames.CONTENT_LENGTH, bytes.length);
+        prepareAsynchronousOutput();
+        return bytes;
+    }
+
+    void renderRejectionMessage(byte[] bytes) { writeCompleteResponse(bytes); }
+
+    void renderOverloadRejection() throws IOException {
+        socketOut.write(ConnectionAcceptor.serverUnavailableResponse);
+        socketOut.flush();
     }
 
     private void prepareAsynchronousOutput() {
@@ -167,6 +194,11 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
 
     @Override
     void cleanup() throws IOException {
+        renderCleanup();
+        setState(ResponseState.FINISHED);
+    }
+
+    void renderCleanup() throws IOException {
         if (responseState() == ResponseState.NOTHING) {
             // empty response body
             if (!suppressContent()
@@ -186,7 +218,6 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
                 out.close();
             }
         }
-        setState(ResponseState.FINISHED);
     }
 
     @Override

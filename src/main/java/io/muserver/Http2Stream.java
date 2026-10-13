@@ -484,6 +484,11 @@ class Http2Stream implements ResponseInfo {
         requiredResponse().cleanup();
     }
 
+    CompletableFuture<@Nullable Void> cleanupAsynchronously() {
+        request.cleanup();
+        return requiredResponse().cleanupAsynchronously();
+    }
+
     void cleanupResources() throws IOException {
         try { requiredResponse().cleanupResources(); }
         finally { endNanos = System.nanoTime(); }

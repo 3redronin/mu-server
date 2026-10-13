@@ -2,6 +2,8 @@ package io.muserver;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -263,6 +265,45 @@ class Http1ReadDriverTest {
         }
     }
 
+    @ParameterizedTest @CsvSource({"empty,false", "empty,true", "parser,false", "parser,true", "overload,false", "overload,true"})
+    void finalOutputAndFlushAcknowledgementPrecedeExchangeRetirement(String kind, boolean failFlush) throws Exception {
+        var response = new CompletableFuture<BaseResponse>();
+        var notified = new CompletableFuture<ResponseInfo>();
+        try (var fixture = new Fixture((request, res) -> {
+            assertEquals("empty", kind);
+            response.complete((BaseResponse) res);
+            res.addCompletionListener(notified::complete);
+            return true;
+        })) {
+            Session session = fixture.add(512, true);
+            if (kind.equals("overload")) fixture.application.shutdown();
+            String extra = kind.equals("parser") ? "Content-Length: invalid\r\n" : "";
+            session.offer(("GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n"
+                + extra + "\r\n").getBytes(US_ASCII));
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            fixture.internal.submit(() -> {}).get(2, TimeUnit.SECONDS);
+            assertFalse(session.driver.completion().isDone());
+            assertEquals(0, session.connection.completedRequests());
+            assertEquals(0, session.connection.rejectedDueToOverload());
+            if (kind.equals("empty")) assertFalse(response.get().responseState().endState());
+            session.completeOutput();
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            assertEquals(0, session.pendingOutput.peek().bytes.remaining(), "The last flush is independently acknowledged");
+            assertFalse(session.driver.completion().isDone());
+            assertFalse(notified.isDone());
+            assertEquals(0, session.connection.completedRequests());
+            assertEquals(0, session.connection.rejectedDueToOverload());
+            if (failFlush) session.failOutput(); else session.completeOutput();
+            fixture.until(session.driver.completion()::isDone);
+            session.driver.completion().get();
+            assertEquals(kind.equals("empty") ? 1 : 0, session.connection.completedRequests());
+            assertEquals(kind.equals("overload") ? 1 : 0, session.connection.rejectedDueToOverload());
+            if (kind.equals("empty")) assertEquals(!failFlush, notified.get(2, TimeUnit.SECONDS).completedSuccessfully());
+            String wire = session.sink.bytes.toString(US_ASCII);
+            assertTrue(wire.startsWith("HTTP/1.1 " + (kind.equals("empty") ? 200 : kind.equals("overload") ? 503 : 400)), wire);
+        }
+    }
+
     private static final class Fixture implements AutoCloseable {
         final AtomicInteger internalThreads = new AtomicInteger();
         final AtomicInteger applicationThreads = new AtomicInteger();
@@ -294,8 +335,10 @@ class Http1ReadDriverTest {
             barrier();
         }
 
-        Session add(int inputCapacity) {
-            Session session = new Session(this, inputCapacity);
+        Session add(int inputCapacity) { return add(inputCapacity, false); }
+
+        Session add(int inputCapacity, boolean delayed) {
+            Session session = new Session(this, inputCapacity, delayed);
             sessions.add(session);
             return session;
         }
@@ -340,13 +383,35 @@ class Http1ReadDriverTest {
         final TransportOutputBufferTest.Sink sink = new TransportOutputBufferTest.Sink(7);
         final Http1Connection connection;
         final Http1Connection.ReadDriver driver;
+        final Queue<PendingOutput> pendingOutput = new ConcurrentLinkedQueue<>();
 
-        Session(Fixture fixture, int inputCapacity) {
+        Session(Fixture fixture, int inputCapacity, boolean delayed) {
             input = new TransportInputBuffer(inputCapacity, fixture.changed::release);
             output = new TransportOutputBuffer(97, fixture.changed::release);
             connection = new Http1Connection(fixture.config.server, fixture.config.creator, this,
                 ConnectionAcceptedTime.now(), null, fixture.application);
-            driver = connection.readDriver(input, new HttpConnectionOutputStream(connection, output), fixture.changed::release);
+            if (delayed) {
+                AsyncTransportOutput writer = bytes -> {
+                    var pending = new PendingOutput(bytes);
+                    pendingOutput.add(pending);
+                    return pending.completion;
+                };
+                driver = connection.readDriver(input, new HttpConnectionOutputStream(connection,
+                    new AsyncTransportOutputStream(writer, connection::forceShutdown)), fixture.changed::release, writer);
+            } else driver = connection.readDriver(input, new HttpConnectionOutputStream(connection, output), fixture.changed::release);
+        }
+
+        void completeOutput() {
+            PendingOutput write = java.util.Objects.requireNonNull(pendingOutput.poll());
+            byte[] bytes = new byte[write.bytes.remaining()];
+            write.bytes.get(bytes);
+            sink.bytes.writeBytes(bytes);
+            write.completion.complete(null);
+        }
+
+        void failOutput() {
+            PendingOutput write;
+            while ((write = pendingOutput.poll()) != null) write.completion.completeExceptionally(new IOException("Final output failed"));
         }
 
         void offer(byte[] bytes) throws IOException {
@@ -367,10 +432,17 @@ class Http1ReadDriverTest {
             IOException failure = new IOException("Transport aborted");
             input.fail(failure);
             output.fail(failure);
+            failOutput();
         }
         @Override public void close() throws IOException {
             output.close();
             input.endOfInput();
         }
     }
+    private static final class PendingOutput {
+        final ByteBuffer bytes;
+        final CompletableFuture<@org.jspecify.annotations.Nullable Void> completion = new CompletableFuture<>();
+        PendingOutput(ByteBuffer bytes) { this.bytes = bytes.duplicate(); }
+    }
+
 }
