@@ -120,6 +120,9 @@ final class TransportOutputBuffer extends OutputStream {
             }
             head = (head + count) % bytes.length;
             size -= count;
+            // No queued prefix remains to pin the ring offset. Start the next fill contiguously
+            // so a prior short write does not split every later full-buffer socket/TLS write.
+            if (size == 0) head = 0;
             refillAsync();
             if (size == 0 && pendingAsyncWrite != null) {
                 finished = pendingAsyncWrite;

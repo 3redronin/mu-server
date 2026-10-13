@@ -160,9 +160,13 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
                 if (fixedLen >= 0 && fixedLen < bufferSize) {
                     capacity = (int) Math.min(bufferSize, headerBytes.length + fixedLen);
                 }
-                rawOut = capacity == 8192
-                    ? new BufferedOutputStream(socketOut)
-                    : new BufferedOutputStream(socketOut, capacity);
+                if (fixedLen == -1L && request.httpVersion() == HttpVersion.HTTP_1_1) {
+                    rawOut = new Http1OutputBuffer(socketOut, capacity);
+                } else {
+                    rawOut = capacity == 8192
+                        ? new BufferedOutputStream(socketOut)
+                        : new BufferedOutputStream(socketOut, capacity);
+                }
             }
             rawOut.write(headerBytes);
             if (suppressContent()) {

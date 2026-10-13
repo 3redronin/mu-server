@@ -51,6 +51,28 @@ class TransportAsyncOutputTest {
         assertTrue(writer.write(ByteBuffer.allocate(0)).isDone());
     }
 
+    @ParameterizedTest @CsvSource({"7,7", "7,25", "8192,8192", "8192,20003"})
+    void anEmptyRingDoesNotSplitTheNextWriteAtThePreviousOffset(int capacity, int length) throws Exception {
+        var output = new TransportOutputBuffer(capacity, () -> {});
+        var writer = output.asynchronousWriter();
+        var sink = new TransportOutputBufferTest.Sink(capacity);
+        var prefix = writer.write(ByteBuffer.wrap(new byte[]{1, 2, 3}));
+        assertEquals(3, output.drainTo(sink, capacity));
+        prefix.get();
+        byte[] bytes = new byte[length];
+        new Random(981).nextBytes(bytes);
+        var write = writer.write(ByteBuffer.wrap(bytes));
+        for (int remaining = length; remaining > 0; remaining -= capacity) {
+            assertFalse(write.isDone());
+            assertEquals(Math.min(remaining, capacity), output.drainTo(sink, capacity),
+                "An empty ring should admit the next contiguous prefix without a needless split");
+        }
+        write.get();
+        var expected = new ByteArrayOutputStream();
+        expected.write(new byte[]{1, 2, 3}); expected.write(bytes);
+        assertArrayEquals(expected.toByteArray(), sink.bytes.toByteArray());
+    }
+
     @Test
     void exclusiveWriterRejectsOverlapAndModeMixingWithoutLosingTheFirstWrite() throws Exception {
         var output = new TransportOutputBuffer(2, () -> {});
