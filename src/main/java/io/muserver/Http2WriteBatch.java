@@ -9,6 +9,9 @@ import java.util.concurrent.ArrayBlockingQueue;
 final class Http2WriteBatch extends OutputStream {
     // Leave room for the default 8 KiB response chunk and its frame header.
     static final int MAX_BYTES = 16_384;
+    // The channel encoder shares this cache and must fit a full default DATA frame.
+    // Keep the socket adapter's batch/flush boundary independent of cache capacity.
+    static final int SCRATCH_BUFFER_BYTES = MAX_BYTES + Http2FrameHeader.FRAME_HEADER_LENGTH;
     private static final int DIRECT_WRITE_MIN_BYTES = 8_192;
     // Cache a bounded number of idle leases instead of a large array per connection.
     private static final ArrayBlockingQueue<byte[]> SCRATCH_BUFFERS = new ArrayBlockingQueue<>(64);
@@ -73,17 +76,17 @@ final class Http2WriteBatch extends OutputStream {
 
     static byte[] acquireScratch() {
         byte[] scratch = SCRATCH_BUFFERS.poll();
-        return scratch == null ? new byte[MAX_BYTES] : scratch;
+        return scratch == null ? new byte[SCRATCH_BUFFER_BYTES] : scratch;
     }
 
     static void releaseScratch(byte[] scratch) {
-        if (scratch.length == MAX_BYTES) SCRATCH_BUFFERS.offer(scratch);
+        if (scratch.length == SCRATCH_BUFFER_BYTES) SCRATCH_BUFFERS.offer(scratch);
     }
 
     /** Return scratch only after transport output has relinquished its ownership. */
     void releaseScratch() {
         if (count != 0) throw new IllegalStateException("Cannot release buffered output");
-        if (buffer.length == MAX_BYTES) {
+        if (buffer.length == SCRATCH_BUFFER_BYTES) {
             byte[] scratch = buffer;
             buffer = smallBuffer;
             releaseScratch(scratch);

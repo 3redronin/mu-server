@@ -62,6 +62,7 @@ final class ChannelTransportLoop {
         }
     }
 
+    @SuppressWarnings("ReferenceEquality") // Only this exact owner may skip waking its selector.
     boolean enqueue(ChannelConnection connection) {
         // Serialize publication with exit, so an accepted socket cannot fall between the final
         // queue drain and selector closure. Continuations after exit are harmless.
@@ -71,7 +72,7 @@ final class ChannelTransportLoop {
         }
         // The owner will observe its own ready queue before selecting. Only an external
         // producer needs to interrupt a possibly blocked select call.
-        if (!Thread.currentThread().equals(thread)) selector.wakeup();
+        if (Thread.currentThread() != thread) selector.wakeup();
         return true;
     }
 

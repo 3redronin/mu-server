@@ -16,7 +16,7 @@ import java.util.Objects;
 /** Owned output from one synchronous encoder turn, drained later without a network wait. */
 final class RenderedResponseBytes extends OutputStream {
     static final int MEMORY_LIMIT = 32768;
-    static final int DRAIN_BYTES = 8192;
+    static final int DRAIN_BYTES = 16_384;
     private final Path directory;
     private byte @Nullable [] memory = new byte[256];
     private @Nullable FileChannel file;

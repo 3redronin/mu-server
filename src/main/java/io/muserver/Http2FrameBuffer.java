@@ -29,7 +29,7 @@ final class Http2FrameBuffer extends OutputStream {
         if (required < 0) throw new OutOfMemoryError("HTTP/2 frame encoding is too large");
         if (required <= buf.length) return;
         byte[] previous = buf;
-        if (required <= Http2WriteBatch.MAX_BYTES) {
+        if (required <= Http2WriteBatch.SCRATCH_BUFFER_BYTES) {
             buf = Http2WriteBatch.acquireScratch();
             System.arraycopy(previous, 0, buf, 0, count);
         } else {

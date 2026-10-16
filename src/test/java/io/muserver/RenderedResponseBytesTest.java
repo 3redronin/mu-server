@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class RenderedResponseBytesTest {
     @TempDir Path directory;
 
-    @ParameterizedTest @ValueSource(ints = {0, 1, 8192, 32768, 32769, 1048576})
+    @ParameterizedTest @ValueSource(ints = {0, 1, 8192, 16383, 16384, 16385, 32768, 32769, 1048576})
     void ownsAnEncoderBurstAndDrainsBoundedChunks(int size) throws Exception {
         byte[] expected = new byte[size];
         new Random(1234).nextBytes(expected);

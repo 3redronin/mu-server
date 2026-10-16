@@ -34,7 +34,7 @@ class AsyncResponseRendererTest {
         try {
             var written = executor.submit(() -> renderer.write(ByteBuffer.allocate(8 * 1024 * 1024)))
                 .get(3, TimeUnit.SECONDS);
-            assertEquals(8192, borrowed.get(3, TimeUnit.SECONDS).remaining());
+            assertEquals(16384, borrowed.get(3, TimeUnit.SECONDS).remaining());
             executor.submit(() -> {}).get(3, TimeUnit.SECONDS);
             assertFalse(written.isDone());
             IOException aborted = new IOException("transport aborted");
@@ -90,7 +90,7 @@ class AsyncResponseRendererTest {
         while (!pending.isEmpty()) {
             assertFalse(written.isDone());
             ByteBuffer bytes = borrowed.remove();
-            assertTrue(bytes.remaining() <= 8192);
+            assertTrue(bytes.remaining() <= RenderedResponseBytes.DRAIN_BYTES);
             byte[] copy = new byte[bytes.remaining()]; bytes.get(copy); actual.write(copy);
             pending.remove().complete(null);
             runTasks(tasks);
@@ -108,7 +108,7 @@ class AsyncResponseRendererTest {
             return calls.incrementAndGet() == 63 ? io : CompletableFuture.completedFuture(null);
         }, directory);
         var renderer = new AsyncResponseRenderer(command -> { throw rejected; }, capture, () -> capture);
-        var written = renderer.render(() -> capture.write(new byte[64 * 8192]));
+        var written = renderer.render(() -> capture.write(new byte[64 * RenderedResponseBytes.DRAIN_BYTES]));
         assertEquals(63, calls.get());
         assertFalse(written.isDone());
         assertFalse(io.isCancelled());

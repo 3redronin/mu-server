@@ -1146,3 +1146,98 @@ The default remains capped at four to retain the parallel-throughput gains;
 `withNioThreads(1)` offers a measured lower-CPU configuration on this host. The
 choice is workload-dependent, and these single-run controls do not establish a
 universal optimum.
+
+## Full DATA-frame encoding and async rendering (17 October 2026)
+
+The preceding checkpoint is committed as `625e9f139f890ad67363f3e12573e44181a8fb04`.
+Two further experiments keep its evidence intact and use separate immutable
+source/class inventories.
+
+The `full-frame-cache` snapshot has production SHA-256
+`326d62731402e701348d5c04c94187880fb84678b8a5bd5b6d0bda6e5686e586`.
+Its encoding leases include the nine-byte header of a default 16 KiB DATA frame.
+The shared cache still holds at most 64 idle leases, adding 576 bytes of array
+payload to its idle bound. Socket batches retain their 16 KiB flush boundary.
+The selector wakeup check also uses exact thread identity, avoiding a call to a
+caller thread subclass's `equals` implementation.
+
+A regression test that cycles full DATA frames through the bounded cache failed
+before the cache change and passed afterward; the 104 focused tests passed with
+NullAway/Error Prone. An isolated ThreadMXBean allocation probe encoded 100,000
+frames per repeat after 20,000 warm-up frames. The same probe class measured
+16,416 bytes allocated per frame before the change, then zero in its final two
+repeats afterward (208 bytes total in the first measured repeat). Payload
+checksums matched. This isolates encoding allocation; its timing is not a server
+throughput measurement.
+
+Twelve native trials paired this snapshot with the preceding checkpoint in
+opposite orders. All passed without generator or connection exclusions. For
+whole-write HTTP/2 bulk, median throughput increased from 1,534 to 1,720
+responses/s, CPU fell from 3,158 to 3,044 microseconds/response, and GC time fell
+from 2,286 to 761 milliseconds per twenty-second measurement. The original
+8 KiB HTTP/2 bulk and multiplexed workloads were approximately flat: 1,214 to
+1,197 and 138,089 to 137,721 responses/s respectively. Two repeats do not establish
+whether those small differences are meaningful.
+
+The next snapshot, `async-turn`, has production SHA-256
+`859d92fd5af7d436a357e9161cbe8065aac7eaf08f82940eb85af4e950477e15`.
+It increases channel async rendering input and drain chunks from 8 to 16 KiB,
+matching a default HTTP/2 DATA payload. Captured output still spills beyond
+32 KiB and the renderer yields after 64 immediate steps. Direct/read-only source
+scratch and spill-file read scratch increase from 8 to 16 KiB; ordinary active
+captures can also retain a larger chunk. Transport acknowledgement still gates
+source reuse, failure publication and capture deletion. The focused 155-test
+renderer, storage, async-response, HTTP/2 and TLS suite passed.
+
+Twelve native trials compare 8 and 16 KiB renderer turns on top of the same
+full-frame cache, in opposite orders. All passed with no generator or connection
+exclusions. The fixture performs one async write of a 1 MiB body, with eight
+connections and Java 21 PLATFORM. Medians of two runs:
+
+| Protocol | 8 KiB turns, responses/s | 16 KiB turns, responses/s | CPU microseconds/response, 8 → 16 KiB |
+| --- | ---: | ---: | ---: |
+| HTTP/1 | 2,418 | 2,941 | 1,897 → 1,328 |
+| HTTPS/1 | 1,822 | 2,350 | 2,301 → 1,609 |
+| TLS HTTP/2 | 1,106 | 1,508 | 4,666 → 3,250 |
+
+These increases are approximately 22%, 29% and 36%, with about 30% less CPU per
+response. Observed candidate peak cgroup memory stayed below 137 MiB in these
+trials. That observation does not erase the larger per-write scratch bound or
+predict memory use with many stalled application writes.
+
+The final snapshot passed clean `verify` on Java 11, 17, 21 and 25. Each run
+discovered 5,289 tests with zero failures and errors; Java 11 and 17 skipped the
+176 virtual-thread-only cases, while Java 21 and 25 skipped none. Java 21 also
+passed NullAway/Error Prone. Its clean verified production classes are byte for
+byte identical to the frozen classes used for the native measurements.
+The external functional matrix passed all 140 cases, and the four transfer-pressure
+runs passed concurrent uploads/downloads, cancellation with connection reuse,
+and shutdown during transfer. On each runtime, h2spec again passed all 147 cases;
+Autobahn reported 244 passes and the same three informational cases. Their
+reviewed behavior and close details match the earlier reports. The strict
+independent-harness exit of one remains recorded alongside the separate passing
+comparison review.
+
+Six sustained native checks then exercised one async write per 1 MiB response,
+with eight persistent clients, ten seconds of warm-up and 120 seconds of measured
+load per check. AUTO selected platform application workers on Java 11 and virtual
+workers on Java 25. All passed with zero request errors and no generator or
+connection exclusions:
+
+| Runtime | Protocol | Measured responses | Peak cgroup memory, MiB |
+| --- | --- | ---: | ---: |
+| Java 11 | HTTP/1 | 362,696 | 99.6 |
+| Java 11 | HTTPS/1 | 233,510 | 106.4 |
+| Java 11 | TLS HTTP/2 | 161,601 | 121.5 |
+| Java 25 | HTTP/1 | 374,460 | 94.1 |
+| Java 25 | HTTPS/1 | 287,440 | 117.5 |
+| Java 25 | TLS HTTP/2 | 205,324 | 137.6 |
+
+That is 1,625,031 measured large responses under the same 512 MiB heap and 1 GiB
+cgroup limits. Payload hashes matched before and after each run; successful
+statuses and request counts were reconciled during load. These checks cover the
+changed async body path for bounded runs, not multi-day leak behavior. The final
+evidence audit passed all 164 checks, including source, test, dependency and
+compiled-class inventories. Its 36 native trials include the paired cache and
+renderer experiments, six final original-workload checks and these six sustained
+runs; the earlier checkpoint's separate evidence remains intact.

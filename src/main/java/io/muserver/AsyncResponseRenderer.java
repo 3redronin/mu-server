@@ -14,7 +14,8 @@ import java.util.function.Supplier;
 final class AsyncResponseRenderer {
     @FunctionalInterface interface Operation { void run() throws Throwable; }
     @FunctionalInterface private interface Step { boolean render() throws Throwable; }
-    private static final int SOURCE_BYTES = 8192;
+    // One default HTTP/2 DATA payload per input turn; captured output keeps its separate cap.
+    private static final int SOURCE_BYTES = 16_384;
     private final Executor executor;
     private final ResponseOutputCapture output;
     private final Supplier<OutputStream> responseStream;
