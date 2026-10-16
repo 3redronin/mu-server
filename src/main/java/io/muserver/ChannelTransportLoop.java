@@ -7,17 +7,16 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.Socket;
 import java.nio.channels.SelectionKey;
+import java.nio.channels.CancelledKeyException;
 import java.nio.channels.Selector;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
-/** Owns readiness and TLS progression for one listener; application work runs on other executors. */
+/** Owns readiness and TLS progression for its assigned connections; application work runs elsewhere. */
 final class ChannelTransportLoop {
     private static final Logger log = LoggerFactory.getLogger(ChannelTransportLoop.class);
     private static final int TURN_LIMIT = 128;
@@ -34,28 +33,19 @@ final class ChannelTransportLoop {
     private final Object submissionLock = new Object();
 
     ChannelTransportLoop(ConnectionAcceptor acceptor, Mu3ServerImpl server,
-                         @Nullable HAProxyProtocolConfig proxyConfig) throws IOException {
+                         @Nullable HAProxyProtocolConfig proxyConfig, ThreadPoolExecutor tlsTasks,
+                         int index) throws IOException {
         this.acceptor = acceptor;
         this.server = server;
         this.proxyConfig = proxyConfig;
+        this.tlsTasks = tlsTasks;
         selector = Selector.open();
-        int workers = Math.max(2, Math.min(8, Runtime.getRuntime().availableProcessors()));
-        AtomicInteger sequence = new AtomicInteger();
-        ThreadPoolExecutor taskExecutor = null;
         try {
-            taskExecutor = new ThreadPoolExecutor(workers, workers, 0, TimeUnit.SECONDS,
-                new ArrayBlockingQueue<>(256), task -> {
-                    Thread worker = new Thread(task, "mu-tls-task-" + acceptor.address().getPort() + "-" + sequence.incrementAndGet());
-                    worker.setDaemon(true);
-                    return worker;
-                });
-            tlsTasks = taskExecutor;
-            thread = new Thread(this::run, "mu-channel-loop-" + acceptor.address().getPort());
+            thread = new Thread(this::run, "mu-channel-loop-" + acceptor.address().getPort() + "-" + index);
             // The acceptor owns server liveness. Application tasks may outlive a forced stop;
             // this daemon can observe their eventual retirement without extending stop(timeout).
             thread.setDaemon(true);
         } catch (RuntimeException | Error failure) {
-            if (taskExecutor != null) taskExecutor.shutdownNow();
             try { selector.close(); } catch (IOException cleanup) { failure.addSuppressed(cleanup); }
             throw failure;
         }
@@ -79,7 +69,9 @@ final class ChannelTransportLoop {
             if (exited) return false;
             ready.add(connection);
         }
-        selector.wakeup();
+        // The owner will observe its own ready queue before selecting. Only an external
+        // producer needs to interrupt a possibly blocked select call.
+        if (!Thread.currentThread().equals(thread)) selector.wakeup();
         return true;
     }
 
@@ -129,7 +121,12 @@ final class ChannelTransportLoop {
                 for (int i = 0; i < TURN_LIMIT && selected.hasNext(); i++) {
                     SelectionKey key = selected.next();
                     selected.remove();
-                    if (key.isValid()) ((ChannelConnection) key.attachment()).schedule();
+                    try {
+                        if (key.isValid()) ((ChannelConnection) key.attachment()).selected(key.readyOps());
+                    } catch (CancelledKeyException closedConcurrently) {
+                        // Abort can close the channel between isValid and readyOps. Its
+                        // separately queued continuation owns cancellation and retirement.
+                    }
                 }
                 long now = System.nanoTime();
                 if (now - nextScan >= 0) {

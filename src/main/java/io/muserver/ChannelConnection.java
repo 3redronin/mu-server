@@ -20,10 +20,19 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Channel/TLS owner state; control methods only publish requests or immediately abort the channel. */
 final class ChannelConnection implements ConnectionTransport {
     private static final int BUFFER_SIZE = 8192;
+    // Fit a default response DATA chunk plus its frame header. Otherwise each full chunk
+    // leaves a nine-byte tail that requires another TLS record and transport write.
+    private static final int OUTPUT_BUFFER_SIZE = BUFFER_SIZE + Http2FrameHeader.FRAME_HEADER_LENGTH;
+    // A TLS record includes framing/tag bytes in addition to the plaintext ring. Let an
+    // ordinary record drain in one bounded call rather than splitting off its trailer.
+    private static final int ENCRYPTED_WRITE_BUDGET = 64 * 1024;
     private static final int TURN_LIMIT = 16;
     private static final long SETUP_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(10);
     private static final long CLOSE_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(1);
     private final ChannelTransportLoop loop;
+    // Owner only. Once a nonblocking read would block, wait for fresh selector readiness.
+    // Keep readiness while input buffers are full so releasing capacity can resume locally.
+    private boolean readReady = true;
     private final ExecutionResources.TransportLease executionLease;
     final Socket socket;
     private final SocketChannel channel;
@@ -35,7 +44,7 @@ final class ChannelConnection implements ConnectionTransport {
     final AtomicBoolean scheduled = new AtomicBoolean();
     private final AtomicBoolean aborted = new AtomicBoolean();
     private final TransportInputBuffer input = new TransportInputBuffer(BUFFER_SIZE, this::schedule, this::schedule);
-    private final TransportOutputBuffer output = new TransportOutputBuffer(BUFFER_SIZE, this::schedule);
+    private final TransportOutputBuffer output = new TransportOutputBuffer(OUTPUT_BUFFER_SIZE, this::schedule);
     private ByteBuffer incoming = ByteBuffer.allocate(BUFFER_SIZE).flip();
     private final ByteBuffer protocolPrefix = ByteBuffer.allocate(Http2Handshaker.clientConnectionPrefaceLength());
     private final @Nullable ProxyProtocolDecoder proxy;
@@ -93,6 +102,11 @@ final class ChannelConnection implements ConnectionTransport {
         return !retired && (!scheduled.compareAndSet(false, true) || loop.enqueue(this));
     }
 
+    void selected(int operations) {
+        if ((operations & SelectionKey.OP_READ) != 0) readReady = true;
+        schedule();
+    }
+
     void drive() {
         if (retired) return;
         try {
@@ -137,7 +151,7 @@ final class ChannelConnection implements ConnectionTransport {
             boolean progressed = false;
             if (tls != null && !tls.failureCloseDone()) {
                 progressed = tls.advanceFailureClose();
-                progressed |= tls.drainFailureTo(channel, BUFFER_SIZE) > 0;
+                progressed |= tls.drainFailureTo(channel, ENCRYPTED_WRITE_BUDGET) > 0;
             }
             if (tls == null || tls.failureCloseDone() || deadlinePassed(closeDeadline)) closeNetwork();
             return progressed;
@@ -160,11 +174,13 @@ final class ChannelConnection implements ConnectionTransport {
             if (prefetchedCiphertext != null) {
                 if (tls.inputCapacity() > 0) tls.receive(prefetchedCiphertext);
                 if (!prefetchedCiphertext.hasRemaining()) prefetchedCiphertext = null;
-            } else if (!stopReceiving && tls.inputCapacity() > 0) {
-                if (tls.readFrom(channel, BUFFER_SIZE) > 0) networkProgress();
+            } else if (!stopReceiving && readReady && tls.inputCapacity() > 0) {
+                int count = tls.readFrom(channel, BUFFER_SIZE);
+                if (count > 0) networkProgress();
+                else readReady = false;
             }
             tls.advance();
-            if (tls.drainEncryptedTo(channel, BUFFER_SIZE) > 0) networkProgress();
+            if (tls.drainEncryptedTo(channel, ENCRYPTED_WRITE_BUDGET) > 0) networkProgress();
             if (tls.inboundDone() && !tls.handshakeComplete()) throw new IOException("TLS closed before handshake completion");
             if (tls.handshakeComplete() && !tls.tasksPending()) {
                 publishTlsInfo();
@@ -208,7 +224,7 @@ final class ChannelConnection implements ConnectionTransport {
             }
             if (output.pendingBytes() > 0) {
                 long beforeWrite = tls == null ? 0 : tls.revision();
-                int written = output.drainTo(tls == null ? channel : tlsSink, BUFFER_SIZE);
+                int written = output.drainTo(tls == null ? channel : tlsSink, OUTPUT_BUFFER_SIZE);
                 if (written > 0) { networkProgress(); progress = true; }
                 // Wrapping can produce output without acknowledging plaintext yet.
                 if (tls != null && tls.revision() != beforeWrite) progress = true;
@@ -266,11 +282,12 @@ final class ChannelConnection implements ConnectionTransport {
     }
 
     private boolean readPlainChannel() throws IOException {
-        if (networkEof || incoming.remaining() == incoming.capacity()) return false;
+        if (networkEof || !readReady || incoming.remaining() == incoming.capacity()) return false;
         incoming.compact();
         int count;
         try { count = channel.read(incoming); }
         finally { incoming.flip(); }
+        if (count <= 0) readReady = false;
         if (count == -1) { networkEof = true; return true; }
         if (count > 0) networkProgress();
         return count > 0;

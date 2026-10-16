@@ -65,6 +65,13 @@ final class Http2WriteCoordinator {
             }
         }
 
+        void publishAsTransportDrains(LogicalHttp2Frame frameWritten, TransportWriteProgress progress, int offset) {
+            if (frameWritten.endStream()) {
+                Http2Stream stream = applicationStreams.get(frameWritten.streamId());
+                if (stream != null) stream.publishLocalEndStreamAfter(progress, offset);
+            }
+        }
+
         boolean beginWrite() {
             if (task.beginWrite()) {
                 inFlightWrites.add(this);

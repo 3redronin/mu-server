@@ -128,6 +128,50 @@ class ChannelTransportTest {
     }
 
     @ParameterizedTest @ValueSource(booleans = {false, true})
+    void requestInputResumesAfterEachResponseFragment(boolean secure) throws Exception {
+        int fragments = 65;
+        int fragmentSize = 137;
+        try (MuServer server = builder(secure, false).addHandler((request, response) -> {
+            response.headers().set("Content-Length", fragments * fragmentSize);
+            var input = request.body();
+            var output = response.outputStream();
+            for (int i = 0; i < fragments; i++) {
+                byte[] bytes = input.readNBytes(fragmentSize);
+                assertEquals(fragmentSize, bytes.length);
+                output.write(bytes);
+                output.flush();
+            }
+            assertEquals(-1, input.read());
+            return true;
+        }).start(); Socket client = applicationSocket(server, secure)) {
+            client.getOutputStream().write(("POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: "
+                + fragments * fragmentSize + "\r\nConnection: close\r\n\r\n").getBytes(US_ASCII));
+            var input = client.getInputStream();
+            for (int i = 0; i < fragments; i++) {
+                byte[] bytes = new byte[fragmentSize];
+                java.util.Arrays.fill(bytes, (byte) i);
+                client.getOutputStream().write(bytes);
+                client.getOutputStream().flush();
+                if (i == 0) {
+                    var headers = new java.io.ByteArrayOutputStream();
+                    while (!headers.toString(US_ASCII).endsWith("\r\n\r\n")) {
+                        int value = input.read();
+                        assertTrue(value >= 0 && headers.size() < 8192);
+                        headers.write(value);
+                    }
+                    assertTrue(headers.toString(US_ASCII).startsWith("HTTP/1.1 200 OK"));
+                }
+                // Each side waits for the other: output progress must not hide the next
+                // readable event after the transport previously observed an empty socket.
+                assertArrayEquals(bytes, input.readNBytes(fragmentSize));
+            }
+            assertEquals(-1, input.read());
+            until(() -> server.stats().completedConnections() == 1);
+            assertEquals(1, server.stats().completedRequests());
+        }
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {false, true})
     void idleWebsocketsPartialFramesAndAsyncReceivesLeaveBothWorkersAvailable(boolean secure) throws Exception {
         var application = Executors.newSingleThreadExecutor();
         var internal = Executors.newSingleThreadExecutor();

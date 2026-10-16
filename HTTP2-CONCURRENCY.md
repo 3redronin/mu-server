@@ -9,8 +9,8 @@ request handling and shutdown.
 | --- | --- | --- |
 | Application executor | `withHandlerExecutor`; caller-owned when supplied | Handlers, JAX-RS continuations, body/write callbacks, WebSocket events, completion/rejection listeners |
 | Internal task executor | Mu-owned, unbounded task dispatch | Resumable protocol/body/output turns, encoding, cleanup and maintenance; blocking I/O for the internal socket adapter |
-| Channel readiness loop | One Mu-owned platform thread per listener | Bounded socket/TLS progression and scheduling protocol continuations |
-| TLS delegated tasks | Per-listener platform pool, two to eight workers and a 256-task queue | Engine tasks; rejection fails the handshake without running tasks on the readiness loop |
+| Channel readiness loops | `withNioThreads(n)` per listener; zero selects `min(4, availableProcessors)` Mu-owned platform threads | Each connection retains one owner for bounded socket/TLS progression and scheduling protocol continuations |
+| TLS delegated tasks | One shared per-listener platform pool, two to eight workers and a 256-task queue | Engine tasks; rejection fails the handshake without running tasks on the readiness loop |
 | Timer | Mu-owned single scheduled thread | Determine when work is due and dispatch it |
 
 The two task executors use `withThreadingMode` to select their implementation.
@@ -18,6 +18,13 @@ The two task executors use `withThreadingMode` to select their implementation.
 threads on earlier runtimes. `PLATFORM` always uses cached platform threads;
 `VIRTUAL` explicitly selects virtual threads and requires Java 21 or later.
 A supplied handler executor remains caller-owned and is not changed by the mode.
+
+HTTP/1 request preparation can run directly on Mu's own application executor;
+its handler then runs through the same application-task queue. A supplied
+executor still receives submissions from an internal worker, because its
+`execute` method may block or run code inline. Preparation, handlers, rejection
+writes and cleanup remain off the readiness owner. Forced shutdown checks the
+connection again before queued preparation can enter a handler.
 
 Java 21–23 can pin virtual-thread carriers when application code or dependencies
 block while holding Java monitors. Mu's gzip and response-writer wrappers, certificate
@@ -372,6 +379,18 @@ progress, while avoiding a flush-time interval in which the peer can observe the
 frame before the reader sees the fence. Protocol closure, write promises, and
 successful response completion still advance only after the flush succeeds; a
 failed terminal write closes the connection.
+
+The channel writer instead submits an owned encoding through the asynchronous
+transport. It combines only already-ready frames, with a 64-frame limit and an
+8 KiB target; a single logical frame may exceed that target. GOAWAY and protocol
+errors finish the batch. Already-ready control frames drain before a flow-control
+stall. The transport publishes its consumed byte prefix, including TLS
+ciphertext drain. A fully drained terminal frame can publish its reader-facing
+fence and complete on the writer while later frames in the same batch remain
+pending. No partial frame releases admission. Encoding scratch returns to the
+shared bounded cache only after the entire transport borrow is acknowledged;
+completing an earlier frame does not recycle that storage. Abort drops ownership
+without recycling storage still potentially borrowed by the transport.
 
 If a handler completes a response while the peer request side is still open,
 the input enters discard mode. Already-buffered and future request DATA is

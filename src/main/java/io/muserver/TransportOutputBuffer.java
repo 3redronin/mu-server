@@ -35,8 +35,12 @@ final class TransportOutputBuffer extends OutputStream {
 
     private static final class PendingAsyncWrite {
         final ByteBuffer source;
+        final @Nullable TransportWriteProgress progress;
         final CompletableFuture<@Nullable Void> completion = new CompletableFuture<>();
-        PendingAsyncWrite(ByteBuffer source) { this.source = source.duplicate(); }
+        PendingAsyncWrite(ByteBuffer source, @Nullable TransportWriteProgress progress) {
+            this.source = source.duplicate();
+            this.progress = progress;
+        }
     }
 
     /** Claim an idle buffer exclusively; prior blocking writes must have finished and cannot resume. */
@@ -46,12 +50,19 @@ final class TransportOutputBuffer extends OutputStream {
             ensureOpen();
             if (asynchronous || writers.isLocked() || size != 0) throw new IllegalStateException("Output already has a writer");
             asynchronous = true;
-            return this::writeAsync;
+            return new AsyncTransportOutput() {
+                @Override public CompletableFuture<@Nullable Void> write(ByteBuffer source) throws IOException {
+                    return writeAsync(source, null);
+                }
+                @Override public CompletableFuture<@Nullable Void> write(ByteBuffer source, TransportWriteProgress progress) throws IOException {
+                    return writeAsync(source, progress);
+                }
+            };
         } finally { lock.unlock(); }
     }
 
-    private CompletableFuture<@Nullable Void> writeAsync(ByteBuffer source) throws IOException {
-        PendingAsyncWrite write = new PendingAsyncWrite(source);
+    private CompletableFuture<@Nullable Void> writeAsync(ByteBuffer source, @Nullable TransportWriteProgress progress) throws IOException {
+        PendingAsyncWrite write = new PendingAsyncWrite(source, progress);
         boolean empty;
         lock.lock();
         try {
@@ -104,6 +115,7 @@ final class TransportOutputBuffer extends OutputStream {
     int drainTo(WritableByteChannel sink, int maxBytes) throws IOException {
         if (maxBytes < 1) throw new IllegalArgumentException("Positive drain budget required");
         PendingAsyncWrite finished = null;
+        TransportWriteProgress progressed = null;
         IOException failed = null;
         lock.lock();
         try {
@@ -120,6 +132,11 @@ final class TransportOutputBuffer extends OutputStream {
             }
             head = (head + count) % bytes.length;
             size -= count;
+            PendingAsyncWrite active = pendingAsyncWrite;
+            if (count > 0 && active != null && active.progress != null) {
+                progressed = active.progress;
+                progressed.consumed(count);
+            }
             // No queued prefix remains to pin the ring offset. Start the next fill contiguously
             // so a prior short write does not split every later full-buffer socket/TLS write.
             if (size == 0) head = 0;
@@ -132,9 +149,13 @@ final class TransportOutputBuffer extends OutputStream {
             return count;
         } finally {
             lock.unlock();
-            if (finished != null) {
-                if (failed == null) finished.completion.complete(null);
-                else finished.completion.completeExceptionally(failed);
+            try {
+                if (progressed != null) progressed.notifyOwner();
+            } finally {
+                if (finished != null) {
+                    if (failed == null) finished.completion.complete(null);
+                    else finished.completion.completeExceptionally(failed);
+                }
             }
         }
     }

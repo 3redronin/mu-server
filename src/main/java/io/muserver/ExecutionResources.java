@@ -68,6 +68,8 @@ class ExecutionResources {
 
     ExecutorService writerExecutor() { return internal; }
 
+    boolean ownsApplication() { return ownsApplication; }
+
     void shutdown() {
         if (!shutdownStarted.compareAndSet(false, true)) return;
         timer.shutdown();

@@ -102,6 +102,35 @@ class TlsEngineDriverTest {
         }
     }
 
+    @ParameterizedTest @ValueSource(strings = {"TLSv1.2", "TLSv1.3"})
+    void transportProgressPublishesOnlyAfterTheWholeCiphertextRecordDrains(String protocol) throws Exception {
+        try (var pair = new Pair(protocol, 4096, false, false)) {
+            pair.handshake();
+            var output = new TransportOutputBuffer(4, () -> {});
+            var progress = new TransportWriteProgress(() -> {});
+            byte[] bytes = {1, 2, 3, 4, 5, 6, 7, 8};
+            var write = output.asynchronousWriter().write(ByteBuffer.wrap(bytes), progress);
+            var sink = new Channel(pair.server::writePlaintext);
+            assertEquals(0, output.drainTo(sink, 4));
+            assertFalse(progress.reached(1));
+            int packet = pair.server.encryptedOutputSize();
+            assertTrue(packet > 4);
+            assertEquals(packet - 1, pair.server.drainEncryptedTo(new Channel(pair.client::receive), packet - 1));
+            assertEquals(0, output.drainTo(sink, 4));
+            assertFalse(progress.reached(1));
+            assertEquals(1, pair.server.drainEncryptedTo(new Channel(pair.client::receive), 1));
+            assertEquals(4, output.drainTo(sink, 4));
+            assertTrue(progress.reached(4));
+            assertFalse(progress.reached(5));
+            assertFalse(write.isDone(), "The later record still owns the transport write");
+            pair.until(() -> write.isDone() && pair.clientReceived.size() == bytes.length,
+                () -> output.drainTo(sink, 4));
+            write.get();
+            assertTrue(progress.reached(bytes.length));
+            assertArrayEquals(bytes, pair.clientReceived.toByteArray());
+        }
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"TLSv1.2", "TLSv1.3"})
     void applicationDataSurvivesRenegotiationOrKeyUpdate(String protocol) throws Exception {

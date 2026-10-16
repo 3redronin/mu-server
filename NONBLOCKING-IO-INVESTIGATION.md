@@ -889,3 +889,260 @@ request/receive counts are in `nonblocking-validation/final-bulk-comparison/`;
 leak qualification. The supported branch implementation is validated by the
 build, protocol, ownership, cancellation and recovery checks described above;
 application-specific capacity and release criteria remain deployment concerns.
+
+## Native-load performance investigation (17 October 2026)
+
+The native-load comparison in
+`mu-conformance/target/nio-comparison-20261014/report.html` exposes much larger
+channel-transport costs than the earlier Python-driven bulk comparison. That
+original report and its incomplete campaign are preserved. Passing protocol and
+ownership tests does not establish throughput acceptance; the earlier bulk
+figures are not evidence of saturation or parity with the blocking implementation.
+
+The new campaign is in `nonblocking-validation/performance-20261017/` beside the
+repository. It uses frozen source and class inventories, fresh JVMs, native
+h2load 1.70.0, ten seconds of warm-up and twenty seconds of measurement. Server
+CPUs are `0-3,8-11`; generator CPUs are `4-7,12-15`. The server has a 512 MiB
+maximum heap and a 1 GiB cgroup with swap disabled. Body hashes are checked before
+and after each trial, successful statuses and request counts are reconciled, and
+generator saturation and incomplete connection sets exclude speed comparisons.
+Diagnostic JFR runs are separate from throughput trials.
+The host is an AMD Ryzen 9 8945HS on Linux 7.2.5-3-omarchy; each CPU set contains
+four physical cores and both SMT siblings. These are local closed-loop tests at
+fixed concurrency, not fixed offered-rate latency measurements.
+
+Controls separate transport changes from worker policy: starting NIO
+`b1b007232aa882c477b295aee3d96e9db53fc582`, the candidate channel transport, its
+same-source internal socket adapter, and earlier blocking
+`50ad1a7072fffe959770531204a09b2ddd3b4637` run with explicit PLATFORM on Java 21.
+The core workloads repeat in opposite order. Expanded uploads, multipart,
+compression, sequential traffic and pipelining receive exploratory checks;
+Java 25 AUTO and Java 21 explicit VIRTUAL are recorded separately. The primary
+comparison does not mix different worker defaults.
+
+The production changes address measured costs while retaining the existing
+transport and TLS ownership rules:
+
+* Encrypted writes have a bounded 64 KiB drain budget, so an ordinary TLS record
+  is not split merely because its ciphertext is larger than 8 KiB of plaintext.
+  Read readiness is retained until a nonblocking read would block; a transport
+  owner does not wake its own selector when scheduling another turn.
+* Connections are assigned permanently across a configurable readiness group.
+  `withNioThreads(0)` selects `min(4, availableProcessors)` per listener; positive
+  values select an explicit count. TLS delegated tasks still share one bounded
+  two-to-eight-worker pool and 256-task queue per listener. Additional owners
+  improve parallel throughput but can increase CPU cost per request.
+* The output ring has nine bytes of frame-header headroom: 8,201 bytes instead of
+  8,192. A default HTTP/2 DATA chunk can therefore drain without a separate
+  nine-byte plaintext tail and TLS record. Input capacities are unchanged.
+* The HTTP/2 writer reuses encoding scratch from the existing bounded cache of
+  64 idle 16 KiB arrays; an idle writer retains its 256-byte small buffer. Larger
+  individual encodings are discarded after use. Batches combine only ready
+  frames, with a 64-frame limit and an 8 KiB target, and flush before waiting for
+  flow-control credit. GOAWAY and protocol errors remain ordering boundaries.
+* Transport progress records fully drained byte prefixes, including TLS
+  ciphertext. A complete terminal frame can publish its reader-facing fence and
+  complete on the serialized writer while later batch bytes remain pending.
+  Partial frames retain admission; later failures do not undo a drained earlier
+  frame. The shared encoding remains borrowed until the entire transport write
+  is acknowledged, including after cancellation. Progress notifications only
+  schedule work; they do not run application callbacks on the readiness owner.
+* HTTP/1 request preparation uses Mu's own application executor directly, then
+  its existing application-task queue for the handler. A caller-supplied
+  executor retains the protective internal handoff because submission itself
+  can block or execute code. Preparation, rejection writes and cleanup remain
+  off the readiness owner.
+
+Regression coverage includes permanent owner assignment, shared TLS-task
+capacity, selector failure across all owners, retained running handlers,
+fragmented duplex reads, zero and partial output drains, and exact final TLS
+record-byte acknowledgement on TLS 1.2/1.3. HTTP/2 tests hold later batch output
+while earlier frames finish, fail later output before the writer resumes, and
+churn the shared scratch pool while an encoding remains borrowed. These checks
+separate frame publication, task completion and buffer reuse explicitly.
+
+The frozen candidate's production source SHA-256 is
+`1432a813bb5c272e285189d69e798a33ea643f1d2db88c648a3ac6ecb50d495c`.
+Clean `verify` completed on Java 11, 17, 21 and 25. Each run discovered 5,282
+tests with no failures or errors; Java 11 and 17 skipped 176 tests that require
+virtual-thread support, while Java 21 and 25 skipped none. Java 21 also ran the
+NullAway/Error Prone profile. The external functional matrix passed 140 cases
+across those runtimes. All four transfer-pressure runs passed concurrent 8 MiB
+uploads/downloads, cancellation followed by HTTP/2 connection reuse, and graceful
+shutdown with a transfer in progress.
+
+Independent h2spec 2.6.0 passed all 147 cases on each runtime. Autobahn passed
+244 cases per runtime and classified three cases (7.1.6, 7.13.1, 7.13.2) as
+informational. Their behavior, received messages, close codes and clean-close
+flags match the earlier `independent-2eaef` reports. The strict harness exit of
+one and its `candidate_pass: false` remain in the raw results; the separate
+`validated-independent-review.json` records the comparison instead of rewriting
+those outcomes.
+
+Five-minute mixed HTTP/1, HTTPS and HTTP/2 soaks with eight clients completed on
+all four runtimes: 6,000,158 requests on Java 11, 6,184,159 on Java 17, 6,109,221 on
+Java 21 and 5,892,002 on Java 25. No request errors or resource-guard violations
+were reported. These short runs exercise repeated traffic and recovery; they do
+not establish a multi-day leak bound.
+
+The 48 core native trials completed with no correctness failures or generator/
+connection exclusions. Medians of two runs in opposite order, in requests/s:
+
+| Java 21 PLATFORM workload | Starting NIO | Candidate NIO | Ratio | Candidate socket adapter | Earlier blocking |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| HTTP/1, 128 B, 32 connections | 72,007 | 120,955 | 1.68x | 151,308 | 175,787 |
+| HTTP/1, fixed 1 MiB, 8 connections | 1,102 | 2,918 | 2.65x | 6,753 | 6,841 |
+| HTTPS/1, fixed 1 MiB, 8 connections | 486 | 2,190 | 4.50x | 5,176 | 5,227 |
+| TLS HTTP/2, 1 MiB, 8 connections | 326 | 1,211 | 3.71x | 1,794 | 1,807 |
+| HTTP/1, chunked 1 MiB, 8 connections | 1,081 | 2,859 | 2.64x | 6,488 | 4,492 |
+| TLS HTTP/2, 128 B, 1 connection / 32 streams | 55,648 | 139,896 | 2.51x | 162,366 | 170,371 |
+
+Throughput gains do not imply lower CPU cost throughout. CPU microseconds per
+request changed from 41.0 to 53.7 for small HTTP/1 responses, 1,166.8 to 1,711.6
+for fixed HTTP/1 bulk, and 1,217.2 to 1,772.8 for chunked bulk. HTTPS bulk changed
+from 1,985.8 to 2,053.7 and HTTP/2 bulk from 4,270.5 to 4,527.2. Small multiplexed
+HTTP/2 responses improved from 50.0 to 31.8. Small HTTP/1 p99 at saturation also
+rose from approximately 0.74 ms to 1.25 ms. More readiness owners increase useful
+parallelism but can also increase contention and scheduling work. The blocking
+controls still outperform the candidate on these original streaming workloads.
+
+All 112 uninstrumented native trials passed without generator-saturation or
+incomplete-connection exclusions. The 20 additional Java 21 PLATFORM workload
+pairs covered sequential requests, uploads, multipart, compression, pipelining
+and HTTPS chunked output. Candidate/starting throughput ratios ranged from 1.008
+for highly compressible HTTPS to 3.873 for HTTPS chunked output. These are single
+runs: the small differences on compression and sequential HTTP/2 do not establish
+a meaningful gain by themselves.
+
+Java 25 AUTO uses virtual application and internal workers. Its separate
+single-run comparison verified virtual application workers in both NIO versions
+and the explicitly VIRTUAL earlier-blocking control:
+
+| Java 25 workload, as above | Starting NIO AUTO | Candidate NIO AUTO | Earlier blocking VIRTUAL |
+| --- | ---: | ---: | ---: |
+| Small HTTP/1 | 73,364 | 214,777 | 246,990 |
+| Fixed HTTP/1 bulk | 1,017 | 2,949 | 6,492 |
+| Fixed HTTPS/1 bulk | 482 | 2,238 | 5,104 |
+| HTTP/2 bulk | 320 | 1,695 | 2,837 |
+| Chunked HTTP/1 bulk | 1,011 | 2,877 | 4,230 |
+| Multiplexed HTTP/2 | 54,584 | 156,071 | 166,938 |
+
+For small HTTP/1 responses, Java 25 CPU cost fell from 38.5 to 27.6 microseconds
+per request and p99 from 0.724 to 0.508 ms. Explicit Java 21 VIRTUAL runs also
+passed all six core workloads, including 215,854 small HTTP/1 responses/s and
+1,712 HTTP/2 bulk responses/s. These fixture-specific worker-policy comparisons
+remain separate from the repeated PLATFORM controls. Bulk transfers still show
+substantial gaps to the earlier blocking implementation.
+
+Both separate diagnostic JFR runs passed, peaking at approximately 685 and
+696 MiB under the 1 GiB cgroup limit. Instrumentation substantially reduced
+throughput; those rates are excluded from the performance comparisons.
+Normalizing the byte-array allocation sample weights by completed responses in
+each recording gives approximately 1,249,000 bytes per HTTP/2 bulk response for
+starting NIO and 108,000 for the candidate. These are sampled allocation weights,
+not retained heap. Recorded blocking-write park starts remain approximately
+129 and 126 per bulk response: reusing encodings removes allocation pressure,
+but the original application's 8 KiB write loop still imposes many handoffs.
+Small HTTP/1 executor-idle park starts in the recorded leading sites fell from
+approximately 5.0 to 3.9 per response. Park durations are clipped to their overlap
+with the measurement window; profiles are not used as clean throughput results.
+
+All 24 idle-capacity cases passed: one and 1,024 connections for HTTP/1, HTTPS/1
+and TLS HTTP/2 on each runtime. Every target connection remained open throughout
+the ten-second warm-up and thirty-second hold, then answered its final reuse
+probe. The 1,024-connection cases consumed approximately 0.010–0.011 CPU cores
+during the hold. Java platform-thread counts and process RSS after that hold:
+
+| Runtime | HTTP/1 threads / MiB | HTTPS/1 threads / MiB | HTTP/2 threads / MiB |
+| --- | ---: | ---: | ---: |
+| Java 11 | 47 / 138.0 | 98 / 252.0 | 120 / 254.6 |
+| Java 17 | 46 / 138.7 | 85 / 245.5 | 97 / 249.9 |
+| Java 21 | 47 / 133.8 | 99 / 256.4 | 92 / 262.4 |
+| Java 25 | 26 / 130.8 | 34 / 228.6 | 34 / 235.3 |
+
+ThreadMXBean counts Java platform threads, excluding native GC/JIT workers.
+Cached workers created during connection setup can remain alive through this
+hold; these counts do not imply permanently assigned connection workers. RSS
+includes JVM and setup allocations, so its difference from the one-connection
+control is not an exact retained-memory cost per connection.
+
+An additional Java 11 HTTPS run held 1,024 connections for ninety seconds after
+the ten-second warm-up. Java platform threads fell from 126 to 26 as cached
+workers expired; all 1,024 connections stayed open and answered their final
+reuse probes. No request errors or resource violations were reported. This
+checks idle worker retirement and connection retention, not long-term heap
+reclamation.
+
+All 27 additional write-granularity trials passed without generator or
+connection exclusions. They use the same 1 MiB payload, eight connections and
+Java 21 PLATFORM, with three separate fixture variants: one blocking write,
+one `AsyncHandle.write` followed by `complete`, and the original 8 KiB loop using
+the existing explicit `response.outputStream(65536)` option. Each variant
+preallocates two additional immutable 1 MiB payload arrays in every control JVM.
+Single-run throughput, in requests/s:
+
+| Protocol / write mode | Starting NIO | Candidate NIO | Earlier blocking |
+| --- | ---: | ---: | ---: |
+| HTTP/1 / whole | 1,243 | 4,538 | 18,111 |
+| HTTP/1 / async | 987 | 2,459 | 17,476 |
+| HTTP/1 / buffered 64 KiB | 1,212 | 3,948 | 14,806 |
+| HTTPS/1 / whole | 554 | 3,532 | 7,814 |
+| HTTPS/1 / async | 466 | 1,813 | 7,628 |
+| HTTPS/1 / buffered 64 KiB | 530 | 3,185 | 6,782 |
+| HTTP/2 / whole | 388 | 1,517 | 2,059 |
+| HTTP/2 / async | 329 | 1,117 | 1,974 |
+| HTTP/2 / buffered 64 KiB | 370 | 1,330 | 2,024 |
+
+Larger blocking writes reduce handoff costs: candidate CPU per response was
+606 microseconds for whole HTTP/1 and 825 for whole HTTPS, compared with 1,712
+and 2,054 in the original streaming workload. The async path still renders in
+8 KiB source turns and drains bounded captures; one large public async write
+does not translate into one transport submission. HTTP/2 whole and buffered
+output spent 2,438 and 3,403 milliseconds in GC respectively during their
+twenty-second measurements. A full 16 KiB DATA payload plus its nine-byte header
+exceeds the current scratch-cache size; the following experiment measures that
+allocation boundary separately. These diagnostic API variants do not replace
+the primary streaming workload or change application buffer defaults.
+
+All 24 matched-rate trials passed and achieved their requested aggregate rates
+within 5%. These use h2load's per-client rate control, the original streaming
+fixture and Java 21 PLATFORM. Each workload has two offered rates and one run
+per source/rate. The higher rate in each pair gives:
+
+| Workload / requested responses/s | CPU microseconds/response, starting → candidate | p99 ms, starting → candidate |
+| --- | ---: | ---: |
+| Small HTTP/1 / 50,000 | 42.1 → 54.6 | 0.849 → 1.009 |
+| Multiplexed HTTP/2 / 40,000 | 51.1 → 33.9 | 1.022 → 0.741 |
+| HTTPS bulk / 384 | 2,066.7 → 2,143.8 | 13.052 → 3.253 |
+| HTTP/2 bulk / 256 | 4,407.5 → 4,072.3 | 22.668 → 5.464 |
+| Fixed HTTP/1 bulk / 768 | 1,228.5 → 1,738.9 | 8.492 → 3.687 |
+| Chunked HTTP/1 bulk / 768 | 1,268.2 → 1,800.1 | 8.598 → 3.816 |
+
+Thus the greater maximum throughput does not erase the HTTP/1 CPU tradeoff at
+matched load. Multiplexed HTTP/2 improves CPU and latency in these checks;
+HTTPS bulk substantially improves latency at similar CPU cost. These exploratory
+rate-controlled measurements are not an overload SLA or confidence intervals.
+The report retains every raw trial, including the lower offered-rate cases.
+
+Twelve further rate-controlled trials changed only the candidate's
+`withNioThreads` setting to one or two. All passed and reached their requested
+rates. CPU microseconds per response, including the four-owner controls above:
+
+| Workload / requested responses/s | Starting NIO | Candidate, one owner | Two owners | Four owners |
+| --- | ---: | ---: | ---: | ---: |
+| Small HTTP/1 / 20,000 | 45.6 | 40.1 | 52.5 | 62.8 |
+| Small HTTP/1 / 50,000 | 42.1 | 35.7 | 45.6 | 54.6 |
+| HTTPS bulk / 384 | 2,066.7 | 1,555.1 | 1,825.5 | 2,143.8 |
+| Multiplexed HTTP/2 / 40,000 | 51.1 | 33.8 | 33.9 | 33.9 |
+| Fixed HTTP/1 bulk / 768 | 1,228.5 | 1,107.4 | 1,299.5 | 1,738.9 |
+| Chunked HTTP/1 bulk / 768 | 1,268.2 | 1,120.4 | 1,315.8 | 1,800.1 |
+
+The CPU increase on these HTTP/1 workloads is largely a parallelism tradeoff.
+With one owner, the candidate uses less CPU than starting NIO at all six offered
+loads. HTTPS bulk p99 is 6.464 ms with one owner, 5.436 with two and 3.253 with
+four; small HTTP/1 at 50,000 responses/s gives 0.750, 0.690 and 1.009 ms
+respectively. A single HTTP/2 connection does not use multiple readiness owners.
+The default remains capped at four to retain the parallel-throughput gains;
+`withNioThreads(1)` offers a measured lower-CPU configuration on this host. The
+choice is workload-dependent, and these single-run controls do not establish a
+universal optimum.

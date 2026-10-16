@@ -48,6 +48,7 @@ public class MuServerBuilder {
     private int maxConcurrentRequests = 1000;
     private int maxConnections;
     private int listenBacklog = 50;
+    private int nioThreads;
     ExecutionResources.Factory executionResourcesFactory = ExecutionResources::create;
     // The socket adapter remains available internally for compatibility and fault-injection tests.
     boolean useChannelTransport = true;
@@ -396,14 +397,16 @@ public class MuServerBuilder {
     }
 
     /**
-     * Obsolete. Throws {@link UnsupportedOperationException}
-     * @param nioThreads ignored
-     * @return Does not return
-     * @deprecated NIO threads are no longer used
+     * Sets the number of transport threads per listener. Each connection remains on one thread
+     * for socket readiness and TLS processing; application handlers use their separate executor.
+     * Zero (the default) selects the smaller of four and the available processor count.
+     * @param nioThreads a positive thread count, or zero for automatic selection
+     * @return this builder
      */
-    @Deprecated
     public MuServerBuilder withNioThreads(int nioThreads) {
-        throw new UnsupportedOperationException("This is obsolete");
+        if (nioThreads < 0) throw new IllegalArgumentException("NIO thread count cannot be negative");
+        this.nioThreads = nioThreads;
+        return this;
     }
 
     /**
@@ -745,13 +748,13 @@ public class MuServerBuilder {
     /**
      * Gets the configured number of NIO threads.
      *
-     * @return Always returns <code>0</code> because NIO thread configuration is obsolete.
-     * @deprecated There are no long nio threads in use
+     * @return the configured count per listener, or zero for automatic selection
      */
-    @Deprecated
     public int nioThreads() {
-        return 0;
+        return nioThreads;
     }
+
+    int channelThreads() { return nioThreads == 0 ? Math.min(4, Runtime.getRuntime().availableProcessors()) : nioThreads; }
 
     /**
      * Gets the request handlers registered with this builder.

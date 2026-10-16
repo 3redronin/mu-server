@@ -41,6 +41,14 @@ class Http2Stream implements ResponseInfo {
     // Writer-published after the complete END_STREAM frame is handed to output
     // and before flush, matching the stream-admission publication boundary.
     private volatile boolean localEndStreamPublished;
+    private volatile @Nullable EndStreamProgress localEndStreamProgress;
+
+    private static final class EndStreamProgress {
+        final TransportWriteProgress write;
+        final int offset;
+        EndStreamProgress(TransportWriteProgress write, int offset) { this.write = write; this.offset = offset; }
+        boolean reached() { return write.reached(offset); }
+    }
     // Unlike publication for stream admission, successful delivery requires flush to finish.
     private volatile boolean localEndStreamWritten;
     // Guarded by this stream's monitor. A peer can read END_STREAM before write/flush returns.
@@ -139,6 +147,11 @@ class Http2Stream implements ResponseInfo {
 
     void onLocalEndStreamPublished() {
         localEndStreamPublished = true;
+        localEndStreamProgress = null;
+    }
+
+    void publishLocalEndStreamAfter(TransportWriteProgress write, int offset) {
+        localEndStreamProgress = new EndStreamProgress(write, offset);
     }
 
     synchronized void onLocalEndStreamWriting() {
@@ -181,9 +194,10 @@ class Http2Stream implements ResponseInfo {
 
     /** Whether the protocol stream still occupies a concurrency slot. */
     boolean countsAsConcurrentProtocolStream() {
+        EndStreamProgress progress = localEndStreamProgress;
         return !protocolStateClosed
             && !peerResetRead
-            && !(remoteEndStreamRead && localEndStreamPublished);
+            && !(remoteEndStreamRead && (localEndStreamPublished || (progress != null && progress.reached())));
     }
 
     void onProtocolStreamRetired() {

@@ -13,4 +13,12 @@ import java.util.concurrent.CompletableFuture;
 @FunctionalInterface
 interface AsyncTransportOutput {
     CompletableFuture<@Nullable Void> write(ByteBuffer source) throws IOException;
+
+    /** A transport may publish consumed prefixes before the complete write is acknowledged. */
+    default CompletableFuture<@Nullable Void> write(ByteBuffer source, TransportWriteProgress progress) throws IOException {
+        int count = source.remaining();
+        return write(source).whenComplete((ignored, failure) -> {
+            if (failure == null) progress.consumed(count);
+        });
+    }
 }

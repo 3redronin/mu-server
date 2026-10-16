@@ -42,7 +42,7 @@ class ConnectionAcceptor {
     private final ExecutorService connectionExecutor;
     private final ExecutorService http2WriterExecutor;
     private final List<ContentEncoder> contentEncoders;
-    private final @Nullable ChannelTransportLoop channelLoop;
+    private final @Nullable ChannelTransportGroup channelLoop;
 
     public boolean isHttps() {
         return isHttps;
@@ -126,7 +126,7 @@ class ConnectionAcceptor {
                        @Nullable HttpsConfig httpsConfig, @Nullable Http2Config http2Config,
                        ExecutorService handlerExecutor, ExecutorService connectionExecutor,
                        ExecutorService http2WriterExecutor,
-                       List<ContentEncoder> contentEncoders) throws IOException {
+                       List<ContentEncoder> contentEncoders, int channelThreads) throws IOException {
         this.server = server;
         HAProxyProtocolConfig config = server.haProxyProtocolConfig;
         this.proxyConfig = config != null && config.enabled() ? config : null;
@@ -141,7 +141,7 @@ class ConnectionAcceptor {
         this.contentEncoders = contentEncoders;
         this.isHttps = httpsConfig != null;
         this.acceptorThread = new Thread(this::acceptLoop, toString());
-        this.channelLoop = socketServer.getChannel() == null ? null : new ChannelTransportLoop(this, server, proxyConfig);
+        this.channelLoop = socketServer.getChannel() == null ? null : new ChannelTransportGroup(this, server, proxyConfig, channelThreads);
     }
 
 
@@ -763,7 +763,7 @@ class ConnectionAcceptor {
         ExecutorService connectionExecutor,
         ExecutorService http2WriterExecutor,
         List<ContentEncoder> contentEncoders,
-        boolean useChannels) throws IOException {
+        boolean useChannels, int channelThreads) throws IOException {
 
         ServerSocket socketServer = useChannels ? ServerSocketChannel.open().socket() : new ServerSocket();
         try {
@@ -775,7 +775,7 @@ class ConnectionAcceptor {
 
             return new ConnectionAcceptor(server, socketServer,
                 (InetSocketAddress) socketServer.getLocalSocketAddress(),
-                uri, httpsConfig, h2Config, handlerExecutor, connectionExecutor, http2WriterExecutor, contentEncoders);
+                uri, httpsConfig, h2Config, handlerExecutor, connectionExecutor, http2WriterExecutor, contentEncoders, channelThreads);
         } catch (IOException | RuntimeException | Error creationFailure) {
             try {
                 socketServer.close();

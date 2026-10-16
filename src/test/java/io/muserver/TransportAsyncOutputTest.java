@@ -16,14 +16,16 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Timeout(10)
 class TransportAsyncOutputTest {
-    @ParameterizedTest @CsvSource({"1,1", "1,8192", "7,1", "7,3", "7,8192", "8192,1", "8192,3", "8192,8192"})
+    @ParameterizedTest @CsvSource({"1,1", "1,8192", "7,1", "7,3", "7,8192", "8192,1", "8192,3", "8192,8192",
+        "8201,1", "8201,8192", "8201,8201"})
     void partialDrainsCopyOnlyBoundedChunksAndCompleteAfterTheLastByte(int capacity, int budget) throws Exception {
         var output = new TransportOutputBuffer(capacity, () -> {});
         var writer = output.asynchronousWriter();
         byte[] bytes = new byte[20003];
         new Random(123).nextBytes(bytes);
         ByteBuffer source = ByteBuffer.allocateDirect(bytes.length + 4).position(2).put(bytes).flip().position(2).asReadOnlyBuffer();
-        var completed = writer.write(source);
+        var progress = new TransportWriteProgress(() -> {});
+        var completed = writer.write(source, progress);
         assertFalse(completed.isDone());
         var received = new ByteArrayOutputStream();
         var sink = new WritableByteChannel() {
@@ -42,6 +44,8 @@ class TransportAsyncOutputTest {
             assertTrue(++turns < 100000);
             assertTrue(output.pendingBytes() <= capacity);
             output.drainTo(sink, budget);
+            assertTrue(progress.reached(received.size()));
+            assertFalse(progress.reached(received.size() + 1), "Copying into the ring must not publish consumption");
             if (received.size() < bytes.length) assertFalse(completed.isDone());
         }
         completed.get();
@@ -49,6 +53,33 @@ class TransportAsyncOutputTest {
         assertEquals(2, source.position(), "The transport uses its own source view");
         assertEquals(0, output.pendingBytes());
         assertTrue(writer.write(ByteBuffer.allocate(0)).isDone());
+    }
+
+    @Test
+    void progressNotificationRunsOutsideTheRingLockAndDoesNotAcknowledgeTheRemainingSource() throws Exception {
+        var output = new TransportOutputBuffer(7, () -> {});
+        var check = Executors.newSingleThreadExecutor();
+        try {
+            var notifications = new java.util.concurrent.atomic.AtomicInteger();
+            var progress = new TransportWriteProgress(() -> {
+                try { check.submit(output::pendingBytes).get(2, TimeUnit.SECONDS); }
+                catch (Exception e) { throw new AssertionError("Progress notification held ring storage", e); }
+                notifications.incrementAndGet();
+            });
+            progress.awaitOffset(3);
+            var write = output.asynchronousWriter().write(ByteBuffer.wrap(new byte[19]), progress);
+            var sink = new TransportOutputBufferTest.Sink(2);
+            output.drainTo(sink, 7);
+            assertEquals(0, notifications.get());
+            output.drainTo(sink, 7);
+            assertEquals(1, notifications.get());
+            assertTrue(progress.reached(4));
+            assertFalse(progress.reached(5));
+            assertFalse(write.isDone());
+            output.fail(new IOException("Abort after a drained prefix"));
+            assertThrows(ExecutionException.class, write::get);
+            assertFalse(progress.reached(5));
+        } finally { check.shutdownNow(); }
     }
 
     @ParameterizedTest @CsvSource({"7,7", "7,25", "8192,8192", "8192,20003"})

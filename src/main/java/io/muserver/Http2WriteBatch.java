@@ -65,11 +65,19 @@ final class Http2WriteBatch extends OutputStream {
 
     private void grow(int required) {
         if (required > buffer.length) {
-            byte[] scratch = SCRATCH_BUFFERS.poll();
-            if (scratch == null) scratch = new byte[MAX_BYTES];
+            byte[] scratch = acquireScratch();
             System.arraycopy(buffer, 0, scratch, 0, count);
             buffer = scratch;
         }
+    }
+
+    static byte[] acquireScratch() {
+        byte[] scratch = SCRATCH_BUFFERS.poll();
+        return scratch == null ? new byte[MAX_BYTES] : scratch;
+    }
+
+    static void releaseScratch(byte[] scratch) {
+        if (scratch.length == MAX_BYTES) SCRATCH_BUFFERS.offer(scratch);
     }
 
     /** Return scratch only after transport output has relinquished its ownership. */
@@ -78,7 +86,7 @@ final class Http2WriteBatch extends OutputStream {
         if (buffer.length == MAX_BYTES) {
             byte[] scratch = buffer;
             buffer = smallBuffer;
-            SCRATCH_BUFFERS.offer(scratch);
+            releaseScratch(scratch);
         }
     }
 

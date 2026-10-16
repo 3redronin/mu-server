@@ -208,13 +208,17 @@ class Mu3ServerImpl implements MuServer {
 
     /** Nested application work is queued to avoid recursive callback delivery. */
     @Nullable RejectedExecutionException tryExecuteHandlerTask(Runnable task) {
+        return tryExecuteHandlerTask(executionResources.application, task);
+    }
+
+    @Nullable RejectedExecutionException tryExecuteHandlerTask(ExecutorService executor, Runnable task) {
         ApplicationTaskContext current = applicationTaskContext.get();
         if (current != null) {
             current.tasks.add(task);
             return null;
         }
         try {
-            executionResources.application.execute(handlerApplicationTask(task));
+            executor.execute(handlerApplicationTask(task));
             return null;
         } catch (RejectedExecutionException rejected) {
             return rejected;
@@ -228,6 +232,15 @@ class Mu3ServerImpl implements MuServer {
 
     void executeInternalTask(Runnable task) {
         executionResources.internal.execute(task);
+    }
+
+    void executeRequestPreparation(Runnable task) {
+        // Mu's own executor never runs submitted tasks on the caller. Preparing the
+        // request there also lets its handler use the same application-task trampoline.
+        // A supplied executor may block or execute inline, so submit to it off the I/O owner.
+        if (executionResources.ownsApplication()) {
+            executionResources.application.execute(handlerApplicationTask(task));
+        } else executeInternalTask(task);
     }
 
     Runnable handlerApplicationTask(Runnable task) {
@@ -642,7 +655,7 @@ class Mu3ServerImpl implements MuServer {
                     connectionExecutor,
                     http2WriterExecutor,
                     contentEncoders,
-                    builder.useChannelTransport
+                    builder.useChannelTransport, builder.channelThreads()
                 );
                 acceptors.add(acceptor);
                 httpsConfig.setHttpsUri(acceptor.uri());
@@ -659,7 +672,7 @@ class Mu3ServerImpl implements MuServer {
                     connectionExecutor,
                     http2WriterExecutor,
                     contentEncoders,
-                    builder.useChannelTransport
+                    builder.useChannelTransport, builder.channelThreads()
                 ));
             }
             impl.startListening();

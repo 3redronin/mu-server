@@ -206,7 +206,7 @@ class Http1Connection extends BaseHttpConnection {
         try {
             // Submitting to a user-supplied handler executor can itself run application code.
             // Keep preparation, submission, rejection writes and body cleanup off the selector.
-            server.executeInternalTask(() -> {
+            server.executeRequestPreparation(() -> {
                 if (closed.get()) {
                     completion.complete(new ExchangeResult(true, null));
                     return;
@@ -625,7 +625,7 @@ class Http1Connection extends BaseHttpConnection {
         if (!server.tryAdmit(request)) return CompletableFuture.completedFuture(false);
         CompletableFuture<Boolean> completion = new CompletableFuture<>();
         try {
-            handlerExecutor.execute(server.handlerApplicationTask(() -> {
+            RejectedExecutionException rejected = server.tryExecuteHandlerTask(handlerExecutor, () -> {
                 try {
                     if (closed.get()) response.setState(ResponseState.CLIENT_DISCONNECTED);
                     CompletableFuture<@Nullable Void> async = response.responseState().endState() ? null : handleExchange(request, response);
@@ -650,7 +650,8 @@ class Http1Connection extends BaseHttpConnection {
                     completion.completeExceptionally(error);
                     FatalErrors.rethrow(error);
                 }
-            }));
+            });
+            if (rejected != null) completion.complete(false);
         } catch (RejectedExecutionException rejected) {
             completion.complete(false);
         }

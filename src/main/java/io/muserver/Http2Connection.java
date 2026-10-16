@@ -1568,16 +1568,22 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
     /** Serialized by writerTaskScheduled; no worker remains assigned during socket/TLS backpressure. */
     private final class AsyncWriteDriver {
         private final AsyncTransportOutput output;
-        private @Nullable BatchFrame current;
+        private final Http2FrameBuffer encoded = new Http2FrameBuffer();
+        private final ArrayList<BatchFrame> batch = new ArrayList<>();
+        private Http2WriteCoordinator.@Nullable WritableFrame deferred;
         private volatile @Nullable CompletableFuture<@Nullable Void> pending;
+        private volatile @Nullable TransportWriteProgress pendingProgress;
         private volatile boolean yielded;
-        private int pendingBytes;
+        private int completedFrames;
+        private int completedBytes;
 
         private AsyncWriteDriver(AsyncTransportOutput output) { this.output = output; }
 
         private boolean ready() {
             CompletableFuture<?> write = pending;
-            return write == null ? yielded || !lifecycle.writeState.canSendFrames : write.isDone();
+            TransportWriteProgress progress = pendingProgress;
+            return write == null ? yielded || !lifecycle.writeState.canSendFrames
+                : write.isDone() || (progress != null && progress.ready());
         }
 
         private void run() throws IOException {
@@ -1586,47 +1592,90 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                 writeCoordinator.processAvailableCommands();
                 CompletableFuture<?> write = pending;
                 if (write != null) {
-                    if (!write.isDone()) return;
+                    boolean done = write.isDone();
+                    TransportWriteProgress progress = Objects.requireNonNull(pendingProgress);
+                    while (completedFrames < batch.size()) {
+                        BatchFrame completed = batch.get(completedFrames);
+                        if (!progress.reached((int) completed.endOffset)) break;
+                        onBytesSent((int) completed.endOffset - completedBytes);
+                        completedBytes = (int) completed.endOffset;
+                        completed.candidate.publishAfterWrite(completed.frame);
+                        completeFrame(completed);
+                        completedFrames++;
+                    }
+                    progress.awaitOffset(completedFrames == batch.size() ? 0 : (int) batch.get(completedFrames).endOffset);
+                    if (!done) return;
+                    // A later write failure cannot undo a prefix that already drained, even
+                    // when this writer only observes both events on the same scheduled turn.
                     checkCompletedWrite(write);
-                    onBytesSent(pendingBytes);
-                    BatchFrame completed = Objects.requireNonNull(current);
-                    completed.candidate.publishAfterWrite(completed.frame);
-                    completeFrame(completed);
                     pending = null;
-                    current = null;
+                    pendingProgress = null;
+                    completedFrames = completedBytes = 0;
+                    batch.clear();
+                    encoded.release();
                 }
                 if (!lifecycle.writeState.canSendFrames) {
                     finishWriteLoop(new IOException("HTTP/2 connection write loop closed"));
                     return;
                 }
-                Http2WriteCoordinator.WritableFrame candidate = writeCoordinator.pollWritable();
-                if (candidate == null) {
+                boolean exhausted = true;
+                var progress = new TransportWriteProgress(Http2Connection.this::requestWriteRun);
+                for (int count = 0; count < MAX_WRITE_BATCH_FRAMES; count++) {
+                    Http2WriteCoordinator.WritableFrame candidate = deferred;
+                    deferred = null;
+                    if (candidate == null) {
+                        candidate = writeCoordinator.pollWritable();
+                        if (candidate == null) { exhausted = false; break; }
+                        if (!candidate.beginWrite()) continue;
+                    }
+                    Http2Exception protocolError = candidate.protocolError();
+                    if (protocolError != null && !batch.isEmpty()) {
+                        // Keep the already-claimed error in flight while preceding bytes drain.
+                        // Preparing it can terminate streams and must not overtake that output.
+                        deferred = candidate;
+                        break;
+                    }
+                    LogicalHttp2Frame frame = protocolError == null ? candidate.frame() : prepareCoordinatorErrorFrame(protocolError);
+                    PendingSettingsAck ack = frame instanceof Http2Settings && !((Http2Settings) frame).isAck
+                        ? registerPendingSettingsAck() : null;
+                    var entry = new BatchFrame(candidate, frame, ack);
+                    batch.add(entry);
+                    if (frame instanceof Http2WindowUpdate) {
+                        Http2WindowUpdate update = (Http2WindowUpdate) frame;
+                        inboundFlowControl.windowUpdateWriting(update.streamId(), update.windowSizeIncrement());
+                    }
+                    // Own the encoding, including any caller buffers that encoders may reuse.
+                    frame.writeTo(Http2Connection.this, encoded);
+                    entry.endOffset = encoded.size();
+                    candidate.publishAsTransportDrains(frame, progress, encoded.size());
+                    // Only combine already-ready frames. Bound frame count and encoded bytes;
+                    // a single large logical frame is still permitted, as before batching.
+                    if (encoded.size() >= 8192 || frame instanceof Http2GoAway || protocolError != null) break;
+                }
+                if (batch.isEmpty()) {
+                    if (exhausted) { yielded = true; return; }
                     if (nextWriteAction()) continue;
                     if (!lifecycle.writeState.canSendFrames) finishWriteLoop(new IOException("HTTP/2 connection write loop closed"));
                     return;
                 }
-                if (!candidate.beginWrite()) continue;
-                Http2Exception protocolError = candidate.protocolError();
-                LogicalHttp2Frame frame = protocolError == null ? candidate.frame() : prepareCoordinatorErrorFrame(protocolError);
-                PendingSettingsAck ack = frame instanceof Http2Settings && !((Http2Settings) frame).isAck
-                    ? registerPendingSettingsAck() : null;
-                current = new BatchFrame(candidate, frame, ack);
-                if (frame instanceof Http2WindowUpdate) {
-                    Http2WindowUpdate update = (Http2WindowUpdate) frame;
-                    inboundFlowControl.windowUpdateWriting(update.streamId(), update.windowSizeIncrement());
-                }
-                // OutputStream encoders may reuse their arrays as soon as write() returns.
-                // Own this encoding, rather than retaining borrowed frame/caller storage.
-                var encoded = new NiceByteArrayOutputStream(256);
-                frame.writeTo(Http2Connection.this, encoded);
-                pendingBytes = encoded.size();
-                pending = output.write(ByteBuffer.wrap(encoded.rawBuffer(), 0, encoded.size()));
+                pendingProgress = progress;
+                progress.awaitOffset((int) batch.get(0).endOffset);
+                pending = output.write(ByteBuffer.wrap(encoded.rawBuffer(), 0, encoded.size()), progress);
                 pending.whenComplete((ignored, failure) -> requestWriteRun());
+                // One bounded batch per turn, including transports that complete synchronously.
+                return;
             }
             yielded = true;
         }
 
-        private void discard() { pending = null; current = null; pendingBytes = 0; }
+        private void discard() {
+            pending = null;
+            pendingProgress = null;
+            batch.clear();
+            deferred = null;
+            completedFrames = completedBytes = 0;
+            encoded.discard();
+        }
     }
 
     private void scheduleFinalGoAwayWakeLocked(long delayNanos) {

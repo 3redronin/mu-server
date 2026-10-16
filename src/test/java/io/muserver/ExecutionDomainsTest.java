@@ -62,6 +62,73 @@ class ExecutionDomainsTest {
     private @Nullable MuServer server;
     private final List<ExecutorService> executors = new ArrayList<>();
 
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void requestPreparationUsesOnlyTheOwnedApplicationExecutorDirectly(boolean owned) throws Exception {
+        var internal = track(new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS,
+            new java.util.concurrent.LinkedBlockingQueue<>(), namedThreads("preparation-internal-")));
+        var application = track(Executors.newSingleThreadExecutor(namedThreads("preparation-application-")));
+        var timer = Executors.newSingleThreadScheduledExecutor();
+        executors.add(timer);
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var handled = new CompletableFuture<String>();
+        internal.submit(() -> { entered.countDown(); release.await(); return null; });
+        assertThat(entered.await(5, TimeUnit.SECONDS), is(true));
+        // Keep periodic maintenance out of the deliberately blocked request-preparation queue.
+        var builder = httpServer().withIdleTimeout(0, TimeUnit.MILLISECONDS);
+        builder.executionResourcesFactory = (supplied, mode) -> new ExecutionResources(application, owned, internal, timer);
+        server = builder.addHandler((request, response) -> {
+            handled.complete(Thread.currentThread().getName());
+            response.status(204);
+            return true;
+        }).start();
+        try (var client = new Socket(server.uri().getHost(), server.uri().getPort())) {
+            client.setSoTimeout(5000);
+            client.getOutputStream().write("GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
+            if (owned) {
+                assertThat(handled.get(5, TimeUnit.SECONDS), startsWith("preparation-application-"));
+            } else {
+                assertEventually(() -> internal.getQueue().size(), is(1));
+                assertThat(handled.isDone(), is(false));
+            }
+            release.countDown();
+            assertThat(handled.get(5, TimeUnit.SECONDS), startsWith("preparation-application-"));
+            assertThat(new String(client.getInputStream().readAllBytes(), StandardCharsets.US_ASCII), startsWith("HTTP/1.1 204"));
+        } finally { release.countDown(); }
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void stoppedConnectionCannotRunQueuedRequestPreparation(boolean owned) throws Exception {
+        var internal = track(new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS,
+            new java.util.concurrent.LinkedBlockingQueue<>(), namedThreads("stopped-internal-")));
+        var application = track(new ThreadPoolExecutor(1, 1, 0, TimeUnit.SECONDS,
+            new java.util.concurrent.LinkedBlockingQueue<>(), namedThreads("stopped-application-")));
+        var timer = Executors.newSingleThreadScheduledExecutor();
+        executors.add(timer);
+        var preparation = owned ? application : internal;
+        var entered = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        var handled = new AtomicInteger();
+        preparation.submit(() -> { entered.countDown(); release.await(); return null; });
+        assertThat(entered.await(5, TimeUnit.SECONDS), is(true));
+        // Keep periodic maintenance out of the deliberately blocked request-preparation queue.
+        var builder = httpServer().withIdleTimeout(0, TimeUnit.MILLISECONDS);
+        builder.executionResourcesFactory = (supplied, mode) -> new ExecutionResources(application, owned, internal, timer);
+        server = builder.addHandler((request, response) -> { handled.incrementAndGet(); return true; }).start();
+        try (var client = new Socket(server.uri().getHost(), server.uri().getPort())) {
+            client.setSoTimeout(5000);
+            client.getOutputStream().write("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
+            assertEventually(() -> preparation.getQueue().size(), is(1));
+            server.stop(0, TimeUnit.SECONDS);
+            assertThat(client.getInputStream().read(), is(-1));
+            release.countDown();
+            MuServer stopped = server;
+            assertEventually(() -> stopped.stats().activeConnections(), is(0L));
+            assertThat(handled.get(), is(0));
+            assertThat(server.stats().completedRequests(), is(0L));
+        } finally { release.countDown(); }
+    }
+
     @Test
     void anAcceptedConnectionQueuedBeforeStopCannotStartAfterStop() throws Exception {
         var connectionExecutor = track(new ThreadPoolExecutor(

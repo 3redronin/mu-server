@@ -218,6 +218,200 @@ class Http2ReadDriverTest {
         }
     }
 
+    @ParameterizedTest @CsvSource({"1,false", "3,false", "70,false", "3,true", "70,true"})
+    void readyAsyncFramesShareBoundedWritesAndTheirTransportOutcome(int taskCount, boolean fail) throws Exception {
+        try (var fixture = new Fixture((req, res) -> true)) {
+            Session session = fixture.add(1024, true);
+            session.offer(preface());
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.completeOutput();
+            fixture.barrier();
+            var release = new CountDownLatch(1);
+            fixture.internal.submit(() -> { release.await(); return null; });
+            var tasks = new ArrayList<WriteTask>();
+            try {
+                for (int i = 0; i < taskCount; i++) {
+                    var task = new WriteTask(new Http2Ping(true, new byte[]{(byte) i, 0, 0, 0, 0, 0, 0, 0}), true);
+                    tasks.add(task);
+                    session.connection.write(task);
+                }
+            } finally { release.countDown(); }
+            for (int start = 0; start < taskCount; start += 64) {
+                fixture.until(() -> !session.pendingOutput.isEmpty());
+                fixture.barrier();
+                int count = Math.min(64, taskCount - start);
+                assertEquals(count * 17, session.pendingOutput.peek().bytes.remaining());
+                for (int i = start; i < taskCount; i++) assertFalse(tasks.get(i).completion().isDone());
+                if (fail) {
+                    session.failOutput();
+                    for (var task : tasks) assertThrows(ExecutionException.class,
+                        () -> task.completion().get(3, TimeUnit.SECONDS));
+                    break;
+                }
+                session.completeOutput();
+                for (int i = start; i < start + count; i++) tasks.get(i).completion().get(3, TimeUnit.SECONDS);
+            }
+            fixture.barrier();
+            assertTrue(session.pendingOutput.isEmpty());
+            if (!fail) {
+                byte[] wire = session.output.toByteArray();
+                for (int i = 0; i < taskCount; i++) assertEquals((byte) i, wire[48 + i * 17 + 9]);
+            }
+        }
+    }
+
+    @Test
+    void asyncBatchFlushesReadyFramesBeforeWaitingForAnotherStreamsCredit() throws Exception {
+        try (var fixture = new Fixture((req, res) -> true)) {
+            Session session = fixture.add(1024, true);
+            session.offer(preface());
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.completeOutput();
+            fixture.barrier();
+            var release = new CountDownLatch(1);
+            fixture.internal.submit(() -> { release.await(); return null; });
+            var coordinator = session.connection.testProbe().coordinator();
+            var fields = new FieldBlock(); fields.set(":status", "200");
+            var headers = new WriteTask(new Http2HeadersFrame(1, false, fields), true);
+            var body = new WriteTask(new Http2DataFrame(1, true, new byte[]{42}, 0, 1), true);
+            var ping = new WriteTask(new Http2Ping(true, new byte[8]), true);
+            try {
+                coordinator.openStream(1, 0);
+                session.connection.write(headers);
+                session.connection.write(body);
+                session.connection.write(ping);
+            } finally { release.countDown(); }
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            fixture.barrier();
+            ByteBuffer encoded = session.pendingOutput.peek().bytes.duplicate();
+            byte[] bytes = new byte[encoded.remaining()]; encoded.get(bytes);
+            assertTrue(containsFrame(bytes, Http2FrameType.HEADERS, 4));
+            assertTrue(containsFrame(bytes, Http2FrameType.PING, 1));
+            assertFalse(headers.completion().isDone());
+            assertFalse(ping.completion().isDone());
+            session.completeOutput();
+            headers.completion().get(3, TimeUnit.SECONDS);
+            ping.completion().get(3, TimeUnit.SECONDS);
+            fixture.barrier();
+            assertTrue(session.pendingOutput.isEmpty());
+            assertFalse(body.completion().isDone());
+            coordinator.applyStreamWindowUpdate(1, 1);
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            assertEquals(10, session.pendingOutput.peek().bytes.remaining());
+            session.completeOutput();
+            body.completion().get(3, TimeUnit.SECONDS);
+        }
+    }
+
+    @Test
+    void completingABatchPrefixDoesNotRecycleTheBorrowedEncoding() throws Exception {
+        try (var fixture = new Fixture((req, res) -> true)) {
+            Session session = fixture.add(1024, true);
+            session.offer(preface());
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.completeOutput();
+            fixture.barrier();
+            var release = new CountDownLatch(1);
+            fixture.internal.submit(() -> { release.await(); return null; });
+            var tasks = new ArrayList<WriteTask>();
+            try {
+                for (int i = 0; i < 64; i++) {
+                    var task = new WriteTask(new Http2Ping(true, new byte[]{(byte) i, 0, 0, 0, 0, 0, 0, 0}), true);
+                    tasks.add(task);
+                    session.connection.write(task);
+                }
+            } finally { release.countDown(); }
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.advanceOutput(17);
+            tasks.get(0).completion().get(3, TimeUnit.SECONDS);
+            ByteBuffer borrowed = session.pendingOutput.peek().bytes.duplicate();
+            byte[] expected = new byte[borrowed.remaining()];
+            borrowed.duplicate().get(expected);
+            for (int i = 0; i < 100; i++) {
+                var competing = new Http2FrameBuffer();
+                byte[] bytes = new byte[2048];
+                Arrays.fill(bytes, (byte) 99);
+                competing.write(bytes);
+                competing.release();
+            }
+            byte[] retained = new byte[borrowed.remaining()];
+            borrowed.get(retained);
+            assertArrayEquals(expected, retained);
+            for (int i = 1; i < tasks.size(); i++) assertFalse(tasks.get(i).completion().isDone());
+            session.completeOutput();
+            for (var task : tasks) task.completion().get(3, TimeUnit.SECONDS);
+        }
+    }
+
+    @ParameterizedTest @CsvSource({"false,false,false", "true,false,false", "false,true,false", "true,true,false",
+        "false,true,true", "true,true,true"})
+    void terminalFramesDoNotWaitForLaterOutputToReleaseTheirStream(boolean body, boolean failLater, boolean failBeforeWriterRuns) throws Exception {
+        var started = new CompletableFuture<Http2Stream>();
+        try (var fixture = new Fixture((req, res) -> {
+            req.handleAsync();
+            ((BaseResponse) res).setState(ResponseState.WRITING_HEADERS);
+            started.complete(((Http2Connection) req.connection()).testProbe().streams().applicationStream(1));
+            return true;
+        })) {
+            Session session = fixture.add(1024, true);
+            session.offer(preface());
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.completeOutput();
+            session.offer(requestBytes(1));
+            Http2Stream stream = started.get(3, TimeUnit.SECONDS);
+            fixture.barrier();
+            var release = new CountDownLatch(1);
+            fixture.internal.submit(() -> { release.await(); return null; });
+            var fields = new FieldBlock(); fields.set(":status", "200");
+            var headers = new WriteTask(new Http2HeadersFrame(1, !body, fields), true);
+            var terminal = body ? new WriteTask(Http2DataFrame.eos(1), true) : headers;
+            var later = new WriteTask(new Http2Ping(true, new byte[8]), true);
+            try {
+                session.connection.write(headers);
+                if (body) session.connection.write(terminal);
+                session.connection.write(later);
+            } finally { release.countDown(); }
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            fixture.barrier();
+            ByteBuffer encoded = session.pendingOutput.peek().bytes.duplicate();
+            Http2FrameHeader last;
+            do {
+                last = Http2FrameHeader.readFrom(encoded);
+                encoded.position(encoded.position() + last.length());
+            } while ((last.flags() & 1) == 0);
+            assertEquals(body ? Http2FrameType.DATA : Http2FrameType.HEADERS, last.frameType());
+            assertEquals(1, last.flags() & 1);
+            assertEquals(17, encoded.remaining(), "The later PING shares the same transport write");
+            assertTrue(stream.countsAsConcurrentProtocolStream());
+            assertFalse(terminal.completion().isDone());
+            assertFalse(later.completion().isDone());
+            session.advanceOutput(encoded.position() - 1);
+            fixture.barrier();
+            assertTrue(stream.countsAsConcurrentProtocolStream(), "A partial terminal frame must retain admission");
+            assertFalse(terminal.completion().isDone());
+            var resumeWriter = new CountDownLatch(1);
+            if (failBeforeWriterRuns) fixture.internal.submit(() -> { resumeWriter.await(); return null; });
+            try {
+                session.advanceOutput(1);
+                if (failBeforeWriterRuns) session.failOutput();
+            } finally { resumeWriter.countDown(); }
+            terminal.completion().get(3, TimeUnit.SECONDS);
+            assertFalse(stream.countsAsConcurrentProtocolStream());
+            if (!failBeforeWriterRuns) {
+                assertEquals(17, session.pendingOutput.peek().bytes.remaining());
+                assertFalse(later.completion().isDone());
+            }
+            if (failLater) {
+                if (!failBeforeWriterRuns) session.failOutput();
+                assertThrows(ExecutionException.class, () -> later.completion().get(3, TimeUnit.SECONDS));
+                terminal.completion().get(3, TimeUnit.SECONDS);
+            } else {
+                session.completeOutput();
+                later.completion().get(3, TimeUnit.SECONDS);
+            }
+        }
+    }
+
     @Test
     void asynchronousStreamWriteResumesAcrossCreditAndWaitsForTheFinalTransportAcknowledgement() throws Exception {
         CompletableFuture<Http2Stream> started = new CompletableFuture<>();
@@ -382,15 +576,15 @@ class Http2ReadDriverTest {
         return false;
     }
 
-    @ParameterizedTest @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
-    void aHandlerFailureJoinsItsOutstandingAsyncWriteBeforeRetiring(boolean completeFirst) throws Exception {
+    @ParameterizedTest @CsvSource({"false,8192", "true,8192", "false,16384", "true,16384"})
+    void aHandlerFailureJoinsItsOutstandingAsyncWriteBeforeRetiring(boolean completeFirst, int size) throws Exception {
         var releaseHandler = new CountDownLatch(1);
         var written = new CompletableFuture<java.util.concurrent.Future<@org.jspecify.annotations.Nullable Void>>();
         var notified = new CompletableFuture<ResponseInfo>();
         try (var fixture = new Fixture((request, response) -> {
             response.addCompletionListener(notified::complete);
             var async = request.handleAsync();
-            written.complete(async.write(ByteBuffer.wrap(new byte[16384]).asReadOnlyBuffer()));
+            written.complete(async.write(ByteBuffer.wrap(new byte[size]).asReadOnlyBuffer()));
             if (completeFirst) async.complete();
             releaseHandler.await();
             throw new IOException("Controlled handler failure");
@@ -403,6 +597,9 @@ class Http2ReadDriverTest {
             fixture.until(() -> !session.pendingOutput.isEmpty());
             session.completeOutput(); // Response headers precede the borrowed DATA fragment.
             fixture.until(() -> !session.pendingOutput.isEmpty());
+            ByteBuffer borrowed = session.pendingOutput.peek().bytes.duplicate();
+            byte[] expected = new byte[borrowed.remaining()];
+            borrowed.duplicate().get(expected);
             session.holdAbortedOutput = true;
             releaseHandler.countDown();
             fixture.until(() -> session.closed);
@@ -410,6 +607,15 @@ class Http2ReadDriverTest {
             assertEquals(0, session.connection.completedRequests(), "The transport still owns the output buffer");
             assertFalse(notified.isDone());
             assertFalse(written.get().isDone());
+            // Other connections can recycle every idle scratch lease while cancellation is
+            // pending. This transport's encoding must remain unchanged until its own ACK.
+            var other = new Http2FrameBuffer();
+            byte[] overwrite = new byte[8192];
+            Arrays.fill(overwrite, (byte) 99);
+            for (int i = 0; i < 100; i++) { other.write(overwrite); other.release(); }
+            byte[] retained = new byte[borrowed.remaining()];
+            borrowed.get(retained);
+            assertArrayEquals(expected, retained);
             session.holdAbortedOutput = false;
             session.failOutput();
             assertThrows(java.util.concurrent.ExecutionException.class, () -> written.get().get(3, TimeUnit.SECONDS));
@@ -489,23 +695,36 @@ class Http2ReadDriverTest {
             connection = new Http2Connection(fixture.config.server, fixture.config.creator, this,
                 ConnectionAcceptedTime.now(), null, Http2Settings.DEFAULT_CLIENT_SETTINGS, 30000,
                 fixture.application, fixture.internal);
-            driver = connection.readDriver(input, source -> {
+            driver = connection.readDriver(input, new AsyncTransportOutput() {
+                @Override public CompletableFuture<@org.jspecify.annotations.Nullable Void> write(ByteBuffer source) throws IOException {
+                    return write(source, new TransportWriteProgress(() -> {}));
+                }
+                @Override public CompletableFuture<@org.jspecify.annotations.Nullable Void> write(ByteBuffer source, TransportWriteProgress progress) throws IOException {
                 if (delayed) {
-                    var write = new PendingOutput(source);
+                    var write = new PendingOutput(source, progress);
                     pendingOutput.add(write);
                     return write.completion;
                 }
                 byte[] bytes = new byte[source.remaining()];
                 source.duplicate().get(bytes);
                 output.write(bytes);
+                progress.consumed(bytes.length);
                 return CompletableFuture.completedFuture(null);
+                }
             });
         }
-        void completeOutput() {
-            PendingOutput write = java.util.Objects.requireNonNull(pendingOutput.poll());
-            byte[] bytes = new byte[write.bytes.remaining()];
+        void advanceOutput(int count) {
+            PendingOutput write = java.util.Objects.requireNonNull(pendingOutput.peek());
+            byte[] bytes = new byte[count];
             write.bytes.get(bytes);
             output.writeBytes(bytes);
+            write.progress.consumed(count);
+            write.progress.notifyOwner();
+        }
+        void completeOutput() {
+            PendingOutput write = java.util.Objects.requireNonNull(pendingOutput.peek());
+            advanceOutput(write.bytes.remaining());
+            pendingOutput.remove(write);
             write.completion.complete(null);
         }
         void offer(byte[] bytes) throws IOException {
@@ -550,7 +769,8 @@ class Http2ReadDriverTest {
 
     private static final class PendingOutput {
         final ByteBuffer bytes;
+        final TransportWriteProgress progress;
         final CompletableFuture<Void> completion = new CompletableFuture<>();
-        PendingOutput(ByteBuffer bytes) { this.bytes = bytes.duplicate(); }
+        PendingOutput(ByteBuffer bytes, TransportWriteProgress progress) { this.bytes = bytes.duplicate(); this.progress = progress; }
     }
 }
