@@ -1735,3 +1735,93 @@ native runs and test reports. Full Java 11/17/25 suites and external conformance
 were not rerun for this allocation change. The combined report is
 `nonblocking-validation/async-capture-lazy-20261017/report.html` beside the
 checkout; `audit.json` and the linked raw ledgers retain the supporting evidence.
+
+
+### Final HTTP/2 batch wakeups (17 October 2026)
+
+The asynchronous HTTP/2 writer armed a progress wakeup at every frame boundary,
+including the end of a transport batch. `TransportOutputBuffer` publishes that
+progress immediately before completing the write future. If the writer runs
+between these notifications, it can process the drained bytes, return while the
+future is incomplete, and then be dispatched again for completion.
+
+The writer now arms progress wakeups only for frames followed by more batch
+bytes. The final frame relies on the existing write-completion notification.
+Earlier frames still complete while later bytes are pending, including when a
+later write fails. Reader-visible END_STREAM publication continues to inspect
+consumed bytes independently of the notification threshold. Frame sizes, flow
+control, buffer capacities, input turns, TLS ciphertext acknowledgement,
+cancellation ownership and callback execution contexts are unchanged. No
+encoder or application continuation moves onto the transport owner.
+
+Four new controlled-transport cases reproduce the redundant final-frame turn
+on the baseline and pass with the change. They cover one- and three-frame
+batches, partial frame drains, successful completion, and failure after all
+bytes have drained. Existing tests cover earlier END_STREAM publication,
+credit-blocked fragments, pending-borrow cancellation and completion dispatch.
+
+The comparison baseline is `75f13ce3`, with source digest
+`5b2bf5e46a002d29091165fdbe385a7e744822b27672837eca263bca4be8984f`.
+Its immutable source snapshot retains older pre-commit Git metadata; the source
+digest and verified class inventory identify the committed implementation.
+Only `Http2Connection` and its `AsyncWriteDriver` change in the production class
+inventory. Both builds use Java 21 compilation targeting Java 11 and identical
+bounded-async fixtures and dependencies.
+
+Thirty short trials use Java 21 PLATFORM, fresh JVMs, 512 MiB heaps, 1 GiB
+cgroups, swap disabled and separate server/generator CPU sets. Three pairs
+reverse order, with four seconds warm-up and six measured seconds. All cases
+use TLS 1.3 AES-128-GCM. Bulk responses are one MiB with one async write per
+request and eight connections; multiplexed bulk uses one connection with eight
+streams. Small HTTP/2 uses 128-byte responses and 32 streams on one connection;
+gzip uses 64 KiB uncompressed input and eight connections. Busy-PC results are
+indicators only. The primary change below is the median of paired throughput
+changes, rather than the ratio of independent response-rate medians, which can
+differ as workstation load drifts.
+
+| Workload | Median paired throughput change | All paired changes |
+| --- | ---: | ---: |
+| TLS HTTP/2 bulk | -0.1% | -0.8%, +3.4%, -0.1% |
+| Small multiplexed HTTP/2 | +1.0% | -3.1%, +1.0%, +4.6% |
+| HTTPS/1 bulk control | -0.1% | -0.1%, -0.5%, +5.0% |
+| Multiplexed HTTP/2 bulk | +0.6% | +1.1%, -1.5%, +0.6% |
+| HTTP/2 gzip | +0.2% | +0.9%, -1.5%, +0.2% |
+
+These results do not establish a throughput improvement. Separate all-park JFR
+runs show 248.5 versus 247.9 park events per bulk HTTP/2 response, a reduction of
+only about 0.2%. Weighted allocation estimates are 254,026 versus 249,935 bytes
+per response, without JFR data loss. These are approximate diagnostic estimates,
+not exact task counts or whole-server allocation guarantees; recording every
+park also materially changes performance. Diagnostic response rates are excluded
+from the speed comparison.
+
+The accepted change removes a demonstrated redundant notification with no
+buffer growth. It does not address most of HTTP/2's scheduling cost. The next
+substantial candidate is reducing renderer/coordinator transitions per DATA
+frame, which needs explicit bounds on borrowed spans, peer frame-size handling,
+stream fairness and cancellation before it can safely replace the current turns.
+
+In particular, `Http2WriteCoordinator.pollWritable()` currently splits DATA by
+available credit; callers supply frame-sized payloads. A larger logical borrow
+would need its own wire-fragment bound, including the existing TLS framing
+headroom. Partially written tasks also retain their queue position, so simply
+increasing the input span could let one stream occupy the front of the queue
+for longer. Yielding between fragments must preserve per-stream ordering,
+ordered resets and the active fragment's cancellation acknowledgement. Finally,
+`RenderedResponseBytes` currently materializes a borrowed prefix before appending
+mixed output. A larger borrow cannot use that path unchanged without exceeding
+the 32 KiB owned-storage limit. These constraints rule out merely increasing the
+renderer input constant.
+
+All 30 speed trials passed, covering 5,275,682 measured responses;
+the two diagnostic trials covered another 24,163. There were
+zero reported errors, no generator/connection flags, matching pre/post payload
+hashes, clean JVM exits and no leftover response files. The focused 1,051 tests
+passed on Java 11, 17, 21 and 25. Full clean Java 21 `verify` with NullAway/Error
+Prone passed all 5,404 tests, with no failures, errors or skips. Verified
+production bytecode exactly matches the measured candidate. The evidence audit
+passed 424 checks. Full Java 11/17/25 suites and external conformance
+were not rerun for this notification change. The combined report is
+`nonblocking-validation/h2-completion-wakeup-20261017/report.html` beside the
+checkout; it links the raw trials, diagnostic profiles, regression failure on
+the baseline, test logs and identity audit.

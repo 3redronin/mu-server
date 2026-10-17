@@ -1603,7 +1603,7 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                         completeFrame(completed);
                         completedFrames++;
                     }
-                    progress.awaitOffset(completedFrames == batch.size() ? 0 : (int) batch.get(completedFrames).endOffset);
+                    awaitNextPrefix(progress);
                     if (!done) return;
                     // A later write failure cannot undo a prefix that already drained, even
                     // when this writer only observes both events on the same scheduled turn.
@@ -1659,13 +1659,21 @@ class Http2Connection extends BaseHttpConnection implements Http2Peer {
                     return;
                 }
                 pendingProgress = progress;
-                progress.awaitOffset((int) batch.get(0).endOffset);
+                awaitNextPrefix(progress);
                 pending = output.write(ByteBuffer.wrap(encoded.rawBuffer(), 0, encoded.size()), progress);
                 pending.whenComplete((ignored, failure) -> requestWriteRun());
                 // One bounded batch per turn, including transports that complete synchronously.
                 return;
             }
             yielded = true;
+        }
+
+        private void awaitNextPrefix(TransportWriteProgress progress) {
+            // The write future already wakes us after the final byte (including TLS drainage).
+            // Progress notifications are needed only for frames followed by more batch bytes;
+            // waking at the last frame can otherwise race completion and dispatch us twice.
+            // Reader-visible END_STREAM progress is independent of this wakeup threshold.
+            progress.awaitOffset(completedFrames + 1 < batch.size() ? (int) batch.get(completedFrames).endOffset : 0);
         }
 
         private void discard() {

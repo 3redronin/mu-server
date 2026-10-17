@@ -260,6 +260,48 @@ class Http2ReadDriverTest {
         }
     }
 
+    @ParameterizedTest @CsvSource({"1,false", "1,true", "3,false", "3,true"})
+    void onlyBatchPrefixesNeedProgressWakeups(int taskCount, boolean failAfterDrain) throws Exception {
+        try (var fixture = new Fixture((req, res) -> true)) {
+            Session session = fixture.add(1024, true);
+            session.offer(preface());
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.completeOutput();
+            fixture.barrier();
+            var tasks = new ArrayList<WriteTask>();
+            fixture.internal.submit(() -> {
+                for (int i = 0; i < taskCount; i++) {
+                    var task = new WriteTask(new Http2Ping(true, new byte[8]), false);
+                    tasks.add(task);
+                    session.connection.write(task);
+                }
+            }).get(3, TimeUnit.SECONDS);
+            fixture.until(() -> !session.pendingOutput.isEmpty());
+            fixture.barrier();
+            PendingOutput pending = session.pendingOutput.peek();
+            assertEquals(taskCount * 17, pending.bytes.remaining());
+            for (int i = 0; i < taskCount; i++) {
+                // Stop one byte short to verify that only a whole frame is acknowledged.
+                session.advanceOutput(16);
+                fixture.barrier();
+                assertFalse(tasks.get(i).completion().isDone());
+                session.advanceOutput(1);
+                if (i + 1 < taskCount) tasks.get(i).completion().get(3, TimeUnit.SECONDS);
+            }
+            fixture.barrier();
+            assertTrue(pending.progress.reached(taskCount * 17));
+            assertFalse(pending.progress.ready(), "The final frame uses the write-completion wakeup");
+            assertFalse(tasks.get(taskCount - 1).completion().isDone(),
+                "Draining the last frame must not dispatch an extra writer before completion");
+            assertFalse(pending.completion.isDone());
+            if (failAfterDrain) session.failOutput();
+            else session.completeOutput();
+            // A failure observed after the bytes drained cannot undo that published prefix.
+            for (var task : tasks) task.completion().get(3, TimeUnit.SECONDS);
+            if (failAfterDrain) session.driver.completion().get(3, TimeUnit.SECONDS);
+        }
+    }
+
     @Test
     void asyncBatchFlushesReadyFramesBeforeWaitingForAnotherStreamsCredit() throws Exception {
         try (var fixture = new Fixture((req, res) -> true)) {
