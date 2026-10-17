@@ -1940,3 +1940,72 @@ it links the frozen source/class identities, native speed trials, diagnostic
 profiles, test logs, independent conformance and audit. The measured production
 source digest is
 `c764d37da77d10f8ba9ea6ee1a020955987a113b25474d981bd3f2b88995b5b0`.
+
+## Quiet-host three-way baseline, October 18
+
+The quiet-host comparison holds production source constant at NIO `75ce9e7c`
+(the source digest above), Mu3/Netty `78f02551` and pre-migration Mu4 blocking
+`50ad1a70`. Blocking is the preserved implementation, rather than the current
+branch with a socket-mode switch. Full methods and throughput/resource tables
+are in [the baseline README](benchmarks/nio-baseline/README.md#october-18-quiet-host-comparison).
+
+The campaign retains 585 full-profile trial attempts across Temurin 21 and 25,
+with fresh JVMs, ten seconds warm-up, twenty measured seconds and three rotated
+repeats. Each server has a 512 MiB heap, 1 GiB cgroup and no swap; server and
+generator CPU sets are separate. Mu4 uses PLATFORM workers on Java 21 and
+VIRTUAL workers on Java 25. Primary runs select Serial GC under this cap, with
+separate matched G1 controls. All editions use identical application code within
+each fixture profile. No producer submits unbounded output.
+
+There is no overall throughput winner across application patterns. Blocking
+Mu4 leads all six synchronous cases on each JDK. Java 25 NIO exceeds Mu3 in all
+six, but large bounded-async HTTP/1 writes reverse that comparison: one-MiB
+response medians are 18,835 / 18,021 / 4,885 responses/s for Mu3 / blocking /
+NIO. G1 leaves that large gap intact. HTTPS bulk, compression and uploads expose
+additional differences, so a synchronous bulk result cannot stand in for every
+consumer API.
+
+Bounded-async HTTP/2 bulk is a stronger NIO case. Java 25 medians are 2,759 /
+2,514 / 2,744 responses/s, with charged peaks of 807.6 / 115.7 / 138.5 MiB.
+The three paired NIO/Mu3 rate changes range from -4.5% to +4.7%. NIO nevertheless
+uses approximately twice Mu3's server CPU per response (2,063 versus 1,042 µs)
+and has higher p99 latency (4.028 versus 3.481 ms at their achieved loads).
+Memory, CPU and latency must remain separate optimization targets.
+
+With callback-driven 32 KiB chunks, Java 21 native-thread medians at 768 paused
+HTTP/2 downloads are 38 / 1,564 / 43. All three maintain 2,000 foreground
+responses/s with p99 near 0.2 ms. Synchronous application output still occupies
+platform workers in NIO: at 128 paused downloads it uses 169 native threads,
+versus 40 with the callback producer. Java 25 virtual workers keep blocking
+Mu4's native threads flat too; in the 768-client case blocking uses 25 versus
+NIO's 36, and less charged memory (158.1 versus 211.1 MiB). These controls show
+resource costs at a fixed offered rate, not an established capacity ceiling.
+
+The 1,024-client probe exceeds both Mu4 editions' default 1,000 concurrent-request
+limit. Twelve setups receive HTTP 503 after exactly 1,000 accepted paused
+requests; they recover after cancellation and remain excluded. Mu3 completes
+that setup. The matched 768-client control uses unchanged defaults and the same
+frozen fixture, avoiding an admission-policy difference in the transport test.
+
+The audit also identified one original Mu3 Java 25 raw HTTP/2 upload trial that
+emitted `STOPPED` but required forced cleanup (unit-journal exit 143). Its saved
+status preceded termination. Original records are preserved, and a separate
+post-audit finding excludes it. A fresh nine-trial matched Java 25 confirmation
+uses the same measurement settings and allows a longer post-measurement exit
+observation; all nine finish with normal JVM exits. The cause of the original
+shutdown delay has not been established.
+
+The campaign records 361,959,904 measured responses, 572 valid timed trials,
+thirteen explicit exclusions and zero native timed request errors. Twelve
+separate streaming preflights verify full 8 MiB payloads across both JDKs,
+HTTPS/1 and HTTP/2. The evidence audit passes 8,929 checks. The combined report
+is `nonblocking-validation/baseline-20261018-quiet/report.html` beside the
+checkout; it links raw observations, manifests, executed controllers, audit,
+exclusions and the cleanup journal. Production code is unchanged by this task.
+
+The clearest next profiling target is the large bounded-async HTTP/1 path,
+followed by Java 21 small-response dispatch and HTTP/2 upload costs. The baseline
+identifies those gaps; it does not establish which internal handoff, copy or
+scheduling decision causes them. Future changes should preserve the current
+ownership, backpressure and memory bounds and measure CPU and tail latency
+alongside throughput.
