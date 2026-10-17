@@ -20,19 +20,22 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Channel/TLS owner state; control methods only publish requests or immediately abort the channel. */
 final class ChannelConnection implements ConnectionTransport {
     private static final int BUFFER_SIZE = 8192;
-    // Fit a default response DATA chunk plus its frame header. Otherwise each full chunk
-    // leaves a nine-byte tail that requires another TLS record and transport write.
+    // Preserve the blocking bridge's ring size; async output no longer copies through it.
     private static final int OUTPUT_BUFFER_SIZE = BUFFER_SIZE + Http2FrameHeader.FRAME_HEADER_LENGTH;
-    // A TLS record includes framing/tag bytes in addition to the plaintext ring. Let an
+    // Async sources are borrowed, so a full render turn/default DATA frame needs no larger ring.
+    private static final int ASYNC_WRITE_BUDGET = 16_384 + Http2FrameHeader.FRAME_HEADER_LENGTH;
+    // A TLS record includes framing/tag bytes in addition to its plaintext. Let an
     // ordinary record drain in one bounded call rather than splitting off its trailer.
     private static final int ENCRYPTED_WRITE_BUDGET = 64 * 1024;
     private static final int TURN_LIMIT = 16;
+    private static final int PLAINTEXT_VISIT_BUDGET = TURN_LIMIT * OUTPUT_BUFFER_SIZE;
     private static final long SETUP_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(10);
     private static final long CLOSE_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(1);
     private final ChannelTransportLoop loop;
     // Owner only. Once a nonblocking read would block, wait for fresh selector readiness.
     // Keep readiness while input buffers are full so releasing capacity can resume locally.
     private boolean readReady = true;
+    private int remainingWriteBudget;
     private final ExecutionResources.TransportLease executionLease;
     final Socket socket;
     private final SocketChannel channel;
@@ -44,7 +47,7 @@ final class ChannelConnection implements ConnectionTransport {
     final AtomicBoolean scheduled = new AtomicBoolean();
     private final AtomicBoolean aborted = new AtomicBoolean();
     private final TransportInputBuffer input = new TransportInputBuffer(BUFFER_SIZE, this::schedule, this::schedule);
-    private final TransportOutputBuffer output = new TransportOutputBuffer(OUTPUT_BUFFER_SIZE, this::schedule);
+    private final TransportOutputBuffer output = new TransportOutputBuffer(OUTPUT_BUFFER_SIZE, ASYNC_WRITE_BUDGET, this::schedule);
     private ByteBuffer incoming = ByteBuffer.allocate(BUFFER_SIZE).flip();
     private final ByteBuffer protocolPrefix = ByteBuffer.allocate(Http2Handshaker.clientConnectionPrefaceLength());
     private final @Nullable ProxyProtocolDecoder proxy;
@@ -118,7 +121,9 @@ final class ChannelConnection implements ConnectionTransport {
                 if (proxyComplete) beginProtocolSetup();
             }
             boolean progress = false;
-            for (int turn = 0; turn < TURN_LIMIT; turn++) {
+            // Larger borrowed writes must not double one owner's plaintext service quantum.
+            remainingWriteBudget = PLAINTEXT_VISIT_BUDGET;
+            for (int turn = 0; turn < TURN_LIMIT && remainingWriteBudget > 0; turn++) {
                 progress = advance();
                 if (!progress || retired) break;
             }
@@ -224,7 +229,9 @@ final class ChannelConnection implements ConnectionTransport {
             }
             if (output.pendingBytes() > 0) {
                 long beforeWrite = tls == null ? 0 : tls.revision();
-                int written = output.drainTo(tls == null ? channel : tlsSink, OUTPUT_BUFFER_SIZE);
+                int written = output.drainTo(tls == null ? channel : tlsSink,
+                    Math.min(ASYNC_WRITE_BUDGET, remainingWriteBudget));
+                remainingWriteBudget -= written;
                 if (written > 0) { networkProgress(); progress = true; }
                 // Wrapping can produce output without acknowledging plaintext yet.
                 if (tls != null && tls.revision() != beforeWrite) progress = true;

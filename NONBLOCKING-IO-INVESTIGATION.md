@@ -1382,3 +1382,93 @@ classes used for measurement. The focused 146-case suite passed on Java 11,
 bytecode inventories, all 30 native trials and the allocation probe reconcile
 in the final evidence audit. Full Java 11/17 suites and the separate external
 conformance campaigns were not rerun for this change.
+
+## Async drain budget independent of ring storage (17 October 2026)
+
+The borrowed output path still inherited the blocking ring's 8,201-byte drain
+limit. A 16 KiB render turn therefore needed at least two plain socket writes,
+even though no ring copy was involved. Channel connections now give borrowed
+async output a separate 16,393-byte per-call limit, enough for one default
+HTTP/2 DATA frame including its header. The allocated ring remains 8,201 bytes;
+blocking callers still drain within that capacity. The existing constructor
+retains its previous equal ring/drain limits for other callers.
+
+Connections retain the 16-advance visit limit and explicitly cap acknowledged
+plaintext at the previous maximum, 16 × 8,201 = 131,216 bytes per visit. The last
+call uses the smaller remaining budget; progress schedules another visit when
+output remains. The TLS driver's actual consumed-byte count and complete
+ciphertext drain still determine acknowledgement. No TLS engine, buffer cap,
+queue, frame encoding or source-ownership policy changes. The implementation
+adds two integer fields, not a larger byte buffer or per-write allocation.
+
+New transport cases separate ring and async limits in both directions, vary
+individual drain budgets and verify exact output, completion and retained ring
+capacity. The blocking path is also exercised with a larger configured async
+limit. TLS 1.2/1.3 cases hold the last ciphertext byte, change retry budgets,
+and verify heap/direct source ownership at both 8,201- and 16,393-byte limits.
+The focused transport, TLS, WebSocket and async-response suite has 173 cases.
+
+Evidence is under `../nonblocking-validation/async-drain-20261017/`. Both native
+fixtures use the bounded async workload from the preceding capture experiment
+and the same Java 21 compiler, Java 11 target and dependencies. The baseline's
+production source is reconciled with committed `b73e0eaa`; its immutable source
+snapshot predates that commit but has the same production hash. The candidate
+production SHA-256 is
+`a7bbf80b7624c45526ee88f2db3068b84bd4e5d5586d6fdddb2f756170713599`.
+Only six class files from the two changed production files differ.
+
+An isolated Java 21 TLS diagnostic sends one MiB as 64 sequential 16 KiB writes,
+checks every received byte and counts application wrapping calls. With TLS 1.2,
+the larger budget reduces wraps from 128 to 64 and transport sink calls from
+256 to 128. TLS 1.3 still needs 128 wraps and 256 calls with this provider and
+input size. The encrypted output buffer remains 16,709 bytes throughout all
+four cases. A follow-up probe records the first positive acknowledgement:
+16,384 bytes for TLS 1.2 and 16,367 for TLS 1.3 at the larger limit. TLS 1.3
+therefore leaves a 17-byte tail for each 16 KiB application input in this setup.
+The installed JDK 21 source confirms that `OutputRecord.calculateFragmentSize`
+reserves 16 padding bytes and one content-type byte for TLS 1.3. The diagnostic
+records that source archive, entry and hash for a later rendering experiment.
+This distinguishes a removed transport limit from a TLS provider's
+own record boundary; it does not imply a universal HTTPS speedup or unchanged
+allocation for every TLS provider.
+
+The busy-PC native comparison uses Java 21 PLATFORM, fresh JVMs with 512 MiB
+heaps and 1 GiB cgroups (swap disabled), two seconds of warm-up and four seconds
+measured, and two pairs in reversed order. Bulk responses are 1 MiB with eight
+clients and one async write per response; gzip uses 64 KiB input with eight
+clients. Small HTTP/1 uses 128 bytes and 32 clients; small HTTP/2 uses 128 bytes
+and 32 streams on one connection. Medians of two runs:
+
+| Workload | Before → after, responses/s | Throughput change | CPU/response change |
+| --- | ---: | ---: | ---: |
+| Small HTTP/1 | 105,810 → 102,938 | -2.7% | +1.4% |
+| HTTP/1 fixed async | 3,170 → 3,850 | +21.4% | -16.6% |
+| HTTPS/1 fixed async | 2,388 → 2,387 | -0.0% | +1.8% |
+| TLS HTTP/2 async | 1,404 → 1,492 | +6.3% | -4.4% |
+| HTTP/1 chunked async | 1,481 → 1,680 | +13.4% | -10.8% |
+| Small multiplexed HTTP/2 | 108,104 → 108,772 | +0.6% | +3.5% |
+| HTTPS/1 gzip | 15,430 → 15,560 | +0.8% | -0.7% |
+
+All 28 trials passed: 3,795,721 measured responses, zero errors, matched pre/post
+payload hashes, reconciled timed statuses and no generator or connection flags.
+Fixed HTTP/1, chunked HTTP/1 and bulk HTTP/2 improved in both pairs; their p95
+latencies fell approximately 18%, 12% and 7%. HTTPS and the other workloads did
+not establish an improvement. These occupied-host observations are not a
+controlled Mu3/Mu4 ranking or a guarantee of gains on other workloads.
+
+The small HTTP/1 slowdown prompted twelve additional small HTTP/1 and HTTP/2
+trials with five seconds of warm-up, six seconds measured and three reversed
+pairs. Small HTTP/1's paired changes were +1.4%, −3.3% and +2.2%; its median
+comparison was +1.5%. HTTP/2 ranged from −2.5% to +12.9%, with a +5.2% median
+comparison. All 7,358,841 responses passed without generator or connection
+flags. Both sets of results are retained; this variability leaves small-response
+performance unresolved until a quieter comparison.
+
+Final clean Maven `verify` passed all 5,330 tests on Java 21 and 25 with zero
+failures, errors or skips. Java 21 also passed NullAway/Error Prone, and its
+verified production bytecode exactly matches the frozen measured candidate.
+The focused 173 cases passed on Java 11, 17 and 21 without failures, errors or
+skips. The final audit reconciles source and compiled inventories, runtime XML
+and logs, TLS diagnostics and all 40 native trials. Those trials have clean
+service exits and no leftover response files. Full Java 11/17 suites and the
+separate external conformance campaigns were not rerun for this change.

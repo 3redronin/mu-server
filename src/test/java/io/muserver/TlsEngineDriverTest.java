@@ -132,8 +132,9 @@ class TlsEngineDriverTest {
     }
 
     @ParameterizedTest
-    @CsvSource({"TLSv1.2,false", "TLSv1.2,true", "TLSv1.3,false", "TLSv1.3,true"})
-    void borrowedTransportSourceSurvivesCiphertextStallsAndChangingDrainBudgets(String protocol, boolean direct) throws Exception {
+    @CsvSource({"TLSv1.2,false,8201", "TLSv1.2,true,8201", "TLSv1.3,false,8201", "TLSv1.3,true,8201",
+        "TLSv1.2,false,16393", "TLSv1.2,true,16393", "TLSv1.3,false,16393", "TLSv1.3,true,16393"})
+    void borrowedTransportSourceSurvivesCiphertextStallsAndChangingDrainBudgets(String protocol, boolean direct, int drainLimit) throws Exception {
         try (var pair = new Pair(protocol, 97, false, false)) {
             pair.handshake();
             byte[] expected = new byte[20003];
@@ -141,16 +142,16 @@ class TlsEngineDriverTest {
             ByteBuffer storage = direct ? ByteBuffer.allocateDirect(expected.length + 9) : ByteBuffer.allocate(expected.length + 9);
             storage.position(5).put(expected).flip().position(5);
             ByteBuffer source = storage.asReadOnlyBuffer();
-            var output = new TransportOutputBuffer(8201, () -> {});
+            var output = new TransportOutputBuffer(8201, drainLimit, () -> {});
             var progress = new TransportWriteProgress(() -> {});
             var write = output.asynchronousWriter().write(source, progress);
             var sink = new Channel(pair.server::writePlaintext);
 
-            assertEquals(0, output.drainTo(sink, 8201));
+            assertEquals(0, output.drainTo(sink, drainLimit));
             int packet = pair.server.encryptedOutputSize();
             assertTrue(packet > 8201);
             assertEquals(packet - 1, pair.server.drainEncryptedTo(new Channel(pair.client::receive), packet - 1));
-            for (int budget : new int[]{1, 97, 16384, 8201}) {
+            for (int budget : new int[]{1, 97, 16393, 8201}) {
                 assertEquals(0, output.drainTo(sink, budget));
                 assertFalse(progress.reached(1));
                 assertFalse(write.isDone());
@@ -162,11 +163,11 @@ class TlsEngineDriverTest {
             assertFalse(progress.reached(2));
             assertFalse(write.isDone());
 
-            int[] budgets = {3, 16384, 1, 8201, 97};
+            int[] budgets = {3, 16393, 1, 8201, 97};
             int[] turn = {0};
             pair.until(() -> write.isDone() && pair.clientReceived.size() == expected.length, () -> {
                 int budget = budgets[turn[0]++ % budgets.length];
-                assertTrue(output.drainTo(sink, budget) <= Math.min(budget, 8201));
+                assertTrue(output.drainTo(sink, budget) <= Math.min(budget, drainLimit));
             });
             write.get();
             assertTrue(progress.reached(expected.length));

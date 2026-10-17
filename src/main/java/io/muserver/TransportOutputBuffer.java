@@ -27,6 +27,7 @@ final class TransportOutputBuffer extends OutputStream {
     private final ReentrantLock lock = new ReentrantLock();
     private final Condition changed = lock.newCondition();
     private byte[] bytes;
+    private final int asyncDrainLimit;
     private final Runnable outputAvailable;
     private int head;
     private int size;
@@ -82,15 +83,21 @@ final class TransportOutputBuffer extends OutputStream {
     private @Nullable IOException failure;
 
     TransportOutputBuffer(int capacity, Runnable outputAvailable) {
+        this(capacity, capacity, outputAvailable);
+    }
+
+    TransportOutputBuffer(int capacity, int asyncDrainLimit, Runnable outputAvailable) {
         if (capacity < 1) throw new IllegalArgumentException("Positive capacity required");
+        if (asyncDrainLimit < 1) throw new IllegalArgumentException("Positive async drain limit required");
         bytes = new byte[capacity];
+        this.asyncDrainLimit = asyncDrainLimit;
         this.outputAvailable = outputAvailable;
     }
 
     int pendingBytes() {
         lock.lock();
         // Report the bounded prefix available to drain, not the size of a borrowed source.
-        try { return pendingAsyncWrite == null ? size : Math.min(bytes.length, pendingAsyncWrite.source.remaining()); }
+        try { return pendingAsyncWrite == null ? size : Math.min(asyncDrainLimit, pendingAsyncWrite.source.remaining()); }
         finally { lock.unlock(); }
     }
 
@@ -115,10 +122,10 @@ final class TransportOutputBuffer extends OutputStream {
             if (active == null) {
                 source = ByteBuffer.wrap(bytes, head, Math.min(maxBytes, Math.min(size, bytes.length - head)));
             } else {
-                // Keep the same capacity and per-turn limits as the ring path. A separate view
-                // prevents sink position/limit changes from altering the retained source or caller.
+                // Borrowing does not need ring storage. Its separate limit still bounds each call.
+                // A separate view keeps sink position/limit changes away from the retained source.
                 source = active.source.duplicate();
-                source.limit(source.position() + Math.min(maxBytes, Math.min(bytes.length, source.remaining())));
+                source.limit(source.position() + Math.min(maxBytes, Math.min(asyncDrainLimit, source.remaining())));
             }
             int count;
             try {

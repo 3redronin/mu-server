@@ -16,6 +16,65 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Timeout(10)
 class TransportAsyncOutputTest {
+    @ParameterizedTest @CsvSource({"1,16393", "8201,16393", "8201,97"})
+    void borrowedDrainsHaveTheirOwnBudgetWithoutGrowingTheRing(int capacity, int drainLimit) throws Exception {
+        var output = new TransportOutputBuffer(capacity, drainLimit, () -> {});
+        var ring = TransportOutputBuffer.class.getDeclaredField("bytes");
+        ring.setAccessible(true);
+        assertEquals(capacity, ((byte[]) ring.get(output)).length);
+        byte[] expected = new byte[40003];
+        new Random(872).nextBytes(expected);
+        var write = output.asynchronousWriter().write(ByteBuffer.wrap(expected));
+        var sink = new TransportOutputBufferTest.Sink(Integer.MAX_VALUE) {
+            @Override public int write(ByteBuffer data) throws IOException {
+                assertSame(expected, data.array());
+                return super.write(data);
+            }
+        };
+        int[] budgets = {65536, 1, 8192, 97, 16393};
+        int consumed = 0, turn = 0;
+        while (!write.isDone()) {
+            assertEquals(Math.min(drainLimit, expected.length - consumed), output.pendingBytes());
+            int budget = budgets[turn++ % budgets.length];
+            int count = Math.min(expected.length - consumed, Math.min(drainLimit, budget));
+            assertEquals(count, output.drainTo(sink, budget));
+            consumed += count;
+            assertEquals(consumed == expected.length, write.isDone());
+        }
+        write.get();
+        assertArrayEquals(expected, sink.bytes.toByteArray());
+        assertEquals(capacity, ((byte[]) ring.get(output)).length);
+    }
+
+    @Test void asyncBudgetDoesNotEnlargeBlockingRingDrains() throws Exception {
+        var output = new TransportOutputBuffer(7, 16393, () -> {});
+        byte[] expected = new byte[101];
+        new Random(72).nextBytes(expected);
+        var worker = Executors.newSingleThreadExecutor();
+        var sink = new TransportOutputBufferTest.Sink(Integer.MAX_VALUE) {
+            @Override public int write(ByteBuffer data) throws IOException {
+                assertTrue(data.remaining() <= 7);
+                return super.write(data);
+            }
+        };
+        try {
+            var write = worker.submit(() -> { output.write(expected); return null; });
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+            while (!write.isDone()) {
+                assertTrue(System.nanoTime() < deadline);
+                assertTrue(output.pendingBytes() <= 7);
+                if (output.drainTo(sink, 16393) == 0) Thread.sleep(1);
+            }
+            write.get();
+            assertArrayEquals(expected, sink.bytes.toByteArray());
+        } finally { output.fail(new IOException("Test finished")); worker.shutdownNow(); }
+    }
+
+    @Test void asyncBudgetMustBePositive() {
+        assertThrows(IllegalArgumentException.class, () -> new TransportOutputBuffer(7, 0, () -> {}));
+        assertThrows(IllegalArgumentException.class, () -> new TransportOutputBuffer(7, -1, () -> {}));
+    }
+
     @ParameterizedTest @CsvSource({"1,1", "1,8192", "7,1", "7,3", "7,8192", "8192,1", "8192,3", "8192,8192",
         "8201,1", "8201,8192", "8201,8201"})
     void partialDrainsUseBoundedChunksAndCompleteAfterTheLastByte(int capacity, int budget) throws Exception {
