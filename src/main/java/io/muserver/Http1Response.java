@@ -120,6 +120,7 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
                     OutputStream encoded = responseEncoder.wrapStream(request, this, wrappedOut);
                     wrappedOut = encoded == null ? null : new CloseGuardedOutputStream(encoded);
                 }
+                socketOut.allowSourceBorrowing(responseEncoder == null && !suppressContent());
             } catch (IOException e) {
                 throw new UncheckedIOException("Error while setting up output stream", e);
             }

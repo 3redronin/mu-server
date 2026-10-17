@@ -58,6 +58,7 @@ class AsyncResponseChannelTest {
             transport.socket.setSendBufferSize(4096);
             connections.add(transport);
             res.contentType("text/plain");
+            if (encoding.equals("identity")) res.headers().set(HeaderNames.CONTENT_LENGTH, payload.length);
             res.addCompletionListener(info -> outcomes.add(info.completedSuccessfully()));
             AsyncHandle handle = req.handleAsync();
             writes.add(handle.write(ByteBuffer.wrap(encoding.equals("burst") ? new byte[]{1} : payload).asReadOnlyBuffer()));

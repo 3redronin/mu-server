@@ -23,6 +23,53 @@ import static org.junit.jupiter.api.Assertions.*;
 class AsyncResponseRendererTest {
     @TempDir Path directory;
 
+    @ParameterizedTest @ValueSource(ints = {0, 1, 2, 3})
+    void unencodedTurnsBorrowTheInputAndDoNotReuseItBeforeAcknowledgement(int kind) throws Exception {
+        var tasks = new ArrayDeque<Runnable>();
+        var pending = new ArrayDeque<CompletableFuture<Void>>();
+        var borrowed = new ArrayDeque<ByteBuffer>();
+        var supplied = new java.util.concurrent.atomic.AtomicReference<byte[]>();
+        byte[] expected = new byte[3 * 16384 + 37];
+        new java.util.Random(625).nextBytes(expected);
+        ByteBuffer source = kind == 1 ? ByteBuffer.allocateDirect(expected.length + 9)
+            : ByteBuffer.allocate(expected.length + 9);
+        source.position(5).put(expected).flip().position(5);
+        if (kind == 2) source = source.asReadOnlyBuffer();
+        if (kind == 3) source = source.slice();
+        int position = source.position();
+        var capture = new Http1ResponseOutput(OutputStream.nullOutputStream(), bytes -> {
+            if (bytes.hasRemaining()) assertSame(supplied.get(), bytes.array(), "Do not copy unchanged body output");
+            borrowed.add(bytes);
+            var io = new CompletableFuture<Void>(); pending.add(io); return io;
+        }, directory);
+        capture.allowSourceBorrowing(true);
+        var passthrough = new OutputStream() {
+            @Override public void write(int value) { fail("Expected array writes"); }
+            @Override public void write(byte[] bytes, int offset, int count) throws IOException {
+                supplied.set(bytes);
+                capture.write(bytes, offset, count);
+            }
+            @Override public void flush() throws IOException { capture.flush(); }
+        };
+        var written = new AsyncResponseRenderer(tasks::add, capture, () -> passthrough).write(source);
+        var actual = new ByteArrayOutputStream();
+        int turns = 0;
+        while (!written.isDone()) {
+            assertTrue(++turns < 10);
+            assertEquals(1, pending.size());
+            assertTrue(tasks.isEmpty(), "The next render must wait for acknowledgement");
+            ByteBuffer bytes = borrowed.remove();
+            assertTrue(bytes.remaining() <= 16384);
+            byte[] chunk = new byte[bytes.remaining()]; bytes.get(chunk); actual.write(chunk);
+            pending.remove().complete(null);
+            runTasks(tasks);
+        }
+        written.get();
+        assertArrayEquals(expected, actual.toByteArray());
+        assertEquals(source.hasArray() ? position : source.limit(), source.position());
+        assertNoTemporaryFiles();
+    }
+
     @Test void oneWorkerRemainsAvailableDuringTransportBackpressure() throws Exception {
         var borrowed = new CompletableFuture<ByteBuffer>();
         var io = new CompletableFuture<Void>();
@@ -30,6 +77,7 @@ class AsyncResponseRendererTest {
         var capture = new Http1ResponseOutput(OutputStream.nullOutputStream(), bytes -> {
             borrowed.complete(bytes); return io;
         }, directory);
+        capture.allowSourceBorrowing(true);
         var renderer = new AsyncResponseRenderer(executor, capture, () -> capture);
         try {
             var written = executor.submit(() -> renderer.write(ByteBuffer.allocate(8 * 1024 * 1024)))
@@ -116,6 +164,24 @@ class AsyncResponseRendererTest {
         assertSame(rejected, assertThrows(ExecutionException.class,
             () -> written.get(3, TimeUnit.SECONDS)).getCause());
         assertNoTemporaryFiles();
+    }
+
+    @Test void rejectedContinuationKeepsABorrowUntilItsTransportCompletion() throws Exception {
+        var io = new CompletableFuture<Void>();
+        byte[] source = new byte[16384];
+        var borrowed = new CompletableFuture<ByteBuffer>();
+        var capture = new Http1ResponseOutput(OutputStream.nullOutputStream(), bytes -> {
+            borrowed.complete(bytes); return io;
+        }, directory);
+        capture.allowSourceBorrowing(true);
+        var rejected = new RejectedExecutionException("no workers");
+        var renderer = new AsyncResponseRenderer(task -> { throw rejected; }, capture, () -> capture);
+        var written = renderer.write(ByteBuffer.wrap(source));
+        assertSame(source, borrowed.join().array());
+        assertFalse(written.isDone());
+        io.complete(null);
+        assertSame(rejected, assertThrows(ExecutionException.class, () -> written.get(3, TimeUnit.SECONDS)).getCause());
+        assertFalse(io.isCancelled());
     }
 
     @Test void emptyWritesStillCreateAndFlushHeadersAndReportTransportFailure() throws Exception {

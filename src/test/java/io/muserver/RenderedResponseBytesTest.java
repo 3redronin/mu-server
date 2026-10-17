@@ -18,6 +18,93 @@ import static org.junit.jupiter.api.Assertions.*;
 class RenderedResponseBytesTest {
     @TempDir Path directory;
 
+    @Test void aSingleUnchangedWriteBorrowsOnlyTheOfferedRange() throws Exception {
+        byte[] source = new byte[RenderedResponseBytes.DRAIN_BYTES + 17];
+        new Random(892).nextBytes(source);
+        try (var capture = new RenderedResponseBytes(directory)) {
+            capture.borrowSourceIfUnchanged(source, 7, RenderedResponseBytes.DRAIN_BYTES);
+            capture.write(source, 7, RenderedResponseBytes.DRAIN_BYTES);
+            capture.seal();
+            ByteBuffer next = capture.next();
+            assertSame(source, next.array());
+            assertEquals(7, next.arrayOffset() + next.position());
+            assertEquals(RenderedResponseBytes.DRAIN_BYTES, next.remaining());
+            assertNull(capture.next());
+            assertFalse(capture.spilled());
+            capture.close();
+            assertThrows(IOException.class, capture::next);
+            assertThrows(IOException.class, () -> capture.borrowSourceIfUnchanged(source, 7, 1));
+        }
+        assertNoTemporaryFiles();
+    }
+
+    @ParameterizedTest @ValueSource(ints = {0, 1, 2})
+    void aDifferentArrayOffsetOrLengthKeepsOwnedStorage(int difference) throws Exception {
+        byte[] offered = new byte[32];
+        new Random(729).nextBytes(offered);
+        byte[] actual = difference == 0 ? offered.clone() : offered;
+        int offset = difference == 1 ? 4 : 3;
+        int count = difference == 2 ? 15 : 16;
+        byte[] expected = Arrays.copyOfRange(actual, offset, offset + count);
+        try (var capture = new RenderedResponseBytes(directory)) {
+            capture.borrowSourceIfUnchanged(offered, 3, 16);
+            capture.write(actual, offset, count);
+            capture.seal();
+            Arrays.fill(actual, (byte) 0);
+            assertArrayEquals(expected, drain(capture));
+        }
+    }
+
+    @ParameterizedTest @ValueSource(ints = {0, 1, 40000})
+    void mixedOutputMaterializesTheBorrowBeforeAppendingOrSpilling(int suffixLength) throws Exception {
+        byte[] body = new byte[RenderedResponseBytes.DRAIN_BYTES];
+        new Random(47).nextBytes(body);
+        var expected = new ByteArrayOutputStream();
+        try (var capture = new RenderedResponseBytes(directory)) {
+            if (suffixLength == 0) { capture.write(77); expected.write(77); }
+            capture.borrowSourceIfUnchanged(body, 0, body.length);
+            capture.write(body); expected.write(body);
+            if (suffixLength > 0) {
+                byte[] suffix = new byte[suffixLength];
+                Arrays.fill(suffix, (byte) 88);
+                capture.write(suffix); expected.write(suffix);
+            }
+            capture.seal();
+            Arrays.fill(body, (byte) 0); // Fallback owns its copy, including the formerly borrowed prefix.
+            assertArrayEquals(expected.toByteArray(), drain(capture));
+        }
+        assertNoTemporaryFiles();
+    }
+
+    @Test void failedSpillAfterABorrowPreservesTheMaterializedPrefix() throws Exception {
+        Path unusable = Files.createFile(directory.resolve("not-a-directory"));
+        byte[] source = new byte[16384];
+        new Random(987).nextBytes(source);
+        byte[] expected = source.clone();
+        try (var capture = new RenderedResponseBytes(unusable)) {
+            capture.borrowSourceIfUnchanged(source, 0, source.length);
+            capture.write(source);
+            IOException failure = assertThrows(IOException.class, () -> capture.write(new byte[40000]));
+            assertSame(failure, assertThrows(IOException.class, () -> capture.write(1)));
+            Arrays.fill(source, (byte) 0);
+            capture.seal();
+            assertArrayEquals(expected, drain(capture));
+        }
+        Files.delete(unusable);
+        assertNoTemporaryFiles();
+    }
+
+    @Test void borrowOffersCannotExceedTheRenderTurnOrArriveAfterSealing() throws Exception {
+        try (var capture = new RenderedResponseBytes(directory)) {
+            byte[] source = new byte[RenderedResponseBytes.DRAIN_BYTES + 1];
+            assertThrows(IllegalArgumentException.class, () -> capture.borrowSourceIfUnchanged(source, 0, source.length));
+            capture.borrowSourceIfUnchanged(source, 0, 17);
+            capture.seal(); // An offer without a write produces no output.
+            assertNull(capture.next());
+            assertThrows(IOException.class, () -> capture.borrowSourceIfUnchanged(source, 0, 17));
+        }
+    }
+
     @ParameterizedTest @ValueSource(ints = {0, 1, 8192, 16383, 16384, 16385, 32768, 32769, 1048576})
     void ownsAnEncoderBurstAndDrainsBoundedChunks(int size) throws Exception {
         byte[] expected = new byte[size];

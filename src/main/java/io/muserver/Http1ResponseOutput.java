@@ -15,12 +15,15 @@ final class Http1ResponseOutput extends OutputStream implements ResponseOutputCa
     private final Path directory;
     private @Nullable Rendered rendering;
     private boolean discarding;
+    private boolean sourceBorrowingAllowed;
 
     Http1ResponseOutput(OutputStream blocking, @Nullable AsyncTransportOutput asynchronous, Path directory) {
         this.blocking = blocking;
         this.asynchronous = asynchronous;
         this.directory = directory;
     }
+
+    void allowSourceBorrowing(boolean allowed) { sourceBorrowingAllowed = allowed; }
 
     @Override public void write(int value) throws IOException {
         if (discarding) return;
@@ -65,6 +68,10 @@ final class Http1ResponseOutput extends OutputStream implements ResponseOutputCa
         private boolean flushSent;
 
         private Rendered(AsyncTransportOutput writer) { this.writer = writer; }
+
+        @Override public void borrowSourceIfUnchanged(byte[] source, int offset, int length) throws IOException {
+            if (sourceBorrowingAllowed) bytes.borrowSourceIfUnchanged(source, offset, length);
+        }
 
         @Override public void finishRendering() throws IOException {
             rendering = null;

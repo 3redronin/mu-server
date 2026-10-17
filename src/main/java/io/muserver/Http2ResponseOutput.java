@@ -15,11 +15,14 @@ final class Http2ResponseOutput implements ResponseOutputCapture {
     private final Path directory;
     private @Nullable Rendered rendering;
     private boolean discarding;
+    private boolean sourceBorrowingAllowed;
 
     Http2ResponseOutput(Http2Stream stream, Path directory) {
         this.stream = stream;
         this.directory = directory;
     }
+
+    void allowSourceBorrowing(boolean allowed) { sourceBorrowingAllowed = allowed; }
 
     void write(LogicalHttp2Frame frame) throws IOException, InterruptedException {
         if (discarding) return;
@@ -70,6 +73,10 @@ final class Http2ResponseOutput implements ResponseOutputCapture {
         private final RenderedResponseBytes bytes = new RenderedResponseBytes(directory);
         private boolean endStream;
         private boolean headersEndStream;
+
+        @Override public void borrowSourceIfUnchanged(byte[] source, int offset, int length) throws IOException {
+            if (sourceBorrowingAllowed) bytes.borrowSourceIfUnchanged(source, offset, length);
+        }
 
         @Override public void finishRendering() throws IOException {
             rendering = null;

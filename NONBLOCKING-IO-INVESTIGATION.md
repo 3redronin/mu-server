@@ -1286,3 +1286,99 @@ on both Java 21 and 25, again with zero failures, errors or skips; Java 21 also
 passed NullAway/Error Prone. The saved-log/XML/source reconciliation passed all
 756 checks. The full Java 11/17 suites and external conformance campaigns were
 not rerun for this change.
+
+## Borrowed async response captures (17 October 2026)
+
+An unencoded asynchronous response previously copied every rendered body chunk
+into capture storage even when the built-in stream passed the supplied array
+range through unchanged. The renderer now offers its stable input range to the
+capture. The capture may retain that range only when its sole nonempty array
+write has the same array identity, offset and length. Stream initialization,
+headers and framing still run through the existing output stream chain.
+
+Borrowing is enabled only after response initialization selects no content
+encoder. A custom encoder can emit its input unchanged and then immediately
+reuse it, so even such an encoder must keep owned capture storage. A buffered
+prefix, different array/range or additional write also takes the copying path;
+a second write materializes the borrowed prefix before appending or spilling.
+An offer without a write emits nothing. Buffered output therefore remains free
+to combine, split or retain writes without exposing its storage to a later
+render turn.
+
+Each borrow is at most 16 KiB. The renderer already retains the source and waits
+for actual transport/frame acknowledgement before the next turn, including
+failure and continuation rejection. That same boundary now also protects the
+capture's input range and direct/read-only input scratch. No transport, TLS,
+flow-control, queue-size or turn-limit change accompanies this optimization.
+The initial 256-byte capture buffer is still allocated; eligible turns avoid
+its larger replacement array and body copy. The 32 KiB owned-capture spill bound
+and 16 KiB input, drain and file-scratch bounds remain unchanged.
+
+New regression coverage checks sliced array offsets, direct/read-only input,
+delayed acknowledgements, rejection, prefix/suffix fallback and spill failure.
+Real HTTP/1 and HTTP/2 responses over cleartext, TLS 1.2 and TLS 1.3 also exercise
+an encoder that forwards then overwrites its scratch input. Stalled HTTP/1
+identity responses now declare their content length to exercise borrowing
+through backpressure and cancellation; gzip and expanding-encoder cases retain
+their previous framing. HTTP/2 coverage includes stalled flow control.
+
+Evidence is retained in
+`../nonblocking-validation/borrowed-capture-20261017/`. The before/after native
+fixture performs one asynchronous write per 1 MiB response, with eight clients;
+this is a different application workload from the earlier 8 KiB blocking-stream
+comparison. Both editions use identical fixture source and dependencies, compiled
+with Java 21 targeting Java 11. The before build is `bfa03eb1`; the candidate
+production source SHA-256 is
+`1aaf7ca526bae01815f460e1d8b5558a37f55ce63caafb4472b9d15208966d26`.
+Only the eleven class files belonging to the seven changed production source
+files differ. The immutable snapshots preserve the exact tested bytecode.
+
+A ThreadMXBean probe runs the same compiled renderer/capture probe against each
+edition, using a preallocated 1 MiB input, immediate acknowledgements and a
+checksum over every output byte. After 500 warm-up responses, each of three
+repeats renders 200 responses. Median allocation falls from 1,076,520 to 27,944
+bytes per response: one MiB less allocation at this layer. This excludes network,
+framing and TLS allocation and does not measure server throughput or retained
+heap. The same checksum passed every repeat.
+
+The busy-PC native indicator uses two reversed-order pairs per workload, fresh
+Java 21 PLATFORM JVMs, two seconds of warm-up and four seconds of measurement,
+512 MiB heaps and 1 GiB cgroups with swap disabled. The chunked control also uses
+1 MiB bodies and eight clients; gzip uses 64 KiB input bodies and eight clients.
+The unchanged small-response control uses 128-byte bodies and 32 streams on one
+HTTP/2 connection. Latency is closed-loop native-generator request latency.
+Medians of two trials:
+
+| Workload | Before → after, responses/s | Throughput change | CPU/response change |
+| --- | ---: | ---: | ---: |
+| HTTP/1 fixed async | 2,361 → 3,226 | +36.6% | -18.4% |
+| HTTPS/1 fixed async | 1,800 → 2,398 | +33.2% | -19.2% |
+| TLS HTTP/2 async | 1,218 → 1,498 | +22.9% | -10.1% |
+| HTTP/1 chunked control | 1,650 → 1,550 | -6.1% | +6.5% |
+| Small multiplexed HTTP/2 control | 117,993 → 115,708 | -1.9% | +0.3% |
+| HTTPS/1 gzip control | 15,797 → 15,817 | +0.1% | -1.8% |
+
+All 24 trials passed: 2,248,122 measured responses, zero errors, matching pre/post
+payload hashes, reconciled timed statuses, no generator or connection flags,
+clean service exits and no leftover response files. The three fixed-length
+async workloads improved in both pairs; their p95 latencies fell approximately
+26%, 24% and 19% respectively. These are indicative measurements on an occupied
+workstation, not a controlled ranking against Mu3 or Mu4 blocking.
+
+The initial chunked slowdown prompted six additional trials, with five seconds
+of warm-up and six seconds measured. Their three paired throughput changes were
+−4.5%, +3.9% and +10.5%; the median comparison was +7.0%, reversing the first
+indicator. All 56,406 responses passed. This variability leaves the chunked
+performance effect unresolved; it does not establish either a gain or a
+regression. Gzip and small HTTP/2 controls likewise showed no consistent gain.
+The raw results of both runs are preserved rather than selecting the favorable
+chunked result.
+
+Final validation passed all 5,321 tests in clean Maven `verify` builds on Java
+21 and 25, with zero failures, errors or skips. Java 21 also passed NullAway and
+Error Prone, and its verified production classes exactly match the frozen
+classes used for measurement. The focused 146-case suite passed on Java 11,
+17 and 21 with no failures, errors or skips. Logs, XML reports, source and
+bytecode inventories, all 30 native trials and the allocation probe reconcile
+in the final evidence audit. Full Java 11/17 suites and the separate external
+conformance campaigns were not rerun for this change.

@@ -13,7 +13,7 @@ import java.util.function.Supplier;
 /** Runs existing stream encoders in bounded input turns and joins each owned output borrow. */
 final class AsyncResponseRenderer {
     @FunctionalInterface interface Operation { void run() throws Throwable; }
-    @FunctionalInterface private interface Step { boolean render() throws Throwable; }
+    @FunctionalInterface private interface Step { boolean render(ResponseOutputCapture.Capture capture) throws Throwable; }
     // One default HTTP/2 DATA payload per input turn; captured output keeps its separate cap.
     private static final int SOURCE_BYTES = 16_384;
     private final Executor executor;
@@ -34,14 +34,17 @@ final class AsyncResponseRenderer {
         // Preserve the public adapter's existing position behavior for each buffer kind.
         ByteBuffer input = source.hasArray() ? source.duplicate() : source;
         byte[] copy = input.hasArray() ? new byte[0] : new byte[Math.min(input.remaining(), SOURCE_BYTES)];
-        return start(() -> {
+        return start(capture -> {
             OutputStream stream = responseStream.get();
             int count = Math.min(input.remaining(), SOURCE_BYTES);
             if (input.hasArray()) {
-                stream.write(input.array(), input.arrayOffset() + input.position(), count);
+                int offset = input.arrayOffset() + input.position();
+                capture.borrowSourceIfUnchanged(input.array(), offset, count);
+                stream.write(input.array(), offset, count);
                 input.position(input.position() + count);
             } else if (count > 0) {
                 input.get(copy, 0, count);
+                capture.borrowSourceIfUnchanged(copy, 0, count);
                 stream.write(copy, 0, count);
             }
             if (input.hasRemaining()) return false;
@@ -55,7 +58,7 @@ final class AsyncResponseRenderer {
     }
 
     CompletableFuture<@Nullable Void> render(Operation operation, @Nullable Operation preparation) {
-        return start(() -> { operation.run(); return true; }, preparation);
+        return start(capture -> { operation.run(); return true; }, preparation);
     }
 
     private CompletableFuture<@Nullable Void> start(Step step, @Nullable Operation preparation) {
@@ -104,7 +107,7 @@ final class AsyncResponseRenderer {
                         Operation initial = preparation;
                         preparation = null;
                         if (initial != null) initial.run();
-                        else rendered = step.render();
+                        else rendered = step.render(current);
                     }
                     catch (Throwable failure) { renderFailure = failure; }
                     finally {
