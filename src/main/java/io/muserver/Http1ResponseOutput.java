@@ -25,6 +25,8 @@ final class Http1ResponseOutput extends OutputStream implements ResponseOutputCa
 
     void allowSourceBorrowing(boolean allowed) { sourceBorrowingAllowed = allowed; }
 
+    @Override public boolean inputHeadroomUseful() { return sourceBorrowingAllowed; }
+
     @Override public void write(int value) throws IOException {
         if (discarding) return;
         Rendered capture = rendering;

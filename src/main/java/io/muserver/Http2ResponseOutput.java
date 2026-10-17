@@ -24,6 +24,8 @@ final class Http2ResponseOutput implements ResponseOutputCapture {
 
     void allowSourceBorrowing(boolean allowed) { sourceBorrowingAllowed = allowed; }
 
+    @Override public boolean inputHeadroomUseful() { return sourceBorrowingAllowed; }
+
     void write(LogicalHttp2Frame frame) throws IOException, InterruptedException {
         if (discarding) return;
         Rendered capture = rendering;

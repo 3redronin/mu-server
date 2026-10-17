@@ -1472,3 +1472,143 @@ skips. The final audit reconciles source and compiled inventories, runtime XML
 and logs, TLS diagnostics and all 40 native trials. Those trials have clean
 service exits and no leftover response files. Full Java 11/17 suites and the
 separate external conformance campaigns were not rerun for this change.
+
+## Framing headroom in async render turns (17 October 2026)
+
+The renderer's 16 KiB input quantum is production code, not a benchmark option.
+Large public async writes pass through it on channel HTTP/1 and on HTTP/2's
+shared response renderer. With the tested OpenJDK 21 TLS 1.3 engine, each full
+16 KiB piece leaves a 17-byte tail after the first record. HTTP/2 adds its
+nine-byte DATA header. HTTP/1 chunk framing also pushes a full piece beyond
+the capture's 16 KiB drain size, creating an extra handoff even without TLS.
+Smaller application writes and other response paths do not necessarily incur
+these costs; the bounded one-MiB async fixture makes them particularly visible.
+
+For unencoded bodies, the renderer now prefers 16,352 source bytes, leaving
+32 bytes below the existing 16 KiB maximum. This accommodates the tested TLS 1.3 content-type/padding and
+ordinary HTTP framing without increasing a buffer. It is a batching preference,
+not an assumption that every encoder or TLS provider will fit a record. Capture
+drains, transport budgets, engine partial-consumption handling, acknowledgement
+and cancellation ownership, and the 64-step renderer yield remain unchanged.
+Direct/read-only scratch stays capped at 16 KiB so the final piece can still
+use the original maximum.
+
+A final piece of at most 16 KiB is not split just for headroom. Likewise, when
+the remaining input fits two maximum-sized pieces but would need three preferred
+pieces, the renderer keeps two. An initial version preserved only the last
+piece. A longer busy-host recheck found HTTP/1 at 32 KiB slower in all three
+pairs (-2.0%, -3.6%, -11.9%); it had introduced a third rendering turn. That
+version and its measurements remain under
+`../nonblocking-validation/async-headroom-20261017/`. The intermediate candidate with the two-piece guard remains under
+`../nonblocking-validation/async-headroom-final-20261017/`. Its longer gzip
+recheck returned paired changes of -4.3%, -6.2% and +0.1%. Input headroom does
+not predict encoded output size, so the final version applies it only when no
+content encoder is selected. Gzip and custom encoders retain their prior full
+16 KiB input turns. This avoids spending extra encoder/rendering calls on a
+batching hint that cannot predict the resulting TLS boundaries.
+
+The final candidate is frozen and measured separately under
+`../nonblocking-validation/async-headroom-unencoded-20261017/` against `e8b9fe77`.
+Both builds use Java 21 targeting Java 11, identical dependencies and identical
+fixtures within each comparison. Eight class files from the renderer, capture interface and HTTP/1/HTTP/2
+capture adapters change. The revised production SHA-256 is
+`0b37273a74a1d0a672e2bf730182170d49c4080ad1b6da8d9843f69d317c3674`.
+
+The real-engine diagnostic runs the actual HTTP/1 renderer and chunk writer
+through the transport buffer and TLS driver, checking every body byte. It
+excludes response headers and the final chunk terminator. Across 56 before/after
+cases it covers TLS 1.2/1.3, fixed/chunked output, and inputs from 8 KiB to one
+MiB, including 16 KiB and 32 KiB boundaries. For one MiB:
+
+| Body framing / TLS | Application records before → after | Transport sink calls before → after |
+| --- | ---: | ---: |
+| Fixed, TLS 1.2 | 64 → 65 | 128 → 130 |
+| Fixed, TLS 1.3 | 128 → 65 | 256 → 130 |
+| Chunked, TLS 1.2 | 128 → 65 | 256 → 130 |
+| Chunked, TLS 1.3 | 192 → 65 | 384 → 130 |
+
+The encrypted output buffer remains 16,709 bytes in every case. The revised
+32 KiB cases retain their previous body-borrow and TLS-record counts. This
+also exposes the tradeoff: fixed TLS 1.2 already fit each full input in one
+record, so its one-MiB output now has one additional record and render turn.
+
+Allocation is not assumed to follow record counts. An immediate-ACK renderer
+probe measures 27,944 → 28,376 allocated bytes per one-MiB response, reflecting
+the extra turn. A separate warmed TLS probe counts caller-thread allocations
+inside rendering/continuations and transport drains through the real TLS driver.
+Its median combined measurements are 211,856 → 137,162 bytes for TLS 1.3
+(-35.3%) and approximately 132,776 → 136,690 for TLS 1.2 (+2.9%). Client pumping,
+handshake, initial setup, HTTP headers, real executor dispatch and other server
+work are outside these counters; these are not whole-server allocation totals.
+Every measured response is checked byte-for-byte.
+
+The focused regression suite has 275 cases. Its expanded renderer cases cover
+heap, direct, read-only and sliced buffers around the preferred and maximum
+piece sizes, the two-piece boundary and its occurrence inside a larger write.
+They verify exact bytes and buffer positions, retained source/scratch ownership
+until acknowledgement, and the absence of an extra rendering turn for the
+final one or two pieces. A separate encoder case checks full-size input turns,
+owned output surviving immediate scratch overwrite, and pending-ACK sequencing.
+Existing transport, TLS, encoder-expansion, rejection,
+HTTP/2 flow-control and cancellation tests remain in the validation scope.
+
+The final native campaign uses Java 21 PLATFORM, fresh JVMs with 512 MiB heaps
+and 1 GiB cgroups, swap disabled, separate server/generator CPU sets, and reversed
+pair order. The main comparison uses two seconds of warm-up, four seconds
+measured and two pairs. Bulk responses are one MiB with eight clients and one
+public async write per response; gzip has 64 KiB input. Small HTTP/1 uses
+128-byte responses and 32 clients; small HTTP/2 uses 128 bytes and 32 streams
+on one connection. The fixture pins TLS 1.3 AES-128-GCM. Medians of two runs:
+
+| Workload | Before → after, responses/s | Throughput change | CPU/response change |
+| --- | ---: | ---: | ---: |
+| Small HTTP/1 | 101,654 → 97,294 | -4.3% | +2.9% |
+| HTTP/1 fixed async | 3,662 → 3,516 | -4.0% | +6.0% |
+| HTTPS/1 fixed async | 2,113 → 2,619 | +23.9% | -16.3% |
+| TLS HTTP/2 async | 1,323 → 1,495 | +13.0% | -6.6% |
+| HTTP/1 chunked async | 1,402 → 1,622 | +15.7% | -13.7% |
+| Small multiplexed HTTP/2 | 88,587 → 94,979 | +7.2% | -11.2% |
+| HTTPS/1 chunked async | 1,124 → 1,364 | +21.3% | -16.8% |
+| HTTPS/1 gzip | 15,078 → 14,657 | -2.8% | +2.8% |
+
+Large fixed HTTPS, HTTP/2 and chunked HTTPS improved in both pairs, with p95
+latency reductions of approximately 20%, 6% and 12%. Plain chunked output also
+improved in both pairs, though the range was broad (+2.1% to +31.2%). Plain
+fixed output was slower in both pairs (-4.3%, -3.7%), as was the small HTTP/1
+control whose input batching does not change. That does not establish the cause
+of the slowdown: plain fixed and small-response performance remain unresolved
+until a quieter comparison. These results do not support a blanket speedup or
+a controlled Mu3/Mu4 ranking.
+
+Another 24 trials cover fixed 16 KiB, 32 KiB and 64 KiB inputs over TLS HTTP/1
+and HTTP/2, using the same short paired protocol. All passed; HTTP/1 at 32 KiB
+ranged from -4.0% to +10.9%, rather than reproducing the initial candidate's
+consistent slowdown. HTTP/2 at 64 KiB improved in both pairs (+7.9%, +2.9%),
+while HTTP/1 at 64 KiB varied from -8.5% to +12.3%. Small and boundary-size
+timings are treated as indicators, not stable performance claims.
+
+Twelve separate trials pin TLS 1.2 ECDHE-RSA-AES128-GCM-SHA256 in both server
+and generator; payload checks also verify the negotiated protocol and cipher.
+The same one-MiB comparison gives fixed HTTPS -2.3% (pairs -5.1%, +0.5%),
+HTTP/2 +17.7% (+16.0%, +19.3%), and chunked HTTPS +29.4% (+38.2%, +21.2%).
+Fixed TLS 1.2 has no established benefit, consistent with its extra record in
+the deterministic diagnostic.
+
+Six longer gzip trials use five seconds of warm-up, six seconds measured and
+three pairs. Their paired changes are +1.7%, +0.6% and -11.4%; the comparison
+of medians is +1.7%. Together with the short run this leaves gzip timing
+unresolved, while its original input budget is now protected by the encoded
+path and regression test. All 74 final native trials passed: 6,291,957 measured
+responses, zero errors, matched pre/post payload hashes and timed statuses,
+no generator or connection flags, clean service exits and no leftover response
+files. The combined report is `async-headroom-unencoded-20261017/report.html`
+under the validation directory; each campaign links its complete raw ledger.
+
+Final clean Maven `verify` passed all 5,391 tests on Java 21 and 25 with zero
+failures, errors or skips. Java 21 also passed NullAway/Error Prone, and its
+verified production bytecode exactly matches the frozen measured candidate.
+The focused 275 cases passed on Java 11, 17 and 21. The final 1,625-check audit
+reconciles validated source, compiler/runtime evidence, fixture and class
+inventories, TLS/allocation diagnostics, all native trials and report links.
+Full Java 11/17 suites and separate external conformance campaigns were not
+rerun for this change.

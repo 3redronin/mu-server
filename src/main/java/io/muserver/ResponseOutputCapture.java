@@ -9,6 +9,9 @@ import java.util.concurrent.CompletableFuture;
 interface ResponseOutputCapture {
     Capture begin() throws IOException;
 
+    /** Input headroom predicts framed output size only when no content encoder is selected. */
+    default boolean inputHeadroomUseful() { return false; }
+
     interface Capture extends AutoCloseable {
         /**
          * The renderer retains this range unchanged until this capture drains. An unencoded

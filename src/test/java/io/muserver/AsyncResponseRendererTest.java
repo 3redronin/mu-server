@@ -4,6 +4,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayOutputStream;
@@ -16,6 +18,8 @@ import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -23,13 +27,19 @@ import static org.junit.jupiter.api.Assertions.*;
 class AsyncResponseRendererTest {
     @TempDir Path directory;
 
-    @ParameterizedTest @ValueSource(ints = {0, 1, 2, 3})
-    void unencodedTurnsBorrowTheInputAndDoNotReuseItBeforeAcknowledgement(int kind) throws Exception {
+    static Stream<Arguments> sourceBoundaries() {
+        return IntStream.of(16351, 16352, 16353, 16384, 16385, 32704, 32705, 32736, 32737,
+                32767, 32768, 32769, 49120, 49121, 3 * 16384 + 37, 65536).boxed()
+            .flatMap(size -> IntStream.range(0, 4).mapToObj(kind -> Arguments.of(kind, size)));
+    }
+
+    @ParameterizedTest @MethodSource("sourceBoundaries")
+    void unencodedTurnsBorrowTheInputAndDoNotReuseItBeforeAcknowledgement(int kind, int size) throws Exception {
         var tasks = new ArrayDeque<Runnable>();
         var pending = new ArrayDeque<CompletableFuture<Void>>();
         var borrowed = new ArrayDeque<ByteBuffer>();
         var supplied = new java.util.concurrent.atomic.AtomicReference<byte[]>();
-        byte[] expected = new byte[3 * 16384 + 37];
+        byte[] expected = new byte[size];
         new java.util.Random(625).nextBytes(expected);
         ByteBuffer source = kind == 1 ? ByteBuffer.allocateDirect(expected.length + 9)
             : ByteBuffer.allocate(expected.length + 9);
@@ -65,6 +75,9 @@ class AsyncResponseRendererTest {
             runTasks(tasks);
         }
         written.get();
+        if (size <= 32768) assertEquals((size + 16383) / 16384 + 1, turns,
+            "Keep one or two body writes plus the final flush, without adding a turn for headroom");
+        if (size == 49120) assertEquals(4, turns, "The last 32 KiB of a larger input still needs only two body turns");
         assertArrayEquals(expected, actual.toByteArray());
         assertEquals(source.hasArray() ? position : source.limit(), source.position());
         assertNoTemporaryFiles();
@@ -82,7 +95,7 @@ class AsyncResponseRendererTest {
         try {
             var written = executor.submit(() -> renderer.write(ByteBuffer.allocate(8 * 1024 * 1024)))
                 .get(3, TimeUnit.SECONDS);
-            assertEquals(16384, borrowed.get(3, TimeUnit.SECONDS).remaining());
+            assertEquals(16352, borrowed.get(3, TimeUnit.SECONDS).remaining());
             executor.submit(() -> {}).get(3, TimeUnit.SECONDS);
             assertFalse(written.isDone());
             IOException aborted = new IOException("transport aborted");
@@ -90,6 +103,46 @@ class AsyncResponseRendererTest {
             assertSame(aborted, assertThrows(ExecutionException.class,
                 () -> written.get(3, TimeUnit.SECONDS)).getCause());
         } finally { io.completeExceptionally(new IOException("test closed")); executor.shutdownNow(); }
+    }
+
+    @Test void encodersKeepFullInputTurnsAndOwnTheirOutputWhileAcknowledgementIsPending() throws Exception {
+        var tasks = new ArrayDeque<Runnable>();
+        var pending = new ArrayDeque<CompletableFuture<Void>>();
+        var borrowed = new ArrayDeque<ByteBuffer>();
+        var inputCounts = new java.util.ArrayList<Integer>();
+        var supplied = new java.util.concurrent.atomic.AtomicReference<byte[]>();
+        byte[] expected = new byte[3 * 16384 + 37];
+        new java.util.Random(928).nextBytes(expected);
+        var capture = new Http1ResponseOutput(OutputStream.nullOutputStream(), bytes -> {
+            if (bytes.hasRemaining()) assertNotSame(supplied.get(), bytes.array(), "An encoder may reuse its input scratch");
+            borrowed.add(bytes);
+            var io = new CompletableFuture<Void>(); pending.add(io); return io;
+        }, directory);
+        var encoder = new OutputStream() {
+            @Override public void write(int value) { fail("Expected array writes"); }
+            @Override public void write(byte[] bytes, int offset, int count) throws IOException {
+                inputCounts.add(count);
+                supplied.set(bytes);
+                capture.write(bytes, offset, count);
+                java.util.Arrays.fill(bytes, offset, offset + count, (byte) 0);
+            }
+            @Override public void flush() throws IOException { capture.flush(); }
+        };
+        var written = new AsyncResponseRenderer(tasks::add, capture, () -> encoder)
+            .write(ByteBuffer.wrap(expected).asReadOnlyBuffer());
+        var actual = new ByteArrayOutputStream();
+        while (!written.isDone()) {
+            assertEquals(1, pending.size());
+            assertTrue(tasks.isEmpty(), "The encoder cannot reuse its scratch before acknowledgement");
+            ByteBuffer bytes = borrowed.remove();
+            byte[] chunk = new byte[bytes.remaining()]; bytes.get(chunk); actual.write(chunk);
+            pending.remove().complete(null);
+            runTasks(tasks);
+        }
+        written.get();
+        assertEquals(java.util.List.of(16384, 16384, 16384, 37), inputCounts);
+        assertArrayEquals(expected, actual.toByteArray());
+        assertNoTemporaryFiles();
     }
 
     @ParameterizedTest @ValueSource(ints = {0, 1, 2, 3})

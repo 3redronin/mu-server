@@ -14,8 +14,13 @@ import java.util.function.Supplier;
 final class AsyncResponseRenderer {
     @FunctionalInterface interface Operation { void run() throws Throwable; }
     @FunctionalInterface private interface Step { boolean render(ResponseOutputCapture.Capture capture) throws Throwable; }
-    // One default HTTP/2 DATA payload per input turn; captured output keeps its separate cap.
-    private static final int SOURCE_BYTES = 16_384;
+    // For unencoded bodies, leave room for HTTP framing and TLS 1.3's inner content type/padding.
+    // A full 16 KiB body can otherwise produce a second, tiny TLS record (SunJSSE uses
+    // 17 bytes for the latter, and an HTTP/2 DATA header adds 9). This is only a batching
+    // preference: encoders may expand output and every transport still handles partial writes.
+    private static final int PREFERRED_SOURCE_BYTES = 16_384 - 32;
+    // Preserve a final piece or pair when headroom would require an extra render/ACK turn.
+    private static final int MAX_SOURCE_BYTES = 16_384;
     private final Executor executor;
     private final ResponseOutputCapture output;
     private final Supplier<OutputStream> responseStream;
@@ -33,10 +38,11 @@ final class AsyncResponseRenderer {
     CompletableFuture<@Nullable Void> write(ByteBuffer source, @Nullable Operation preparation) {
         // Preserve the public adapter's existing position behavior for each buffer kind.
         ByteBuffer input = source.hasArray() ? source.duplicate() : source;
-        byte[] copy = input.hasArray() ? new byte[0] : new byte[Math.min(input.remaining(), SOURCE_BYTES)];
+        byte[] copy = input.hasArray() ? new byte[0] : new byte[Math.min(input.remaining(), MAX_SOURCE_BYTES)];
         return start(capture -> {
             OutputStream stream = responseStream.get();
-            int count = Math.min(input.remaining(), SOURCE_BYTES);
+            int count = output.inputHeadroomUseful() ? nextSourceBytes(input.remaining())
+                : Math.min(input.remaining(), MAX_SOURCE_BYTES);
             if (input.hasArray()) {
                 int offset = input.arrayOffset() + input.position();
                 capture.borrowSourceIfUnchanged(input.array(), offset, count);
@@ -51,6 +57,14 @@ final class AsyncResponseRenderer {
             stream.flush();
             return true;
         }, preparation);
+    }
+
+    private static int nextSourceBytes(int remaining) {
+        if (remaining <= MAX_SOURCE_BYTES) return remaining;
+        if (remaining <= 2 * MAX_SOURCE_BYTES && remaining > PREFERRED_SOURCE_BYTES + MAX_SOURCE_BYTES) {
+            return MAX_SOURCE_BYTES;
+        }
+        return PREFERRED_SOURCE_BYTES;
     }
 
     CompletableFuture<@Nullable Void> render(Operation operation) {
