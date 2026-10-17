@@ -12,6 +12,9 @@ interface ResponseOutputCapture {
     /** Input headroom predicts framed output size only when no content encoder is selected. */
     default boolean inputHeadroomUseful() { return false; }
 
+    /** Only unencoded output with a bounded, fair fragment scheduler may retain a larger heap borrow. */
+    default boolean multiFrameBorrowAllowed() { return false; }
+
     interface Capture extends AutoCloseable {
         /**
          * The renderer retains this range unchanged until this capture drains. An unencoded

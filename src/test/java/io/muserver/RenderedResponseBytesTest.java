@@ -60,7 +60,9 @@ class RenderedResponseBytesTest {
         "1, 0", "1, 1", "1, 40000",
         "256, 0", "256, 1", "256, 40000",
         "257, 0", "257, 1", "257, 40000",
-        "16384, 0", "16384, 1", "16384, 40000"
+        "16384, 0", "16384, 1", "16384, 40000",
+        "32769, 0", "32769, 1", "32769, 40000",
+        "65408, 0", "65408, 1", "65408, 40000"
     })
     void mixedOutputMaterializesTheBorrowBeforeAppendingOrSpilling(int bodyLength, int suffixLength) throws Exception {
         byte[] body = new byte[bodyLength];
@@ -77,6 +79,7 @@ class RenderedResponseBytesTest {
             }
             capture.seal();
             Arrays.fill(body, (byte) 0); // Fallback owns its copy, including the formerly borrowed prefix.
+            assertOwnedMemoryBound(capture);
             assertArrayEquals(expected.toByteArray(), drain(capture));
         }
         assertNoTemporaryFiles();
@@ -102,13 +105,62 @@ class RenderedResponseBytesTest {
 
     @Test void borrowOffersCannotExceedTheRenderTurnOrArriveAfterSealing() throws Exception {
         try (var capture = new RenderedResponseBytes(directory)) {
-            byte[] source = new byte[RenderedResponseBytes.DRAIN_BYTES + 1];
+            byte[] source = new byte[ResponseWriteSizes.MAX_BORROW_BYTES + 1];
             assertThrows(IllegalArgumentException.class, () -> capture.borrowSourceIfUnchanged(source, 0, source.length));
             capture.borrowSourceIfUnchanged(source, 0, 17);
             capture.seal(); // An offer without a write produces no output.
             assertNull(capture.next());
             assertThrows(IOException.class, () -> capture.borrowSourceIfUnchanged(source, 0, 17));
         }
+    }
+
+    @ParameterizedTest @ValueSource(ints = {32769, 65408})
+    void largeBorrowDrainsWithoutGrowingOwnedStorage(int length) throws Exception {
+        byte[] source = new byte[length + 13];
+        new Random(63).nextBytes(source);
+        try (var capture = new RenderedResponseBytes(directory)) {
+            capture.borrowSourceIfUnchanged(source, 7, length);
+            capture.write(source, 7, length);
+            capture.seal();
+            ByteBuffer first = capture.next();
+            assertEquals(16384, first.remaining());
+            assertSame(source, first.array());
+            ByteBuffer rest = capture.next(ResponseWriteSizes.MAX_BORROW_BYTES);
+            assertSame(source, rest.array());
+            assertEquals(7 + 16384, rest.arrayOffset());
+            assertEquals(length - 16384, rest.remaining());
+            assertNull(capture.next());
+            assertFalse(capture.spilled());
+            assertOwnedMemoryBound(capture);
+        }
+        assertNoTemporaryFiles();
+    }
+
+    @Test void failedLargeBorrowSpillRetainsItsStablePrefixUntilDrained() throws Exception {
+        Path unusable = Files.createFile(directory.resolve("not-a-directory"));
+        byte[] source = new byte[65408];
+        new Random(749).nextBytes(source);
+        try (var capture = new RenderedResponseBytes(unusable)) {
+            capture.borrowSourceIfUnchanged(source, 0, source.length);
+            capture.write(source);
+            IOException failed = assertThrows(IOException.class, () -> capture.write(42));
+            assertSame(failed, assertThrows(IOException.class, () -> capture.write(43)));
+            capture.seal();
+            ByteBuffer prefix = capture.next(ResponseWriteSizes.MAX_BORROW_BYTES);
+            assertSame(source, prefix.array());
+            byte[] actual = new byte[prefix.remaining()]; prefix.get(actual);
+            assertArrayEquals(source, actual);
+            assertNull(capture.next());
+            assertOwnedMemoryBound(capture);
+        }
+        Files.delete(unusable);
+        assertNoTemporaryFiles();
+    }
+
+    private static void assertOwnedMemoryBound(RenderedResponseBytes capture) throws Exception {
+        var field = RenderedResponseBytes.class.getDeclaredField("memory"); field.setAccessible(true);
+        byte[] owned = (byte[]) field.get(capture);
+        assertTrue(owned == null || owned.length <= RenderedResponseBytes.MEMORY_LIMIT);
     }
 
     @ParameterizedTest @ValueSource(ints = {0, 1, 8192, 16383, 16384, 16385, 32768, 32769, 1048576})

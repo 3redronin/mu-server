@@ -40,7 +40,7 @@ final class RenderedResponseBytes extends OutputStream {
     void borrowSourceIfUnchanged(byte[] source, int offset, int count) throws IOException {
         Objects.checkFromIndexSize(offset, count, source.length);
         if (closed || sealed) throw new IOException("Rendered response output is no longer writable");
-        if (count > DRAIN_BYTES) throw new IllegalArgumentException("Borrow exceeds one render turn");
+        if (count > ResponseWriteSizes.MAX_BORROW_BYTES) throw new IllegalArgumentException("Borrow exceeds one render turn");
         // Stream initialization may already have captured headers or a buffered prefix.
         if (length != 0 || count == 0) return;
         borrowCandidate = source;
@@ -69,9 +69,15 @@ final class RenderedResponseBytes extends OutputStream {
             // appending or spilling, while the renderer still owns the stable source. No borrow
             // has reached the transport yet: capture drain starts only after sealing.
             if (borrowed) {
-                byte[] buffered = Objects.requireNonNull(memory);
-                if (length > buffered.length) memory = buffered = new byte[Math.max(256, (int) length)];
-                System.arraycopy(Objects.requireNonNull(borrowCandidate), borrowOffset, buffered, 0, (int) length);
+                if (length > MEMORY_LIMIT) {
+                    // Do not materialize a multi-frame borrow into an oversized owned array.
+                    // On failure the offered source remains stable until its prefix drains.
+                    spill();
+                } else {
+                    byte[] buffered = Objects.requireNonNull(memory);
+                    if (length > buffered.length) memory = buffered = new byte[Math.max(256, (int) length)];
+                    System.arraycopy(Objects.requireNonNull(borrowCandidate), borrowOffset, buffered, 0, (int) length);
+                }
                 borrowed = false;
             }
             borrowCandidate = null;
@@ -106,7 +112,9 @@ final class RenderedResponseBytes extends OutputStream {
         try {
             opened = FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE,
                 StandardOpenOption.DELETE_ON_CLOSE);
-            writeFully(opened, ByteBuffer.wrap(Objects.requireNonNull(memory), 0, (int) length));
+            writeFully(opened, borrowed
+                ? ByteBuffer.wrap(Objects.requireNonNull(borrowCandidate), borrowOffset, (int) length)
+                : ByteBuffer.wrap(Objects.requireNonNull(memory), 0, (int) length));
             file = opened;
             temporaryFile = path;
             memory = null;
@@ -137,8 +145,16 @@ final class RenderedResponseBytes extends OutputStream {
 
     /** The returned storage is borrowed until the next read or close; callers wait for write ACK. */
     @Nullable ByteBuffer next() throws IOException {
+        return next(DRAIN_BYTES);
+    }
+
+    /** Larger drains apply only to a stable source borrow, never to owned memory or file scratch. */
+    @Nullable ByteBuffer next(int maxBorrowBytes) throws IOException {
+        if (maxBorrowBytes < 1 || maxBorrowBytes > ResponseWriteSizes.MAX_BORROW_BYTES) {
+            throw new IllegalArgumentException("Invalid borrowed drain size");
+        }
         if (closed || !sealed) throw new IOException("Rendered response output is not readable");
-        int count = (int) Math.min(DRAIN_BYTES, length - read);
+        int count = (int) Math.min(borrowed ? maxBorrowBytes : DRAIN_BYTES, length - read);
         if (count == 0) return null;
         ByteBuffer result;
         FileChannel source = file;

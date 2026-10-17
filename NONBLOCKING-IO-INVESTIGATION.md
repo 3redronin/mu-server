@@ -1825,3 +1825,118 @@ were not rerun for this notification change. The combined report is
 `nonblocking-validation/h2-completion-wakeup-20261017/report.html` beside the
 checkout; it links the raw trials, diagnostic profiles, regression failure on
 the baseline, test logs and identity audit.
+
+
+### Bounded HTTP/2 source spans (17 October 2026)
+
+Large asynchronous HTTP/2 responses returned to the renderer after each
+frame-sized input turn, even when the next bytes belonged to the same stable
+heap array. The renderer now offers up to 65,408 bytes of an unencoded heap
+input after its first ordinary turn. `Http2DataSpan` represents that logical
+borrow; it cannot serialize itself as a wire frame. The coordinator emits
+ordinary DATA fragments of at most 16 KiB, preserving the existing 32-byte
+framing/TLS headroom when it does not add a final fragment. A one MiB input
+therefore uses 17 source turns instead of 65, while the transport still
+acknowledges individual fragments.
+
+Only one fragment of a span may be active. After its acknowledgement, the
+remainder moves behind other streams. Later DATA, headers and ordered resets
+on the same stream cannot overtake it; outbound WINDOW_UPDATE frames remain
+independent of response DATA ordering. Stream and connection credit still
+bound each fragment, including after SETTINGS reduces a stream window below
+zero. The span completes only after its final fragment returns. Cancellation
+and reset retain active transport ownership and discard the remainder; a
+cancelled yielded span must not hide a queued successor until another command
+arrives. A deterministic regression test reproduced that stalled-successor
+case during development and passes with the corrected eligibility check.
+
+The larger borrow uses the existing caller-owned array. It does not add a
+larger payload buffer. Owned capture storage remains capped at 32 KiB;
+owned/file drains, file scratch and direct/read-only input scratch remain at
+most 16 KiB. Mixed output after a borrowed prefix over 32 KiB spills directly
+from that stable prefix, avoiding an oversized owned array. If spilling fails,
+the already captured prefix remains readable until its acknowledgement and
+capture cleanup.
+
+The first input turn deliberately retains its ordinary size. With a response
+stream buffer no larger than 16,352 bytes, this flushes an existing buffered
+prefix while keeping the combined owned capture within 32 KiB. Later turns can
+then borrow larger ranges unchanged. Larger custom response buffers retain
+ordinary input turns. This prevents an ordinary buffered response from gaining
+a new dependency on temporary-file availability. Direct/read-only inputs,
+selected content encoders and HTTP/1 retain their previous input limits.
+Encoder and application continuation execution contexts, TLS engine behavior,
+transport buffer capacities and writer drain budgets are unchanged.
+
+New regression cases cover fragment boundaries and source offsets, final-only
+completion, round-robin progress across three busy streams, same-stream DATA
+and ordered-reset ordering, tiny credit, negative stream windows, cancellation
+before and during native ownership, and cancellation between fragments with
+an already queued successor. Capture tests cover larger borrowed drains,
+small/large mixed suffixes and spill failure without owned-buffer growth.
+Real response tests cover heap slices, direct and read-only buffers over
+cleartext HTTP/2, TLS 1.2 and TLS 1.3, with and without a buffered prefix. They
+reuse the caller's source after successful completion and check exact payloads.
+Four additional cases use response buffers of 8,192, 16,352, 16,384 and 32,768
+bytes with the spill directory deliberately replaced by a file; the ordinary
+response still succeeds. Controlled handler-failure cases verify that a larger
+borrow remains owned until the active transport fragment returns.
+
+The comparison baseline is `33785ab7`, source digest
+`e2cd5f2997bfb6aa807146a017ba61f27c494a790873cfa3d09c95b4015e951f`.
+The frozen baseline retains pre-commit Git metadata; its source digest maps it
+to the committed implementation. Both builds use Java 21 compilation targeting
+Java 11, identical bounded-async fixtures and dependencies. Thirty short trials
+use fresh Java 21 PLATFORM JVMs, 512 MiB heaps, 1 GiB cgroups, swap disabled and
+separate server/generator CPU sets. Three pairs reverse order, with four seconds
+warm-up and six measured seconds. All cases use TLS 1.3 AES-128-GCM.
+
+Bulk responses contain one MiB and use one bounded async write per request,
+eight connections and one stream each. Multiplexed bulk uses one connection
+with eight streams. Small HTTP/2 uses synchronous 128-byte responses and
+32 streams on one connection; gzip uses 64 KiB uncompressed input and eight
+connections. Busy-PC results are indicators only. The primary statistic is
+the median of paired throughput changes, not the ratio of separate rate medians.
+HTTP/2 runs advertise a 65,535-byte stream window and a 16,777,215-byte
+connection window (`h2load -w 16 -W 24`), exercising repeated stream-credit
+updates while the larger source borrows are outstanding.
+
+| Workload | Median paired throughput change | All paired changes |
+| --- | ---: | ---: |
+| TLS HTTP/2 bulk | +15.9% | +15.9%, +17.0%, +15.9% |
+| Small multiplexed HTTP/2 | +4.0% | +4.6%, +1.2%, +4.0% |
+| HTTPS/1 bulk control | -1.0% | -1.4%, -0.7%, -1.0% |
+| Multiplexed HTTP/2 bulk | +5.5% | +5.5%, +5.6%, +4.5% |
+| HTTP/2 gzip | +0.7% | +0.7%, +0.9%, -0.1% |
+
+HTTP/2 bulk median p95 latency fell from 4.777 to 4.248 ms and measured CPU
+from 2,780 to 2,235 microseconds per response. Multiplexed bulk p95 fell from
+11.644 to 11.083 ms. Small synchronous responses, gzip and HTTP/1 do not use
+larger source borrows; their observed changes should not be attributed to that
+optimization. These measurements do not establish a new Mu3/blocking/NIO ranking.
+
+Separate all-park JFR runs show 247.1 versus 161.5 park events per bulk response,
+a reduction of about 35%. Weighted sampled allocation falls from 248,344 to
+226,171 bytes per response, about 9%, with no JFR data loss. These are approximate
+diagnostic estimates, not exact task counts or a whole-server peak-memory
+guarantee. Recording every park materially changes performance; diagnostic
+response rates are excluded from the speed comparison.
+
+All 30 speed trials passed, covering 5,584,759 measured responses;
+the two diagnostic trials covered another 25,836. There were
+zero reported errors, no generator/connection flags, matching pre/post payload
+hashes, clean JVM exits and no leftover response files. The final focused
+1,134 tests passed on Java 11, 17, 21 and 25. Full clean Java 21 `verify` with
+NullAway/Error Prone passed all 5,453 tests, with no failures, errors or skips.
+Verified production bytecode exactly matches the measured candidate. The pinned
+h2spec 2.6.0 strict TLS/ALPN profile passed all 147 cases on each of Java 11, 17,
+21 and 25, with fresh-request health checks and clean shutdown. This is the
+tool's RFC7540/7541 profile, not certification of every RFC9113 behavior.
+Full Java 11/17/25 suites and external WebSocket conformance were not rerun.
+
+The evidence audit passed 458 checks. The combined report is
+`nonblocking-validation/h2-data-spans-20261017/report.html` beside the checkout;
+it links the frozen source/class identities, native speed trials, diagnostic
+profiles, test logs, independent conformance and audit. The measured production
+source digest is
+`c764d37da77d10f8ba9ea6ee1a020955987a113b25474d981bd3f2b88995b5b0`.

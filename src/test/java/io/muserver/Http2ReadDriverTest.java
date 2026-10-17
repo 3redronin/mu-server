@@ -618,7 +618,7 @@ class Http2ReadDriverTest {
         return false;
     }
 
-    @ParameterizedTest @CsvSource({"false,8192", "true,8192", "false,16384", "true,16384"})
+    @ParameterizedTest @CsvSource({"false,8192", "true,8192", "false,16384", "true,16384", "false,65408", "true,65408"})
     void aHandlerFailureJoinsItsOutstandingAsyncWriteBeforeRetiring(boolean completeFirst, int size) throws Exception {
         var releaseHandler = new CountDownLatch(1);
         var written = new CompletableFuture<java.util.concurrent.Future<@org.jspecify.annotations.Nullable Void>>();
@@ -626,7 +626,8 @@ class Http2ReadDriverTest {
         try (var fixture = new Fixture((request, response) -> {
             response.addCompletionListener(notified::complete);
             var async = request.handleAsync();
-            written.complete(async.write(ByteBuffer.wrap(new byte[size]).asReadOnlyBuffer()));
+            ByteBuffer bytes = ByteBuffer.wrap(new byte[size]);
+            written.complete(async.write(size > 16384 ? bytes : bytes.asReadOnlyBuffer()));
             if (completeFirst) async.complete();
             releaseHandler.await();
             throw new IOException("Controlled handler failure");
@@ -639,6 +640,12 @@ class Http2ReadDriverTest {
             fixture.until(() -> !session.pendingOutput.isEmpty());
             session.completeOutput(); // Response headers precede the borrowed DATA fragment.
             fixture.until(() -> !session.pendingOutput.isEmpty());
+            if (size > 16384) {
+                // Drain the ordinary first turn so cancellation holds a fragment of the
+                // larger source span, rather than only repeating the single-frame case.
+                session.completeOutput();
+                fixture.until(() -> !session.pendingOutput.isEmpty());
+            }
             ByteBuffer borrowed = session.pendingOutput.peek().bytes.duplicate();
             byte[] expected = new byte[borrowed.remaining()];
             borrowed.duplicate().get(expected);

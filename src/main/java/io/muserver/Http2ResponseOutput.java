@@ -16,15 +16,21 @@ final class Http2ResponseOutput implements ResponseOutputCapture {
     private @Nullable Rendered rendering;
     private boolean discarding;
     private boolean sourceBorrowingAllowed;
+    private boolean multiFrameBorrowAllowed;
 
     Http2ResponseOutput(Http2Stream stream, Path directory) {
         this.stream = stream;
         this.directory = directory;
     }
 
-    void allowSourceBorrowing(boolean allowed) { sourceBorrowingAllowed = allowed; }
+    void allowSourceBorrowing(boolean allowed, int bufferSize) {
+        sourceBorrowingAllowed = allowed;
+        multiFrameBorrowAllowed = allowed && bufferSize <= ResponseWriteSizes.PREFERRED_SOURCE_BYTES;
+    }
 
     @Override public boolean inputHeadroomUseful() { return sourceBorrowingAllowed; }
+
+    @Override public boolean multiFrameBorrowAllowed() { return multiFrameBorrowAllowed; }
 
     void write(LogicalHttp2Frame frame) throws IOException, InterruptedException {
         if (discarding) return;
@@ -93,12 +99,14 @@ final class Http2ResponseOutput implements ResponseOutputCapture {
         @Override public @Nullable CompletableFuture<@Nullable Void> writeNext() throws IOException {
             Http2HeadersFrame header = headers == null ? null : headers.poll();
             if (header != null) return stream.writeAsynchronously(header);
-            ByteBuffer next = bytes.next();
+            ByteBuffer next = bytes.next(ResponseWriteSizes.MAX_BORROW_BYTES);
             if (next != null) {
                 boolean last = endStream && !bytes.hasRemaining();
                 if (last) endStream = false;
-                return stream.writeAsynchronously(new Http2DataFrame(stream.id, last, next.array(),
-                    next.arrayOffset() + next.position(), next.remaining()));
+                int offset = next.arrayOffset() + next.position();
+                return stream.writeAsynchronously(next.remaining() > ResponseWriteSizes.MAX_SOURCE_BYTES
+                    ? new Http2DataSpan(stream.id, last, next.array(), offset, next.remaining())
+                    : new Http2DataFrame(stream.id, last, next.array(), offset, next.remaining()));
             }
             if (endStream) {
                 endStream = false;

@@ -4,6 +4,8 @@ import okhttp3.Protocol;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -19,6 +21,83 @@ import static scaffolding.ClientUtils.request;
 
 @Timeout(15)
 class AsyncResponseBorrowTest {
+    @org.junit.jupiter.api.io.TempDir java.nio.file.Path directory;
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {8192, 16352, 16384, 32768})
+    void aBufferedPrefixDoesNotIntroduceAResponseSpill(int bufferSize) throws Exception {
+        byte[] expected = new byte[150000];
+        new Random(791).nextBytes(expected);
+        var temporary = java.nio.file.Files.createDirectory(directory.resolve("responses"));
+        MuServerBuilder builder = MuServerBuilder.muServer().withHttpPort(0)
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled()).withTempDirectory(temporary);
+        builder.useChannelTransport = true;
+        builder.addHandler((req, res) -> {
+            res.headers().set(HeaderNames.CONTENT_LENGTH, expected.length);
+            res.outputStream(bufferSize).write(expected, 0, bufferSize - 1);
+            // A file cannot host a response spill. The old bounded path needs none here.
+            java.nio.file.Files.delete(temporary);
+            java.nio.file.Files.createFile(temporary);
+            var async = req.handleAsync();
+            async.write(ByteBuffer.wrap(expected, bufferSize - 1, expected.length - bufferSize + 1))
+                .get(5, TimeUnit.SECONDS);
+            async.complete();
+            return true;
+        });
+        var transport = client.newBuilder().protocols(List.of(Protocol.H2_PRIOR_KNOWLEDGE)).build();
+        try (MuServer server = builder.start(); var response = transport.newCall(request(server.uri()).build()).execute()) {
+            assertEquals(200, response.code());
+            assertArrayEquals(expected, response.body().bytes());
+        } finally { transport.connectionPool().evictAll(); }
+    }
+
+    static java.util.stream.Stream<Arguments> largeBodies() {
+        return java.util.stream.Stream.of("plain", "TLSv1.2", "TLSv1.3").flatMap(protocol ->
+            java.util.stream.IntStream.range(0, 3).boxed().flatMap(kind ->
+                java.util.stream.Stream.of(false, true).map(prefix -> Arguments.of(protocol, kind, prefix))));
+    }
+
+    @ParameterizedTest @MethodSource("largeBodies")
+    void largeWritesKeepTheirBytesAcrossWindowsAndAllowReuseOnlyAfterAcknowledgement(String protocol, int kind, boolean bufferedPrefix) throws Exception {
+        byte[] expected = new byte[4 * 65408 + 37];
+        new Random(383).nextBytes(expected);
+        byte[] prefix = bufferedPrefix ? new byte[]{1, 2, 3, 4, 5} : new byte[0];
+        boolean secure = !protocol.equals("plain");
+        MuServerBuilder builder = MuServerBuilder.muServer().withThreadingMode(ThreadingMode.PLATFORM)
+            .withHttp2Config(Http2ConfigBuilder.http2Enabled());
+        builder.useChannelTransport = true;
+        if (secure) builder.withHttpsPort(0).withHttpsConfig(HttpsConfigBuilder.unsignedLocalhost().withProtocols(protocol));
+        else builder.withHttpPort(0);
+        builder.addHandler((req, res) -> {
+            res.headers().set(HeaderNames.CONTENT_LENGTH, prefix.length + expected.length);
+            if (bufferedPrefix) res.outputStream(8192).write(prefix);
+            ByteBuffer storage = kind == 1 ? ByteBuffer.allocateDirect(expected.length + 9)
+                : ByteBuffer.allocate(expected.length + 9);
+            storage.position(5).put(expected).flip().position(5);
+            ByteBuffer source = kind == 2 ? storage.asReadOnlyBuffer() : storage.slice();
+            source.mark();
+            int position = source.position();
+            AsyncHandle handle = req.handleAsync();
+            handle.write(source).get(5, TimeUnit.SECONDS);
+            assertEquals(source.hasArray() ? position : source.limit(), source.position());
+            if (source.hasArray()) { source.reset(); assertEquals(position, source.position()); }
+            // Every frame has released the borrow, including the final TLS ciphertext.
+            storage.clear();
+            while (storage.hasRemaining()) storage.put((byte) 99);
+            handle.complete();
+            return true;
+        });
+        var protocols = secure ? List.of(Protocol.HTTP_2, Protocol.HTTP_1_1) : List.of(Protocol.H2_PRIOR_KNOWLEDGE);
+        var transport = client.newBuilder().protocols(protocols).build();
+        try (MuServer server = builder.start(); var response = transport.newCall(request(server.uri()).build()).execute()) {
+            assertEquals(secure ? Protocol.HTTP_2 : Protocol.H2_PRIOR_KNOWLEDGE, response.protocol());
+            assertEquals(200, response.code());
+            byte[] actual = response.body().bytes();
+            assertArrayEquals(prefix, Arrays.copyOf(actual, prefix.length));
+            assertArrayEquals(expected, Arrays.copyOfRange(actual, prefix.length, actual.length));
+        } finally { transport.connectionPool().evictAll(); }
+    }
+
     @ParameterizedTest
     @CsvSource({"plain,false,false", "plain,true,false", "TLSv1.2,false,false", "TLSv1.2,true,false",
         "TLSv1.3,false,false", "TLSv1.3,true,false", "plain,false,true", "plain,true,true",

@@ -199,7 +199,7 @@ class Http2Response extends BaseResponse {
                 encoded = new CloseGuardedOutputStream(encoded);
             }
             wrappedOut = encoded;
-            output.allowSourceBorrowing(responseEncoder == null && !suppressContent());
+            output.allowSourceBorrowing(responseEncoder == null && !suppressContent(), bufferSize);
             preparedEncoder = null;
         } catch (IOException e) {
             throw new UncheckedIOException("Error while setting up output stream", e);

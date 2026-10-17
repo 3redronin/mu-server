@@ -35,6 +35,7 @@ final class Http2WriteCoordinator {
         private final WriteTask task;
         private final boolean completesTask;
         private final @Nullable Http2Exception protocolError;
+        private final @Nullable PendingWrite remainder;
 
         private WritableFrame(
             LogicalHttp2Frame frame,
@@ -42,10 +43,16 @@ final class Http2WriteCoordinator {
             boolean completesTask,
             @Nullable Http2Exception protocolError
         ) {
+            this(frame, task, completesTask, protocolError, null);
+        }
+
+        private WritableFrame(LogicalHttp2Frame frame, WriteTask task, boolean completesTask,
+                              @Nullable Http2Exception protocolError, @Nullable PendingWrite remainder) {
             this.frame = frame;
             this.task = task;
             this.completesTask = completesTask;
             this.protocolError = protocolError;
+            this.remainder = remainder;
         }
 
         LogicalHttp2Frame frame() {
@@ -92,6 +99,12 @@ final class Http2WriteCoordinator {
 
         void complete() {
             inFlightWrites.remove(this);
+            if (remainder != null) {
+                remainder.fragmentInFlight = false;
+                // Rejoin behind other streams only after the active fragment releases ownership.
+                // Resets can already have removed this remainder while its fragment was in flight.
+                if (pendingWrites.remove(remainder)) pendingWrites.addLast(remainder);
+            }
             if (completesTask) onWriteCompleted(frame);
             task.finishPart(completesTask);
         }
@@ -258,6 +271,7 @@ final class Http2WriteCoordinator {
     private final AtomicBoolean wakeUpQueued = new AtomicBoolean();
     private final FieldBlockEncoder fieldBlockEncoder;
     private int connectionCredit;
+    private int yieldingSpans;
     private boolean connectionErrorPendingGoAway;
     private @Nullable IOException connectionFailureReason;
 
@@ -442,7 +456,7 @@ final class Http2WriteCoordinator {
         for (Iterator<PendingWrite> iterator = pendingWrites.iterator(); iterator.hasNext(); ) {
             PendingWrite pending = iterator.next();
             WriteTask task = pending.task;
-            if (task.isCancelled()) { iterator.remove(); continue; }
+            if (task.isCancelled()) { iterator.remove(); removedPending(pending); continue; }
             int streamId = task.frame().streamId();
             LogicalHttp2Frame frame = task.frame();
             if (connectionErrorPendingGoAway && !(frame instanceof Http2GoAway)) {
@@ -450,8 +464,15 @@ final class Http2WriteCoordinator {
             }
             if (!(frame instanceof Http2WindowUpdate)
                 && streamId != 0
+                && !pending.yielding
                 && blockedStreams != null
                 && blockedStreams.contains(streamId)) {
+                continue;
+            }
+
+            if (pending.fragmentInFlight || (!(frame instanceof Http2WindowUpdate) && behindYieldingSpan(pending))) {
+                if (blockedStreams == null) blockedStreams = new HashSet<>();
+                blockedStreams.add(streamId);
                 continue;
             }
 
@@ -466,7 +487,10 @@ final class Http2WriteCoordinator {
             }
             Http2DataFrame data = (Http2DataFrame) frame;
             int remaining = data.payloadLength() - pending.dataBytesWritten;
-            int reserved = reserveCreditUpTo(streamId, remaining);
+            // A span never emits more than the protocol's minimum supported frame maximum,
+            // even when the peer permits larger frames. Keep TLS framing headroom as well.
+            int requested = data instanceof Http2DataSpan ? ResponseWriteSizes.nextFragmentBytes(remaining) : remaining;
+            int reserved = reserveCreditUpTo(streamId, requested);
             if (reserved < 0 || reserved > remaining) {
                 throw new IllegalStateException("Invalid flow-control reservation " + reserved + " for " + remaining + " bytes");
             }
@@ -485,12 +509,17 @@ final class Http2WriteCoordinator {
                 pending.dataBytesWritten += reserved;
                 if (completesTask) {
                     iterator.remove();
+                    removedPending(pending);
+                } else if (data instanceof Http2DataSpan) {
+                    if (!pending.yielding) { pending.yielding = true; yieldingSpans++; }
+                    pending.fragmentInFlight = true;
                 }
                 return new WritableFrame(
                     writableData,
                     task,
                     completesTask,
-                    pending.protocolError
+                    pending.protocolError,
+                    pending.fragmentInFlight ? pending : null
                 );
             }
 
@@ -511,6 +540,21 @@ final class Http2WriteCoordinator {
         return null;
     }
 
+    private boolean behindYieldingSpan(PendingWrite pending) {
+        // A partial span may have moved behind its own successors to yield to other streams.
+        // Those successors must wait, but must not prevent that predecessor from resuming.
+        if (yieldingSpans == 0 || pending.yielding || pending.task.frame().streamId() == 0) return false;
+        int streamId = pending.task.frame().streamId();
+        for (PendingWrite other : pendingWrites) {
+            if (other.yielding && other.task.frame().streamId() == streamId && !other.task.isCancelled()) return true;
+        }
+        return false;
+    }
+
+    private void removedPending(PendingWrite pending) {
+        if (pending.yielding) { pending.yielding = false; yieldingSpans--; }
+    }
+
     boolean isIdle() {
         return mailbox.isEmpty() && pendingWrites.isEmpty() && inFlightWrites.isEmpty();
     }
@@ -524,6 +568,7 @@ final class Http2WriteCoordinator {
         while (!inFlightWrites.isEmpty()) inFlightWrites.get(0).fail(reason);
         PendingWrite pending;
         while ((pending = pendingWrites.poll()) != null) {
+            removedPending(pending);
             pending.task.fail(reason);
         }
     }
@@ -767,6 +812,7 @@ final class Http2WriteCoordinator {
         }
         PendingWrite pending;
         while ((pending = pendingWrites.poll()) != null) {
+            removedPending(pending);
             pending.task.fail(reason);
         }
         return true;
@@ -796,6 +842,7 @@ final class Http2WriteCoordinator {
             LogicalHttp2Frame frame = pending.task.frame();
             if (frame.streamId() == streamId && (includeResets || !(frame instanceof Http2ResetStreamFrame))) {
                 iterator.remove();
+                removedPending(pending);
                 pending.task.fail(reason);
             }
         }
@@ -935,6 +982,8 @@ final class Http2WriteCoordinator {
         private final @Nullable Http2Exception protocolError;
         private int dataBytesWritten;
         private boolean responseHeadersWritten;
+        private boolean yielding;
+        private boolean fragmentInFlight;
 
         private PendingWrite(WriteTask task, @Nullable Http2Exception protocolError) {
             this.task = task;
