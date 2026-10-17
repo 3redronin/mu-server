@@ -3,6 +3,7 @@ package io.muserver;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayOutputStream;
@@ -55,9 +56,14 @@ class RenderedResponseBytesTest {
         }
     }
 
-    @ParameterizedTest @ValueSource(ints = {0, 1, 40000})
-    void mixedOutputMaterializesTheBorrowBeforeAppendingOrSpilling(int suffixLength) throws Exception {
-        byte[] body = new byte[RenderedResponseBytes.DRAIN_BYTES];
+    @ParameterizedTest @CsvSource({
+        "1, 0", "1, 1", "1, 40000",
+        "256, 0", "256, 1", "256, 40000",
+        "257, 0", "257, 1", "257, 40000",
+        "16384, 0", "16384, 1", "16384, 40000"
+    })
+    void mixedOutputMaterializesTheBorrowBeforeAppendingOrSpilling(int bodyLength, int suffixLength) throws Exception {
+        byte[] body = new byte[bodyLength];
         new Random(47).nextBytes(body);
         var expected = new ByteArrayOutputStream();
         try (var capture = new RenderedResponseBytes(directory)) {

@@ -1612,3 +1612,126 @@ reconciles validated source, compiler/runtime evidence, fixture and class
 inventories, TLS/allocation diagnostics, all native trials and report links.
 Full Java 11/17 suites and separate external conformance campaigns were not
 rerun for this change.
+
+
+### On-demand response capture storage (17 October 2026)
+
+Fresh Java 21 PLATFORM JFR recordings of the bounded-async fixture identify
+repeated capture allocation and worker dispatch on the current headroom build,
+`07d79b56`. One-MiB fixed responses show approximately 72 park events per response
+on HTTP/1 and HTTPS/1 and 249 on TLS HTTP/2. Most recorded parks are cached-worker
+queue waits. These are events rather than exact task counts; HTTP/2 also performs
+coordinator and flow-control work. Recording every park materially increases GC
+and allocation, and the Java execution samples are too sparse to rank CPU
+hotspots. Diagnostic throughput is excluded from speed comparisons.
+
+The bounded change removes unused storage from captures. `RenderedResponseBytes`
+starts with a shared empty array and allocates owned storage only when output
+needs copying. Empty and unchanged borrowed captures never allocate that array.
+HTTP/2 capture header queues are also created only when headers are added. Owned
+buffer growth preserves the prior sizes, including a first write just above
+256 bytes followed by a small suffix. The 32 KiB memory/spill limit, 16 KiB source
+and drain limits, TLS headroom, acknowledgement boundaries and dispatch policy
+are unchanged. No new retained buffer cache or connection storage is introduced.
+
+An initial candidate also deferred allocation but changed growth for first
+writes between 257 and 511 bytes. It was replaced after review identified that
+a following small write could cause an extra resize. Its measurements remain
+under `nonblocking-validation/async-scheduling-20261017`. A second candidate
+corrected ordinary growth; subsequent review also restored the original capacity
+when materializing a borrowed prefix smaller than 256 bytes. That intermediate
+evidence is in `nonblocking-validation/async-capture-allocation-20261017`. The
+final evidence is in `nonblocking-validation/async-capture-lazy-20261017`.
+The final source digest is
+`5b2bf5e46a002d29091165fdbe385a7e744822b27672837eca263bca4be8984f`.
+Both comparison builds use Java 21 compilation with Java 11 bytecode; only
+`RenderedResponseBytes`, `Http2ResponseOutput` and its `Rendered` inner class
+change in the production class inventory.
+
+An identical immediate-acknowledgement probe with a preallocated one-MiB source
+checks every payload byte. Median renderer/capture allocation falls from 28,376
+to 10,696 bytes per response, saving 17,680 bytes (62.3%): 65 unused 256-byte arrays
+plus their object headers. This excludes HTTP framing, transport, TLS, dispatch
+and setup, so it is not a whole-server allocation reduction. A separate probe
+covers first writes of 1, 256, 257, 300 and 513 bytes followed by ten bytes, both
+with ordinary owned output and after materializing a borrowed prefix. All ten
+cases preserve the original backing capacity and payload. Allocation is
+unchanged for the four smaller-prefix cases and 272 bytes lower for the other
+six. The mixed-output regression test now covers 1-, 256-, 257- and 16,384-byte
+prefixes, including appending and disk spill after a borrow.
+
+Reducing worker handoffs remains separate work. Running arbitrary encoders on
+transport or serialized HTTP/2 writer callbacks would compromise isolation.
+A future optimization should establish a bounded way to submit larger borrowed
+spans or remove redundant internal transitions while retaining cancellation,
+acknowledgement ownership and fairness.
+
+The final 32-trial short comparison uses Java 21 PLATFORM, fresh JVMs, 512 MiB
+heaps, 1 GiB cgroups, swap disabled and separate server/generator CPU sets.
+Each pair has two seconds warm-up and four seconds measured; two pairs reverse
+order. The bounded-async fixture and payload checks match the preceding
+headroom experiment: one-MiB bulk responses/eight clients, 128-byte small
+responses (32 HTTP/1 clients or 32 HTTP/2 streams), 64 KiB gzip input, and
+TLS 1.3 AES-128-GCM. Busy-PC results are indicators, not stable rankings:
+
+| Workload | Before → after, responses/s | Throughput change | Paired changes |
+| --- | ---: | ---: | ---: |
+| Small HTTP/1 | 118,550 → 118,463 | -0.1% | +0.9%, -1.0% |
+| Fixed HTTP/1 bulk | 4,277 → 4,271 | -0.2% | -1.8%, +1.5% |
+| Fixed HTTPS/1 bulk | 3,253 → 3,236 | -0.5% | -4.0%, +3.0% |
+| TLS HTTP/2 bulk | 1,943 → 1,973 | +1.5% | +0.7%, +2.3% |
+| Chunked HTTP/1 bulk | 2,554 → 2,584 | +1.2% | +2.9%, -0.5% |
+| Small multiplexed HTTP/2 | 128,271 → 132,755 | +3.5% | +8.0%, -0.6% |
+| Chunked HTTPS/1 bulk | 1,810 → 1,831 | +1.2% | +0.8%, +1.6% |
+| HTTPS/1 gzip | 16,861 → 16,752 | -0.6% | -1.6%, +0.4% |
+
+Most short-run differences are small. Because an intermediate candidate had
+shown approximately 5% slowdowns on plain chunked output and small HTTP/2,
+twelve further trials recheck those cases with five seconds warm-up, six
+seconds measured and three reversed pairs. Small HTTP/2 is +1.3% overall,
+with paired changes +1.3%, +2.0% and -0.7%. Plain chunked output is -2.4%,
+with all three pairs slower (-1.4%, -1.3%, -4.5%); its CPU/response is +1.7%
+and p95 +5.6%. This remains a possible small throughput cost to resolve on a
+quieter workstation. The accepted benefit is reduced allocation; these runs
+do not establish an overall speedup or a Mu3/blocking/NIO ranking.
+
+Separate final JFR runs show no allocation samples from the formerly eager
+capture-array constructor. Total weighted allocation estimates per response
+are 93,576 → 75,128 bytes for plain HTTP/1, 184,951 → 162,462 for HTTPS/1 and
+276,582 → 260,640 for HTTP/2. These are diagnostic estimates, normalized by
+native response counts over an approximately matching server-statistics
+window. Parks remain approximately 72, 72 and 247 per response, respectively;
+the allocation change does not reduce worker handoffs. No JFR data loss was
+reported.
+
+Additional async-profiler CPU runs use eight seconds warm-up, eight seconds
+measured and a 1 ms sampling interval on the final build. They produce
+28,291 plain-HTTP samples, 27,874 HTTPS samples and 31,989 HTTP/2 samples.
+Kernel frames are excluded; native syscall wrappers do not identify work
+inside the kernel. Separate process counters attribute 73.3%, 62.8% and
+63.8% of total CPU to system time, respectively. Inclusive stack categories
+(overlapping, not a partition of CPU time) are:
+
+| Workload | Socket-write stacks | Worker-queue stacks | Renderer stacks | TLS-wrap stacks |
+| --- | ---: | ---: | ---: | ---: |
+| HTTP/1 bulk | 53.3% | 24.1% | 5.9% | 0% |
+| HTTPS/1 bulk | 45.9% | 19.9% | 4.8% | 14.1% |
+| TLS HTTP/2 bulk | 20.9% | 47.4% | 6.0% | 6.2% |
+
+These measurements support investigating fewer worker handoffs, particularly
+on HTTP/2, and separating syscall costs from encoding work. The report links
+interactive CPU profiles, exact category patterns, raw samples and all trial
+ledgers. Profiled response rates are excluded from the speed comparison.
+
+All 44 unprofiled final trials passed, covering 9,377,008 measured responses;
+the nine diagnostic trials covered another 195,815. There were zero reported
+errors, no generator/connection flags, matching pre/post payload hashes,
+clean JVM exits and no leftover response files. Clean Java 21 Maven `verify`
+with NullAway/Error Prone passed all 5,400 tests. The focused 284 transport,
+TLS, ownership and response cases passed on Java 11, 17, 21 and 25. Verified
+Java 21 production bytecode exactly matches the measured candidate. A 630-check
+audit reconciles source, compiler/fixture/class inventories, probes, profiles,
+native runs and test reports. Full Java 11/17/25 suites and external conformance
+were not rerun for this allocation change. The combined report is
+`nonblocking-validation/async-capture-lazy-20261017/report.html` beside the
+checkout; `audit.json` and the linked raw ledgers retain the supporting evidence.

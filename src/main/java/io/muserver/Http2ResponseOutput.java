@@ -30,12 +30,12 @@ final class Http2ResponseOutput implements ResponseOutputCapture {
         if (discarding) return;
         Rendered capture = rendering;
         if (capture == null) { stream.blockingWrite(frame); return; }
-        if (frame instanceof Http2ResponseFrame) capture.headers.add(((Http2ResponseFrame) frame).headers());
+        if (frame instanceof Http2ResponseFrame) capture.addHeader(((Http2ResponseFrame) frame).headers());
         else if (frame instanceof Http2HeadersFrame) {
             if (capture.bytes.length() > 0 || capture.endStream || capture.headersEndStream) {
                 throw new IllegalStateException("Response headers cannot follow its captured body");
             }
-            capture.headers.add((Http2HeadersFrame) frame);
+            capture.addHeader((Http2HeadersFrame) frame);
             capture.headersEndStream = frame.endStream();
             return;
         }
@@ -71,10 +71,15 @@ final class Http2ResponseOutput implements ResponseOutputCapture {
     }
 
     private final class Rendered implements Capture {
-        private final Queue<Http2HeadersFrame> headers = new ArrayDeque<>();
+        private @Nullable Queue<Http2HeadersFrame> headers;
         private final RenderedResponseBytes bytes = new RenderedResponseBytes(directory);
         private boolean endStream;
         private boolean headersEndStream;
+
+        private void addHeader(Http2HeadersFrame header) {
+            if (headers == null) headers = new ArrayDeque<>();
+            headers.add(header);
+        }
 
         @Override public void borrowSourceIfUnchanged(byte[] source, int offset, int length) throws IOException {
             if (sourceBorrowingAllowed) bytes.borrowSourceIfUnchanged(source, offset, length);
@@ -86,7 +91,7 @@ final class Http2ResponseOutput implements ResponseOutputCapture {
         }
 
         @Override public @Nullable CompletableFuture<@Nullable Void> writeNext() throws IOException {
-            Http2HeadersFrame header = headers.poll();
+            Http2HeadersFrame header = headers == null ? null : headers.poll();
             if (header != null) return stream.writeAsynchronously(header);
             ByteBuffer next = bytes.next();
             if (next != null) {
@@ -102,6 +107,9 @@ final class Http2ResponseOutput implements ResponseOutputCapture {
             return null;
         }
 
-        @Override public void close() throws IOException { headers.clear(); bytes.close(); }
+        @Override public void close() throws IOException {
+            if (headers != null) headers.clear();
+            bytes.close();
+        }
     }
 }

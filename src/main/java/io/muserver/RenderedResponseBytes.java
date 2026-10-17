@@ -17,8 +17,10 @@ import java.util.Objects;
 final class RenderedResponseBytes extends OutputStream {
     static final int MEMORY_LIMIT = 32768;
     static final int DRAIN_BYTES = 16_384;
+    private static final byte[] EMPTY = new byte[0];
     private final Path directory;
-    private byte @Nullable [] memory = new byte[256];
+    // Borrowed and empty captures do not need an owned body array.
+    private byte @Nullable [] memory = EMPTY;
     private @Nullable FileChannel file;
     private @Nullable Path temporaryFile;
     private byte @Nullable [] scratch;
@@ -68,7 +70,7 @@ final class RenderedResponseBytes extends OutputStream {
             // has reached the transport yet: capture drain starts only after sealing.
             if (borrowed) {
                 byte[] buffered = Objects.requireNonNull(memory);
-                if (length > buffered.length) memory = buffered = new byte[(int) length];
+                if (length > buffered.length) memory = buffered = new byte[Math.max(256, (int) length)];
                 System.arraycopy(Objects.requireNonNull(borrowCandidate), borrowOffset, buffered, 0, (int) length);
                 borrowed = false;
             }
@@ -78,8 +80,11 @@ final class RenderedResponseBytes extends OutputStream {
                 int required = (int) length + count;
                 if (required > buffered.length) {
                     // Generic stream growth can overshoot the bound after an uneven encoder burst.
+                    // Preserve the former eagerly allocated 256-byte buffer's growth sizes.
+                    int capacity = Math.max(256, buffered.length);
+                    if (required > capacity) capacity = Math.max(required, capacity * 2);
                     buffered = Arrays.copyOf(buffered,
-                        Math.min(MEMORY_LIMIT, Math.max(required, buffered.length * 2)));
+                        Math.min(MEMORY_LIMIT, capacity));
                     memory = buffered;
                 }
                 System.arraycopy(bytes, offset, buffered, (int) length, count);
