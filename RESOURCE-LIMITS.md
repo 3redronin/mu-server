@@ -52,6 +52,15 @@ Until measured on an otherwise quiet machine, use streaming, modest request/mess
 
 ## Verification
 
+The asynchronous `TransportOutputBuffer` path borrows one source until transport
+acknowledgement and drains bounded views directly to the socket/TLS sink. It no
+longer copies that source into its ring. The existing 8,201-byte ring allocation
+is still present for the blocking bridge; source retention, drain limits and
+queue policy are unchanged. `TransportAsyncOutputTest` verifies shared backing
+storage, direct/read-only and sliced buffers, zero/partial drains, and source
+ownership through failure. `TlsEngineDriverTest` checks that stalled ciphertext
+and changing drain budgets cannot acknowledge plaintext early.
+
 `AsyncResponseOutputTest` checks success, failure, cancellation and rejected writes for retained Mu-owned references, including delayed callback dispatch. Its object graph inspection follows Mu fields and actual collections; it does not depend on garbage-collection timing or open JDK internals. Existing cases verify ordering, exactly-once delivery, and buffer ownership until I/O acknowledges abort.
 
 `AsyncOutputBufferTest` checks empty, small and multi-chunk array/direct/read-only buffers, slice offsets, exact bytes, bounded scratch-array size and a single flush. `AsyncOutputIntegrationTest` sends multi-chunk payloads over HTTP/1 and HTTP/2 with one application worker, plus cancellation of flow-controlled output. Existing `LifecycleRecoveryTest` covers slow-peer disconnect, timeout and shutdown retirement. These are small correctness tests, not performance or capacity tests.

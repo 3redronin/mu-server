@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class TransportAsyncOutputTest {
     @ParameterizedTest @CsvSource({"1,1", "1,8192", "7,1", "7,3", "7,8192", "8192,1", "8192,3", "8192,8192",
         "8201,1", "8201,8192", "8201,8201"})
-    void partialDrainsCopyOnlyBoundedChunksAndCompleteAfterTheLastByte(int capacity, int budget) throws Exception {
+    void partialDrainsUseBoundedChunksAndCompleteAfterTheLastByte(int capacity, int budget) throws Exception {
         var output = new TransportOutputBuffer(capacity, () -> {});
         var writer = output.asynchronousWriter();
         byte[] bytes = new byte[20003];
@@ -31,6 +31,9 @@ class TransportAsyncOutputTest {
         var sink = new WritableByteChannel() {
             int turns;
             @Override public int write(ByteBuffer data) {
+                assertTrue(data.isDirect(), "Drain must borrow the direct source without a heap copy");
+                assertTrue(data.isReadOnly());
+                assertTrue(data.remaining() <= Math.min(capacity, budget));
                 if (++turns % 5 == 0) return 0;
                 int count = Math.min(11, data.remaining());
                 byte[] copy = new byte[count];
@@ -45,7 +48,7 @@ class TransportAsyncOutputTest {
             assertTrue(output.pendingBytes() <= capacity);
             output.drainTo(sink, budget);
             assertTrue(progress.reached(received.size()));
-            assertFalse(progress.reached(received.size() + 1), "Copying into the ring must not publish consumption");
+            assertFalse(progress.reached(received.size() + 1), "Only sink consumption may publish progress");
             if (received.size() < bytes.length) assertFalse(completed.isDone());
         }
         completed.get();
@@ -53,6 +56,37 @@ class TransportAsyncOutputTest {
         assertEquals(2, source.position(), "The transport uses its own source view");
         assertEquals(0, output.pendingBytes());
         assertTrue(writer.write(ByteBuffer.allocate(0)).isDone());
+    }
+
+    @Test
+    void slicedHeapSourceIsBorrowedWithoutChangingCallerPositionLimitOrMark() throws Exception {
+        byte[] storage = new byte[37];
+        new Random(729).nextBytes(storage);
+        ByteBuffer source = ByteBuffer.wrap(storage, 3, 29).slice().position(2).mark().limit(27);
+        var output = new TransportOutputBuffer(7, () -> {});
+        var writer = output.asynchronousWriter();
+        var write = writer.write(source);
+        var sink = new TransportOutputBufferTest.Sink(3) {
+            @Override public int write(ByteBuffer data) throws IOException {
+                assertSame(storage, data.array(), "The sink must see the borrowed backing storage");
+                assertTrue(data.remaining() <= 7);
+                return super.write(data);
+            }
+        };
+        while (!write.isDone()) output.drainTo(sink, 11);
+        write.get();
+        assertArrayEquals(java.util.Arrays.copyOfRange(storage, 5, 30), sink.bytes.toByteArray());
+        assertEquals(2, source.position());
+        assertEquals(27, source.limit());
+        source.reset();
+        assertEquals(2, source.position());
+        // Completion returns storage ownership: reusing the same source must send its new contents.
+        java.util.Arrays.fill(storage, (byte) 99);
+        sink.bytes.reset();
+        var next = writer.write(source);
+        while (!next.isDone()) output.drainTo(sink, 11);
+        next.get();
+        assertArrayEquals(java.util.Arrays.copyOfRange(storage, 5, 30), sink.bytes.toByteArray());
     }
 
     @Test
@@ -156,7 +190,7 @@ class TransportAsyncOutputTest {
     }
 
     @Test
-    void abortCannotReleaseBorrowedSourceWhileTheSinkStillUsesTheRing() throws Exception {
+    void abortCannotReleaseBorrowedSourceWhileTheSinkStillUsesIt() throws Exception {
         var output = new TransportOutputBuffer(4, () -> {});
         var writer = output.asynchronousWriter();
         byte[] bytes = new byte[100];
@@ -165,9 +199,11 @@ class TransportAsyncOutputTest {
         CountDownLatch writing = new CountDownLatch(1), release = new CountDownLatch(1), aborting = new CountDownLatch(1);
         var sink = new WritableByteChannel() {
             @Override public int write(ByteBuffer source) throws IOException {
+                assertSame(bytes, source.array());
                 writing.countDown();
                 try { if (!release.await(3, TimeUnit.SECONDS)) throw new IOException("Test did not release sink"); }
                 catch (InterruptedException e) { throw new IOException(e); }
+                assertFalse(completed.isDone(), "Ownership cannot return while the sink accesses storage");
                 int count = source.remaining(); source.position(source.limit()); return count;
             }
             @Override public boolean isOpen() { return true; }
@@ -185,5 +221,29 @@ class TransportAsyncOutputTest {
             java.util.Arrays.fill(bytes, (byte) 99); // Returned source ownership is now safe to reuse.
             assertEquals(0, output.pendingBytes());
         } finally { release.countDown(); tasks.shutdownNow(); }
+    }
+
+    @Test
+    void sinkFailureAfterAdvancingItsViewReleasesOwnershipWithoutAcknowledgingBytes() throws Exception {
+        var output = new TransportOutputBuffer(7, () -> {});
+        byte[] bytes = {1, 2, 3, 4, 5};
+        ByteBuffer source = ByteBuffer.wrap(bytes);
+        var progress = new TransportWriteProgress(() -> {});
+        var write = output.asynchronousWriter().write(source, progress);
+        IOException failure = new IOException("Failed after partial sink access");
+        var sink = new TransportOutputBufferTest.Sink(2) {
+            @Override public int write(ByteBuffer data) throws IOException {
+                super.write(data);
+                throw failure;
+            }
+        };
+        assertSame(failure, assertThrows(IOException.class, () -> output.drainTo(sink, 7)));
+        assertSame(failure, assertThrows(ExecutionException.class, write::get).getCause());
+        assertFalse(progress.reached(1));
+        assertEquals(0, source.position());
+        java.util.Arrays.fill(bytes, (byte) 99);
+        assertSame(failure, assertThrows(IOException.class, () -> output.drainTo(sink, 7)));
+        assertArrayEquals(new byte[]{1, 2}, sink.bytes.toByteArray());
+        assertEquals(0, output.pendingBytes());
     }
 }

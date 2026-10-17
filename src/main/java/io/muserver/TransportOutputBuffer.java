@@ -17,7 +17,8 @@ import java.util.concurrent.locks.ReentrantLock;
  * A successful write means all its bytes were consumed by the supplied transport sink, not merely
  * copied into this buffer, and does not imply peer receipt. Blocking write/flush belongs on workers.
  * The exclusive asynchronous writer retains at most one source until its completion; transport
- * drain refills the ring without reserving a waiting worker. Internal futures only schedule work.
+ * drain borrows bounded views of that source without copying into the blocking writer's ring.
+ * Internal futures only schedule work.
  * The internal output notification must schedule transport work without blocking or throwing.
  */
 final class TransportOutputBuffer extends OutputStream {
@@ -71,24 +72,11 @@ final class TransportOutputBuffer extends OutputStream {
             empty = !source.hasRemaining();
             if (!empty) {
                 pendingAsyncWrite = write;
-                refillAsync();
             }
         } finally { lock.unlock(); }
         if (empty) write.completion.complete(null);
         else outputAvailable.run();
         return write.completion;
-    }
-
-    // Only the ring is passed to the sink. No caller storage is borrowed outside this lock.
-    private void refillAsync() {
-        PendingAsyncWrite write = pendingAsyncWrite;
-        if (write == null) return;
-        int count = Math.min(write.source.remaining(), bytes.length - size);
-        int tail = (head + size) % bytes.length;
-        int first = Math.min(count, bytes.length - tail);
-        write.source.get(bytes, tail, first);
-        write.source.get(bytes, 0, count - first);
-        size += count;
     }
 
     private @Nullable IOException failure;
@@ -101,7 +89,8 @@ final class TransportOutputBuffer extends OutputStream {
 
     int pendingBytes() {
         lock.lock();
-        try { return size; }
+        // Report the bounded prefix available to drain, not the size of a borrowed source.
+        try { return pendingAsyncWrite == null ? size : Math.min(bytes.length, pendingAsyncWrite.source.remaining()); }
         finally { lock.unlock(); }
     }
 
@@ -120,30 +109,42 @@ final class TransportOutputBuffer extends OutputStream {
         lock.lock();
         try {
             checkFailure();
-            if (size == 0) return 0;
+            PendingAsyncWrite active = pendingAsyncWrite;
+            if (size == 0 && active == null) return 0;
+            ByteBuffer source;
+            if (active == null) {
+                source = ByteBuffer.wrap(bytes, head, Math.min(maxBytes, Math.min(size, bytes.length - head)));
+            } else {
+                // Keep the same capacity and per-turn limits as the ring path. A separate view
+                // prevents sink position/limit changes from altering the retained source or caller.
+                source = active.source.duplicate();
+                source.limit(source.position() + Math.min(maxBytes, Math.min(bytes.length, source.remaining())));
+            }
             int count;
             try {
-                count = sink.write(ByteBuffer.wrap(bytes, head, Math.min(maxBytes, Math.min(size, bytes.length - head))));
+                count = sink.write(source);
             } catch (IOException | RuntimeException failedWrite) {
                 failed = failedWrite instanceof IOException ? (IOException) failedWrite
                     : new IOException("Transport output failed", failedWrite);
                 finished = failLocked(failed);
                 throw failedWrite;
             }
-            head = (head + count) % bytes.length;
-            size -= count;
-            PendingAsyncWrite active = pendingAsyncWrite;
+            if (active == null) {
+                head = (head + count) % bytes.length;
+                size -= count;
+                // No queued prefix remains to pin the ring offset.
+                if (size == 0) head = 0;
+            } else {
+                // For TLS this advances only after the corresponding ciphertext has drained.
+                active.source.position(active.source.position() + count);
+                if (!active.source.hasRemaining()) {
+                    finished = active;
+                    pendingAsyncWrite = null;
+                }
+            }
             if (count > 0 && active != null && active.progress != null) {
                 progressed = active.progress;
                 progressed.consumed(count);
-            }
-            // No queued prefix remains to pin the ring offset. Start the next fill contiguously
-            // so a prior short write does not split every later full-buffer socket/TLS write.
-            if (size == 0) head = 0;
-            refillAsync();
-            if (size == 0 && pendingAsyncWrite != null) {
-                finished = pendingAsyncWrite;
-                pendingAsyncWrite = null;
             }
             if (count > 0) changed.signalAll();
             return count;
@@ -171,7 +172,7 @@ final class TransportOutputBuffer extends OutputStream {
 
     private @Nullable PendingAsyncWrite failLocked(IOException cause) {
         if (failure == null) failure = cause;
-        // The sink borrows ring storage under this lock. Release source ownership before completion.
+        // The sink borrows storage under this lock. Release source ownership before completion.
         PendingAsyncWrite write = pendingAsyncWrite;
         pendingAsyncWrite = null;
         bytes = new byte[0];

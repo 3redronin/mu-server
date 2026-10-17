@@ -132,6 +132,54 @@ class TlsEngineDriverTest {
     }
 
     @ParameterizedTest
+    @CsvSource({"TLSv1.2,false", "TLSv1.2,true", "TLSv1.3,false", "TLSv1.3,true"})
+    void borrowedTransportSourceSurvivesCiphertextStallsAndChangingDrainBudgets(String protocol, boolean direct) throws Exception {
+        try (var pair = new Pair(protocol, 97, false, false)) {
+            pair.handshake();
+            byte[] expected = new byte[20003];
+            new Random(812).nextBytes(expected);
+            ByteBuffer storage = direct ? ByteBuffer.allocateDirect(expected.length + 9) : ByteBuffer.allocate(expected.length + 9);
+            storage.position(5).put(expected).flip().position(5);
+            ByteBuffer source = storage.asReadOnlyBuffer();
+            var output = new TransportOutputBuffer(8201, () -> {});
+            var progress = new TransportWriteProgress(() -> {});
+            var write = output.asynchronousWriter().write(source, progress);
+            var sink = new Channel(pair.server::writePlaintext);
+
+            assertEquals(0, output.drainTo(sink, 8201));
+            int packet = pair.server.encryptedOutputSize();
+            assertTrue(packet > 8201);
+            assertEquals(packet - 1, pair.server.drainEncryptedTo(new Channel(pair.client::receive), packet - 1));
+            for (int budget : new int[]{1, 97, 16384, 8201}) {
+                assertEquals(0, output.drainTo(sink, budget));
+                assertFalse(progress.reached(1));
+                assertFalse(write.isDone());
+                assertEquals(5, source.position());
+            }
+            assertEquals(1, pair.server.drainEncryptedTo(new Channel(pair.client::receive), 1));
+            assertEquals(1, output.drainTo(sink, 1));
+            assertTrue(progress.reached(1));
+            assertFalse(progress.reached(2));
+            assertFalse(write.isDone());
+
+            int[] budgets = {3, 16384, 1, 8201, 97};
+            int[] turn = {0};
+            pair.until(() -> write.isDone() && pair.clientReceived.size() == expected.length, () -> {
+                int budget = budgets[turn[0]++ % budgets.length];
+                assertTrue(output.drainTo(sink, budget) <= Math.min(budget, 8201));
+            });
+            write.get();
+            assertTrue(progress.reached(expected.length));
+            assertFalse(progress.reached(expected.length + 1));
+            assertArrayEquals(expected, pair.clientReceived.toByteArray());
+            assertEquals(5, source.position());
+            assertEquals(expected.length + 5, source.limit());
+            assertEquals(0, output.pendingBytes());
+            assertEquals(0, pair.server.encryptedOutputSize(), "Completion must include the last ciphertext byte");
+        }
+    }
+
+    @ParameterizedTest
     @ValueSource(strings = {"TLSv1.2", "TLSv1.3"})
     void applicationDataSurvivesRenegotiationOrKeyUpdate(String protocol) throws Exception {
         try (var pair = new Pair(protocol, 7, true, true)) {

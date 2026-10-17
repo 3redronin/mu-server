@@ -1241,3 +1241,48 @@ evidence audit passed all 164 checks, including source, test, dependency and
 compiled-class inventories. Its 36 native trials include the paired cache and
 renderer experiments, six final original-workload checks and these six sustained
 runs; the earlier checkpoint's separate evidence remains intact.
+
+## Borrowed transport drains (17 October 2026)
+
+`TransportOutputBuffer` previously retained the complete asynchronous source
+until acknowledgement while also copying each prefix into its ring. The async
+path now passes a bounded view of that same retained source to the transport
+sink. This removes one full plaintext copy at this layer, including frame bytes;
+it does not remove HTTP/2 frame encoding, response capture or TLS encryption.
+The blocking bridge continues to own its ring copies.
+
+Each call is still capped by both the configured output capacity and the drain
+budget. Channel connections retain the existing 8,201-byte limit and transport
+turn count. No buffer or queue was enlarged; the ring allocation remains present,
+so this change makes no claim of lower retained heap. The same single source is
+borrowed for the same lifetime. A separate view preserves the caller's position,
+limit and mark. Abort takes the drain lock before returning source ownership,
+and completion/progress callbacks still run outside that lock.
+
+TLS wraps a duplicate without retaining its source between calls. A queued
+plaintext prefix advances only when the corresponding ciphertext has completely
+drained. Retrying with a smaller budget can acknowledge part of that prefix;
+retrying with a larger budget cannot acknowledge a later record. New TLS 1.2/1.3
+tests stall the final ciphertext byte, vary plaintext budgets from one byte to
+larger than the capacity, and check exact output for heap and direct read-only
+sources. Transport tests also verify shared backing storage, sliced offsets,
+zero/partial writes, safe reuse after completion, concurrent abort and a sink
+that advances its view before failing.
+
+Caller review covered HTTP/1 captured output, the public blocking stream adapter,
+HTTP/2 owned frame encodings and WebSocket payloads. Their existing completion
+boundaries retain source storage through the borrow; failed HTTP/2 encodings are
+discarded without pooling while a transport might still reference them.
+
+Validation logs and XML reports are retained under
+`../nonblocking-validation/borrowed-output-20261017/`. The earlier three-way
+baseline keeps its frozen production classes. No throughput claim is made from
+this change or from tests run while the host is in use. A controlled comparison
+must measure this candidate separately against the preserved baseline.
+
+The focused 214-case transport/protocol suite passed on Java 11, 17 and 21 with
+zero failures, errors or skips. Full Maven verification passed all 5,295 tests
+on both Java 21 and 25, again with zero failures, errors or skips; Java 21 also
+passed NullAway/Error Prone. The saved-log/XML/source reconciliation passed all
+756 checks. The full Java 11/17 suites and external conformance campaigns were
+not rerun for this change.
