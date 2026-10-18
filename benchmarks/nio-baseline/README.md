@@ -408,7 +408,7 @@ mu-conformance/.venv/bin/python mu4/benchmarks/nio-baseline/connection_density.p
 control, one second of warm-up and three measured seconds. `--counts`,
 `--protocols` and `--jdks` select explicit subsets; zero must remain as a control.
 `--heap 384m` applies a common larger heap to every edition while retaining the
-same 512 MiB total cgroup cap. This can distinguish a heap-distribution limit
+default 512 MiB total cgroup cap. This can distinguish a heap-distribution limit
 from whole-server memory exhaustion when implementations place buffers in
 different memory pools. It is a separate control, not a replacement for the
 default 256 MiB-heap results.
@@ -496,3 +496,175 @@ control is `density-heap384-20261018-02`; the `-01` control is diagnostic only.
 Observed excluded rates, latency and GC remain visible alongside their exclusion
 reasons. The evidence identifies idle TLS memory as a concrete next optimization
 target, rather than assuming the plaintext scaling result extends to TLS.
+
+
+## Equal total memory with independent heap sizes
+
+A common `-Xmx` is a useful configuration control, but does not give identical
+usable buffer capacity to heap-based NIO and Netty's off-heap allocator. The
+whole-server cgroup charge includes both; it remains the authoritative budget.
+A Java heap failure below that budget establishes a configuration limit, not an
+inherent total-memory requirement.
+
+`connection_density.py` now accepts `--cap-mib 512` or `1024`, a whole-MiB
+`--heap` value, and `--heap-for JDK/edition=SIZE` overrides. The heap maximum must
+fit within the total cap. `--direct-memory-mib` supplies the same explicit JVM
+direct-memory ceiling to every edition independently of heap size. This is an
+allocation ceiling, not a reservation or additional memory allowance: all heap,
+native, direct and kernel memory still share the one cgroup, with swap disabled.
+No buffer implementation or collector policy is changed by these options.
+
+The equal-budget experiment uses both total caps. Every edition/JDK tests heaps
+of one quarter, one half, three quarters and all of the total cap, with the direct
+ceiling equal to that cap. Each candidate has zero- and 4,096-idle-TLS controls,
+sixteen foreground connections and the same 10,000/s offered rate. The 96 tuning
+trials use `--phase tuning --profile smoke`; their short rates are excluded from
+performance conclusions.
+
+For each edition/JDK, the selection rule prefers the smallest heap that completes
+the full cohort and meets 98% of the target without detected generator
+saturation. If none does, it selects the best correctly completed rate; if all
+fail correctness/resources, it selects the largest established cohort. Ties
+prefer smaller heaps. A candidate must also have a successful zero-cohort
+control when available. This is a bounded heap search for this workload, not a
+claim of globally optimal JVM tuning.
+
+The selected heaps are frozen before the independent
+`--phase confirmation --profile full` runs: three cyclic repeats, five seconds
+of warm-up and ten measured seconds, including fresh zero-cohort controls. Both
+total caps remain separate comparisons. Confirmation failures are retained;
+selection does not make an unsuccessful tuning candidate count as successful.
+For example, a fresh confirmation can use:
+
+```bash
+mu-conformance/.venv/bin/python mu4/benchmarks/nio-baseline/connection_density.py \
+  --inputs nonblocking-validation/baseline-20261018-quiet/sync \
+  --run-id tls-independent-new --phase confirmation --profile full --host-state quiet \
+  --counts 0 4096 --protocols https1 --cap-mib 1024 --heap 256m \
+  --direct-memory-mib 1024 --heap-for 21/nio=768m 25/nio=768m
+```
+
+The heap overrides in that command are illustrative; the executed experiment
+records all selected heaps, candidates, raw outcomes, commands and source hashes.
+
+
+### Selected heaps for the 18 October equal-budget experiment
+
+| Total server cap | Java | Mu3 heap | Mu4 blocking heap | Mu4 NIO heap |
+| --- | --- | ---: | ---: | ---: |
+| 512 MiB | 21 | 128 MiB | 128 MiB | 384 MiB |
+| 512 MiB | 25 | 128 MiB | 256 MiB | 384 MiB |
+| 1,024 MiB | 21 | 256 MiB | 256 MiB | 512 MiB |
+| 1,024 MiB | 25 | 256 MiB | 256 MiB | 512 MiB |
+
+Selection is not a success claim. At 512 MiB total, no Java 21 blocking or
+NIO candidate sustains the full offered workload; their listed heaps follow
+the documented fallback rule and must retain confirmation failures/exclusions.
+At 1,024 MiB total, every edition/JDK has a successful tuning candidate.
+The candidate ranges are 128/256/384/512 MiB and 256/512/768/1024 MiB,
+respectively; this compares a shared search space within each total budget.
+
+The independent 512 MiB confirmations retain the earlier dense-TLS outcome
+after allowing different heaps. At 4,096 idle connections, Mu3 sustains the
+10,000/s foreground target on both JDKs with a 128 MiB heap. Its median
+measurement charge is 324.0 MiB on Java 21 and 265.4 MiB on Java 25. Java 25
+blocking sustains the target with a 256 MiB heap at 216.1 MiB measurement charge.
+Java 21 blocking, selected at 128 MiB, reaches the whole-server limit in all
+three dense trials.
+
+Java 21 NIO's selected 384 MiB heap retains and resumes the entire cohort, but
+all three confirmations miss the rate target: median 7,538 responses/s,
+62.650 ms p99, 6,066 ms recorded GC time per ten measured seconds and
+492.4 MiB measurement charge. These are excluded diagnostic measurements.
+Java 25 NIO's selected 384 MiB heap exhausts Java heap in all three dense trials.
+The larger 512 MiB heap candidate reached the whole-server limit on both JDKs
+during tuning. The bounded search therefore did not find a configuration that
+sustains this dense workload within 512 MiB total; this is not proof that no
+other heap layout, collector or implementation could do so.
+
+### Deeper latency tails without changing the measured workload
+
+`latency_tails.py` post-processes a completed run's native `h2load.json` sample
+vectors. It validates the complete declared sample count, finite sorted values
+and maximum, then computes nearest-rank p99, p99.9 and p99.99 in milliseconds.
+The separate `latency-tails.json` overlay preserves per-trial exclusions and
+reports medians of per-trial percentiles/maxima plus the worst observed maximum.
+It never edits the measured ledger or profiles the running server. Run it after
+the measurement controller finishes:
+
+```bash
+python mu4/benchmarks/nio-baseline/latency_tails.py \
+  nonblocking-validation/baseline-20261018-quiet/sync/runs/RUN_ID
+```
+
+A low p99 can coexist with long rare pauses; the equal-budget report includes
+these deeper tails and GC time. These remain native request latencies from the
+closed-loop generator, rather than a validated open-loop latency SLA. Run all
+focused checks from `mu4/benchmarks/nio-baseline/` with:
+
+```bash
+python -m unittest -v test_baseline test_connection_density test_latency_tails
+```
+
+
+### 1 GiB confirmations and timing qualification
+
+All 36 confirmations at the same 1,024 MiB whole-server cap complete the payload,
+connection-retention/resumption and cleanup checks, and meet the foreground
+rate threshold. The dense TLS cases sustain approximately 10,000 responses/s
+in all three repeats with 256 MiB heaps for Mu3/blocking and 512 MiB for NIO.
+Thus an appropriate larger heap resolves NIO's heap-failure outcome at this
+total budget without changing Java production code. The JVM-selected collectors
+reported in these selected configurations are Copy/MarkSweepCompact (Serial GC);
+this is a heap-budget experiment, not a collector-tuning comparison.
+
+Concurrent desktop/development activity was reported during this confirmation;
+its exact onset is uncertain. The entire 36-case 1 GiB confirmation is therefore
+excluded from controlled timing/CPU ranking. Original declared host metadata
+and measured ledgers remain intact, with explicit `post-audit-findings.json`
+qualifications applied to both summary reports and deeper-tail overlays.
+The following are observed medians of three dense trials; timing and CPU are
+indicative only. Measurement memory is sampled peak total cgroup charge;
+lifetime peak includes setup and resumption.
+
+| Java | Edition | Heap max MiB | Native threads | Measurement MiB | Lifetime peak MiB | p99 ms | p99.9 ms | CPU µs/response |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 21 | Mu3 | 256 | 51 | 428.4 | 434.4 | 0.148 | 0.512 | 42.7 |
+| 21 | Mu4 blocking | 256 | 4149 | 701.6 | 837.3 | 0.143 | 5.686 | 33.5 |
+| 21 | Mu4 NIO | 512 | 72 | 625.4 | 630.3 | 0.374 | 74.736 | 72.9 |
+| 25 | Mu3 | 256 | 39 | 352.7 | 365.6 | 0.185 | 0.884 | 44.5 |
+| 25 | Mu4 blocking | 256 | 25 | 246.7 | 257.7 | 0.183 | 0.713 | 59.1 |
+| 25 | Mu4 NIO | 512 | 36 | 612.9 | 620.8 | 0.172 | 77.176 | 66.0 |
+
+The 1 GiB observations separate adequate heap headroom from memory efficiency.
+NIO uses fewer native threads and less charged memory than Java 21 blocking,
+while Mu3 and Java 25 blocking use less charged memory than NIO. JMX buffer-pool
+readings confirm that a heap-only comparison omits a substantial part of Mu3's
+buffer allocation; the total-charge columns include it.
+
+NIO's observed p99 alone conceals the deeper tail: median per-trial p99.9 is
+approximately 75–77 ms, and the worst observed request is 89.6 ms on Java 21 and
+111.6 ms on Java 25. Recorded GC time is 722 and 1,050 ms per ten measured
+seconds, respectively. These are indicative observations that warrant a
+controlled follow-up; this campaign does not establish the cause of every
+outlier. Full p99.99, maxima, per-run samples, zero-cohort controls and all
+exclusions are retained. No maximum-throughput or open-loop latency claim is
+made from the fixed offered load.
+
+The campaign preserves 96 short tuning trials and 72 independent confirmation
+attempts, with 6,526,220 measured confirmation responses. Sixty-six confirmations
+complete correctness/cohort/cleanup verification; six have resource failures.
+Of the 72 attempts, 27 are eligible performance observations, three miss the
+rate target and 36 are classified as indicative because of concurrent desktop
+activity. All 31 focused Python checks passed, including heap-budget selection,
+complete-sample tail validation and late host-activity qualification without
+rewriting raw evidence. The evidence audit passed 4,858 checks, including actual
+memory limits/flags, unchanged frozen production inputs, cyclic ordering,
+complete payload/cohort checks, generator reaping, reader completion and normal
+JVM exit for successful runs. No Java production code changed.
+
+The combined report is
+`nonblocking-validation/tls-memory-20261018-report.html` beside the checkout.
+It links the campaign specification, executed controller, frozen input manifest,
+audit, host-activity qualification, raw trials and complete-sample tail overlays.
+`tls-memory-20261018-summary.json` contains the combined machine-readable results.

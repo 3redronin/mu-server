@@ -18,6 +18,61 @@ import time
 import baseline as b
 
 
+def heap_size(value):
+    try:
+        if not value.endswith('m'): raise ValueError()
+        size = int(value[:-1])
+        if size < 32 or size > 4096: raise ValueError()
+    except (ValueError, AttributeError):
+        raise argparse.ArgumentTypeError('Heap must be 32m through 4096m in whole MiB')
+    return f'{size}m'
+
+
+def heap_configuration(default, overrides, cap):
+    heaps = {}
+    for override in overrides:
+        try:
+            edition, value = override.split('=')
+            jdk, role = edition.split('/')
+            if jdk not in ('21', '25') or role not in b.ROLES or edition in heaps: raise ValueError()
+            heaps[edition] = heap_size(value)
+        except (ValueError, argparse.ArgumentTypeError):
+            raise ValueError('Each heap override must be a unique JDK/edition=SIZE, e.g. 25/nio=768m')
+    if any(int(value[:-1]) > cap for value in [default, *heaps.values()]):
+        raise ValueError('Heap maximum must not exceed the whole-server memory budget')
+    return heaps
+
+
+def trial_heap(settings, item):
+    return settings.get('heap_by_edition', {}).get(f"{item['jdk']}/{item['role']}", settings['heap'])
+
+
+def memory_options(settings, existing):
+    options = list(existing)
+    if settings.get('direct_memory_mib') is not None:
+        options.append(f"-XX:MaxDirectMemorySize={settings['direct_memory_mib']}m")
+    return options
+
+
+def choose_heap(rows):
+    """Use tuning observations only; confirm the chosen heap in fresh trials.
+
+    Prefer the smallest heap that meets the offered load with a complete cohort.
+    Otherwise retain the best correctly completed rate, or largest established
+    cohort when every candidate fails. Ties prefer smaller heaps.
+    """
+    if not rows or len({(r['jdk'], r['role'], r['idle']) for r in rows}) != 1:
+        raise ValueError('Selection requires one edition, JDK and idle population')
+    correct = [r for r in rows if r['outcome'] == 'pass']
+    healthy = [r for r in correct if r['target_rate_met'] and not r.get('generator_busy')
+               and not r.get('connections_incomplete')]
+    size = lambda r: int(r['heap'][:-1])
+    if healthy: return min(healthy, key=size)['heap']
+    if correct:
+        return min(correct, key=lambda r: (-r.get('measurement', {}).get('requests_per_second', 0), size(r)))['heap']
+    return min(rows, key=lambda r: (-r['launch'].get('idle_cohort', {}).get('established', 0), size(r)))['heap']
+
+
 def configure_descriptors(max_count):
     before, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
     desired = (before if before == resource.RLIM_INFINITY else
@@ -242,6 +297,7 @@ def trial(c, inputs, directory, item, settings, tool):
         def __init__(self, *args, **kwargs):
             nonlocal active
             self.pool = None
+            kwargs['java_options'] = memory_options(settings, kwargs.get('java_options', []))
             super().__init__(*args, **kwargs); active = self
 
         def ready(self, *args, **kwargs):
@@ -286,7 +342,7 @@ def trial(c, inputs, directory, item, settings, tool):
 
     def native(*args, **kwargs):
         return native_with_cleanup(c, tool, lambda: original_native(
-            *args, cap=settings['cap_mib'], heap=settings['heap'], **kwargs))
+            *args, cap=settings['cap_mib'], heap=trial_heap(settings, item), **kwargs))
 
     c.Server, c.accepted_connections, c.native_trial = Density, count, native
     try: row = b.run_trial(c, inputs, directory, item, settings, tool)
@@ -303,6 +359,9 @@ def trial(c, inputs, directory, item, settings, tool):
 
 def report(run):
     ledger = b.read(run / 'results.json'); groups = collections.defaultdict(list)
+    annotation_path = run / 'post-audit-findings.json'
+    annotations = b.read(annotation_path) if annotation_path.exists() else {}
+    extra_exclusions = annotations.get('performance_exclusions', [])
     for row in ledger['trials']: groups[(row['jdk'], row['case']['protocol'], row['idle'], row['role'])].append(row)
     parts = ['<!doctype html><meta charset="utf-8"><title>Idle connection density</title>',
              '<style>body{font:16px system-ui;max-width:1400px;margin:30px auto;padding:20px}table{border-collapse:collapse}td,th{padding:8px;border-bottom:1px solid #ccc;text-align:right}td:first-child,th:first-child{text-align:left}</style>',
@@ -311,10 +370,13 @@ def report(run):
              '<p>' + html.escape(json.dumps(ledger['spec'])) + '</p>',
              f'<p>{len(ledger["trials"])} / {len(ledger["plan"])} trials; complete: {ledger["complete"]}. <a href="results.json">Ledger</a> · <a href="../../manifest.json">Frozen inputs</a></p>',
              '<p>Smoke and busy-host rates are excluded from performance conclusions. Setup failures remain visible; partial cohorts never count as successful measurements. Observed rates/latency/GC retain excluded measurements as diagnostics; they do not become valid rates. Charged peak includes setup and resumption; measurement memory is sampled current charge. Native threads are sampled OS threads.</p>',
-             '<table><tr><th>JDK / protocol / idle / edition</th><th>Verified runs / saved</th><th>Valid rates</th><th>Valid req/s</th><th>Valid p99 ms</th><th>Observed req/s</th><th>Observed p99 ms</th><th>GC ms</th><th>Native threads</th><th>Measurement MiB</th><th>Lifetime peak MiB</th></tr>']
+             '<table><tr><th>JDK / protocol / idle / edition</th><th>Heap max</th><th>Verified runs / saved</th><th>Valid rates</th><th>Valid req/s</th><th>Valid p99 ms</th><th>Observed req/s</th><th>Observed p99 ms</th><th>GC ms</th><th>Native threads</th><th>Measurement MiB</th><th>Lifetime peak MiB</th></tr>']
+    if extra_exclusions:
+        parts.insert(4, '<p><strong>INDICATIVE ONLY:</strong> '+html.escape('; '.join(extra_exclusions))+
+                     '. Original declared host metadata is preserved. <a href="post-audit-findings.json">Post-audit qualification</a></p>')
     summaries = []
     for (jdk, protocol, idle, role), rows in groups.items():
-        good = [r for r in rows if r['outcome'] == 'pass' and not r['performance_exclusions']]
+        good = [r for r in rows if r['outcome'] == 'pass' and not r['performance_exclusions'] and not extra_exclusions]
         correct = [r for r in rows if r['outcome'] == 'pass']
         def median(values): return statistics.median(values) if values else None
         rates = {k: median([r['measurement'][k] for r in good]) for k in ('requests_per_second', 'p99_ms')}
@@ -322,11 +384,15 @@ def report(run):
                     for k in ('requests_per_second', 'p99_ms', 'gc_millis')}
         threads = median([max(s.get('process', {}).get('os_threads', 0) for s in r['launch']['samples'] if s['phase'] == 'measurement') for r in correct])
         memory = median([r['measurement_peak_mib'] for r in correct]); peak = median([r['peak_mib'] for r in rows])
+        boundaries = {key: median([max(r.get(phase, {}).get(key, 0) for phase in
+                    ('measurement_before', 'measurement_after')) / 1048576 for r in correct
+                    if 'measurement_before' in r and 'measurement_after' in r])
+                    for key in ('heap_bytes', 'buffer_pool_bytes')}
         entry = dict(jdk=jdk, protocol=protocol, idle=idle, role=role, saved=len(rows), correct=len(correct), valid=len(good),
-                     **rates, observed=observed, native_threads=threads, measurement_peak_mib=memory, peak_mib=peak)
+                     **rates, boundary_mib=boundaries, collectors=sorted({r['launch'].get('ready', {}).get('gc', 'unknown') for r in rows}), heaps=sorted({r.get('heap', ledger['spec'].get('heap', 'unknown')) for r in rows}), observed=observed, native_threads=threads, measurement_peak_mib=memory, peak_mib=peak)
         summaries.append(entry)
         def fmt(v, n=1): return '—' if v is None else f'{v:,.{n}f}'
-        values = [f'{jdk} / {protocol} / {idle} / {role}', f'{len(correct)}/{len(rows)}', str(len(good)),
+        values = [f'{jdk} / {protocol} / {idle} / {role}', ', '.join(entry['heaps']), f'{len(correct)}/{len(rows)}', str(len(good)),
                   fmt(rates['requests_per_second'], 0), fmt(rates['p99_ms'], 3),
                   fmt(observed['requests_per_second'], 0), fmt(observed['p99_ms'], 3),
                   fmt(observed['gc_millis'], 0), fmt(threads, 0), fmt(memory), fmt(peak)]
@@ -334,11 +400,11 @@ def report(run):
     parts.append('</table><h2>All trials and exclusions</h2><ul>')
     for row in ledger['trials']:
         link = 'trials/' + row['key'] + '/result.json'
-        text = row['key'] + ': ' + row['outcome'] + '; ' + str(row.get('error', '')) + '; ' + ', '.join(row['performance_exclusions'])
+        text = row['key'] + ': ' + row['outcome'] + '; ' + str(row.get('error', '')) + '; ' + ', '.join(row['performance_exclusions'] + extra_exclusions)
         text += '; observed ' + json.dumps(row.get('measurement', {}), sort_keys=True)
         parts.append('<li><a href="' + html.escape(link) + '">' + html.escape(text) + '</a></li>')
     parts.append('</ul>'); (run / 'report.html').write_text('\n'.join(parts))
-    b.save(run / 'summary.json', dict(complete=ledger['complete'], groups=summaries))
+    b.save(run / 'summary.json', dict(complete=ledger['complete'], performance_annotations=annotations, groups=summaries))
 
 
 def main():
@@ -350,22 +416,35 @@ def main():
     parser.add_argument('--counts', type=int, nargs='+')
     parser.add_argument('--protocols', choices=['http1', 'https1'], nargs='+')
     parser.add_argument('--jdks', type=int, choices=[21, 25], nargs='+', default=[21, 25])
-    parser.add_argument('--heap', choices=['256m', '384m'], default='256m',
-                        help='Common maximum heap for every edition; total cgroup stays 512 MiB')
+    parser.add_argument('--heap', type=heap_size, default='256m', help='Default maximum heap for every edition')
+    parser.add_argument('--heap-for', nargs='+', default=[], metavar='JDK/EDITION=SIZE',
+                        help='Independent per-edition/JDK heaps under the same total memory budget')
+    parser.add_argument('--cap-mib', type=int, choices=[512, 1024], default=512)
+    parser.add_argument('--direct-memory-mib', type=int, help='Explicit direct-memory ceiling for every edition')
+    parser.add_argument('--phase', choices=['comparison', 'tuning', 'confirmation'], default='comparison')
     args = parser.parse_args(); inputs = args.inputs.resolve()
     counts = args.counts if args.counts is not None else ([0, 64] if args.profile == 'smoke' else [0, 1024, 4096])
     protocols = args.protocols or (['https1'] if args.profile == 'smoke' else ['http1', 'https1'])
     if 0 not in counts or any(n < 0 or n > 4096 for n in counts) or len(set(counts)) != len(counts):
         parser.error('Require unique counts including zero, between 0 and 4096')
     if Path(args.run_id).name != args.run_id or args.run_id in ('.', '..'): parser.error('Run ID must be one directory name')
-    try: descriptors = configure_descriptors(max(counts))
+    try:
+        heaps = heap_configuration(args.heap, args.heap_for, args.cap_mib)
+        if args.direct_memory_mib is not None and not 1 <= args.direct_memory_mib <= args.cap_mib:
+            raise ValueError('Direct-memory ceiling must be positive and no larger than the total budget')
+        if args.phase == 'tuning' and args.profile != 'smoke':
+            raise ValueError('Tuning must use the smoke profile, excluded from performance conclusions')
+        if args.phase == 'confirmation' and args.profile != 'full':
+            raise ValueError('Confirmation requires full independent repeats')
+        descriptors = configure_descriptors(max(counts))
     except ValueError as error: parser.error(str(error))
     c = b.load_harness(inputs / 'harness'); manifest = b.verify_manifest(inputs, c)
     run = inputs / 'runs' / args.run_id; run.mkdir(parents=True, exist_ok=False)
     source = Path(__file__); (run / 'executed_connection_density.py').write_bytes(source.read_bytes())
     settings = dict(profile=args.profile, host_state=args.host_state, warmup=1 if args.profile == 'smoke' else 5,
                     duration=3 if args.profile == 'smoke' else 10, repeats=1 if args.profile == 'smoke' else 3,
-                    counts=counts, protocols=protocols, jdks=args.jdks, cap_mib=512, heap=args.heap, target_rps=10000,
+                    counts=counts, protocols=protocols, jdks=args.jdks, cap_mib=args.cap_mib, heap=args.heap, heap_by_edition=heaps,
+                    direct_memory_mib=args.direct_memory_mib, phase=args.phase, target_rps=10000,
                     server_cpus='0-3,8-11', generator_cpus='4-7,12-15', controller_sha256=b.digest(source),
                     baseline_controller_sha256=b.digest(Path(b.__file__)), manifest_sha256=b.digest(inputs / 'manifest.json'),
                     client_descriptor_limits=descriptors)

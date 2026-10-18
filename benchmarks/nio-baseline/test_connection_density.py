@@ -10,6 +10,40 @@ import connection_density as d
 
 
 class DensityTests(unittest.TestCase):
+    def test_heap_overrides_change_only_selected_editions_and_preserve_total_budget(self):
+        heaps = d.heap_configuration('256m', ['21/nio=512m', '25/nio=384m'], 512)
+        settings = dict(heap='256m', heap_by_edition=heaps, direct_memory_mib=512)
+        self.assertEqual('512m', d.trial_heap(settings, dict(jdk=21, role='nio')))
+        self.assertEqual('256m', d.trial_heap(settings, dict(jdk=21, role='mu3')))
+        options = ['-Dcomparison.threading=VIRTUAL']
+        self.assertEqual(options+['-XX:MaxDirectMemorySize=512m'], d.memory_options(settings, options))
+        self.assertEqual(['-Dcomparison.threading=VIRTUAL'], options)
+        self.assertEqual([], d.memory_options({}, []))
+        for overrides in (['21/nio=768m'], ['21/nio=256m', '21/nio=384m'], ['25/unknown=128m']):
+            with self.assertRaises(ValueError): d.heap_configuration('256m', overrides, 512)
+
+    def test_heap_selection_uses_smallest_successful_heap_not_best_tuning_latency(self):
+        def row(heap, rate, p99):
+            return dict(jdk=25, role='nio', idle=4096, heap=heap, outcome='pass', target_rate_met=rate>=9800,
+                        measurement=dict(requests_per_second=rate, p99_ms=p99))
+        rows = [row('128m', 7000, 90), row('256m', 10000, 2), row('384m', 10000, .1)]
+        self.assertEqual('256m', d.choose_heap(rows))
+        rows[1]['generator_busy'] = True
+        self.assertEqual('384m', d.choose_heap(rows))
+
+    def test_failed_tuning_cannot_claim_target_success_or_hide_cohort_failure(self):
+        rows = [dict(jdk=21, role='nio', idle=4096, heap=heap, outcome='Java heap exhaustion',
+                     target_rate_met=False, launch=dict(idle_cohort=dict(established=count)))
+                for heap,count in [('128m',1000), ('256m',2800), ('384m',4096), ('512m',4096)]]
+        self.assertEqual('384m', d.choose_heap(rows))
+        rows[1].update(outcome='pass', measurement=dict(requests_per_second=5000))
+        self.assertEqual('256m', d.choose_heap(rows))
+        rows[2].update(outcome='pass', measurement=dict(requests_per_second=7000))
+        self.assertEqual('384m', d.choose_heap(rows))
+        with self.assertRaises(ValueError): d.choose_heap([])
+        rows[0]['jdk'] = 25
+        with self.assertRaises(ValueError): d.choose_heap(rows)
+
     def test_early_failure_reaps_only_owned_generator_and_reader(self):
         generator = Mock(pid=123, returncode=-15, stdout=io.StringIO())
         generator.poll.return_value = None
@@ -85,6 +119,8 @@ class DensityTests(unittest.TestCase):
         row = dict(jdk=21, case=dict(protocol='https1'), idle=4096, role='nio', outcome='pass',
                    performance_exclusions=['target missed'], key='trial', peak_mib=497, measurement_peak_mib=486,
                    launch=dict(samples=[dict(phase='measurement', process=dict(os_threads=66))]),
+                   measurement_before=dict(heap_bytes=10*1048576, buffer_pool_bytes=40*1048576),
+                   measurement_after=dict(heap_bytes=20*1048576, buffer_pool_bytes=30*1048576),
                    measurement=dict(requests_per_second=7161.4, p99_ms=68.933, gc_millis=6254))
         with tempfile.TemporaryDirectory() as directory:
             run = Path(directory)
@@ -93,8 +129,27 @@ class DensityTests(unittest.TestCase):
             group = json.loads((run/'summary.json').read_text())['groups'][0]
             self.assertEqual(0, group['valid']); self.assertIsNone(group['requests_per_second'])
             self.assertEqual(row['measurement'], group['observed'])
+            self.assertEqual(dict(heap_bytes=20, buffer_pool_bytes=40), group['boundary_mib'])
             self.assertIn('68.933', (run/'report.html').read_text())
             self.assertIn('6,254', (run/'report.html').read_text())
+
+    def test_late_host_activity_excludes_timing_without_rewriting_raw_evidence(self):
+        row=dict(jdk=25,case=dict(protocol='https1'),idle=4096,role='nio',outcome='pass',
+                 performance_exclusions=[],key='trial',heap='512m',peak_mib=630,measurement_peak_mib=620,
+                 launch=dict(samples=[dict(phase='measurement',process=dict(os_threads=30))]),
+                 measurement=dict(requests_per_second=10000,p99_ms=.2,gc_millis=900))
+        with tempfile.TemporaryDirectory() as directory:
+            run=Path(directory);ledger=run/'results.json'
+            ledger.write_text(json.dumps(dict(spec=dict(host_state='quiet'),trials=[row],plan=[row],complete=True)))
+            original=ledger.read_bytes()
+            (run/'post-audit-findings.json').write_text(json.dumps(dict(performance_exclusions=['Concurrent desktop use'])))
+            d.report(run)
+            summary=json.loads((run/'summary.json').read_text())['groups'][0]
+            self.assertEqual(1,summary['correct']);self.assertEqual(0,summary['valid'])
+            self.assertIsNone(summary['requests_per_second'])
+            self.assertEqual(10000,summary['observed']['requests_per_second'])
+            self.assertIn('INDICATIVE ONLY',(run/'report.html').read_text())
+            self.assertEqual(original,ledger.read_bytes())
 
     def test_client_fd_limit_cannot_create_a_false_server_capacity_result(self):
         with patch.object(d.resource, 'getrlimit', return_value=(1024, 65536)), \
