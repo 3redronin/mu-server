@@ -821,3 +821,115 @@ connections remains relevant; these short additions do not replace it.
 Further release coverage should include cold/resumed TLS connection churn,
 realistic RTT/loss and limited bandwidth, WebSockets, varied/large headers,
 TLS 1.2, and longer memory/GC runs. These remain unmeasured by this extension.
+
+## October 18 bounded plaintext response handoffs
+
+The first production optimization targets a single bounded asynchronous 1 MiB
+HTTP/1 write over plaintext. HTTP/1 previously supplied approximately 16 KiB
+render turns even when the transport could drain more. A transport-only 64 KiB
+probe left throughput and write-family counts essentially unchanged; that
+four-way pilot is preserved at
+`nonblocking-validation/plaintext-drain-20261018/pilot/results.json`.
+
+The combined change borrows up to 65,408 unchanged heap bytes after the first
+ordinary HTTP/1 render turn and lets plaintext transport drain up to 64 KiB per
+call. The owned output ring remains 8,201 bytes and the per-connection visit
+budget remains 131,216 bytes. Larger borrows require a fixed-length, unencoded,
+non-bodyless plaintext response and an application output buffer no larger than
+16,352 bytes. This avoids merging a retained buffered prefix with a large borrow
+and creating a temporary-file spill. TLS, chunked output, encoded output and
+direct/read-only renderer input retain their existing rendering limits.
+
+The matched experiment is beside the checkout at
+`nonblocking-validation/plaintext-borrow-20261018/`. Its source snapshot,
+class/dependency/fixture inventories and controller are preserved separately
+from the original baseline. Only `ChannelConnection`, `Http1Response` and
+`Http1ResponseOutput` production classes (including nested classes) differ from
+the baseline. The NIO candidate production source digest is
+`62fca35b5000d12f25eec40b4dfd840e48516d716b9073bd9289e3108cf66eee`.
+
+Each short trial uses two seconds of warm-up and three seconds of measurement,
+a fresh JVM, a 512 MiB heap and a 1 GiB total-memory cap without swap. Java 21
+uses PLATFORM workers and Java 25 uses VIRTUAL workers for both Mu4 editions;
+Mu3 retains its Netty policy. Two comparison repeats reverse paired edition
+order. All observations are indicative and excluded from controlled performance
+conclusions because the laptop was in use. These observations do not replace
+the earlier quiet-host baseline.
+
+Controls cover small responses, HTTPS bulk, HTTP/2 bulk, synchronous bulk and
+chunked bulk. Distinct-connection isolation targets 2,000 small responses/s with
+four foreground clients, alone and alongside 32 paused HTTP/1 readers. The
+isolation fixture uses shared immutable 8 MiB payload arrays and one outstanding
+async write per paused peer, exercising the changed borrow path without an
+unbounded write queue. Paused peers must retain queued TCP bytes until
+cancellation, and a fresh request must succeed afterwards. This is separate from
+the earlier same-connection HTTP/2 stream-fairness experiment.
+
+Observed medians for that bounded async plaintext workload (two repeats):
+
+| Java | Mu3 responses/s | Mu4 blocking responses/s | NIO before responses/s | NIO after responses/s | NIO p99 before → after |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 21 | 15,613 | 16,710 | 4,201 | 10,262 | 3.835 → 1.654 ms |
+| 25 | 16,692 | 17,204 | 4,668 | 10,687 | 2.565 → 1.310 ms |
+
+NIO's observed throughput increased 2.44× / 2.29×, and CPU per response fell
+from 1,061 / 1,011 µs to 440 / 437 µs on Java 21 / 25. It remains behind both
+reference implementations in throughput. Mu3's Java 21 repeats varied from
+13,951 to 17,274 responses/s, so the relative reference ranking is particularly
+uncertain. NIO's paired ranges were 4,191–4,212 before and 10,165–10,358 after
+on Java 21, and 4,622–4,714 before and 10,678–10,697 after on Java 25.
+
+Whole-process write-family calls per response fell from approximately 127 to 35
+on Java 21 and 100 to 29 on Java 25. These `/proc/PID/io` counts include selector
+wakeups and control output; they are not socket-only syscall counts. Sampled
+context switches for threads present at both measurement boundaries also fell.
+This supports reduced handoff overhead, rather than merely a throughput change.
+
+The owned connection buffers do not grow. Java 21's JMX buffer-pool observation
+rose from 0.125 to 0.312 MiB, consistent with larger temporary direct buffers
+cached per transport thread. The installed Java 25 JDK allocates those temporary
+I/O buffers outside this JMX accounting; its zero counter must not be interpreted
+as zero native memory. Installed JDK source excerpts are preserved in the
+experiment's `jdk-native-buffer-sources.json`.
+
+Total measurement cgroup peaks for NIO bulk had observed medians of
+112 → 121 MiB on Java 21 and 91 → 97 MiB on Java 25. Short startup/JIT/GC-sensitive
+runs cannot establish a retained-memory change from these differences. With
+32 paused async readers, the corresponding medians were 202 → 195 MiB and
+188 → 180 MiB. These observations do not establish a memory improvement either.
+
+Control-workload throughput medians differed by approximately −2.2% to +5.2%.
+They show no comparable large change, but these short runs cannot rule out small
+regressions. All 16 fixed-rate isolation trials met their target, and all eight
+paused-reader trials verified retention, queued output, cancellation and recovery.
+Paused foreground p99 medians were 0.280 → 0.301 ms on Java 21 and
+0.397 → 0.330 ms on Java 25. TLS and small-window HTTP/2 performance gaps remain
+separate follow-up work.
+
+Two separate Java 21 JFR diagnostic runs estimated 74,639 → 44,907 allocated
+bytes per response from allocation-sample weights within the measurement
+boundaries (approximately 40% lower). This is an estimate, not an exact
+allocation counter; profiled throughput is not pooled into the comparison.
+Remaining allocation samples point to response-header/buffered-prefix copies
+and per-handoff objects. The recordings contain too few Java execution samples
+to identify a reliable CPU hotspot. `profile-summary.json` links the recordings
+and raw events. Header/prefix allocation and the remaining worker/transport
+handoffs are candidates for the next bounded experiment.
+
+The final regressions passed 2,069 tests on Java 21 and 2,114 on Java 25,
+including TLS/HTTP/2 and WebSocket controls; 270 focused tests also passed on
+each of Java 11 and 17. Added coverage checks large heap borrows, direct/read-only
+fallbacks, custom buffered prefixes without file spills, source reuse only after
+acknowledgement, rejected continuations, transport failure, and zero/partial
+writes. A fresh Java 21 compilation reproduced all 603 frozen production class
+files exactly.
+
+All 78 final-candidate trials passed: four pilot trials, 72 paired/reference
+comparison trials and two separate JFR diagnostic trials, with 5,002,484 measured
+successful responses. The evidence audit passed 1,152 checks, including payload
+probes, native response-log reconciliation, frozen build identity, paused-peer
+retention/recovery, temporary-file cleanup, normal JVM exit and native-child
+reaping. The initial transport-only pilot remains separate. All benchmark
+processes were stopped after completion. `report.html`, `summary.json` and
+`audit.json` in the experiment directory retain the ranges, resource observations,
+exclusions, validation counts and links to individual trial evidence.

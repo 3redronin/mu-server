@@ -16,13 +16,13 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Timeout(10)
 class TransportAsyncOutputTest {
-    @ParameterizedTest @CsvSource({"1,16393", "8201,16393", "8201,97"})
+    @ParameterizedTest @CsvSource({"1,16393", "8201,16393", "8201,97", "8201,65536"})
     void borrowedDrainsHaveTheirOwnBudgetWithoutGrowingTheRing(int capacity, int drainLimit) throws Exception {
         var output = new TransportOutputBuffer(capacity, drainLimit, () -> {});
         var ring = TransportOutputBuffer.class.getDeclaredField("bytes");
         ring.setAccessible(true);
         assertEquals(capacity, ((byte[]) ring.get(output)).length);
-        byte[] expected = new byte[40003];
+        byte[] expected = new byte[262147];
         new Random(872).nextBytes(expected);
         var write = output.asynchronousWriter().write(ByteBuffer.wrap(expected));
         var sink = new TransportOutputBufferTest.Sink(Integer.MAX_VALUE) {
@@ -44,6 +44,42 @@ class TransportAsyncOutputTest {
         write.get();
         assertArrayEquals(expected, sink.bytes.toByteArray());
         assertEquals(capacity, ((byte[]) ring.get(output)).length);
+    }
+
+    @Test void largeBorrowedDrainRetainsUnwrittenSuffixAcrossZeroAndPartialWrites() throws Exception {
+        var output = new TransportOutputBuffer(8201, 65536, () -> {});
+        byte[] expected = new byte[131073];
+        new Random(239).nextBytes(expected);
+        ByteBuffer source = ByteBuffer.allocateDirect(expected.length + 2).position(2).put(expected).flip().position(2);
+        var progress = new TransportWriteProgress(() -> {});
+        var write = output.asynchronousWriter().write(source.asReadOnlyBuffer(), progress);
+        var received = new ByteArrayOutputStream();
+        var sink = new WritableByteChannel() {
+            int calls;
+            @Override public int write(ByteBuffer data) {
+                assertTrue(data.isDirect() && data.isReadOnly());
+                assertTrue(data.remaining() <= 65536);
+                if (++calls % 3 == 0) return 0;
+                int count = Math.min(31001, data.remaining());
+                byte[] bytes = new byte[count];
+                data.get(bytes); received.writeBytes(bytes);
+                return count;
+            }
+            @Override public boolean isOpen() { return true; }
+            @Override public void close() { }
+        };
+        for (int attempts = 0; !write.isDone(); attempts++) {
+            assertTrue(attempts < 20);
+            int before = received.size();
+            int count = output.drainTo(sink, 65536);
+            assertEquals(received.size() - before, count);
+            assertTrue(progress.reached(received.size()));
+            assertFalse(progress.reached(received.size() + 1));
+            assertEquals(received.size() == expected.length, write.isDone());
+        }
+        write.get();
+        assertEquals(2, source.position());
+        assertArrayEquals(expected, received.toByteArray());
     }
 
     @Test void asyncBudgetDoesNotEnlargeBlockingRingDrains() throws Exception {

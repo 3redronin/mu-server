@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -103,6 +104,88 @@ class AsyncResponseRendererTest {
             assertSame(aborted, assertThrows(ExecutionException.class,
                 () -> written.get(3, TimeUnit.SECONDS)).getCause());
         } finally { io.completeExceptionally(new IOException("test closed")); executor.shutdownNow(); }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"0,true", "1,true", "2,true", "3,true", "0,false"})
+    void largerPlainBodyBorrowsDrainHeadersFirstAndAwaitEveryAcknowledgement(int kind, boolean large) throws Exception {
+        var tasks = new ArrayDeque<Runnable>();
+        var pending = new ArrayDeque<CompletableFuture<Void>>();
+        var borrowed = new ArrayDeque<ByteBuffer>();
+        var capture = new Http1ResponseOutput(OutputStream.nullOutputStream(), bytes -> {
+            borrowed.add(bytes);
+            var io = new CompletableFuture<Void>(); pending.add(io); return io;
+        }, directory);
+        capture.allowSourceBorrowing(true);
+        capture.allowLargeSourceBorrowing(large);
+        var stream = new java.io.BufferedOutputStream(capture, 8192);
+        byte[] prefix = "HTTP/1.1 200 OK\r\nContent-Length: 262147\r\n\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        stream.write(prefix);
+        byte[] expected = new byte[262147];
+        new java.util.Random(727).nextBytes(expected);
+        ByteBuffer source = kind == 1 ? ByteBuffer.allocateDirect(expected.length + 9)
+            : ByteBuffer.allocate(expected.length + 9);
+        source.position(5).put(expected).flip().position(5);
+        if (kind == 2) source = source.asReadOnlyBuffer();
+        if (kind == 3) source = source.slice();
+        int position = source.position();
+        var written = new AsyncResponseRenderer(tasks::add, capture, () -> stream).write(source);
+        var actual = new ByteArrayOutputStream();
+        int largeBorrows = 0;
+        while (!written.isDone()) {
+            assertEquals(1, pending.size());
+            assertTrue(tasks.isEmpty(), "No rendering while the transport owns a borrow");
+            ByteBuffer bytes = borrowed.remove();
+            if (bytes.remaining() > 16384) {
+                assertTrue(large && source.hasArray());
+                assertSame(source.array(), bytes.array(), "Large writes must retain the original source");
+                assertTrue(bytes.remaining() <= ResponseWriteSizes.MAX_BORROW_BYTES);
+                largeBorrows++;
+            }
+            byte[] chunk = new byte[bytes.remaining()]; bytes.get(chunk); actual.write(chunk);
+            assertNoTemporaryFiles();
+            pending.remove().complete(null);
+            runTasks(tasks);
+        }
+        written.get();
+        var wire = new ByteArrayOutputStream(); wire.write(prefix); wire.write(expected);
+        assertArrayEquals(wire.toByteArray(), actual.toByteArray());
+        assertEquals(large && source.hasArray() ? 4 : 0, largeBorrows);
+        assertEquals(source.hasArray() ? position : source.limit(), source.position());
+        assertNoTemporaryFiles();
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void largeBorrowRemainsOwnedUntilTransportFailureOrRejectedContinuation(boolean reject) throws Exception {
+        var io = new CompletableFuture<Void>();
+        var largeBorrow = new CompletableFuture<ByteBuffer>();
+        var calls = new AtomicInteger();
+        byte[] source = new byte[262147];
+        new java.util.Random(728).nextBytes(source);
+        var capture = new Http1ResponseOutput(OutputStream.nullOutputStream(), bytes -> {
+            if (calls.incrementAndGet() == 1) return CompletableFuture.completedFuture(null);
+            assertEquals(ResponseWriteSizes.MAX_BORROW_BYTES, bytes.remaining());
+            largeBorrow.complete(bytes); return io;
+        }, directory);
+        capture.allowSourceBorrowing(true);
+        capture.allowLargeSourceBorrowing(true);
+        var tasks = new ArrayDeque<Runnable>();
+        var rejected = new RejectedExecutionException("no workers");
+        var renderer = new AsyncResponseRenderer(task -> {
+            if (reject) throw rejected;
+            tasks.add(task);
+        }, capture, () -> capture);
+        var written = renderer.write(ByteBuffer.wrap(source));
+        assertSame(source, largeBorrow.join().array());
+        assertFalse(written.isDone());
+        assertTrue(tasks.isEmpty());
+        assertEquals(2, calls.get());
+        IOException failure = new IOException("transport closed during large borrow");
+        if (reject) io.complete(null); else io.completeExceptionally(failure);
+        runTasks(tasks);
+        assertSame(reject ? rejected : failure, assertThrows(CompletionException.class, written::join).getCause());
+        assertEquals(2, calls.get(), "A failed response cannot submit its remaining source");
+        assertNoTemporaryFiles();
     }
 
     @Test void encodersKeepFullInputTurnsAndOwnTheirOutputWhileAcknowledgementIsPending() throws Exception {

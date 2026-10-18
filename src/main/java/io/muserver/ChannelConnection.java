@@ -23,7 +23,10 @@ final class ChannelConnection implements ConnectionTransport {
     // Preserve the blocking bridge's ring size; async output no longer copies through it.
     private static final int OUTPUT_BUFFER_SIZE = BUFFER_SIZE + Http2FrameHeader.FRAME_HEADER_LENGTH;
     // Async sources are borrowed, so a full render turn/default DATA frame needs no larger ring.
-    private static final int ASYNC_WRITE_BUDGET = 16_384 + Http2FrameHeader.FRAME_HEADER_LENGTH;
+    private static final int TLS_ASYNC_WRITE_BUDGET = 16_384 + Http2FrameHeader.FRAME_HEADER_LENGTH;
+    // Plain channels can consume larger borrowed spans per syscall without growing the output ring.
+    // The per-visit byte budget below still limits service before another connection gets a turn.
+    private static final int PLAINTEXT_ASYNC_WRITE_BUDGET = 64 * 1024;
     // A TLS record includes framing/tag bytes in addition to its plaintext. Let an
     // ordinary record drain in one bounded call rather than splitting off its trailer.
     private static final int ENCRYPTED_WRITE_BUDGET = 64 * 1024;
@@ -47,7 +50,7 @@ final class ChannelConnection implements ConnectionTransport {
     final AtomicBoolean scheduled = new AtomicBoolean();
     private final AtomicBoolean aborted = new AtomicBoolean();
     private final TransportInputBuffer input = new TransportInputBuffer(BUFFER_SIZE, this::schedule, this::schedule);
-    private final TransportOutputBuffer output = new TransportOutputBuffer(OUTPUT_BUFFER_SIZE, ASYNC_WRITE_BUDGET, this::schedule);
+    private final TransportOutputBuffer output;
     private ByteBuffer incoming = ByteBuffer.allocate(BUFFER_SIZE).flip();
     private final ByteBuffer protocolPrefix = ByteBuffer.allocate(Http2Handshaker.clientConnectionPrefaceLength());
     private final @Nullable ProxyProtocolDecoder proxy;
@@ -93,6 +96,7 @@ final class ChannelConnection implements ConnectionTransport {
         this.remote = (InetSocketAddress) channel.getRemoteAddress();
         this.local = (InetSocketAddress) channel.getLocalAddress();
         this.secure = loop.acceptor.isHttps();
+        output = new TransportOutputBuffer(OUTPUT_BUFFER_SIZE, asyncWriteBudget(), this::schedule);
         proxy = loop.proxyConfig == null ? null : new ProxyProtocolDecoder(loop.proxyConfig);
         proxyComplete = proxy == null;
         executionLease = loop.server.retainTransport();
@@ -100,6 +104,10 @@ final class ChannelConnection implements ConnectionTransport {
 
     @Nullable BaseHttpConnection connection() { return connection; }
     boolean isRetired() { return retired; }
+
+    private int asyncWriteBudget() {
+        return secure ? TLS_ASYNC_WRITE_BUDGET : PLAINTEXT_ASYNC_WRITE_BUDGET;
+    }
 
     boolean schedule() {
         return !retired && (!scheduled.compareAndSet(false, true) || loop.enqueue(this));
@@ -230,7 +238,7 @@ final class ChannelConnection implements ConnectionTransport {
             if (output.pendingBytes() > 0) {
                 long beforeWrite = tls == null ? 0 : tls.revision();
                 int written = output.drainTo(tls == null ? channel : tlsSink,
-                    Math.min(ASYNC_WRITE_BUDGET, remainingWriteBudget));
+                    Math.min(asyncWriteBudget(), remainingWriteBudget));
                 remainingWriteBudget -= written;
                 if (written > 0) { networkProgress(); progress = true; }
                 // Wrapping can produce output without acknowledging plaintext yet.

@@ -24,8 +24,9 @@ class AsyncResponseBorrowTest {
     @org.junit.jupiter.api.io.TempDir java.nio.file.Path directory;
 
     @ParameterizedTest
-    @org.junit.jupiter.params.provider.ValueSource(ints = {8192, 16352, 16384, 32768})
-    void aBufferedPrefixDoesNotIntroduceAResponseSpill(int bufferSize) throws Exception {
+    @CsvSource({"8192,false", "16352,false", "16384,false", "32768,false",
+        "8192,true", "16352,true", "16384,true", "32768,true"})
+    void aBufferedPrefixDoesNotIntroduceAResponseSpill(int bufferSize, boolean h2) throws Exception {
         byte[] expected = new byte[150000];
         new Random(791).nextBytes(expected);
         var temporary = java.nio.file.Files.createDirectory(directory.resolve("responses"));
@@ -44,7 +45,7 @@ class AsyncResponseBorrowTest {
             async.complete();
             return true;
         });
-        var transport = client.newBuilder().protocols(List.of(Protocol.H2_PRIOR_KNOWLEDGE)).build();
+        var transport = client.newBuilder().protocols(List.of(h2 ? Protocol.H2_PRIOR_KNOWLEDGE : Protocol.HTTP_1_1)).build();
         try (MuServer server = builder.start(); var response = transport.newCall(request(server.uri()).build()).execute()) {
             assertEquals(200, response.code());
             assertArrayEquals(expected, response.body().bytes());
@@ -54,11 +55,12 @@ class AsyncResponseBorrowTest {
     static java.util.stream.Stream<Arguments> largeBodies() {
         return java.util.stream.Stream.of("plain", "TLSv1.2", "TLSv1.3").flatMap(protocol ->
             java.util.stream.IntStream.range(0, 3).boxed().flatMap(kind ->
-                java.util.stream.Stream.of(false, true).map(prefix -> Arguments.of(protocol, kind, prefix))));
+                java.util.stream.Stream.of(false, true).flatMap(prefix ->
+                    java.util.stream.Stream.of(false, true).map(h2 -> Arguments.of(protocol, kind, prefix, h2)))));
     }
 
     @ParameterizedTest @MethodSource("largeBodies")
-    void largeWritesKeepTheirBytesAcrossWindowsAndAllowReuseOnlyAfterAcknowledgement(String protocol, int kind, boolean bufferedPrefix) throws Exception {
+    void largeWritesKeepTheirBytesAcrossWindowsAndAllowReuseOnlyAfterAcknowledgement(String protocol, int kind, boolean bufferedPrefix, boolean h2) throws Exception {
         byte[] expected = new byte[4 * 65408 + 37];
         new Random(383).nextBytes(expected);
         byte[] prefix = bufferedPrefix ? new byte[]{1, 2, 3, 4, 5} : new byte[0];
@@ -87,10 +89,11 @@ class AsyncResponseBorrowTest {
             handle.complete();
             return true;
         });
-        var protocols = secure ? List.of(Protocol.HTTP_2, Protocol.HTTP_1_1) : List.of(Protocol.H2_PRIOR_KNOWLEDGE);
+        var protocols = !h2 ? List.of(Protocol.HTTP_1_1) : secure
+            ? List.of(Protocol.HTTP_2, Protocol.HTTP_1_1) : List.of(Protocol.H2_PRIOR_KNOWLEDGE);
         var transport = client.newBuilder().protocols(protocols).build();
         try (MuServer server = builder.start(); var response = transport.newCall(request(server.uri()).build()).execute()) {
-            assertEquals(secure ? Protocol.HTTP_2 : Protocol.H2_PRIOR_KNOWLEDGE, response.protocol());
+            assertEquals(!h2 ? Protocol.HTTP_1_1 : secure ? Protocol.HTTP_2 : Protocol.H2_PRIOR_KNOWLEDGE, response.protocol());
             assertEquals(200, response.code());
             byte[] actual = response.body().bytes();
             assertArrayEquals(prefix, Arrays.copyOf(actual, prefix.length));

@@ -16,6 +16,7 @@ final class Http1ResponseOutput extends OutputStream implements ResponseOutputCa
     private @Nullable Rendered rendering;
     private boolean discarding;
     private boolean sourceBorrowingAllowed;
+    private boolean largeSourceBorrowingAllowed;
 
     Http1ResponseOutput(OutputStream blocking, @Nullable AsyncTransportOutput asynchronous, Path directory) {
         this.blocking = blocking;
@@ -25,7 +26,13 @@ final class Http1ResponseOutput extends OutputStream implements ResponseOutputCa
 
     void allowSourceBorrowing(boolean allowed) { sourceBorrowingAllowed = allowed; }
 
+    void allowLargeSourceBorrowing(boolean allowed) { largeSourceBorrowingAllowed = allowed; }
+
     @Override public boolean inputHeadroomUseful() { return sourceBorrowingAllowed; }
+
+    @Override public boolean multiFrameBorrowAllowed() {
+        return sourceBorrowingAllowed && largeSourceBorrowingAllowed;
+    }
 
     @Override public void write(int value) throws IOException {
         if (discarding) return;
@@ -81,7 +88,7 @@ final class Http1ResponseOutput extends OutputStream implements ResponseOutputCa
         }
 
         @Override public @Nullable CompletableFuture<@Nullable Void> writeNext() throws IOException {
-            ByteBuffer next = bytes.next();
+            ByteBuffer next = multiFrameBorrowAllowed() ? bytes.next(ResponseWriteSizes.MAX_BORROW_BYTES) : bytes.next();
             if (next != null) return writer.write(next);
             if (flushRequested && !flushSent) {
                 flushSent = true;
