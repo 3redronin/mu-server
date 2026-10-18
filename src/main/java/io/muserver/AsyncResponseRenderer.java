@@ -38,7 +38,7 @@ final class AsyncResponseRenderer {
             // The first ordinary turn empties any eligible BufferedOutputStream prefix without
             // making a mixed capture spill merely because this input supports larger borrows.
             int count = input.hasArray() && input.position() != initialPosition && output.multiFrameBorrowAllowed()
-                ? Math.min(input.remaining(), ResponseWriteSizes.MAX_BORROW_BYTES)
+                ? Math.min(input.remaining(), output.maxSourceBorrowBytes())
                 : output.inputHeadroomUseful() ? ResponseWriteSizes.nextFragmentBytes(input.remaining())
                 : Math.min(input.remaining(), ResponseWriteSizes.MAX_SOURCE_BYTES);
             if (input.hasArray()) {

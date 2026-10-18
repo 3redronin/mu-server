@@ -620,23 +620,36 @@ class ChannelTransportTest {
         }
     }
 
-    @ParameterizedTest @ValueSource(booleans = {false, true})
-    void stalledResponseDoesNotPreventAnotherConnectionAndAbortReleasesWriter(boolean secure) throws Exception {
+    @ParameterizedTest @org.junit.jupiter.params.provider.CsvSource({"false,false", "true,false", "false,true", "true,true"})
+    void stalledResponseDoesNotPreventAnotherConnectionAndAbortReleasesWriter(boolean secure, boolean async) throws Exception {
         CompletableFuture<HttpConnection> writing = new CompletableFuture<>();
         CompletableFuture<ResponseInfo> completion = new CompletableFuture<>();
-        try (MuServer server = builder(secure, false).addHandler((req, res) -> {
+        try (MuServer server = builder(secure, false).withNioThreads(1).addHandler((req, res) -> {
             if (req.uri().getPath().equals("/slow")) {
                 ((ChannelConnection) ((BaseHttpConnection) req.connection()).transport).socket.setSendBufferSize(4096);
                 res.addCompletionListener(completion::complete);
                 writing.complete(req.connection());
                 res.contentType("application/octet-stream");
-                res.outputStream().write(new byte[8 * 1024 * 1024]);
+                byte[] body = new byte[8 * 1024 * 1024];
+                if (async) {
+                    res.headers().set(HeaderNames.CONTENT_LENGTH, body.length);
+                    var handle = req.handleAsync();
+                    handle.write(ByteBuffer.wrap(body));
+                    handle.complete();
+                } else res.outputStream().write(body);
             } else res.write("healthy");
             return true;
         }).start(); Socket slow = applicationSocket(server, secure)) {
             slow.setReceiveBufferSize(4096);
             slow.getOutputStream().write("GET /slow HTTP/1.1\r\nHost: localhost\r\n\r\n".getBytes(US_ASCII));
             HttpConnection blocked = writing.get(5, TimeUnit.SECONDS);
+            var outputField = ChannelConnection.class.getDeclaredField("output");
+            outputField.setAccessible(true);
+            var transport = (ChannelConnection) ((BaseHttpConnection) blocked).transport;
+            var output = (TransportOutputBuffer) outputField.get(transport);
+            // For plaintext async output, wait until the first ordinary fragment has passed
+            // and a larger retained borrow is pending before exercising the shared owner.
+            until(() -> output.pendingBytes() >= (async && !secure ? 65536 : 1));
             try (var response = call(request(server.uri()))) { assertEquals("healthy", response.body().string()); }
             assertFalse(completion.isDone(), "The peer has not drained the large response");
             blocked.abort();

@@ -119,9 +119,9 @@ class AsyncResponseRendererTest {
         capture.allowSourceBorrowing(true);
         capture.allowLargeSourceBorrowing(large);
         var stream = new java.io.BufferedOutputStream(capture, 8192);
-        byte[] prefix = "HTTP/1.1 200 OK\r\nContent-Length: 262147\r\n\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+        byte[] prefix = "HTTP/1.1 200 OK\r\nContent-Length: 4194341\r\n\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
         stream.write(prefix);
-        byte[] expected = new byte[262147];
+        byte[] expected = new byte[4194341];
         new java.util.Random(727).nextBytes(expected);
         ByteBuffer source = kind == 1 ? ByteBuffer.allocateDirect(expected.length + 9)
             : ByteBuffer.allocate(expected.length + 9);
@@ -139,7 +139,7 @@ class AsyncResponseRendererTest {
             if (bytes.remaining() > 16384) {
                 assertTrue(large && source.hasArray());
                 assertSame(source.array(), bytes.array(), "Large writes must retain the original source");
-                assertTrue(bytes.remaining() <= ResponseWriteSizes.MAX_BORROW_BYTES);
+                assertTrue(bytes.remaining() <= capture.maxSourceBorrowBytes());
                 largeBorrows++;
             }
             byte[] chunk = new byte[bytes.remaining()]; bytes.get(chunk); actual.write(chunk);
@@ -160,11 +160,11 @@ class AsyncResponseRendererTest {
         var io = new CompletableFuture<Void>();
         var largeBorrow = new CompletableFuture<ByteBuffer>();
         var calls = new AtomicInteger();
-        byte[] source = new byte[262147];
+        byte[] source = new byte[4194341];
         new java.util.Random(728).nextBytes(source);
         var capture = new Http1ResponseOutput(OutputStream.nullOutputStream(), bytes -> {
             if (calls.incrementAndGet() == 1) return CompletableFuture.completedFuture(null);
-            assertEquals(ResponseWriteSizes.MAX_BORROW_BYTES, bytes.remaining());
+            assertEquals(1024 * 1024, bytes.remaining());
             largeBorrow.complete(bytes); return io;
         }, directory);
         capture.allowSourceBorrowing(true);
@@ -185,6 +185,41 @@ class AsyncResponseRendererTest {
         runTasks(tasks);
         assertSame(reject ? rejected : failure, assertThrows(CompletionException.class, written::join).getCause());
         assertEquals(2, calls.get(), "A failed response cannot submit its remaining source");
+        assertNoTemporaryFiles();
+    }
+
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void borrowedBodyWaitsForItsOwnedPrefixAndIsNotSubmittedAfterPrefixFailure(boolean reject) throws Exception {
+        var io = new CompletableFuture<Void>();
+        var submitted = new CompletableFuture<ByteBuffer>();
+        var calls = new AtomicInteger();
+        var capture = new Http1ResponseOutput(OutputStream.nullOutputStream(), bytes -> {
+            assertEquals(1, calls.incrementAndGet(), "A failed prefix must not submit its borrowed body");
+            submitted.complete(bytes); return io;
+        }, directory);
+        capture.allowSourceBorrowing(true);
+        capture.allowLargeSourceBorrowing(true);
+        var stream = new java.io.BufferedOutputStream(capture, 8192);
+        byte[] prefix = {1, 2, 3}; stream.write(prefix);
+        byte[] source = new byte[131072];
+        var tasks = new ArrayDeque<Runnable>();
+        var rejected = new RejectedExecutionException("no workers");
+        var renderer = new AsyncResponseRenderer(task -> {
+            if (reject) throw rejected;
+            tasks.add(task);
+        }, capture, () -> stream);
+        var written = renderer.write(ByteBuffer.wrap(source));
+        ByteBuffer first = submitted.join();
+        assertNotSame(source, first.array());
+        assertEquals(prefix.length, first.remaining());
+        byte[] actual = new byte[first.remaining()]; first.get(actual); assertArrayEquals(prefix, actual);
+        assertFalse(written.isDone());
+        assertTrue(tasks.isEmpty());
+        IOException failure = new IOException("prefix transport failed");
+        if (reject) io.complete(null); else io.completeExceptionally(failure);
+        runTasks(tasks);
+        assertSame(reject ? rejected : failure, assertThrows(CompletionException.class, written::join).getCause());
+        assertEquals(1, calls.get());
         assertNoTemporaryFiles();
     }
 

@@ -61,7 +61,7 @@ class AsyncResponseBorrowTest {
 
     @ParameterizedTest @MethodSource("largeBodies")
     void largeWritesKeepTheirBytesAcrossWindowsAndAllowReuseOnlyAfterAcknowledgement(String protocol, int kind, boolean bufferedPrefix, boolean h2) throws Exception {
-        byte[] expected = new byte[4 * 65408 + 37];
+        byte[] expected = new byte[4 * 1048576 + 37];
         new Random(383).nextBytes(expected);
         byte[] prefix = bufferedPrefix ? new byte[]{1, 2, 3, 4, 5} : new byte[0];
         boolean secure = !protocol.equals("plain");

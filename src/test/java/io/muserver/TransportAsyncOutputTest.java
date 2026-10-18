@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -16,7 +17,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Timeout(10)
 class TransportAsyncOutputTest {
-    @ParameterizedTest @CsvSource({"1,16393", "8201,16393", "8201,97", "8201,65536"})
+    @ParameterizedTest @CsvSource({"1,16393", "8201,16393", "8201,97", "8201,65536", "8201,131216"})
     void borrowedDrainsHaveTheirOwnBudgetWithoutGrowingTheRing(int capacity, int drainLimit) throws Exception {
         var output = new TransportOutputBuffer(capacity, drainLimit, () -> {});
         var ring = TransportOutputBuffer.class.getDeclaredField("bytes");
@@ -31,7 +32,7 @@ class TransportAsyncOutputTest {
                 return super.write(data);
             }
         };
-        int[] budgets = {65536, 1, 8192, 97, 16393};
+        int[] budgets = {131216, 65536, 1, 8192, 97, 16393};
         int consumed = 0, turn = 0;
         while (!write.isDone()) {
             assertEquals(Math.min(drainLimit, expected.length - consumed), output.pendingBytes());
@@ -46,9 +47,10 @@ class TransportAsyncOutputTest {
         assertEquals(capacity, ((byte[]) ring.get(output)).length);
     }
 
-    @Test void largeBorrowedDrainRetainsUnwrittenSuffixAcrossZeroAndPartialWrites() throws Exception {
-        var output = new TransportOutputBuffer(8201, 65536, () -> {});
-        byte[] expected = new byte[131073];
+    @ParameterizedTest @ValueSource(ints = {65536, 131216})
+    void largeBorrowedDrainRetainsUnwrittenSuffixAcrossZeroAndPartialWrites(int drainLimit) throws Exception {
+        var output = new TransportOutputBuffer(8201, drainLimit, () -> {});
+        byte[] expected = new byte[262433];
         new Random(239).nextBytes(expected);
         ByteBuffer source = ByteBuffer.allocateDirect(expected.length + 2).position(2).put(expected).flip().position(2);
         var progress = new TransportWriteProgress(() -> {});
@@ -58,7 +60,7 @@ class TransportAsyncOutputTest {
             int calls;
             @Override public int write(ByteBuffer data) {
                 assertTrue(data.isDirect() && data.isReadOnly());
-                assertTrue(data.remaining() <= 65536);
+                assertTrue(data.remaining() <= drainLimit);
                 if (++calls % 3 == 0) return 0;
                 int count = Math.min(31001, data.remaining());
                 byte[] bytes = new byte[count];
@@ -71,7 +73,7 @@ class TransportAsyncOutputTest {
         for (int attempts = 0; !write.isDone(); attempts++) {
             assertTrue(attempts < 20);
             int before = received.size();
-            int count = output.drainTo(sink, 65536);
+            int count = output.drainTo(sink, drainLimit);
             assertEquals(received.size() - before, count);
             assertTrue(progress.reached(received.size()));
             assertFalse(progress.reached(received.size() + 1));

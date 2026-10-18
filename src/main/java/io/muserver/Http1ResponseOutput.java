@@ -10,6 +10,9 @@ import java.util.concurrent.CompletableFuture;
 
 /** The response's ordinary stream and encoder always write through this same interception point. */
 final class Http1ResponseOutput extends OutputStream implements ResponseOutputCapture {
+    // Stable source views need no extra owned buffer. The transport drains each view in
+    // bounded writes/visits; its acknowledgement still owns the entire retained source span.
+    private static final int MAX_PLAINTEXT_SOURCE_BORROW_BYTES = 1024 * 1024;
     private final OutputStream blocking;
     private final @Nullable AsyncTransportOutput asynchronous;
     private final Path directory;
@@ -34,18 +37,20 @@ final class Http1ResponseOutput extends OutputStream implements ResponseOutputCa
         return sourceBorrowingAllowed && largeSourceBorrowingAllowed;
     }
 
+    @Override public int maxSourceBorrowBytes() { return MAX_PLAINTEXT_SOURCE_BORROW_BYTES; }
+
     @Override public void write(int value) throws IOException {
         if (discarding) return;
         Rendered capture = rendering;
         if (capture == null) blocking.write(value);
-        else capture.bytes.write(value);
+        else capture.write(new byte[]{(byte) value}, 0, 1);
     }
 
     @Override public void write(byte[] bytes, int offset, int length) throws IOException {
         if (discarding) return;
         Rendered capture = rendering;
         if (capture == null) blocking.write(bytes, offset, length);
-        else capture.bytes.write(bytes, offset, length);
+        else capture.write(bytes, offset, length);
     }
 
     @Override public void flush() throws IOException {
@@ -75,21 +80,73 @@ final class Http1ResponseOutput extends OutputStream implements ResponseOutputCa
         private final AsyncTransportOutput writer;
         private boolean flushRequested;
         private boolean flushSent;
+        private boolean sealed;
+        private @Nullable IOException writeFailure;
+        private byte @Nullable [] candidate;
+        private int candidateOffset;
+        private int candidateLength;
+        private @Nullable ByteBuffer borrowedTail;
 
         private Rendered(AsyncTransportOutput writer) { this.writer = writer; }
 
         @Override public void borrowSourceIfUnchanged(byte[] source, int offset, int length) throws IOException {
-            if (sourceBorrowingAllowed) bytes.borrowSourceIfUnchanged(source, offset, length);
+            ensureWritable();
+            if (multiFrameBorrowAllowed()) {
+                java.util.Objects.checkFromIndexSize(offset, length, source.length);
+                if (length > maxSourceBorrowBytes()) throw new IllegalArgumentException("Borrow exceeds one render turn");
+                candidate = source;
+                candidateOffset = offset;
+                candidateLength = length;
+            } else if (sourceBorrowingAllowed) bytes.borrowSourceIfUnchanged(source, offset, length);
+        }
+
+        private void write(byte[] source, int offset, int length) throws IOException {
+            ensureWritable();
+            if (writeFailure != null) throw writeFailure;
+            java.util.Objects.checkFromIndexSize(offset, length, source.length);
+            if (length == 0) return;
+            try { append(source, offset, length); }
+            catch (IOException failure) { writeFailure = failure; throw failure; }
+        }
+
+        private void append(byte[] source, int offset, int length) throws IOException {
+            ByteBuffer tail = borrowedTail;
+            if (tail != null) {
+                // Unexpected output after the borrowed body becomes ordinary owned output.
+                // A failed append leaves bytes.length() at the prefix, so keep the stable tail
+                // until the copy succeeds. Rendering failure can still drain the produced prefix.
+                bytes.write(tail.array(), tail.arrayOffset() + tail.position(), tail.remaining());
+                borrowedTail = null;
+            }
+            @SuppressWarnings("ReferenceEquality") // Only the renderer's unchanged array may be borrowed.
+            boolean sameSource = source == candidate;
+            if (sameSource && offset == candidateOffset && length == candidateLength && !bytes.spilled()) {
+                // BufferedOutputStream can emit headers or an earlier body prefix first. Keep
+                // that bounded prefix owned, but do not copy the unchanged renderer input too.
+                borrowedTail = ByteBuffer.wrap(source, offset, length).slice();
+                candidate = null;
+            } else bytes.write(source, offset, length);
+        }
+
+        private void ensureWritable() throws IOException {
+            if (sealed) throw new IOException("Response capture is no longer writable");
         }
 
         @Override public void finishRendering() throws IOException {
             rendering = null;
+            sealed = true;
+            candidate = null;
             bytes.seal();
         }
 
         @Override public @Nullable CompletableFuture<@Nullable Void> writeNext() throws IOException {
-            ByteBuffer next = multiFrameBorrowAllowed() ? bytes.next(ResponseWriteSizes.MAX_BORROW_BYTES) : bytes.next();
+            ByteBuffer next = bytes.next();
             if (next != null) return writer.write(next);
+            ByteBuffer tail = borrowedTail;
+            if (tail != null) {
+                borrowedTail = null;
+                return writer.write(tail);
+            }
             if (flushRequested && !flushSent) {
                 flushSent = true;
                 return writer.write(ByteBuffer.allocate(0));
@@ -97,6 +154,11 @@ final class Http1ResponseOutput extends OutputStream implements ResponseOutputCa
             return null;
         }
 
-        @Override public void close() throws IOException { bytes.close(); }
+        @Override public void close() throws IOException {
+            sealed = true;
+            candidate = null;
+            borrowedTail = null;
+            bytes.close();
+        }
     }
 }

@@ -24,14 +24,14 @@ final class ChannelConnection implements ConnectionTransport {
     private static final int OUTPUT_BUFFER_SIZE = BUFFER_SIZE + Http2FrameHeader.FRAME_HEADER_LENGTH;
     // Async sources are borrowed, so a full render turn/default DATA frame needs no larger ring.
     private static final int TLS_ASYNC_WRITE_BUDGET = 16_384 + Http2FrameHeader.FRAME_HEADER_LENGTH;
-    // Plain channels can consume larger borrowed spans per syscall without growing the output ring.
-    // The per-visit byte budget below still limits service before another connection gets a turn.
-    private static final int PLAINTEXT_ASYNC_WRITE_BUDGET = 64 * 1024;
     // A TLS record includes framing/tag bytes in addition to its plaintext. Let an
     // ordinary record drain in one bounded call rather than splitting off its trailer.
     private static final int ENCRYPTED_WRITE_BUDGET = 64 * 1024;
     private static final int TURN_LIMIT = 16;
     private static final int PLAINTEXT_VISIT_BUDGET = TURN_LIMIT * OUTPUT_BUFFER_SIZE;
+    // One plain write may use the remaining visit allowance without growing the output ring.
+    // A larger retained source still yields at the same per-connection service boundary.
+    private static final int PLAINTEXT_ASYNC_WRITE_BUDGET = PLAINTEXT_VISIT_BUDGET;
     private static final long SETUP_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(10);
     private static final long CLOSE_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(1);
     private final ChannelTransportLoop loop;

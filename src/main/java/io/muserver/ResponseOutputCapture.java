@@ -15,11 +15,14 @@ interface ResponseOutputCapture {
     /** Only unencoded output with a bounded, fair fragment scheduler may retain a larger heap borrow. */
     default boolean multiFrameBorrowAllowed() { return false; }
 
+    /** Retained source span when larger borrows are allowed; transport write/visit budgets are separate. */
+    default int maxSourceBorrowBytes() { return ResponseWriteSizes.MAX_BORROW_BYTES; }
+
     interface Capture extends AutoCloseable {
         /**
          * The renderer retains this range unchanged until this capture drains. An unencoded
-         * response may borrow it if it is the capture's sole, unchanged array write.
-         * Encoders and mixed output must retain the ordinary owned-copy behavior.
+         * response may borrow an unchanged array write. Any preceding output must remain
+         * independently owned; encoders and changed input retain owned-copy behavior.
          */
         default void borrowSourceIfUnchanged(byte[] source, int offset, int length) throws IOException { }
         /** Stop intercepting output, even if the encoder failed, and make its produced prefix readable. */
