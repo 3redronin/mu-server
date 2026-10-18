@@ -37,10 +37,12 @@ final class TransportOutputBuffer extends OutputStream {
 
     private static final class PendingAsyncWrite {
         final ByteBuffer source;
+        final ByteBuffer drainView;
         final @Nullable TransportWriteProgress progress;
         final CompletableFuture<@Nullable Void> completion = new CompletableFuture<>();
         PendingAsyncWrite(ByteBuffer source, @Nullable TransportWriteProgress progress) {
             this.source = source.duplicate();
+            this.drainView = source.duplicate();
             this.progress = progress;
         }
     }
@@ -64,19 +66,15 @@ final class TransportOutputBuffer extends OutputStream {
     }
 
     private CompletableFuture<@Nullable Void> writeAsync(ByteBuffer source, @Nullable TransportWriteProgress progress) throws IOException {
-        PendingAsyncWrite write = new PendingAsyncWrite(source, progress);
-        boolean empty;
+        PendingAsyncWrite write;
         lock.lock();
         try {
             ensureOpen();
             if (pendingAsyncWrite != null) throw new IllegalStateException("An asynchronous write is still pending");
-            empty = !source.hasRemaining();
-            if (!empty) {
-                pendingAsyncWrite = write;
-            }
+            if (!source.hasRemaining()) return CompletableFuture.completedFuture(null);
+            pendingAsyncWrite = write = new PendingAsyncWrite(source, progress);
         } finally { lock.unlock(); }
-        if (empty) write.completion.complete(null);
-        else outputAvailable.run();
+        outputAvailable.run();
         return write.completion;
     }
 
@@ -123,9 +121,11 @@ final class TransportOutputBuffer extends OutputStream {
                 source = ByteBuffer.wrap(bytes, head, Math.min(maxBytes, Math.min(size, bytes.length - head)));
             } else {
                 // Borrowing does not need ring storage. Its separate limit still bounds each call.
-                // A separate view keeps sink position/limit changes away from the retained source.
-                source = active.source.duplicate();
-                source.limit(source.position() + Math.min(maxBytes, Math.min(asyncDrainLimit, source.remaining())));
+                // Reset the separate view on every attempt, including retries after zero writes.
+                // Sink position/limit changes cannot affect the retained source's acknowledged range.
+                source = active.drainView;
+                source.clear().position(active.source.position());
+                source.limit(source.position() + Math.min(maxBytes, Math.min(asyncDrainLimit, active.source.remaining())));
             }
             int count;
             try {

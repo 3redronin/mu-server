@@ -5,7 +5,7 @@ final class ResponseWriteSizes {
     static final int MAX_SOURCE_BYTES = 16_384;
     // Room for an HTTP/2 header and TLS 1.3 inner content type/padding.
     static final int PREFERRED_SOURCE_BYTES = MAX_SOURCE_BYTES - 32;
-    static final int MAX_BORROW_BYTES = 4 * PREFERRED_SOURCE_BYTES;
+    static final int MAX_BORROW_BYTES = 16 * PREFERRED_SOURCE_BYTES;
 
     private ResponseWriteSizes() { }
 

@@ -62,7 +62,8 @@ class RenderedResponseBytesTest {
         "257, 0", "257, 1", "257, 40000",
         "16384, 0", "16384, 1", "16384, 40000",
         "32769, 0", "32769, 1", "32769, 40000",
-        "65408, 0", "65408, 1", "65408, 40000"
+        "65408, 0", "65408, 1", "65408, 40000",
+        "261632, 0", "261632, 1", "261632, 40000"
     })
     void mixedOutputMaterializesTheBorrowBeforeAppendingOrSpilling(int bodyLength, int suffixLength) throws Exception {
         byte[] body = new byte[bodyLength];

@@ -12,7 +12,7 @@ import java.util.concurrent.CompletableFuture;
 final class Http1ResponseOutput extends OutputStream implements ResponseOutputCapture {
     // Stable source views need no extra owned buffer. The transport drains each view in
     // bounded writes/visits; its acknowledgement still owns the entire retained source span.
-    private static final int MAX_PLAINTEXT_SOURCE_BORROW_BYTES = 1024 * 1024;
+    private static final int MAX_SOURCE_BORROW_BYTES = 1024 * 1024;
     private final OutputStream blocking;
     private final @Nullable AsyncTransportOutput asynchronous;
     private final Path directory;
@@ -37,7 +37,7 @@ final class Http1ResponseOutput extends OutputStream implements ResponseOutputCa
         return sourceBorrowingAllowed && largeSourceBorrowingAllowed;
     }
 
-    @Override public int maxSourceBorrowBytes() { return MAX_PLAINTEXT_SOURCE_BORROW_BYTES; }
+    @Override public int maxSourceBorrowBytes() { return MAX_SOURCE_BORROW_BYTES; }
 
     @Override public void write(int value) throws IOException {
         if (discarding) return;

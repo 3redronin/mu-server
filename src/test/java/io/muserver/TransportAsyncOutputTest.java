@@ -186,6 +186,33 @@ class TransportAsyncOutputTest {
         assertArrayEquals(java.util.Arrays.copyOfRange(storage, 5, 30), sink.bytes.toByteArray());
     }
 
+    @ParameterizedTest @ValueSource(ints = {0, 1, 2})
+    void sinkViewChangesCannotAffectRetriesOrExposeBytesOutsideTheBorrow(int kind) throws Exception {
+        byte[] expected = new byte[53]; new Random(99).nextBytes(expected);
+        ByteBuffer source = kind == 1 ? ByteBuffer.allocateDirect(71) : ByteBuffer.allocate(71);
+        source.position(5).put(expected).flip().position(5).mark();
+        if (kind == 2) source = source.asReadOnlyBuffer();
+        var output = new TransportOutputBuffer(7, 13, () -> {});
+        var written = output.asynchronousWriter().write(source);
+        var actual = new ByteArrayOutputStream();
+        var calls = new java.util.concurrent.atomic.AtomicInteger();
+        var sink = new TransportOutputBufferTest.Sink(3) {
+            @Override public int write(ByteBuffer bytes) throws IOException {
+                assertEquals(5 + actual.size(), bytes.position());
+                assertEquals(Math.min(11, expected.length - actual.size()), bytes.remaining());
+                int count = calls.incrementAndGet() % 2 == 0 ? Math.min(3, bytes.remaining()) : 0;
+                for (int i = 0; i < count; i++) actual.write(bytes.get());
+                // A subsequent retry must reconstruct its range independently of this view.
+                bytes.clear().limit(1).position(1).mark();
+                return count;
+            }
+        };
+        while (!written.isDone()) output.drainTo(sink, 11);
+        written.get();
+        assertArrayEquals(expected, actual.toByteArray());
+        assertEquals(5, source.position()); assertEquals(58, source.limit()); source.reset();
+    }
+
     @Test
     void progressNotificationRunsOutsideTheRingLockAndDoesNotAcknowledgeTheRemainingSource() throws Exception {
         var output = new TransportOutputBuffer(7, () -> {});

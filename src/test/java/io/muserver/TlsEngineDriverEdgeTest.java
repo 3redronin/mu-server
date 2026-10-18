@@ -338,6 +338,72 @@ class TlsEngineDriverEdgeTest {
         assertThrows(SSLException.class, () -> driver.writePlaintext(application));
     }
 
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void aLargeBorrowWaitsForTheLastCiphertextByteOrTransportFailure(boolean abort) throws Exception {
+        var engine = new Engine(NEED_WRAP);
+        engine.packetSize = 16385;
+        engine.applicationSize = 16384;
+        engine.wraps.add((src, dst) -> engine.result(OK, FINISHED, 0, 0));
+        var driver = driver(engine);
+        assertTrue(driver.advance());
+        byte[] body = new byte[1048576 + 37];
+        new java.util.Random(829).nextBytes(body);
+        ByteBuffer source = ByteBuffer.wrap(body).mark();
+        var output = new TransportOutputBuffer(8201, 16393, () -> {});
+        var progress = new TransportWriteProgress(() -> {});
+        var write = output.asynchronousWriter().write(source, progress);
+        var sink = new TlsEngineDriverTest.Channel(driver::writePlaintext);
+        int acknowledged = 0;
+        while (acknowledged < body.length) {
+            int offset = acknowledged;
+            int count = Math.min(16384, body.length - offset);
+            engine.wraps.add((src, dst) -> {
+                assertTrue(src.remaining() <= 16393, "A large borrow cannot enlarge TLS input turns");
+                dst.put((byte) 99);
+                for (int i = 0; i < count; i++) {
+                    byte value = src.get();
+                    assertEquals(body[offset + i], value);
+                    dst.put(value);
+                }
+                return engine.result(OK, NOT_HANDSHAKING, count, count + 1);
+            });
+            assertEquals(0, output.drainTo(sink, 16393), "Wrapping alone cannot acknowledge plaintext");
+            assertEquals(0, driver.drainEncryptedTo(new TlsEngineDriverTest.Channel(bytes -> 0), 65536));
+            assertEquals(0, output.drainTo(sink, 16393));
+            assertTrue(progress.reached(offset));
+            assertFalse(progress.reached(offset + 1));
+            assertFalse(write.isDone());
+            var wire = new java.io.ByteArrayOutputStream();
+            var network = new TlsEngineDriverTest.Channel(bytes -> {
+                int length = bytes.remaining();
+                byte[] part = new byte[length]; bytes.get(part); wire.write(part);
+                return length;
+            });
+            assertEquals(count, driver.drainEncryptedTo(network, count));
+            assertEquals(1, driver.encryptedOutputSize());
+            assertEquals(0, output.drainTo(sink, 16393), "A partial record cannot acknowledge its plaintext");
+            assertFalse(write.isDone());
+            if (abort && offset + count == body.length) {
+                IOException failure = new IOException("Closed with the last ciphertext byte pending");
+                driver.abort(failure); output.fail(failure);
+                assertSame(failure, assertThrows(java.util.concurrent.ExecutionException.class, write::get).getCause());
+                assertFalse(progress.reached(body.length));
+                break;
+            }
+            assertEquals(1, driver.drainEncryptedTo(network, 65536));
+            assertFalse(write.isDone(), "The transport still needs to consume the acknowledgement");
+            assertEquals(count, output.drainTo(sink, 16393));
+            acknowledged += count;
+            assertTrue(progress.reached(acknowledged));
+            assertArrayEquals(java.util.Arrays.copyOfRange(body, offset, acknowledged),
+                java.util.Arrays.copyOfRange(wire.toByteArray(), 1, wire.size()));
+        }
+        if (!abort) write.get();
+        assertEquals(0, source.position()); source.reset();
+        java.util.Arrays.fill(body, (byte) 7); // Completion or failure has returned ownership.
+        assertEquals(0, output.pendingBytes());
+    }
+
     private static TlsEngineDriver driver(Engine engine) throws SSLException {
         return new TlsEngineDriver(engine, task -> fail("Unexpected delegated task"), () -> { });
     }

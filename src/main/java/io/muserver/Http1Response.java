@@ -121,12 +121,12 @@ class Http1Response extends BaseResponse implements MuResponse, ResponseInfo {
                     wrappedOut = encoded == null ? null : new CloseGuardedOutputStream(encoded);
                 }
                 socketOut.allowSourceBorrowing(responseEncoder == null && !suppressContent());
-                // Plain fixed-length bodies can drain a larger unchanged array without framing
-                // or TLS record work. The transport still enforces its per-connection visit limit.
+                // Fixed-length bodies can retain a larger unchanged array without body framing.
+                // Transport visits and TLS records remain bounded independently of this borrow;
+                // TLS acknowledges each prefix only after its ciphertext drains.
                 // A larger application buffer could retain a prefix past the first ordinary turn
                 // and turn the next large borrow into mixed output that needs owned storage.
-                socketOut.allowLargeSourceBorrowing(!request.connection().isHttps()
-                    && bufferSize <= ResponseWriteSizes.PREFERRED_SOURCE_BYTES
+                socketOut.allowLargeSourceBorrowing(bufferSize <= ResponseWriteSizes.PREFERRED_SOURCE_BYTES
                     && headers().getLong(HeaderNames.CONTENT_LENGTH.toString(), -1) >= 0);
             } catch (IOException e) {
                 throw new UncheckedIOException("Error while setting up output stream", e);

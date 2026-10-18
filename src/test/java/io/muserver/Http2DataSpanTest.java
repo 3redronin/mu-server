@@ -14,9 +14,9 @@ import java.util.concurrent.CompletionException;
 import static org.junit.jupiter.api.Assertions.*;
 
 class Http2DataSpanTest {
-    @ParameterizedTest @ValueSource(ints = {1, 16384, 16385, 32736, 32737, 32768, 32769, 49120, 65408})
+    @ParameterizedTest @ValueSource(ints = {1, 16384, 16385, 32736, 32737, 32768, 32769, 49120, 65408, 65409, 261632})
     void fragmentsKeepTheirBytesBoundsAndFinalAcknowledgement(int length) throws Exception {
-        var coordinator = coordinator(200000, 1);
+        var coordinator = coordinator(1000000, 1);
         byte[] source = new byte[length + 13];
         new Random(576).nextBytes(source);
         var task = new WriteTask(new Http2DataSpan(1, true, source, 7, length), false);
@@ -43,25 +43,28 @@ class Http2DataSpanTest {
         assertArrayEquals(java.util.Arrays.copyOfRange(source, 7, 7 + length), actual.toByteArray());
         if (length <= 32768) assertEquals((length + 16383) / 16384, frames);
         if (length == 65408) assertEquals(4, frames);
+        if (length == 261632) assertEquals(16, frames);
         assertTrue(coordinator.isIdle());
     }
 
-    @Test void threeBusyStreamsTakeTurnsBetweenFragments() {
-        var coordinator = coordinator(300000, 1, 3, 5);
+    @ParameterizedTest @ValueSource(ints = {65408, 261632})
+    void threeBusyStreamsTakeTurnsBetweenFragments(int length) {
+        var coordinator = coordinator(1000000, 1, 3, 5);
         var tasks = new ArrayList<WriteTask>();
         for (int id : new int[]{1, 3, 5}) {
-            var task = span(id, true);
+            var task = new WriteTask(new Http2DataSpan(id, true, new byte[length], 0, length), false);
             tasks.add(task); coordinator.submit(task);
         }
         coordinator.processAvailableCommands();
         var order = new ArrayList<Integer>();
-        for (int i = 0; i < 12; i++) {
+        for (int i = 0; i < 3 * length / ResponseWriteSizes.PREFERRED_SOURCE_BYTES; i++) {
             var frame = coordinator.pollWritable(); assertNotNull(frame);
             assertTrue(frame.beginWrite());
             order.add(frame.frame().streamId());
             frame.complete();
         }
-        assertEquals(List.of(1, 3, 5, 1, 3, 5, 1, 3, 5, 1, 3, 5), order);
+        assertEquals(java.util.stream.IntStream.range(0, 3 * length / ResponseWriteSizes.PREFERRED_SOURCE_BYTES)
+            .mapToObj(i -> 1 + 2 * (i % 3)).collect(java.util.stream.Collectors.toList()), order);
         for (var task : tasks) assertTrue(task.completion().isDone());
         assertTrue(coordinator.isIdle());
     }
@@ -118,10 +121,11 @@ class Http2DataSpanTest {
         assertTrue(coordinator.isIdle());
     }
 
-    @ParameterizedTest @ValueSource(booleans = {false, true})
-    void cancellationBeforeAndDuringAFragmentNeverResumesTheBorrow(boolean active) {
+    @ParameterizedTest @org.junit.jupiter.params.provider.CsvSource({"false,65408", "true,65408", "false,261632", "true,261632"})
+    void cancellationBeforeAndDuringAFragmentNeverResumesTheBorrow(boolean active, int length) {
         var coordinator = coordinator(200000, 1, 3);
-        var task = span(1, false); coordinator.submit(task); coordinator.processAvailableCommands();
+        var task = new WriteTask(new Http2DataSpan(1, false, new byte[length], 0, length), false);
+        coordinator.submit(task); coordinator.processAvailableCommands();
         var frame = coordinator.pollWritable(); assertNotNull(frame);
         if (active) assertTrue(frame.beginWrite());
         var failure = new IOException("cancelled");

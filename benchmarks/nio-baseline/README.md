@@ -1043,3 +1043,126 @@ are inactive and all 92 native load-generator children have exited.
 `plaintext-span-20261018/report.html`, `summary.json`, `audit.json`,
 `profile-summary.json` and `final-process-check.json` preserve the observations,
 qualification, validation and individual trial evidence.
+
+## October 18–19 retained-output follow-ups
+
+Five candidates were tested separately against frozen inputs, starting from
+NIO commit `6b4afe8c`. Candidate diffs, source digests, decisions and individual
+trials are linked from `nonblocking-validation/output-followups-20261018`.
+The first-turn shortcut was discarded; the remaining candidates were retained
+after the combined comparison:
+
+| Candidate | Isolated observations and decision |
+| --- | --- |
+| Borrow the first HTTP/1 render turn at full size | Bulk throughput +0.7%, CPU -2.0%; insufficient evidence to justify another capture capability. Discarded. |
+| Extend fixed-length HTTP/1 source borrowing to TLS | TLS bulk throughput about +55%, CPU/response about -51%; plaintext control flat. Retained. |
+| Reuse the transport's independent drain view | Throughput flat. JFR samples estimated plaintext allocation 22,672 → 20,952 bytes/response and TLS allocation 108,103 → 105,013. Retained for lower buffer allocation. |
+| Retain sixteen preferred HTTP/2 DATA fragments instead of four | Normal-window throughput +6.7%, CPU -8.2%; 1,023-byte-window throughput +1.4%, CPU -9.8%. Retained. |
+| Avoid pending-write allocation on empty transport writes | Small/plaintext/TLS timings essentially flat. Simpler path explicitly avoids a pending-write object and its two buffer views. Retained. |
+
+These are short, reversed-order Java 21 pilot pairs, not controlled performance
+claims. The drain-view JFR samples are separate diagnostics, with estimated
+rather than exact allocation counts. An isolated default-JIT ThreadMXBean
+check measured 24 bytes per empty write after the change (the completion
+future). Before the change, its three measurements ranged from 24–34 bytes
+on Java 21 and 116–168 on Java 25. Java 21 already eliminated the extra
+allocations after warm-up in that check; these isolated numbers do not measure
+whole-server allocation or throughput. `empty-write-20261018/empty-allocation.json`
+preserves the observations and method.
+
+TLS now retains the same bounded source ranges already supported for plaintext
+fixed-length HTTP/1, including separate ownership of a buffered prefix. The
+1 MiB source view remains borrowed while its TLS records drain. This changes
+renderer handoffs without changing SSLEngine progression, TLS buffer sizes,
+record acknowledgements or transport service limits. A new regression keeps
+the final ciphertext byte pending and verifies that a large source cannot be
+acknowledged early, including failure at that boundary.
+
+The reused transport view is reset before every attempt, including zero and
+partial writes. It remains separate from the acknowledged source position and
+the caller's buffer. HTTP/2's 261,632-byte retained range still yields between
+individual DATA frames, obeys both flow-control windows, and retains ownership
+until completion or cancellation. Tests cover round-robin fairness and
+cancellation at the larger bound. Owned output rings and capture memory limits
+remain unchanged. Empty writes still check failure and outstanding writes before
+returning their completed future.
+
+The combined matrix uses two reversed-order repeats on Java 21 and 25, with
+two seconds of warm-up and three seconds of measurement per fresh JVM. The
+Mu3/blocking reference builds and fixtures match the preceding experiments.
+Both Mu4 editions use PLATFORM workers on Java 21 and VIRTUAL workers on
+Java 25. All services have a 512 MiB heap, a 1 GiB cgroup limit and no swap,
+with separate server and generator CPU sets. Bulk responses use one bounded
+async 1 MiB heap-buffer write over eight connections. HTTP/2 and HTTPS
+measurements use TLS 1.3 with `TLS_AES_128_GCM_SHA256`. Direct/read-only sources
+retain their bounded scratch-copy path. Small-window HTTP/2 instead uses
+one connection, eight streams and 1,023 bytes of stream credit. Each timing
+retains its short-run and uncontrolled-host exclusions.
+
+The final production source digest is
+`338f15eafccd642392b832d2c11941bc3a2eefae35549f96efe27e90e8a4034a`.
+
+The main comparison observed these median responses/second. Mu3 is pinned to
+`78f02551`, blocking to `50ad1a70`, and NIO before to `6b4afe8c`:
+
+| Java | Workload | Mu3 | Mu4 blocking | NIO before | NIO after |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 21 | Plaintext HTTP/1 | 19,050 | 17,970 | 13,083 | 13,090 |
+| 25 | Plaintext HTTP/1 | 18,689 | 18,373 | 13,391 | 13,396 |
+| 21 | TLS HTTP/1 | 7,434 | 7,804 | 3,470 | 5,182 |
+| 25 | TLS HTTP/1 | 6,960 | 8,090 | 3,715 | 5,638 |
+| 21 | HTTP/2, normal window | 3,190 | 1,875 | 2,377 | 2,530 |
+| 25 | HTTP/2, normal window | 2,715 | 2,426 | 2,611 | 2,681 |
+| 21 | HTTP/2, 1,023-byte window | 271 | 240 | 208 | 211 |
+| 25 | HTTP/2, 1,023-byte window | 269 | 205 | 199 | 208 |
+
+TLS throughput increased 49.3%/51.8% on Java 21/25, with CPU per response
+falling 1,300 → 692 µs and 1,287 → 628 µs (46.7%/51.2% lower). Its p99
+fell 4.042 → 2.595 ms and 3.541 → 2.136 ms. TLS CPU cost is now close to
+blocking's, but NIO throughput still trails both references. Normal-window
+HTTP/2 throughput increased 6.4%/2.7%; small-window throughput increased
+1.4%/4.6%, with CPU reductions of 9.6%/13.2%. Plaintext throughput stayed flat.
+Java 25 normal-window HTTP/2 nearly matched Mu3's throughput in these short
+runs, while still using substantially more CPU per response (2,198 versus
+1,497 µs). This does not establish equivalence across HTTP/2 workloads.
+
+Small shifts in the short controls prompted twelve additional trials with
+five-second warm-ups and twelve-second measurements, still using two reversed
+edition orders. Java 21 chunked throughput was 2,923 → 2,893 responses/second
+(-1.0%), with p99 4.172 → 4.170 ms. Java 25 synchronous bulk throughput was
+3,269 → 3,242 (-0.8%), with p99 3.122 → 3.183 ms. Java 25 small-response
+throughput was 216,648 → 220,074 (+1.6%), with p99 0.542 → 0.529 ms.
+These small differences remain uncertain; the longer checks did not reproduce
+the larger short-run tail shift consistently. Their medians are kept separate
+from the main comparison.
+
+The longer small-response trials exceed the native JSON latency vector's
+one-million-sample cap. Confirmation latencies therefore use the complete
+reconciled status-200 request logs. One completed trial was excluded after the
+old tail helper rejected its capped vector; its evidence is preserved in
+`confirmation/interruption.json`, and the trial was rerun with the corrected
+post-processing. Server and generator exits were successful.
+
+Separate Java 21 JFR samples estimated allocation per response of 21,890 →
+21,041 bytes for plaintext, 165,537 → 107,688 for TLS (35% lower), and
+227,761 → 216,204 for normal-window HTTP/2. Sample weights are estimates,
+and profiled throughput is not pooled with ordinary trials. Short process
+cgroup peaks decreased for plaintext/TLS, but increased by roughly 1–8 MiB
+for HTTP/2. These peaks include startup/JIT/GC effects and do not establish
+retained-memory neutrality. JMX buffer-pool accounting still excludes some
+native memory, particularly Java 25 temporary I/O buffers; full resource
+observations are retained in the report.
+
+All 40 fixed-rate trials met the foreground target; all 20 paused-reader
+trials retained queued output and passed cancellation/recovery checks. The
+combined changes passed 2,146 regression tests on each of Java 21 and 25,
+and 295 focused tests on each of Java 11 and 17. Fresh compilation reproduced
+all 603 frozen production class files exactly.
+
+All 146 final-candidate trials passed (eight isolation pilot, 120 main
+comparison, six JFR and twelve longer control trials): 16,476,315 measured
+successful responses and 2,317 evidence audit checks. The 48 exploratory
+trials and the one excluded post-processing trial remain separate. All 195
+benchmark JVM units are inactive and their load generators have stopped.
+`output-followups-20261018/report.html` links the comparisons, allocation
+diagnostics, candidate decisions, audits and raw evidence.
