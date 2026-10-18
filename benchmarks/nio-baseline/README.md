@@ -668,3 +668,156 @@ The combined report is
 It links the campaign specification, executed controller, frozen input manifest,
 audit, host-activity qualification, raw trials and complete-sample tail overlays.
 `tls-memory-20261018-summary.json` contains the combined machine-readable results.
+
+## Short HTTP/2 regression probes
+
+`roundness.py` adds three explicitly busy-host, rate-limited suites. It reuses
+frozen Java production classes and existing fixtures; no Java changes or
+unbounded application writes are involved.
+
+* `multiplex`: 1 MiB async downloads over one connection with up to eight
+  streams, comparing 65,535-byte and 1,023-byte stream receive windows. Raw
+  1 MiB uploads compare one connection/up to eight streams against eight
+  connections/one stream each. Every case offers 32 requests/s total. At this
+  low paced rate, the stream limit does not ensure simultaneous requests.
+* `burst`: the same cases submit eight requests every 250 ms (one per
+  connection in the eight-connection case). Saved native request intervals
+  must demonstrate at least four overlapping requests. This exercises
+  multiplexing while keeping the average offered payload near 32 MiB/s.
+* `fairness`: 200 small responses/s share one TLS HTTP/2 connection, first
+  alone, then alongside 16 zero-credit 8 MiB downloads. The existing producer
+  has one 32 KiB async write outstanding per response. The Python client grants
+  only foreground stream credit and replenishes connection credit independently.
+  Every small body is checked; each paused stream must subsequently resume for
+  exactly one correct byte. All are cancelled, and the same connection plus a
+  fresh connection must still serve correct responses.
+
+Use the async fixture for native suites and the callback-streaming fixture for
+fairness. Within each suite, all three editions use identical application code.
+For example, from the shared workspace:
+
+```bash
+mu-conformance/.venv/bin/python mu4/benchmarks/nio-baseline/roundness.py \
+  --inputs nonblocking-validation/baseline-20261018-quiet/async \
+  --suite burst --run-id rounded-burst-new --repeats 2
+
+mu-conformance/.venv/bin/python mu4/benchmarks/nio-baseline/roundness.py \
+  --inputs nonblocking-validation/baseline-20261018-quiet/streaming \
+  --suite fairness --run-id rounded-fairness-new --repeats 2
+```
+
+The short controller always marks performance as indicative/excluded, uses one
+second warm-up and three seconds measurement, and defaults to two repeats with
+rotated edition order on both Java 21 and 25. Java 21 uses Mu4 platform workers;
+Java 25 uses virtual workers. Every fresh JVM has a 512 MiB heap, explicit
+1 GiB direct-memory ceiling, 1 GiB whole-server cap and no swap. The direct
+ceiling reserves no memory. Runtime collector names, actual cgroup limits,
+worker modes, class/source identities and cleanup are recorded. These are
+low-density probes, not another optimized heap-budget comparison.
+
+The native controller retains the frozen harness's original command plus the
+actual `executed_generator_commands`; the latter includes the window override
+and, for bursts, the saved timing script. Generator process groups and readers
+use the maintained lifecycle guard. Successful trials require normal actual
+JVM exit, full-body pre/post verification and native status-log reconciliation.
+
+The fairness client has one foreground request outstanding, skips catch-up
+bursts after delays, and records dispatch lateness separately. Its latencies
+include Python-client overhead and are comparable only within that suite.
+Neither client supplies a validated open-loop SLA. Native cases have about
+96 measured responses per trial, so p99 is effectively the maximum; fairness
+has about 600. One second of low-rate warm-up does not establish steady-state
+JIT or GC behavior. Concurrent desktop use adds uncontrolled interference.
+Small receive windows on loopback exercise frequent flow-control updates, not
+realistic WAN latency. Short rates cannot establish maximum capacity.
+
+`results.json` retains every attempt and failure, executed controller snapshots,
+host snapshots, source identities and raw logs; `report.html` and `summary.json`
+show observed metrics with zero eligible controlled-performance observations.
+Run the focused harness checks with:
+
+```bash
+python -m unittest -v test_baseline test_connection_density test_latency_tails test_roundness
+```
+
+### Initial busy-host HTTP/2 observations
+
+The paced window comparison found a repeatable direction across the two short
+observations on each JDK. These are medians of observed per-trial p99 values,
+not controlled estimates; each native trial has about 96 completed responses.
+All three editions met the 32 responses/s target threshold.
+
+| Java | Stream receive window | Mu3 p99 ms | Blocking p99 ms | NIO p99 ms |
+| --- | ---: | ---: | ---: | ---: |
+| 21 | 65,535 bytes | 7.823 | 5.002 | 4.544 |
+| 21 | 1,023 bytes | 27.259 | 31.215 | 40.775 |
+| 25 | 65,535 bytes | 4.498 | 5.709 | 5.613 |
+| 25 | 1,023 bytes | 27.134 | 39.342 | 38.475 |
+
+At the smaller window, observed server CPU per response was approximately
+13.8 / 16.3 / 28.2 ms for Mu3 / blocking / NIO on Java 21, and
+13.3 / 33.9 / 31.5 ms on Java 25. These include ongoing JVM warm-up under the
+short protocol. The paired ordinary-window control does not show the same
+clear Mu3 advantage. This identifies frequent flow-control updates as a useful
+regression target; it does not establish the prevalence of 1 KiB windows among
+real clients, attribute the gap to one implementation method, or predict WAN
+performance.
+
+All 24 same-connection fairness trials passed. Every paused stream resumed for
+one correct byte, both same-connection and fresh-connection recovery worked,
+and all trials met the 200/s target threshold. Observed paused p99 medians were
+1.958 / 1.498 / 1.605 ms on Java 21 and 2.212 / 1.361 / 1.896 ms on Java 25
+for Mu3 / blocking / NIO. This probe does not reveal a clear Mu3 latency
+advantage. Mu3 had a smaller native-thread footprint on Java 21, while both
+Mu4 versions used less sampled total memory in this low-density case. These
+short measurements include startup/JIT effects and Python-client overhead.
+
+Burst timings are relative to each connection, not a global barrier across
+connections. In the eight-connection control, connection establishment can
+shift batch phases and reduce actual overlap. The summary retains observed
+peak-overlap ranges; compare these alongside upload latencies. A configured
+stream/connection count must not be treated as proof of equal simultaneous
+work. The one-connection burst cases directly exercise simultaneous streams.
+
+The separate burst suite also passed all 48 trials and met the target threshold.
+Every one-connection trial verified eight overlapping requests. Observed p99
+medians illustrate why the paced result must not be generalized to all arrival
+patterns:
+
+| Java | Eight-stream burst workload | Mu3 p99 ms | Blocking p99 ms | NIO p99 ms |
+| --- | --- | ---: | ---: | ---: |
+| 21 | Download, 65,535-byte window | 24.279 | 17.121 | 19.369 |
+| 21 | Download, 1,023-byte window | 61.821 | 44.450 | 54.689 |
+| 21 | Raw upload, one connection | 49.059 | 19.729 | 25.399 |
+| 25 | Download, 65,535-byte window | 22.341 | 17.744 | 30.511 |
+| 25 | Download, 1,023-byte window | 59.011 | 57.767 | 50.735 |
+| 25 | Raw upload, one connection | 33.737 | 32.201 | 29.188 |
+
+Mu3 has no consistent burst small-window latency lead. Its two observed p99
+values span approximately 47–77 ms on Java 21 and 52–66 ms on Java 25; NIO
+spans 54–55 and 48–53 ms respectively. The paced small-window CPU advantage
+also becomes much smaller with batching. A quiet, longer confirmation should
+retain both arrival patterns rather than select whichever produces a desired
+ranking. Burst uploads do not reveal a new Mu3 advantage on one connection.
+The separate-connection upload control has observed peak overlap ranging from
+four to eight, so it is not an exactly synchronized eight-way comparison.
+
+Across the main suites, all 120 trials passed correctness/lifecycle checks and
+met their offered-rate thresholds, with 23,606 measured responses. All 40
+focused Python checks and 2,780 evidence-audit checks passed. The separate
+six-trial Java 25 fairness pilot also passed and is not pooled into the main
+summary. Every timing/CPU observation remains indicative, with zero eligible
+controlled-performance rankings. No Java production code changed, and the
+benchmark JVMs, generators and controllers were stopped after completion.
+
+The combined report beside the checkout is
+`nonblocking-validation/rounded-20261018-report.html`; it links all three
+run reports, raw evidence, the earlier quiet baseline and memory comparison.
+`rounded-20261018-summary.json` and `rounded-20261018-audit.json` retain the
+combined metrics and validation result. Earlier quiet evidence of Mu3 strengths
+in large bounded async HTTP/1 writes, HTTP/2 compression/uploads and dense TLS
+connections remains relevant; these short additions do not replace it.
+
+Further release coverage should include cold/resumed TLS connection churn,
+realistic RTT/loss and limited bandwidth, WebSockets, varied/large headers,
+TLS 1.2, and longer memory/GC runs. These remain unmeasured by this extension.
