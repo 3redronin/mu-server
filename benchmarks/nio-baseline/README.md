@@ -367,3 +367,132 @@ ledgers, individual result bundles, executed controllers, frozen manifests,
 from the report. No busy-host measurements or JFR diagnostic rates enter this
 quiet-host comparison. Fixed connection counts and three repeats do not establish
 a universal capacity limit, an open-loop latency SLA or a confidence interval.
+
+## Idle keep-alive connection density
+
+`connection_density.py` adds a different concurrency workload: many completed,
+idle HTTP/1 connections alongside separate active foreground connections. It
+does not leave thousands of application requests open, so the default Mu4
+1,000-concurrent-request limit does not constrain this population.
+
+The full profile compares zero, 1,024 and 4,096 idle connections over plaintext
+and TLS 1.3, on Java 21 and 25, with all three editions and three cyclic repeats:
+108 trials. Every JVM has a 256 MiB maximum heap and a 512 MiB whole-server cgroup,
+with swap disabled and the same separate server/generator CPU sets as the earlier
+baseline. Mu4 keeps the matched PLATFORM/21 and VIRTUAL/25 policies. Five seconds
+of warm-up precede ten measured seconds. Sixteen foreground connections target
+10,000 exact 128-byte responses/s; rates below 98% of target are excluded.
+
+Each idle connection first completes a fully checked response. The runner
+verifies that the entire cohort remains established at measurement checkpoints,
+then requires another exact response on every connection after timing. Finally
+it closes the cohort, verifies fresh-request health and observes normal JVM exit.
+Failed or partial setups remain visible without being counted as successful
+capacity measurements. Shutdown status is captured before resetting the unit;
+an unsuccessful JVM exit cannot be hidden by a successful `systemd-run` launcher.
+
+The runner raises only its own soft descriptor limit within the existing hard
+limit, records that budget, and checks the fixture JVM's descriptor limit before
+opening the cohort. It does not change desktop or system configuration. This
+prevents a client-side descriptor ceiling from masquerading as server capacity.
+
+Run against any compatible prepared baseline input directory, using a new ID:
+
+```bash
+mu-conformance/.venv/bin/python mu4/benchmarks/nio-baseline/connection_density.py \
+  --inputs nonblocking-validation/baseline-20261018-quiet/sync \
+  --run-id density-full-new --profile full --host-state quiet
+```
+
+`--profile smoke` defaults to 64 idle TLS connections plus the zero-connection
+control, one second of warm-up and three measured seconds. `--counts`,
+`--protocols` and `--jdks` select explicit subsets; zero must remain as a control.
+`--heap 384m` applies a common larger heap to every edition while retaining the
+same 512 MiB total cgroup cap. This can distinguish a heap-distribution limit
+from whole-server memory exhaustion when implementations place buffers in
+different memory pools. It is a separate control, not a replacement for the
+default 256 MiB-heap results.
+
+Smoke/busy-host rates cannot supply performance conclusions. Reports, raw trial
+bundles, the executed controller, specification and hardware snapshots go in
+`INPUTS/runs/RUN_ID/`. The frozen input inventories are verified before and after
+the run. This supplements throughput tests with resource-density and foreground
+isolation evidence; it does not promise that NIO will win on every JDK or protocol.
+
+Run the focused framing, cohort, descriptor-budget, shutdown, generator-lifecycle
+and matrix checks from `mu4/benchmarks/nio-baseline/`:
+
+```bash
+python -m unittest -v test_baseline test_connection_density
+```
+
+### Quiet-host density results, 18 October 2026
+
+The 108-case default-heap matrix completed with 96 valid timed trials. All
+zero- and 1,024-idle-connection cases passed. At 4,096 idle connections, the
+following medians summarize three repeats; every successful run sustained the
+10,000/s foreground target and checked every idle connection after timing.
+Memory is sampled peak cgroup charge during measurement, not heap usage.
+
+| Java / transport | Mu3: native threads / MiB | Mu4 blocking: native threads / MiB | Mu4 NIO: native threads / MiB |
+| --- | ---: | ---: | ---: |
+| 21 / plaintext HTTP/1 | 54 / 219.8 | Whole-server OOM, 0/3 | 65 / 320.0 |
+| 21 / TLS HTTP/1 | 45 / 325.5 | Whole-server OOM, 0/3 | Java heap exhausted, 0/3 |
+| 25 / plaintext HTTP/1 | 53 / 198.5 | 25 / 173.6 | 28 / 234.1 |
+| 25 / TLS HTTP/1 | 41 / 268.8 | 25 / 217.2 | Java heap exhausted, 0/3 |
+
+This supplies a concrete Java 21 NIO resource-density win against platform-thread
+blocking. In the plaintext blocking failures, all 4,096 idle sockets had been
+opened, but the JVM could not sustain the separate foreground traffic within
+the same total budget. The TLS blocking failures occurred during cohort setup.
+Mu3 also scales well in this workload, with lower measured memory than NIO.
+Java 25 virtual-thread blocking sustains both populations at lower measured
+memory than NIO. These tests do not demonstrate a universal NIO speed or
+latency win.
+
+The NIO TLS failures expose a real heap-distribution weakness: at the default
+256 MiB heap, neither JDK can establish the entire 4,096-connection TLS cohort,
+although lifetime charged memory remains below the total 512 MiB limit. These
+runs are preserved as failures, with no invented throughput or capacity number.
+
+The separate common-384-MiB-heap control keeps the whole-server limit at
+512 MiB. On Java 21, NIO retains and resumes all 4,096 TLS connections in all
+three repeats, but misses the foreground target in all three: median
+7,683 responses/s, 62.121 ms p99, and 6,078 ms of recorded GC time per measured
+ten seconds. Its observed rate ranges from 4,844 to 7,716/s. These measurements
+remain visible as excluded diagnostics, not valid target-rate results. Median
+measurement charge is 483.7 MiB; median lifetime peak is 491.1 MiB. Increasing
+the heap alone does not resolve the TLS resource problem.
+
+An audit found two generator-lifecycle overlaps in the original 384 MiB control:
+an early fixture-stats exception could bypass the frozen harness's generator
+cleanup. That original 36-case control is retained as diagnostic evidence only.
+The entire control was rerun after adding an outer guard that tracks and reaps
+only the trial's native generator, waits for its log reader, and refuses another
+trial if cleanup cannot finish. Normal exit, early failure, forced termination,
+kill escalation and incomplete reader cleanup have focused regression checks.
+The original measured ledgers and frozen harness were not edited.
+
+In the clean larger-heap control, Java 25 NIO still exhausts Java heap in all
+three 4,096-idle-TLS trials. Mu3 meets the target on both JDKs; virtual-thread
+blocking meets it on Java 25, while platform-thread blocking still reaches the
+whole-server memory limit on Java 21. Java 25 blocking's median measurement
+charge is 217.1 MiB, versus Mu3's 307.6 MiB; its median p99 is 0.346 ms versus
+Mu3's 0.527 ms. These fixed-rate observations do not establish maximum throughput.
+
+The final comparison comprises 144 clean full-trial attempts: 123 valid
+measurements, eighteen resource failures and three missed-target observations,
+with 12,502,560 measured responses retained. The audit passed 3,736 checks across
+204 preserved records: those 144 attempts, the corrected 24-case smoke matrix,
+and the superseded 36-case diagnostic control. The original twelve-case
+client-descriptor-limited pilot is also retained separately. All 22 focused
+Python checks passed. No Java production code changed.
+
+The combined local report is
+`nonblocking-validation/idle-density-20261018-report.html` beside the checkout.
+It links the per-profile reports, frozen manifest, raw ledgers, executed
+controller snapshots, audit and post-audit findings. The clean larger-heap
+control is `density-heap384-20261018-02`; the `-01` control is diagnostic only.
+Observed excluded rates, latency and GC remain visible alongside their exclusion
+reasons. The evidence identifies idle TLS memory as a concrete next optimization
+target, rather than assuming the plaintext scaling result extends to TLS.
