@@ -1166,3 +1166,119 @@ trials and the one excluded post-processing trial remain separate. All 195
 benchmark JVM units are inactive and their load generators have stopped.
 `output-followups-20261018/report.html` links the comparisons, allocation
 diagnostics, candidate decisions, audits and raw evidence.
+
+## October 20: eight isolated optimization experiments
+
+None of these production candidates was retained. They either failed to show a
+worthwhile benefit or exchanged throughput for higher CPU, memory or latency.
+Production source and all 603 compiled classes were restored to `e78fe2e8`;
+these results do not close the gaps in the preceding Mu3 / blocking / NIO
+comparison. Mu3 and preserved Mu4 blocking were not rerun in this batch.
+
+Each experiment started independently from that frozen NIO baseline, passed
+focused Java 21 tests, and used two reversed-order comparison pairs. Pilots used
+two seconds of warm-up and three seconds of measurement. The machine was not
+controlled, so small changes remain uncertain. Larger plaintext-write controls
+also used three seconds of warm-up and five seconds of measurement on Java 21
+and 25. These are indicative measurements, not general rankings.
+
+The bulk fixture submits one bounded async 1 MiB heap-buffer write per response.
+Normal workloads use eight connections. The small-window HTTP/2 case uses one
+connection, eight streams and 1,023 bytes of stream credit. HTTPS and HTTP/2 use
+TLS 1.3 with `TLS_AES_128_GCM_SHA256`. Each JVM has a 512 MiB heap, a 1 GiB
+cgroup limit and no swap, with separate server/generator CPU sets. Mu4 uses
+PLATFORM workers on Java 21 and VIRTUAL workers on Java 25.
+
+| Experiment | Observed pilot result on Java 21 | Decision |
+| --- | --- | --- |
+| Reuse SSLEngine wrap/unwrap buffer arrays | HTTPS +0.4%, HTTP/2 -0.7%; CPU did not improve | Discard |
+| Direct ciphertext output buffer | HTTPS -29.3%, HTTP/2 -18.5%, worse latency | Discard |
+| Remove the output pending-byte check before locking to drain | Plaintext +0.2%, HTTPS -0.5%, small-window HTTP/2 -0.5%; CPU flat | Discard |
+| Wake selectors only around selection | Plaintext write-family calls -22%, but throughput -1.3%; HTTPS throughput -4.2%, CPU +7.1% | Discard |
+| Eight transport owners instead of four | Plaintext +10.5%, HTTPS +19.9%, but CPU +20–27%; normal-window HTTP/2 -8.8% | Keep four-owner default |
+| Raise ready-frame HTTP/2 batching threshold from 8 KiB to 16 KiB | Normal-window +0.1%, small-window -0.2%; small-window CPU +3.4% | Discard |
+| Mutable per-stream HTTP/2 credit cells | Normal-window +1.3%, small-window +0.6%; CPU reductions near 1% | Insufficient benefit demonstrated; discard |
+| Double plaintext visit/write allowance to 262,432 bytes | Plaintext +4.7%, CPU -2.8%, write-family calls -31%; about 0.5 MiB more Java 21 buffer-pool storage with four owners | Discard after fairness check |
+
+The two-owner follow-up also found a tradeoff: HTTPS throughput fell 44.7%,
+while normal-window HTTP/2 throughput fell 18.4% and CPU per response fell
+25.4%. Thread count can change where work is limited; these results do not
+support a new default.
+
+The larger plaintext allowance looked promising in saturated bulk comparisons.
+Longer pairs reproduced throughput increases of 3.9% on Java 21 and 5.1% on
+Java 25. However, it increased small-request latency when those requests shared
+a transport owner with continuously draining bulk downloads. Eight native
+clients each keep one bounded 1 MiB download outstanding, while a Python
+foreground client sends 128-byte requests at 1,000 requests/second. The test
+checks every foreground body and records dispatch lateness and latency from
+the intended send time as well as actual-send latency.
+
+Two reversed-order pairs, with two seconds warm-up and five measured seconds,
+observed these medians on one shared owner:
+
+| Java | Existing allowance p99 | Larger allowance p99 | Change | Foreground rate |
+| --- | ---: | ---: | ---: | ---: |
+| 21 | 0.762 ms | 1.040 ms | +36.5% | 1,000/s in both |
+| 25 | 0.718 ms | 1.028 ms | +43.2% | 1,000/s in both |
+
+Background downloads continued completing throughout measurement. A fresh pair
+per JDK using the reusable benchmark reproduced the latency increase. These
+checks remain separate from the saturated-throughput medians. The regression
+is evidence against this allowance change; it does not establish a universal
+latency ratio for other loads or owner counts.
+
+The new [busy-writer fairness benchmark](busy_writer_fairness.py) complements
+paused-reader isolation. It compares two frozen NIO fixtures with identical
+bounded-async application sources, verifies their manifests, checks the
+connection cohort at both measurement boundaries, and requires bulk completions
+in every complete measurement second. It preserves raw latency samples,
+background request logs, source identities, whole-process resource observations
+and cleanup results. It also reports scheduled latency so a delayed foreground
+client cannot silently hide queueing.
+
+For example, from the repository root, using the sibling validation environment:
+
+```sh
+../mu-conformance/.venv/bin/python benchmarks/nio-baseline/busy_writer_fairness.py \
+  --before ../nonblocking-validation/output-followups-20261018/after-async \
+  --after ../nonblocking-validation/ex08-network-clock-20261020/after-async \
+  --out ../nonblocking-validation/busy-writer-recheck \
+  --jdks 21,25 --repeats 2
+```
+
+Use a new output directory. `--nio-threads`, `--background-clients`,
+`--foreground-rps`, `--warmup`, `--duration`, `--server-cpus` and
+`--generator-cpus` permit matched controls on other machines. The historical
+`ex08-network-clock` directory name predates the final experiment selection;
+its frozen source and patch change only the plaintext allowance.
+
+All eight candidates passed their targeted Java 21 tests: respectively 106,
+106, 156, 109, 49, 788, 788 and 156 cases. The reusable benchmark passed real
+socket runs on Java 21/25, and an injected failure after starting its generator
+verified termination of that owned process, normal JVM shutdown and evidence
+capture. No full application suite was rerun after restoring production code;
+a fresh Java 21 compilation exactly reproduced the baseline source digest
+`338f15eafccd642392b832d2c11941bc3a2eefae35549f96efe27e90e8a4034a`
+and all 603 production classes.
+
+The audit passed 2,275 checks over 128 native performance trials, twelve
+fairness trials and one deliberate cleanup failure. Native measurements
+reconciled 10,322,383 successful responses; the fairness probes additionally
+verified 60,000 foreground responses. All 141 owned JVM units are inactive,
+and their native generators have been reaped. The deliberate failure is
+excluded from performance results.
+
+[The portable summary](experiments-20261020.json) includes medians, ranges,
+source digests, decisions and validation. The complete local report is
+`nonblocking-validation/eight-experiments-20261020/report.html` beside the
+checkout, with links to candidate patches, frozen manifests, raw results,
+regression logs and the audit. Whole-process write-family counters include
+selector/control writes; short cgroup peaks include startup and GC effects.
+JMX buffer pools omit some native memory, particularly on Java 25, and are not
+a substitute for whole-process memory accounting.
+
+The next substantial hypothesis is reducing transport/HTTP/2 writer handoffs
+while preserving frame-level flow control, cancellation and fairness. These
+experiments do not prove that such a redesign will help, but they provide
+reasons to prefer investigating it over adopting these tuning tradeoffs.

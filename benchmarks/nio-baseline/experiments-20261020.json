@@ -1,0 +1,3408 @@
+{
+  "baseline_commit": "e78fe2e8f3dbed6083a73bae7c8dc215f5e49799",
+  "qualification": "Indicative uncontrolled-host experiments; pilots use 2s warmup + 3s measurement and two reversed-order repeats on Java 21. Longer plaintext controls use 3s + 5s on Java 21/25. All production candidates discarded.",
+  "experiments": [
+    {
+      "id": 1,
+      "name": "tls-vectors",
+      "hypothesis": "Reuse one-element SSLEngine wrap/unwrap vectors to reduce per-record allocation",
+      "status": "complete",
+      "decision": "Discard: TLS +0.4%, H2 -0.7%; no CPU benefit.",
+      "evidence_directory": "ex01-tls-vectors-20261020",
+      "candidate_source_sha256": "4100355be1f614104ab640d03f6b84a6e158a415c18723d1d33a688d0e09866f",
+      "changed_classes": [
+        "io/muserver/TlsEngineDriver$1.class",
+        "io/muserver/TlsEngineDriver.class"
+      ],
+      "java21_regression_tests": 106,
+      "phases": {
+        "pilot": [
+          {
+            "key": [
+              21,
+              "tls-control",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 5353.666666666666,
+              "p99_ms": 2.3745,
+              "cpu_us_per_request": 650.2867878278286,
+              "process_write_calls_per_response": 67.7445681958138,
+              "surviving_thread_context_switches_per_response": 10.286239982310025,
+              "buffer_pool_boundary_mib": 0.12508010864257812
+            },
+            "ranges": {
+              "requests_per_second": [
+                5243.0,
+                5464.333333333333
+              ],
+              "p99_ms": [
+                2.324,
+                2.425
+              ],
+              "cpu_us_per_request": [
+                637.4672116147136,
+                663.1063640409435
+              ],
+              "process_write_calls_per_response": [
+                67.6903808252273,
+                67.79875556640029
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.157323247727689,
+                10.415156716892364
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12508010864257812,
+                0.12508010864257812
+              ]
+            },
+            "measurement_peak_mib": 109.171875
+          },
+          {
+            "key": [
+              21,
+              "tls-control",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 5372.5,
+              "p99_ms": 2.426,
+              "cpu_us_per_request": 667.9934047954227,
+              "process_write_calls_per_response": 67.88559467675523,
+              "surviving_thread_context_switches_per_response": 10.3007764208739,
+              "buffer_pool_boundary_mib": 0.12508010864257812
+            },
+            "ranges": {
+              "requests_per_second": [
+                5310.333333333333,
+                5434.666666666667
+              ],
+              "p99_ms": [
+                2.384,
+                2.468
+              ],
+              "cpu_us_per_request": [
+                660.5740922473013,
+                675.412717343544
+              ],
+              "process_write_calls_per_response": [
+                67.78946707676856,
+                67.9817222767419
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.047350343473994,
+                10.554202498273806
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12508010864257812,
+                0.12508010864257812
+              ]
+            },
+            "measurement_peak_mib": 115.86328125
+          },
+          {
+            "key": [
+              21,
+              "h2-control",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 2468.833333333333,
+              "p99_ms": 5.2155000000000005,
+              "cpu_us_per_request": 2231.7596100799265,
+              "process_write_calls_per_response": 130.44374433608266,
+              "surviving_thread_context_switches_per_response": 164.90736233113114,
+              "buffer_pool_boundary_mib": 0.12505722045898438
+            },
+            "ranges": {
+              "requests_per_second": [
+                2416.6666666666665,
+                2521.0
+              ],
+              "p99_ms": [
+                5.009,
+                5.422
+              ],
+              "cpu_us_per_request": [
+                2202.829564987439,
+                2260.689655172414
+              ],
+              "process_write_calls_per_response": [
+                130.23986206896552,
+                130.6476266031998
+              ],
+              "surviving_thread_context_switches_per_response": [
+                160.71489655172414,
+                169.09982811053814
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12505722045898438,
+                0.12505722045898438
+              ]
+            },
+            "measurement_peak_mib": 133.6875
+          },
+          {
+            "key": [
+              21,
+              "h2-control",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 2486.333333333333,
+              "p99_ms": 5.1645,
+              "cpu_us_per_request": 2210.2253690242514,
+              "process_write_calls_per_response": 130.43229801629244,
+              "surviving_thread_context_switches_per_response": 162.99499938885413,
+              "buffer_pool_boundary_mib": 0.12505722045898438
+            },
+            "ranges": {
+              "requests_per_second": [
+                2466.6666666666665,
+                2506.0
+              ],
+              "p99_ms": [
+                4.939,
+                5.39
+              ],
+              "cpu_us_per_request": [
+                2192.0723596701246,
+                2228.3783783783783
+              ],
+              "process_write_calls_per_response": [
+                130.1270284650173,
+                130.73756756756757
+              ],
+              "surviving_thread_context_switches_per_response": [
+                158.47297297297297,
+                167.5170258047353
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12505722045898438,
+                0.12505722045898438
+              ]
+            },
+            "measurement_peak_mib": 130.6171875
+          }
+        ]
+      }
+    },
+    {
+      "id": 2,
+      "name": "tls-direct-output",
+      "hypothesis": "Direct ciphertext output avoids the channel heap-to-native staging copy",
+      "status": "complete",
+      "decision": "Discard: direct ciphertext output reduced TLS throughput 29.3% and H2 throughput 18.5%; correctness passed.",
+      "evidence_directory": "ex02-tls-direct-output-20261020",
+      "candidate_source_sha256": "eca635a9497f4703aa4426ff1a4f181c45737593d7b590035c9c22a5a2ee60a4",
+      "changed_classes": [
+        "io/muserver/TlsEngineDriver.class"
+      ],
+      "java21_regression_tests": 106,
+      "phases": {
+        "pilot": [
+          {
+            "key": [
+              21,
+              "tls-control",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 5496.333333333333,
+              "p99_ms": 2.21,
+              "cpu_us_per_request": 624.7329915392079,
+              "process_write_calls_per_response": 67.76540385086594,
+              "surviving_thread_context_switches_per_response": 10.317071459570112,
+              "buffer_pool_boundary_mib": 0.12508010864257812
+            },
+            "ranges": {
+              "requests_per_second": [
+                5448.333333333333,
+                5544.333333333333
+              ],
+              "p99_ms": [
+                2.154,
+                2.266
+              ],
+              "cpu_us_per_request": [
+                616.2448145253412,
+                633.2211685530744
+              ],
+              "process_write_calls_per_response": [
+                67.74634762219684,
+                67.78446007953502
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.31227078698972,
+                10.321872132150505
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12508010864257812,
+                0.12508010864257812
+              ]
+            },
+            "measurement_peak_mib": 107.30859375
+          },
+          {
+            "key": [
+              21,
+              "tls-control",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 3883.5,
+              "p99_ms": 3.166,
+              "cpu_us_per_request": 804.0823010476227,
+              "process_write_calls_per_response": 67.9138045699163,
+              "surviving_thread_context_switches_per_response": 11.943830505129046,
+              "buffer_pool_boundary_mib": 0.23716449737548828
+            },
+            "ranges": {
+              "requests_per_second": [
+                3835.6666666666665,
+                3931.3333333333335
+              ],
+              "p99_ms": [
+                3.026,
+                3.306
+              ],
+              "cpu_us_per_request": [
+                783.449211463456,
+                824.7153906317893
+              ],
+              "process_write_calls_per_response": [
+                67.78641682211294,
+                68.04119231771965
+              ],
+              "surviving_thread_context_switches_per_response": [
+                11.849075801254875,
+                12.038585209003216
+              ],
+              "buffer_pool_boundary_mib": [
+                0.23716449737548828,
+                0.23716449737548828
+              ]
+            },
+            "measurement_peak_mib": 108.40625
+          },
+          {
+            "key": [
+              21,
+              "h2-control",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 2063.8333333333335,
+              "p99_ms": 5.774,
+              "cpu_us_per_request": 2305.8617095264835,
+              "process_write_calls_per_response": 128.5312162387729,
+              "surviving_thread_context_switches_per_response": 151.04723617175358,
+              "buffer_pool_boundary_mib": 0.23716449737548828
+            },
+            "ranges": {
+              "requests_per_second": [
+                2040.6666666666667,
+                2087.0
+              ],
+              "p99_ms": [
+                5.689,
+                5.859
+              ],
+              "cpu_us_per_request": [
+                2280.785816962147,
+                2330.93760209082
+              ],
+              "process_write_calls_per_response": [
+                128.30855929434824,
+                128.75387318319758
+              ],
+              "surviving_thread_context_switches_per_response": [
+                141.73015354459326,
+                160.3643187989139
+              ],
+              "buffer_pool_boundary_mib": [
+                0.23716449737548828,
+                0.23716449737548828
+              ]
+            },
+            "measurement_peak_mib": 122.4140625
+          },
+          {
+            "key": [
+              21,
+              "h2-control",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 2532.833333333333,
+              "p99_ms": 4.871499999999999,
+              "cpu_us_per_request": 2198.491400042185,
+              "process_write_calls_per_response": 130.59841923765103,
+              "surviving_thread_context_switches_per_response": 162.1816100613467,
+              "buffer_pool_boundary_mib": 0.12505722045898438
+            },
+            "ranges": {
+              "requests_per_second": [
+                2523.6666666666665,
+                2542.0
+              ],
+              "p99_ms": [
+                4.84,
+                4.903
+              ],
+              "cpu_us_per_request": [
+                2189.8767374770523,
+                2207.106062607317
+              ],
+              "process_write_calls_per_response": [
+                130.1289129573372,
+                131.06792551796485
+              ],
+              "surviving_thread_context_switches_per_response": [
+                155.07382638342511,
+                169.28939373926826
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12505722045898438,
+                0.12505722045898438
+              ]
+            },
+            "measurement_peak_mib": 141.845703125
+          }
+        ]
+      }
+    },
+    {
+      "id": 3,
+      "name": "drain-lock",
+      "hypothesis": "Avoid separately locking output to inspect pending bytes immediately before drainTo does the same check",
+      "status": "complete",
+      "decision": "Discard: throughput and CPU were effectively flat, with a small-window p99 regression in the pilot.",
+      "evidence_directory": "ex03-drain-lock-20261020",
+      "candidate_source_sha256": "4cd4dd627c10e5dc8c8e08773a0efc24a771bf11b2350e1181e25c43cf13880f",
+      "changed_classes": [
+        "io/muserver/ChannelConnection.class"
+      ],
+      "java21_regression_tests": 156,
+      "phases": {
+        "pilot": [
+          {
+            "key": [
+              21,
+              "async-bulk",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 12946.166666666666,
+              "p99_ms": 1.014,
+              "cpu_us_per_request": 301.68545414155915,
+              "process_write_calls_per_response": 12.974912375052526,
+              "surviving_thread_context_switches_per_response": 10.083799778967743,
+              "buffer_pool_boundary_mib": 0.56304931640625
+            },
+            "ranges": {
+              "requests_per_second": [
+                12784.666666666666,
+                13107.666666666666
+              ],
+              "p99_ms": [
+                0.993,
+                1.035
+              ],
+              "cpu_us_per_request": [
+                297.53579330163006,
+                305.8351149814882
+              ],
+              "process_write_calls_per_response": [
+                12.973603234748111,
+                12.976221515356938
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.064898405513313,
+                10.102701152422172
+              ],
+              "buffer_pool_boundary_mib": [
+                0.56304931640625,
+                0.56304931640625
+              ]
+            },
+            "measurement_peak_mib": 120.34765625
+          },
+          {
+            "key": [
+              21,
+              "async-bulk",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 12965.666666666668,
+              "p99_ms": 1.002,
+              "cpu_us_per_request": 300.9321901377607,
+              "process_write_calls_per_response": 12.970207007084529,
+              "surviving_thread_context_switches_per_response": 10.0717931828216,
+              "buffer_pool_boundary_mib": 0.56304931640625
+            },
+            "ranges": {
+              "requests_per_second": [
+                12891.0,
+                13040.333333333334
+              ],
+              "p99_ms": [
+                0.996,
+                1.008
+              ],
+              "cpu_us_per_request": [
+                299.3277267963498,
+                302.53665347917155
+              ],
+              "process_write_calls_per_response": [
+                12.968608589972332,
+                12.971805424196724
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.056344219481291,
+                10.087242146161907
+              ],
+              "buffer_pool_boundary_mib": [
+                0.56304931640625,
+                0.56304931640625
+              ]
+            },
+            "measurement_peak_mib": 126.634765625
+          },
+          {
+            "key": [
+              21,
+              "tls-control",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 5382.166666666667,
+              "p99_ms": 2.3685,
+              "cpu_us_per_request": 651.3509424046439,
+              "process_write_calls_per_response": 67.79644575784964,
+              "surviving_thread_context_switches_per_response": 10.38270627941352,
+              "buffer_pool_boundary_mib": 0.12508010864257812
+            },
+            "ranges": {
+              "requests_per_second": [
+                5315.666666666667,
+                5448.666666666667
+              ],
+              "p99_ms": [
+                2.323,
+                2.414
+              ],
+              "cpu_us_per_request": [
+                641.1354459806679,
+                661.5664388286199
+              ],
+              "process_write_calls_per_response": [
+                67.73222806802887,
+                67.8606634476704
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.334420267134885,
+                10.430992291692156
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12508010864257812,
+                0.12508010864257812
+              ]
+            },
+            "measurement_peak_mib": 111.828125
+          },
+          {
+            "key": [
+              21,
+              "tls-control",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 5406.5,
+              "p99_ms": 2.2815000000000003,
+              "cpu_us_per_request": 651.0951859654286,
+              "process_write_calls_per_response": 67.89048773848342,
+              "surviving_thread_context_switches_per_response": 10.453314389583628,
+              "buffer_pool_boundary_mib": 0.12508010864257812
+            },
+            "ranges": {
+              "requests_per_second": [
+                5371.666666666667,
+                5441.333333333333
+              ],
+              "p99_ms": [
+                2.248,
+                2.315
+              ],
+              "cpu_us_per_request": [
+                646.9002695417789,
+                655.2901023890784
+              ],
+              "process_write_calls_per_response": [
+                67.79255352156376,
+                67.98842195540308
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.371661357510414,
+                10.534967421656841
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12508010864257812,
+                0.12508010864257812
+              ]
+            },
+            "measurement_peak_mib": 113.109375
+          },
+          {
+            "key": [
+              21,
+              "h2-window-small",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 209.66666666666666,
+              "p99_ms": 46.7275,
+              "cpu_us_per_request": 5834.411776600477,
+              "process_write_calls_per_response": 402.0323356048044,
+              "surviving_thread_context_switches_per_response": 821.5016682169289,
+              "buffer_pool_boundary_mib": 0.10167407989501953
+            },
+            "ranges": {
+              "requests_per_second": [
+                208.66666666666666,
+                210.66666666666666
+              ],
+              "p99_ms": [
+                45.367,
+                48.088
+              ],
+              "cpu_us_per_request": [
+                5782.747603833867,
+                5886.075949367088
+              ],
+              "process_write_calls_per_response": [
+                395.64536741214056,
+                408.41930379746833
+              ],
+              "surviving_thread_context_switches_per_response": [
+                815.3514376996806,
+                827.6518987341772
+              ],
+              "buffer_pool_boundary_mib": [
+                0.10167407989501953,
+                0.10167407989501953
+              ]
+            },
+            "measurement_peak_mib": 125.93359375
+          },
+          {
+            "key": [
+              21,
+              "h2-window-small",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 208.66666666666669,
+              "p99_ms": 51.7485,
+              "cpu_us_per_request": 5878.450106157112,
+              "process_write_calls_per_response": 414.89340907235015,
+              "surviving_thread_context_switches_per_response": 837.665523436224,
+              "buffer_pool_boundary_mib": 0.10167407989501953
+            },
+            "ranges": {
+              "requests_per_second": [
+                208.0,
+                209.33333333333334
+              ],
+              "p99_ms": [
+                51.486,
+                52.011
+              ],
+              "cpu_us_per_request": [
+                5833.333333333334,
+                5923.566878980891
+              ],
+              "process_write_calls_per_response": [
+                410.53044871794873,
+                419.2563694267516
+              ],
+              "surviving_thread_context_switches_per_response": [
+                830.224358974359,
+                845.1066878980891
+              ],
+              "buffer_pool_boundary_mib": [
+                0.10167407989501953,
+                0.10167407989501953
+              ]
+            },
+            "measurement_peak_mib": 124.544921875
+          }
+        ]
+      }
+    },
+    {
+      "id": 4,
+      "name": "selector-wake",
+      "hypothesis": "Wake selector only while the owner may be selecting, with a queue recheck to avoid lost notifications",
+      "status": "complete",
+      "decision": "Discard: fewer write-family calls did not improve throughput; TLS throughput -4.2% and CPU +7.1%.",
+      "evidence_directory": "ex04-selector-wake-20261020",
+      "candidate_source_sha256": "7c0686893cc0ef293a14a51ca7f1bbbe1e6f3441415fce019ea946d45b626811",
+      "changed_classes": [
+        "io/muserver/ChannelTransportLoop.class"
+      ],
+      "java21_regression_tests": 109,
+      "phases": {
+        "pilot": [
+          {
+            "key": [
+              21,
+              "async-bulk",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 13305.333333333334,
+              "p99_ms": 0.9829999999999999,
+              "cpu_us_per_request": 294.28738643473923,
+              "process_write_calls_per_response": 12.96569864012867,
+              "surviving_thread_context_switches_per_response": 10.07013688392653,
+              "buffer_pool_boundary_mib": 0.56304931640625
+            },
+            "ranges": {
+              "requests_per_second": [
+                12962.333333333334,
+                13648.333333333334
+              ],
+              "p99_ms": [
+                0.945,
+                1.021
+              ],
+              "cpu_us_per_request": [
+                287.70301624129934,
+                300.87175662817907
+              ],
+              "process_write_calls_per_response": [
+                12.963586802787564,
+                12.967810477469776
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.068274744773317,
+                10.07199902307974
+              ],
+              "buffer_pool_boundary_mib": [
+                0.56304931640625,
+                0.56304931640625
+              ]
+            },
+            "measurement_peak_mib": 137.78515625
+          },
+          {
+            "key": [
+              21,
+              "async-bulk",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 13130.666666666668,
+              "p99_ms": 0.988,
+              "cpu_us_per_request": 295.1540323044954,
+              "process_write_calls_per_response": 10.082404824638083,
+              "surviving_thread_context_switches_per_response": 10.057891595409508,
+              "buffer_pool_boundary_mib": 0.56304931640625
+            },
+            "ranges": {
+              "requests_per_second": [
+                12974.333333333334,
+                13287.0
+              ],
+              "p99_ms": [
+                0.978,
+                0.998
+              ],
+              "cpu_us_per_request": [
+                291.5130077017637,
+                298.7950569072271
+              ],
+              "process_write_calls_per_response": [
+                10.078334146905428,
+                10.086475502370739
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.050355830742749,
+                10.065427360076265
+              ],
+              "buffer_pool_boundary_mib": [
+                0.56304931640625,
+                0.56304931640625
+              ]
+            },
+            "measurement_peak_mib": 133.11328125
+          },
+          {
+            "key": [
+              21,
+              "small",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 118267.0,
+              "p99_ms": 0.9949999999999999,
+              "cpu_us_per_request": 54.45940222369569,
+              "process_write_calls_per_response": 1.069568840510332,
+              "surviving_thread_context_switches_per_response": 7.380530478507518,
+              "buffer_pool_boundary_mib": 0.09375
+            },
+            "ranges": {
+              "requests_per_second": [
+                117283.66666666667,
+                119250.33333333333
+              ],
+              "p99_ms": [
+                0.983,
+                1.007
+              ],
+              "cpu_us_per_request": [
+                53.69656548828654,
+                55.22223895910485
+              ],
+              "process_write_calls_per_response": [
+                1.0671640330844638,
+                1.0719736479362003
+              ],
+              "surviving_thread_context_switches_per_response": [
+                7.2510069853054215,
+                7.510053971709616
+              ],
+              "buffer_pool_boundary_mib": [
+                0.09375,
+                0.09375
+              ]
+            },
+            "measurement_peak_mib": 117.638671875
+          },
+          {
+            "key": [
+              21,
+              "small",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 116840.16666666666,
+              "p99_ms": 0.9954999999999999,
+              "cpu_us_per_request": 55.361471434969545,
+              "process_write_calls_per_response": 1.4048946554002346,
+              "surviving_thread_context_switches_per_response": 7.514670169295016,
+              "buffer_pool_boundary_mib": 0.09375
+            },
+            "ranges": {
+              "requests_per_second": [
+                116124.0,
+                117556.33333333333
+              ],
+              "p99_ms": [
+                0.99,
+                1.001
+              ],
+              "cpu_us_per_request": [
+                55.2075742410022,
+                55.51536862893688
+              ],
+              "process_write_calls_per_response": [
+                1.401579346216114,
+                1.4082099645843553
+              ],
+              "surviving_thread_context_switches_per_response": [
+                7.4899762323034,
+                7.539364106286631
+              ],
+              "buffer_pool_boundary_mib": [
+                0.09375,
+                0.09375
+              ]
+            },
+            "measurement_peak_mib": 123.1171875
+          },
+          {
+            "key": [
+              21,
+              "tls-control",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 5389.5,
+              "p99_ms": 2.319,
+              "cpu_us_per_request": 659.0298140983243,
+              "process_write_calls_per_response": 67.87844720727432,
+              "surviving_thread_context_switches_per_response": 10.41543743473884,
+              "buffer_pool_boundary_mib": 0.12508010864257812
+            },
+            "ranges": {
+              "requests_per_second": [
+                5335.333333333333,
+                5443.666666666667
+              ],
+              "p99_ms": [
+                2.28,
+                2.358
+              ],
+              "cpu_us_per_request": [
+                655.8079725675096,
+                662.2516556291391
+              ],
+              "process_write_calls_per_response": [
+                67.74814769456862,
+                68.00874671998001
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.384667197354725,
+                10.446207672122954
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12508010864257812,
+                0.12508010864257812
+              ]
+            },
+            "measurement_peak_mib": 116.083984375
+          },
+          {
+            "key": [
+              21,
+              "tls-control",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 5162.333333333333,
+              "p99_ms": 2.573,
+              "cpu_us_per_request": 706.0058043997559,
+              "process_write_calls_per_response": 66.05812919330435,
+              "surviving_thread_context_switches_per_response": 10.161119248973787,
+              "buffer_pool_boundary_mib": 0.12508010864257812
+            },
+            "ranges": {
+              "requests_per_second": [
+                5032.333333333333,
+                5292.333333333333
+              ],
+              "p99_ms": [
+                2.416,
+                2.73
+              ],
+              "cpu_us_per_request": [
+                695.9753101971405,
+                716.0362986023713
+              ],
+              "process_write_calls_per_response": [
+                66.05106974895675,
+                66.06518863765194
+              ],
+              "surviving_thread_context_switches_per_response": [
+                9.233545380109593,
+                11.08869311783798
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12508010864257812,
+                0.12508010864257812
+              ]
+            },
+            "measurement_peak_mib": 114.9453125
+          },
+          {
+            "key": [
+              21,
+              "h2-window-small",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 208.0,
+              "p99_ms": 48.846000000000004,
+              "cpu_us_per_request": 5881.410256410256,
+              "process_write_calls_per_response": 393.3918269230769,
+              "surviving_thread_context_switches_per_response": 850.792467948718,
+              "buffer_pool_boundary_mib": 0.10167407989501953
+            },
+            "ranges": {
+              "requests_per_second": [
+                208.0,
+                208.0
+              ],
+              "p99_ms": [
+                47.047,
+                50.645
+              ],
+              "cpu_us_per_request": [
+                5865.384615384615,
+                5897.435897435897
+              ],
+              "process_write_calls_per_response": [
+                389.74038461538464,
+                397.0432692307692
+              ],
+              "surviving_thread_context_switches_per_response": [
+                842.6570512820513,
+                858.9278846153846
+              ],
+              "buffer_pool_boundary_mib": [
+                0.10167407989501953,
+                0.10167407989501953
+              ]
+            },
+            "measurement_peak_mib": 119.8203125
+          },
+          {
+            "key": [
+              21,
+              "h2-window-small",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 208.83333333333331,
+              "p99_ms": 46.403499999999994,
+              "cpu_us_per_request": 5842.263360645715,
+              "process_write_calls_per_response": 411.42889863845744,
+              "surviving_thread_context_switches_per_response": 835.008033202886,
+              "buffer_pool_boundary_mib": 0.10167407989501953
+            },
+            "ranges": {
+              "requests_per_second": [
+                208.0,
+                209.66666666666666
+              ],
+              "p99_ms": [
+                46.077,
+                46.73
+              ],
+              "cpu_us_per_request": [
+                5771.065182829891,
+                5913.461538461539
+              ],
+              "process_write_calls_per_response": [
+                405.31089743589746,
+                417.5468998410175
+              ],
+              "surviving_thread_context_switches_per_response": [
+                827.2211538461538,
+                842.7949125596184
+              ],
+              "buffer_pool_boundary_mib": [
+                0.10167407989501953,
+                0.10167407989501953
+              ]
+            },
+            "measurement_peak_mib": 127.501953125
+          }
+        ]
+      }
+    },
+    {
+      "id": 5,
+      "name": "owners",
+      "hypothesis": "Eight rather than four transport owners improves TLS throughput enough to justify additional threads and buffers",
+      "status": "complete",
+      "decision": "Keep existing default: eight owners improved H1 throughput but increased CPU 20\u201327% and reduced H2 throughput 8.8%; retain as configuration evidence only.",
+      "evidence_directory": "ex05-owners-20261020",
+      "candidate_source_sha256": "338f15eafccd642392b832d2c11941bc3a2eefae35549f96efe27e90e8a4034a",
+      "changed_classes": [],
+      "java21_regression_tests": 49,
+      "phases": {
+        "pilot": [
+          {
+            "key": [
+              21,
+              "async-bulk",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 13186.0,
+              "p99_ms": 1.0,
+              "cpu_us_per_request": 296.6683240031266,
+              "process_write_calls_per_response": 12.971265599257322,
+              "surviving_thread_context_switches_per_response": 10.096617215332664,
+              "buffer_pool_boundary_mib": 0.56304931640625
+            },
+            "ranges": {
+              "requests_per_second": [
+                13099.333333333334,
+                13272.666666666666
+              ],
+              "p99_ms": [
+                0.974,
+                1.026
+              ],
+              "cpu_us_per_request": [
+                294.3392435581897,
+                298.9974044480635
+              ],
+              "process_write_calls_per_response": [
+                12.96617107840675,
+                12.976360120107893
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.081294891757496,
+                10.111939538907832
+              ],
+              "buffer_pool_boundary_mib": [
+                0.56304931640625,
+                0.56304931640625
+              ]
+            },
+            "measurement_peak_mib": 129.943359375
+          },
+          {
+            "key": [
+              21,
+              "async-bulk",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 14567.333333333332,
+              "p99_ms": 1.1265,
+              "cpu_us_per_request": 360.738422233285,
+              "process_write_calls_per_response": 13.879411159587566,
+              "surviving_thread_context_switches_per_response": 17.636340349897374,
+              "buffer_pool_boundary_mib": 1.0635986328125
+            },
+            "ranges": {
+              "requests_per_second": [
+                14564.0,
+                14570.666666666666
+              ],
+              "p99_ms": [
+                1.125,
+                1.128
+              ],
+              "cpu_us_per_request": [
+                359.79126613567695,
+                361.68557833089307
+              ],
+              "process_write_calls_per_response": [
+                13.876761530014642,
+                13.882060789160487
+              ],
+              "surviving_thread_context_switches_per_response": [
+                17.4017432284041,
+                17.870937471390643
+              ],
+              "buffer_pool_boundary_mib": [
+                1.0635986328125,
+                1.0635986328125
+              ]
+            },
+            "measurement_peak_mib": 128.94921875
+          },
+          {
+            "key": [
+              21,
+              "tls-control",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 6571.333333333333,
+              "p99_ms": 2.614,
+              "cpu_us_per_request": 800.3814536639196,
+              "process_write_calls_per_response": 69.47764684618019,
+              "surviving_thread_context_switches_per_response": 18.80873816000502,
+              "buffer_pool_boundary_mib": 0.18766021728515625
+            },
+            "ranges": {
+              "requests_per_second": [
+                6458.333333333333,
+                6684.333333333333
+              ],
+              "p99_ms": [
+                2.556,
+                2.672
+              ],
+              "cpu_us_per_request": [
+                789.4080686181619,
+                811.3548387096773
+              ],
+              "process_write_calls_per_response": [
+                69.44469677419355,
+                69.51059691816685
+              ],
+              "surviving_thread_context_switches_per_response": [
+                18.178838709677418,
+                19.43863761033262
+              ],
+              "buffer_pool_boundary_mib": [
+                0.18766021728515625,
+                0.18766021728515625
+              ]
+            },
+            "measurement_peak_mib": 122.88671875
+          },
+          {
+            "key": [
+              21,
+              "tls-control",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 5482.333333333333,
+              "p99_ms": 2.2489999999999997,
+              "cpu_us_per_request": 632.7469498316858,
+              "process_write_calls_per_response": 67.82821093641624,
+              "surviving_thread_context_switches_per_response": 10.403237538226005,
+              "buffer_pool_boundary_mib": 0.12508010864257812
+            },
+            "ranges": {
+              "requests_per_second": [
+                5421.333333333333,
+                5543.333333333333
+              ],
+              "p99_ms": [
+                2.214,
+                2.284
+              ],
+              "cpu_us_per_request": [
+                622.9705351773903,
+                642.5233644859813
+              ],
+              "process_write_calls_per_response": [
+                67.63742006886375,
+                68.01900180396873
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.381118460613349,
+                10.425356615838663
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12508010864257812,
+                0.12508010864257812
+              ]
+            },
+            "measurement_peak_mib": 113.607421875
+          },
+          {
+            "key": [
+              21,
+              "h2-control",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 2562.666666666667,
+              "p99_ms": 4.8235,
+              "cpu_us_per_request": 2160.5972048630683,
+              "process_write_calls_per_response": 130.06489143159496,
+              "surviving_thread_context_switches_per_response": 160.6805981564405,
+              "buffer_pool_boundary_mib": 0.12505722045898438
+            },
+            "ranges": {
+              "requests_per_second": [
+                2543.0,
+                2582.3333333333335
+              ],
+              "p99_ms": [
+                4.737,
+                4.91
+              ],
+              "cpu_us_per_request": [
+                2149.2190525364654,
+                2171.975357189671
+              ],
+              "process_write_calls_per_response": [
+                129.80023594180102,
+                130.32954692138892
+              ],
+              "surviving_thread_context_switches_per_response": [
+                154.67316380534402,
+                166.68803250753703
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12505722045898438,
+                0.12505722045898438
+              ]
+            },
+            "measurement_peak_mib": 124.333984375
+          },
+          {
+            "key": [
+              21,
+              "h2-control",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 2337.0,
+              "p99_ms": 4.6705000000000005,
+              "cpu_us_per_request": 2601.6301545636707,
+              "process_write_calls_per_response": 143.6977849584588,
+              "surviving_thread_context_switches_per_response": 257.7563582473019,
+              "buffer_pool_boundary_mib": 0.18761444091796875
+            },
+            "ranges": {
+              "requests_per_second": [
+                2336.0,
+                2338.0
+              ],
+              "p99_ms": [
+                4.634,
+                4.707
+              ],
+              "cpu_us_per_request": [
+                2591.9589392643284,
+                2611.301369863013
+              ],
+              "process_write_calls_per_response": [
+                143.64100370687197,
+                143.75456621004565
+              ],
+              "surviving_thread_context_switches_per_response": [
+                257.36558219178085,
+                258.1471343028229
+              ],
+              "buffer_pool_boundary_mib": [
+                0.18761444091796875,
+                0.18761444091796875
+              ]
+            },
+            "measurement_peak_mib": 129.048828125
+          },
+          {
+            "key": [
+              21,
+              "h2-window-small",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 209.83333333333331,
+              "p99_ms": 43.5505,
+              "cpu_us_per_request": 5845.749298447499,
+              "process_write_calls_per_response": 415.61166924070824,
+              "surviving_thread_context_switches_per_response": 841.4879423818464,
+              "buffer_pool_boundary_mib": 0.10167407989501953
+            },
+            "ranges": {
+              "requests_per_second": [
+                209.0,
+                210.66666666666666
+              ],
+              "p99_ms": [
+                42.133,
+                44.968
+              ],
+              "cpu_us_per_request": [
+                5805.422647527911,
+                5886.075949367088
+              ],
+              "process_write_calls_per_response": [
+                414.6299840510367,
+                416.59335443037975
+              ],
+              "surviving_thread_context_switches_per_response": [
+                841.4240506329114,
+                841.5518341307815
+              ],
+              "buffer_pool_boundary_mib": [
+                0.10167407989501953,
+                0.10167407989501953
+              ]
+            },
+            "measurement_peak_mib": 127.42578125
+          },
+          {
+            "key": [
+              21,
+              "h2-window-small",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 209.66666666666666,
+              "p99_ms": 46.707499999999996,
+              "cpu_us_per_request": 5771.120637359971,
+              "process_write_calls_per_response": 409.9017824645125,
+              "surviving_thread_context_switches_per_response": 834.3482377562989,
+              "buffer_pool_boundary_mib": 0.10167407989501953
+            },
+            "ranges": {
+              "requests_per_second": [
+                208.66666666666666,
+                210.66666666666666
+              ],
+              "p99_ms": [
+                45.929,
+                47.486
+              ],
+              "cpu_us_per_request": [
+                5759.493670886075,
+                5782.7476038338655
+              ],
+              "process_write_calls_per_response": [
+                407.6613924050633,
+                412.1421725239617
+              ],
+              "surviving_thread_context_switches_per_response": [
+                831.6677215189874,
+                837.0287539936103
+              ],
+              "buffer_pool_boundary_mib": [
+                0.10167407989501953,
+                0.10167407989501953
+              ]
+            },
+            "measurement_peak_mib": 118.17578125
+          }
+        ],
+        "two-owners": [
+          {
+            "key": [
+              21,
+              "tls-control",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 5451.666666666666,
+              "p99_ms": 2.4705,
+              "cpu_us_per_request": 618.4785750181429,
+              "process_write_calls_per_response": 67.88074138915749,
+              "surviving_thread_context_switches_per_response": 10.461611806949026,
+              "buffer_pool_boundary_mib": 0.12508010864257812
+            },
+            "ranges": {
+              "requests_per_second": [
+                5371.0,
+                5532.333333333333
+              ],
+              "p99_ms": [
+                2.211,
+                2.73
+              ],
+              "cpu_us_per_request": [
+                617.581490630837,
+                619.3756594054489
+              ],
+              "process_write_calls_per_response": [
+                67.85192080928442,
+                67.90956196903055
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.394830391034525,
+                10.528393222863526
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12508010864257812,
+                0.12508010864257812
+              ]
+            },
+            "measurement_peak_mib": 107.43359375
+          },
+          {
+            "key": [
+              21,
+              "tls-control",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 3016.666666666667,
+              "p99_ms": 3.5934999999999997,
+              "cpu_us_per_request": 651.4685662240903,
+              "process_write_calls_per_response": 67.4264030657597,
+              "surviving_thread_context_switches_per_response": 9.745417727001527,
+              "buffer_pool_boundary_mib": 0.09379005432128906
+            },
+            "ranges": {
+              "requests_per_second": [
+                2996.0,
+                3037.3333333333335
+              ],
+              "p99_ms": [
+                3.577,
+                3.61
+              ],
+              "cpu_us_per_request": [
+                638.7181738366987,
+                664.2189586114819
+              ],
+              "process_write_calls_per_response": [
+                67.39330218068535,
+                67.45950395083406
+              ],
+              "surviving_thread_context_switches_per_response": [
+                9.63202370500439,
+                9.858811748998665
+              ],
+              "buffer_pool_boundary_mib": [
+                0.09379005432128906,
+                0.09379005432128906
+              ]
+            },
+            "measurement_peak_mib": 116.94140625
+          },
+          {
+            "key": [
+              21,
+              "h2-control",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 2127.5,
+              "p99_ms": 4.7335,
+              "cpu_us_per_request": 1585.5932983522046,
+              "process_write_calls_per_response": 91.86039381386357,
+              "surviving_thread_context_switches_per_response": 133.30854625793978,
+              "buffer_pool_boundary_mib": 0.09377861022949219
+            },
+            "ranges": {
+              "requests_per_second": [
+                2125.0,
+                2130.0
+              ],
+              "p99_ms": [
+                4.658,
+                4.809
+              ],
+              "cpu_us_per_request": [
+                1579.0297339593114,
+                1592.1568627450977
+              ],
+              "process_write_calls_per_response": [
+                91.72219607843137,
+                91.99859154929578
+              ],
+              "surviving_thread_context_switches_per_response": [
+                133.2814117647059,
+                133.3356807511737
+              ],
+              "buffer_pool_boundary_mib": [
+                0.09377861022949219,
+                0.09377861022949219
+              ]
+            },
+            "measurement_peak_mib": 125.50390625
+          },
+          {
+            "key": [
+              21,
+              "h2-control",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 2607.5,
+              "p99_ms": 4.672,
+              "cpu_us_per_request": 2126.05103473297,
+              "process_write_calls_per_response": 130.9936884393942,
+              "surviving_thread_context_switches_per_response": 156.03436562852897,
+              "buffer_pool_boundary_mib": 0.12505722045898438
+            },
+            "ranges": {
+              "requests_per_second": [
+                2593.3333333333335,
+                2621.6666666666665
+              ],
+              "p99_ms": [
+                4.542,
+                4.802
+              ],
+              "cpu_us_per_request": [
+                2101.7164653528293,
+                2150.3856041131107
+              ],
+              "process_write_calls_per_response": [
+                130.90832803560076,
+                131.07904884318765
+              ],
+              "surviving_thread_context_switches_per_response": [
+                148.97965670692943,
+                163.08907455012854
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12505722045898438,
+                0.12505722045898438
+              ]
+            },
+            "measurement_peak_mib": 130.28125
+          }
+        ]
+      }
+    },
+    {
+      "id": 6,
+      "name": "h2-batch",
+      "hypothesis": "A 16KiB instead of 8KiB ready-frame batching threshold reduces transport handoffs",
+      "status": "complete",
+      "decision": "Discard: throughput flat; small-window CPU +3.4%.",
+      "evidence_directory": "ex06-h2-batch-20261020",
+      "candidate_source_sha256": "61c9e2290a16beb184e03962669dc3e7a47edb79dee7bb07e4a785bc79569fd8",
+      "changed_classes": [
+        "io/muserver/Http2Connection$AsyncWriteDriver.class"
+      ],
+      "java21_regression_tests": 788,
+      "phases": {
+        "pilot": [
+          {
+            "key": [
+              21,
+              "h2-control",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 2574.6666666666665,
+              "p99_ms": 4.85,
+              "cpu_us_per_request": 2162.0616826203327,
+              "process_write_calls_per_response": 130.3783799027862,
+              "surviving_thread_context_switches_per_response": 163.65059963608357,
+              "buffer_pool_boundary_mib": 0.12505722045898438
+            },
+            "ranges": {
+              "requests_per_second": [
+                2568.6666666666665,
+                2580.6666666666665
+              ],
+              "p99_ms": [
+                4.803,
+                4.897
+              ],
+              "cpu_us_per_request": [
+                2148.9748248118353,
+                2175.14854042883
+              ],
+              "process_write_calls_per_response": [
+                130.21762263171556,
+                130.5391371738569
+              ],
+              "surviving_thread_context_switches_per_response": [
+                159.97106690777576,
+                167.33013236439137
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12505722045898438,
+                0.12505722045898438
+              ]
+            },
+            "measurement_peak_mib": 131.337890625
+          },
+          {
+            "key": [
+              21,
+              "h2-control",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 2577.333333333333,
+              "p99_ms": 4.776,
+              "cpu_us_per_request": 2148.4600893430024,
+              "process_write_calls_per_response": 130.52306776472807,
+              "surviving_thread_context_switches_per_response": 167.68854825425677,
+              "buffer_pool_boundary_mib": 0.12505722045898438
+            },
+            "ranges": {
+              "requests_per_second": [
+                2545.6666666666665,
+                2609.0
+              ],
+              "p99_ms": [
+                4.628,
+                4.924
+              ],
+              "cpu_us_per_request": [
+                2128.5294493420215,
+                2168.3907293439834
+              ],
+              "process_write_calls_per_response": [
+                130.13211994238574,
+                130.9140155870704
+              ],
+              "surviving_thread_context_switches_per_response": [
+                167.49533665516802,
+                167.88175985334556
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12505722045898438,
+                0.12505722045898438
+              ]
+            },
+            "measurement_peak_mib": 127.5859375
+          },
+          {
+            "key": [
+              21,
+              "h2-window-small",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 210.16666666666666,
+              "p99_ms": 42.218,
+              "cpu_us_per_request": 5773.228552454166,
+              "process_write_calls_per_response": 402.72724185466177,
+              "surviving_thread_context_switches_per_response": 825.5252699180937,
+              "buffer_pool_boundary_mib": 0.10167407989501953
+            },
+            "ranges": {
+              "requests_per_second": [
+                209.66666666666666,
+                210.66666666666666
+              ],
+              "p99_ms": [
+                42.05,
+                42.386
+              ],
+              "cpu_us_per_request": [
+                5759.493670886074,
+                5786.9634340222565
+              ],
+              "process_write_calls_per_response": [
+                402.376582278481,
+                403.0779014308426
+              ],
+              "surviving_thread_context_switches_per_response": [
+                825.4034810126582,
+                825.6470588235294
+              ],
+              "buffer_pool_boundary_mib": [
+                0.10167407989501953,
+                0.10167407989501953
+              ]
+            },
+            "measurement_peak_mib": 125.982421875
+          },
+          {
+            "key": [
+              21,
+              "h2-window-small",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 210.66666666666666,
+              "p99_ms": 46.91,
+              "cpu_us_per_request": 5585.443037974685,
+              "process_write_calls_per_response": 397.378164556962,
+              "surviving_thread_context_switches_per_response": 820.7064873417721,
+              "buffer_pool_boundary_mib": 0.10167407989501953
+            },
+            "ranges": {
+              "requests_per_second": [
+                210.66666666666666,
+                210.66666666666666
+              ],
+              "p99_ms": [
+                46.764,
+                47.056
+              ],
+              "cpu_us_per_request": [
+                5443.037974683545,
+                5727.848101265823
+              ],
+              "process_write_calls_per_response": [
+                389.10759493670884,
+                405.6487341772152
+              ],
+              "surviving_thread_context_switches_per_response": [
+                811.9129746835443,
+                829.5
+              ],
+              "buffer_pool_boundary_mib": [
+                0.10167407989501953,
+                0.10167407989501953
+              ]
+            },
+            "measurement_peak_mib": 121.3984375
+          }
+        ]
+      }
+    },
+    {
+      "id": 7,
+      "name": "h2-credit",
+      "hypothesis": "Mutable stream-credit cells avoid boxing and replacing map values on every DATA frame",
+      "status": "complete",
+      "decision": "Discard: normal-window throughput +1.3% and small-window +0.6%; short-run CPU improvements near 1% do not establish a worthwhile benefit for the added mutable credit state.",
+      "evidence_directory": "ex07-h2-credit-20261020",
+      "candidate_source_sha256": "3bb7d9fbe6549a2e8234981fb96c72200a520868535267d68fa63c6e65b94f32",
+      "changed_classes": [
+        "io/muserver/Http2WriteCoordinator$ApplicationExchangeEnded.class",
+        "io/muserver/Http2WriteCoordinator$ConnectionFailure.class",
+        "io/muserver/Http2WriteCoordinator$ConnectionWindowUpdate.class",
+        "io/muserver/Http2WriteCoordinator$ForgetStream.class",
+        "io/muserver/Http2WriteCoordinator$OpenStream.class",
+        "io/muserver/Http2WriteCoordinator$PeerSettingsChange.class",
+        "io/muserver/Http2WriteCoordinator$PendingWrite.class",
+        "io/muserver/Http2WriteCoordinator$QueueWrite.class",
+        "io/muserver/Http2WriteCoordinator$RemoteEndStream.class",
+        "io/muserver/Http2WriteCoordinator$ResetAfterPendingWrites.class",
+        "io/muserver/Http2WriteCoordinator$ResetStream.class",
+        "io/muserver/Http2WriteCoordinator$SettingsTimeout.class",
+        "io/muserver/Http2WriteCoordinator$StreamCredit.class",
+        "io/muserver/Http2WriteCoordinator$StreamWindowUpdate.class",
+        "io/muserver/Http2WriteCoordinator$WakeUp.class",
+        "io/muserver/Http2WriteCoordinator$WritableFrame.class",
+        "io/muserver/Http2WriteCoordinator.class"
+      ],
+      "java21_regression_tests": 788,
+      "phases": {
+        "pilot": [
+          {
+            "key": [
+              21,
+              "h2-control",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 2555.0,
+              "p99_ms": 4.734500000000001,
+              "cpu_us_per_request": 2169.600647767226,
+              "process_write_calls_per_response": 130.04320066277268,
+              "surviving_thread_context_switches_per_response": 164.432568294009,
+              "buffer_pool_boundary_mib": 0.12505722045898438
+            },
+            "ranges": {
+              "requests_per_second": [
+                2549.6666666666665,
+                2560.3333333333335
+              ],
+              "p99_ms": [
+                4.628,
+                4.841
+              ],
+              "cpu_us_per_request": [
+                2168.910968754085,
+                2170.2903267803667
+              ],
+              "process_write_calls_per_response": [
+                129.9890181723101,
+                130.09738315323526
+              ],
+              "surviving_thread_context_switches_per_response": [
+                162.14281994531962,
+                166.7223166426984
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12505722045898438,
+                0.12505722045898438
+              ]
+            },
+            "measurement_peak_mib": 124.275390625
+          },
+          {
+            "key": [
+              21,
+              "h2-control",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 2589.1666666666665,
+              "p99_ms": 4.7895,
+              "cpu_us_per_request": 2141.002485352109,
+              "process_write_calls_per_response": 130.69705816794016,
+              "surviving_thread_context_switches_per_response": 167.8790738029872,
+              "buffer_pool_boundary_mib": 0.12505722045898438
+            },
+            "ranges": {
+              "requests_per_second": [
+                2573.6666666666665,
+                2604.6666666666665
+              ],
+              "p99_ms": [
+                4.755,
+                4.824
+              ],
+              "cpu_us_per_request": [
+                2135.909905298183,
+                2146.0950654060357
+              ],
+              "process_write_calls_per_response": [
+                130.333631942667,
+                131.0604843932133
+              ],
+              "surviving_thread_context_switches_per_response": [
+                167.63618702240643,
+                168.12196058356795
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12505722045898438,
+                0.12505722045898438
+              ]
+            },
+            "measurement_peak_mib": 126.76953125
+          },
+          {
+            "key": [
+              21,
+              "h2-window-small",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 211.0,
+              "p99_ms": 46.4915,
+              "cpu_us_per_request": 5720.022963258786,
+              "process_write_calls_per_response": 403.7927590854633,
+              "surviving_thread_context_switches_per_response": 826.4783546325879,
+              "buffer_pool_boundary_mib": 0.10167407989501953
+            },
+            "ranges": {
+              "requests_per_second": [
+                208.66666666666666,
+                213.33333333333334
+              ],
+              "p99_ms": [
+                44.194,
+                48.789
+              ],
+              "cpu_us_per_request": [
+                5609.375,
+                5830.670926517572
+              ],
+              "process_write_calls_per_response": [
+                399.48083067092654,
+                408.1046875
+              ],
+              "surviving_thread_context_switches_per_response": [
+                824.8067092651758,
+                828.15
+              ],
+              "buffer_pool_boundary_mib": [
+                0.10167407989501953,
+                0.10167407989501953
+              ]
+            },
+            "measurement_peak_mib": 121.822265625
+          },
+          {
+            "key": [
+              21,
+              "h2-window-small",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 209.66666666666666,
+              "p99_ms": 44.8775,
+              "cpu_us_per_request": 5763.588385166013,
+              "process_write_calls_per_response": 402.0077243499009,
+              "surviving_thread_context_switches_per_response": 824.4731189590327,
+              "buffer_pool_boundary_mib": 0.10167407989501953
+            },
+            "ranges": {
+              "requests_per_second": [
+                208.66666666666666,
+                210.66666666666666
+              ],
+              "p99_ms": [
+                43.807,
+                45.948
+              ],
+              "cpu_us_per_request": [
+                5664.556962025318,
+                5862.6198083067075
+              ],
+              "process_write_calls_per_response": [
+                401.29392971246006,
+                402.72151898734177
+              ],
+              "surviving_thread_context_switches_per_response": [
+                823.1091772151899,
+                825.8370607028754
+              ],
+              "buffer_pool_boundary_mib": [
+                0.10167407989501953,
+                0.10167407989501953
+              ]
+            },
+            "measurement_peak_mib": 119.11328125
+          }
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "name": "plain-quantum",
+      "hypothesis": "Double plaintext service quantum/socket write limit to 262432 bytes; preserve TLS limits and owned buffers; inspect native-buffer and fairness costs",
+      "status": "complete",
+      "decision": "Discard: longer bulk throughput +3.9%/+5.1% on Java 21/25, but repeated active-writer shared-owner p99 regressed 36.5%/43.2%; about 0.5 MiB more Java 21 buffer-pool storage with four owners.",
+      "evidence_directory": "ex08-network-clock-20261020",
+      "candidate_source_sha256": "349c595201c132025d8403ba9fd2f1d6778a2483d38c59a2ab9e1c2f41c68956",
+      "changed_classes": [
+        "io/muserver/ChannelConnection.class"
+      ],
+      "java21_regression_tests": 156,
+      "phases": {
+        "confirmation": [
+          {
+            "key": [
+              21,
+              "async-bulk",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 13209.9,
+              "p99_ms": 1.0025,
+              "cpu_us_per_request": 294.48535754043473,
+              "process_write_calls_per_response": 12.968901605181832,
+              "surviving_thread_context_switches_per_response": 10.096126756153856,
+              "buffer_pool_boundary_mib": 0.56304931640625
+            },
+            "ranges": {
+              "requests_per_second": [
+                13125.0,
+                13294.8
+              ],
+              "p99_ms": [
+                0.983,
+                1.022
+              ],
+              "cpu_us_per_request": [
+                293.04690555706,
+                295.9238095238095
+              ],
+              "process_write_calls_per_response": [
+                12.968822857142857,
+                12.968980353220807
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.08994494087914,
+                10.102308571428571
+              ],
+              "buffer_pool_boundary_mib": [
+                0.56304931640625,
+                0.56304931640625
+              ]
+            },
+            "measurement_peak_mib": 138.482421875
+          },
+          {
+            "key": [
+              21,
+              "async-bulk",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 13730.1,
+              "p99_ms": 0.9655,
+              "cpu_us_per_request": 289.07282582644746,
+              "process_write_calls_per_response": 8.970525073634324,
+              "surviving_thread_context_switches_per_response": 10.297438052827149,
+              "buffer_pool_boundary_mib": 1.0635986328125
+            },
+            "ranges": {
+              "requests_per_second": [
+                13717.2,
+                13743.0
+              ],
+              "p99_ms": [
+                0.944,
+                0.987
+              ],
+              "cpu_us_per_request": [
+                288.98025836176487,
+                289.16539329113004
+              ],
+              "process_write_calls_per_response": [
+                8.970035654515026,
+                8.971014492753623
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.262228043367532,
+                10.332648062286765
+              ],
+              "buffer_pool_boundary_mib": [
+                1.0635986328125,
+                1.0635986328125
+              ]
+            },
+            "measurement_peak_mib": 131.037109375
+          },
+          {
+            "key": [
+              21,
+              "small",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 119972.1,
+              "p99_ms": 0.9635,
+              "cpu_us_per_request": 54.16629075445252,
+              "process_write_calls_per_response": 1.4091729986102286,
+              "surviving_thread_context_switches_per_response": 7.29331239039586,
+              "buffer_pool_boundary_mib": 0.09375
+            },
+            "ranges": {
+              "requests_per_second": [
+                118843.2,
+                121101.0
+              ],
+              "p99_ms": [
+                0.948,
+                0.979
+              ],
+              "cpu_us_per_request": [
+                53.77329666972197,
+                54.55928483918306
+              ],
+              "process_write_calls_per_response": [
+                1.404439269700498,
+                1.413906727519959
+              ],
+              "surviving_thread_context_switches_per_response": [
+                7.091962906994987,
+                7.494661873796733
+              ],
+              "buffer_pool_boundary_mib": [
+                0.09375,
+                0.09375
+              ]
+            },
+            "measurement_peak_mib": 133.9765625
+          },
+          {
+            "key": [
+              21,
+              "small",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 119110.4,
+              "p99_ms": 0.989,
+              "cpu_us_per_request": 54.5213399529794,
+              "process_write_calls_per_response": 1.4226940835404456,
+              "surviving_thread_context_switches_per_response": 7.543520870934573,
+              "buffer_pool_boundary_mib": 0.09375
+            },
+            "ranges": {
+              "requests_per_second": [
+                118470.2,
+                119750.6
+              ],
+              "p99_ms": [
+                0.984,
+                0.994
+              ],
+              "cpu_us_per_request": [
+                54.429789913369945,
+                54.612889992588855
+              ],
+              "process_write_calls_per_response": [
+                1.4195097163674917,
+                1.4258784507133992
+              ],
+              "surviving_thread_context_switches_per_response": [
+                7.530574377080366,
+                7.556467364788782
+              ],
+              "buffer_pool_boundary_mib": [
+                0.09375,
+                0.09375
+              ]
+            },
+            "measurement_peak_mib": 137.580078125
+          },
+          {
+            "key": [
+              21,
+              "sync-bulk",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 3148.7,
+              "p99_ms": 3.819,
+              "cpu_us_per_request": 1508.5815639285806,
+              "process_write_calls_per_response": 253.67105195153314,
+              "surviving_thread_context_switches_per_response": 146.10794939668352,
+              "buffer_pool_boundary_mib": 0.09375
+            },
+            "ranges": {
+              "requests_per_second": [
+                3137.8,
+                3159.6
+              ],
+              "p99_ms": [
+                3.786,
+                3.852
+              ],
+              "cpu_us_per_request": [
+                1502.088872009115,
+                1515.0742558480463
+              ],
+              "process_write_calls_per_response": [
+                253.61061890496526,
+                253.73148499810102
+              ],
+              "surviving_thread_context_switches_per_response": [
+                146.10792505380428,
+                146.10797373956274
+              ],
+              "buffer_pool_boundary_mib": [
+                0.09375,
+                0.09375
+              ]
+            },
+            "measurement_peak_mib": 105.52734375
+          },
+          {
+            "key": [
+              21,
+              "sync-bulk",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 3096.8,
+              "p99_ms": 4.2835,
+              "cpu_us_per_request": 1544.8083355218741,
+              "process_write_calls_per_response": 253.38648938204386,
+              "surviving_thread_context_switches_per_response": 147.14459387239634,
+              "buffer_pool_boundary_mib": 0.09375
+            },
+            "ranges": {
+              "requests_per_second": [
+                3068.0,
+                3125.6
+              ],
+              "p99_ms": [
+                3.793,
+                4.774
+              ],
+              "cpu_us_per_request": [
+                1511.3898131558738,
+                1578.2268578878745
+              ],
+              "process_write_calls_per_response": [
+                252.88233376792698,
+                253.89064499616074
+              ],
+              "surviving_thread_context_switches_per_response": [
+                146.0863194266701,
+                148.20286831812257
+              ],
+              "buffer_pool_boundary_mib": [
+                0.09375,
+                0.09375
+              ]
+            },
+            "measurement_peak_mib": 111.80078125
+          },
+          {
+            "key": [
+              21,
+              "chunked-control",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 2876.3,
+              "p99_ms": 4.257,
+              "cpu_us_per_request": 1488.8118179523613,
+              "process_write_calls_per_response": 189.43377437544984,
+              "surviving_thread_context_switches_per_response": 105.28745710328266,
+              "buffer_pool_boundary_mib": 0.125
+            },
+            "ranges": {
+              "requests_per_second": [
+                2845.8,
+                2906.8
+              ],
+              "p99_ms": [
+                4.192,
+                4.322
+              ],
+              "cpu_us_per_request": [
+                1479.9779826613458,
+                1497.6456532433765
+              ],
+              "process_write_calls_per_response": [
+                189.42279851008504,
+                189.44475024081464
+              ],
+              "surviving_thread_context_switches_per_response": [
+                97.92637952387506,
+                112.64853468269028
+              ],
+              "buffer_pool_boundary_mib": [
+                0.125,
+                0.125
+              ]
+            },
+            "measurement_peak_mib": 104.74609375
+          },
+          {
+            "key": [
+              21,
+              "chunked-control",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 2904.1000000000004,
+              "p99_ms": 4.266500000000001,
+              "cpu_us_per_request": 1486.4878889703748,
+              "process_write_calls_per_response": 189.10982196438005,
+              "surviving_thread_context_switches_per_response": 115.24674817297334,
+              "buffer_pool_boundary_mib": 0.125
+            },
+            "ranges": {
+              "requests_per_second": [
+                2874.4,
+                2933.8
+              ],
+              "p99_ms": [
+                4.195,
+                4.338
+              ],
+              "cpu_us_per_request": [
+                1483.440022265516,
+                1489.5357556752335
+              ],
+              "process_write_calls_per_response": [
+                189.03797123184947,
+                189.18167269691065
+              ],
+              "surviving_thread_context_switches_per_response": [
+                114.19224881714445,
+                116.30124752880224
+              ],
+              "buffer_pool_boundary_mib": [
+                0.125,
+                0.125
+              ]
+            },
+            "measurement_peak_mib": 124.650390625
+          },
+          {
+            "key": [
+              25,
+              "async-bulk",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 14025.3,
+              "p99_ms": 0.928,
+              "cpu_us_per_request": 295.112650527146,
+              "process_write_calls_per_response": 8.618203659706488,
+              "surviving_thread_context_switches_per_response": 10.31928397443072,
+              "buffer_pool_boundary_mib": 0.0
+            },
+            "ranges": {
+              "requests_per_second": [
+                13970.6,
+                14080.0
+              ],
+              "p99_ms": [
+                0.928,
+                0.928
+              ],
+              "cpu_us_per_request": [
+                294.3181818181818,
+                295.90711923611013
+              ],
+              "process_write_calls_per_response": [
+                8.612869318181819,
+                8.623538001231157
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.316477272727273,
+                10.322090676134167
+              ],
+              "buffer_pool_boundary_mib": [
+                0.0,
+                0.0
+              ]
+            },
+            "measurement_peak_mib": 96.443359375
+          },
+          {
+            "key": [
+              25,
+              "async-bulk",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 13347.0,
+              "p99_ms": 0.923,
+              "cpu_us_per_request": 303.06446606618,
+              "process_write_calls_per_response": 12.82551439215105,
+              "surviving_thread_context_switches_per_response": 10.290000010690324,
+              "buffer_pool_boundary_mib": 0.0
+            },
+            "ranges": {
+              "requests_per_second": [
+                13342.6,
+                13351.4
+              ],
+              "p99_ms": [
+                0.912,
+                0.934
+              ],
+              "cpu_us_per_request": [
+                302.7397875878185,
+                303.38914454454147
+              ],
+              "process_write_calls_per_response": [
+                12.81628892850188,
+                12.834739855800219
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.260422128016538,
+                10.319577893364112
+              ],
+              "buffer_pool_boundary_mib": [
+                0.0,
+                0.0
+              ]
+            },
+            "measurement_peak_mib": 100.146484375
+          },
+          {
+            "key": [
+              25,
+              "small",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 218562.7,
+              "p99_ms": 0.536,
+              "cpu_us_per_request": 26.78678067291098,
+              "process_write_calls_per_response": 1.3838443749955993,
+              "surviving_thread_context_switches_per_response": 0.9250670381465529,
+              "buffer_pool_boundary_mib": 0.0
+            },
+            "ranges": {
+              "requests_per_second": [
+                213927.2,
+                223198.2
+              ],
+              "p99_ms": [
+                0.535,
+                0.537
+              ],
+              "cpu_us_per_request": [
+                26.22781008090567,
+                27.345751264916288
+              ],
+              "process_write_calls_per_response": [
+                1.36504661398831,
+                1.402642136002889
+              ],
+              "surviving_thread_context_switches_per_response": [
+                0.8295326754427231,
+                1.0206014008503828
+              ],
+              "buffer_pool_boundary_mib": [
+                0.0,
+                0.0
+              ]
+            },
+            "measurement_peak_mib": 115.38671875
+          },
+          {
+            "key": [
+              25,
+              "small",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 224851.6,
+              "p99_ms": 0.53,
+              "cpu_us_per_request": 26.022195908498905,
+              "process_write_calls_per_response": 1.4187521959219955,
+              "surviving_thread_context_switches_per_response": 0.8347924665539458,
+              "buffer_pool_boundary_mib": 0.0
+            },
+            "ranges": {
+              "requests_per_second": [
+                221228.6,
+                228474.6
+              ],
+              "p99_ms": [
+                0.514,
+                0.546
+              ],
+              "cpu_us_per_request": [
+                25.709641246773163,
+                26.334750570224646
+              ],
+              "process_write_calls_per_response": [
+                1.4128182341704463,
+                1.4246861576735446
+              ],
+              "surviving_thread_context_switches_per_response": [
+                0.832590361282402,
+                0.8369945718254895
+              ],
+              "buffer_pool_boundary_mib": [
+                0.0,
+                0.0
+              ]
+            },
+            "measurement_peak_mib": 122.94921875
+          },
+          {
+            "key": [
+              25,
+              "sync-bulk",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 3309.4,
+              "p99_ms": 3.138,
+              "cpu_us_per_request": 1487.0003619631564,
+              "process_write_calls_per_response": 192.75835329097848,
+              "surviving_thread_context_switches_per_response": 114.8967628064988,
+              "buffer_pool_boundary_mib": 0.0
+            },
+            "ranges": {
+              "requests_per_second": [
+                3295.8,
+                3323.0
+              ],
+              "p99_ms": [
+                3.091,
+                3.185
+              ],
+              "cpu_us_per_request": [
+                1481.191694252182,
+                1492.8090296741307
+              ],
+              "process_write_calls_per_response": [
+                192.5455311465543,
+                192.97117543540264
+              ],
+              "surviving_thread_context_switches_per_response": [
+                114.39331928979837,
+                115.40020632319923
+              ],
+              "buffer_pool_boundary_mib": [
+                0.0,
+                0.0
+              ]
+            },
+            "measurement_peak_mib": 90.822265625
+          },
+          {
+            "key": [
+              25,
+              "sync-bulk",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 3285.3999999999996,
+              "p99_ms": 3.1814999999999998,
+              "cpu_us_per_request": 1494.5031929048714,
+              "process_write_calls_per_response": 193.08446446235695,
+              "surviving_thread_context_switches_per_response": 115.53165097123133,
+              "buffer_pool_boundary_mib": 0.0
+            },
+            "ranges": {
+              "requests_per_second": [
+                3280.2,
+                3290.6
+              ],
+              "p99_ms": [
+                3.127,
+                3.236
+              ],
+              "cpu_us_per_request": [
+                1486.6589679693675,
+                1502.3474178403753
+              ],
+              "process_write_calls_per_response": [
+                192.75745381379184,
+                193.41147511092203
+              ],
+              "surviving_thread_context_switches_per_response": [
+                115.38047772442715,
+                115.68282421803549
+              ],
+              "buffer_pool_boundary_mib": [
+                0.0,
+                0.0
+              ]
+            },
+            "measurement_peak_mib": 97.9296875
+          },
+          {
+            "key": [
+              25,
+              "chunked-control",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 3075.5,
+              "p99_ms": 3.8365,
+              "cpu_us_per_request": 1492.455060703022,
+              "process_write_calls_per_response": 159.352388923334,
+              "surviving_thread_context_switches_per_response": 105.32391587857273,
+              "buffer_pool_boundary_mib": 0.0
+            },
+            "ranges": {
+              "requests_per_second": [
+                3068.6,
+                3082.4
+              ],
+              "p99_ms": [
+                3.827,
+                3.846
+              ],
+              "cpu_us_per_request": [
+                1485.8551777835453,
+                1499.0549436224985
+              ],
+              "process_write_calls_per_response": [
+                159.22599273293537,
+                159.47878511373264
+              ],
+              "surviving_thread_context_switches_per_response": [
+                104.72923695821437,
+                105.91859479893111
+              ],
+              "buffer_pool_boundary_mib": [
+                0.0,
+                0.0
+              ]
+            },
+            "measurement_peak_mib": 97.705078125
+          },
+          {
+            "key": [
+              25,
+              "chunked-control",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 3081.6,
+              "p99_ms": 3.706,
+              "cpu_us_per_request": 1496.9384676225886,
+              "process_write_calls_per_response": 159.49598503108427,
+              "surviving_thread_context_switches_per_response": 105.60731054638967,
+              "buffer_pool_boundary_mib": 0.0
+            },
+            "ranges": {
+              "requests_per_second": [
+                3030.6,
+                3132.6
+              ],
+              "p99_ms": [
+                3.641,
+                3.771
+              ],
+              "cpu_us_per_request": [
+                1478.0054906467474,
+                1515.8714445984297
+              ],
+              "process_write_calls_per_response": [
+                159.29936793717678,
+                159.69260212499174
+              ],
+              "surviving_thread_context_switches_per_response": [
+                104.00165996297005,
+                107.21296112980927
+              ],
+              "buffer_pool_boundary_mib": [
+                0.0,
+                0.0
+              ]
+            },
+            "measurement_peak_mib": 99.337890625
+          }
+        ],
+        "pilot": [
+          {
+            "key": [
+              21,
+              "async-bulk",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 12961.166666666666,
+              "p99_ms": 1.013,
+              "cpu_us_per_request": 301.96426498910256,
+              "process_write_calls_per_response": 12.974365163865128,
+              "surviving_thread_context_switches_per_response": 10.105953036682862,
+              "buffer_pool_boundary_mib": 0.56304931640625
+            },
+            "ranges": {
+              "requests_per_second": [
+                12823.666666666666,
+                13098.666666666666
+              ],
+              "p99_ms": [
+                1.0,
+                1.026
+              ],
+              "cpu_us_per_request": [
+                298.503664495114,
+                305.42486548309114
+              ],
+              "process_write_calls_per_response": [
+                12.965220555743286,
+                12.98350977198697
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.09825582906605,
+                10.113650244299674
+              ],
+              "buffer_pool_boundary_mib": [
+                0.56304931640625,
+                0.56304931640625
+              ]
+            },
+            "measurement_peak_mib": 121.931640625
+          },
+          {
+            "key": [
+              21,
+              "async-bulk",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 13571.5,
+              "p99_ms": 0.9875,
+              "cpu_us_per_request": 293.38490468875483,
+              "process_write_calls_per_response": 8.967942139633752,
+              "surviving_thread_context_switches_per_response": 10.317136101980084,
+              "buffer_pool_boundary_mib": 1.0635986328125
+            },
+            "ranges": {
+              "requests_per_second": [
+                13551.0,
+                13592.0
+              ],
+              "p99_ms": [
+                0.98,
+                0.995
+              ],
+              "cpu_us_per_request": [
+                293.0645477732,
+                293.70526160430967
+              ],
+              "process_write_calls_per_response": [
+                8.963385324700804,
+                8.9724989545667
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.293360883575629,
+                10.34091132038454
+              ],
+              "buffer_pool_boundary_mib": [
+                1.0635986328125,
+                1.0635986328125
+              ]
+            },
+            "measurement_peak_mib": 126.02734375
+          },
+          {
+            "key": [
+              21,
+              "tls-control",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 5367.666666666667,
+              "p99_ms": 2.3289999999999997,
+              "cpu_us_per_request": 655.4672370287803,
+              "process_write_calls_per_response": 67.7419572721102,
+              "surviving_thread_context_switches_per_response": 10.09122900010037,
+              "buffer_pool_boundary_mib": 0.12508010864257812
+            },
+            "ranges": {
+              "requests_per_second": [
+                5305.666666666667,
+                5429.666666666667
+              ],
+              "p99_ms": [
+                2.25,
+                2.408
+              ],
+              "cpu_us_per_request": [
+                628.6450979188411,
+                682.2893761387195
+              ],
+              "process_write_calls_per_response": [
+                67.67616182699982,
+                67.80775271722058
+              ],
+              "surviving_thread_context_switches_per_response": [
+                9.803920336746874,
+                10.378537663453864
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12508010864257812,
+                0.12508010864257812
+              ]
+            },
+            "measurement_peak_mib": 108.23828125
+          },
+          {
+            "key": [
+              21,
+              "tls-control",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 5390.833333333334,
+              "p99_ms": 2.348,
+              "cpu_us_per_request": 649.24838053297,
+              "process_write_calls_per_response": 67.97974062299042,
+              "surviving_thread_context_switches_per_response": 10.489255442952036,
+              "buffer_pool_boundary_mib": 0.12508010864257812
+            },
+            "ranges": {
+              "requests_per_second": [
+                5376.0,
+                5405.666666666667
+              ],
+              "p99_ms": [
+                2.306,
+                2.39
+              ],
+              "cpu_us_per_request": [
+                648.561507936508,
+                649.9352531294321
+              ],
+              "process_write_calls_per_response": [
+                67.97175803169513,
+                67.98772321428571
+              ],
+              "surviving_thread_context_switches_per_response": [
+                10.478386877967566,
+                10.500124007936508
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12508010864257812,
+                0.12508010864257812
+              ]
+            },
+            "measurement_peak_mib": 104.25
+          },
+          {
+            "key": [
+              21,
+              "h2-control",
+              "before",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 2535.5,
+              "p99_ms": 4.8260000000000005,
+              "cpu_us_per_request": 2181.14443885369,
+              "process_write_calls_per_response": 130.45864610181792,
+              "surviving_thread_context_switches_per_response": 164.44573573758595,
+              "buffer_pool_boundary_mib": 0.12505722045898438
+            },
+            "ranges": {
+              "requests_per_second": [
+                2497.0,
+                2574.0
+              ],
+              "p99_ms": [
+                4.54,
+                5.112
+              ],
+              "cpu_us_per_request": [
+                2130.2771302771307,
+                2232.011747430249
+              ],
+              "process_write_calls_per_response": [
+                130.38772338772338,
+                130.52956881591243
+              ],
+              "surviving_thread_context_switches_per_response": [
+                160.12548562548562,
+                168.7659858496863
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12505722045898438,
+                0.12505722045898438
+              ]
+            },
+            "measurement_peak_mib": 133.40234375
+          },
+          {
+            "key": [
+              21,
+              "h2-control",
+              "after",
+              "nio"
+            ],
+            "correct": 2,
+            "trials": 2,
+            "valid_performance": 0,
+            "observed": {
+              "requests_per_second": 2503.333333333333,
+              "p99_ms": 4.904,
+              "cpu_us_per_request": 2226.3991776869375,
+              "process_write_calls_per_response": 130.4508851172176,
+              "surviving_thread_context_switches_per_response": 165.3048457896163,
+              "buffer_pool_boundary_mib": 0.12505722045898438
+            },
+            "ranges": {
+              "requests_per_second": [
+                2499.0,
+                2507.6666666666665
+              ],
+              "p99_ms": [
+                4.892,
+                4.916
+              ],
+              "cpu_us_per_request": [
+                2206.5665293101156,
+                2246.2318260637594
+              ],
+              "process_write_calls_per_response": [
+                130.01648278612257,
+                130.88528744831265
+              ],
+              "surviving_thread_context_switches_per_response": [
+                164.06575963718822,
+                166.5439319420444
+              ],
+              "buffer_pool_boundary_mib": [
+                0.12505722045898438,
+                0.12505722045898438
+              ]
+            },
+            "measurement_peak_mib": 128.18359375
+          }
+        ]
+      }
+    }
+  ],
+  "fairness": {
+    "fairness": [
+      {
+        "jdk": 21,
+        "edition": "before",
+        "trials": 2,
+        "median": {
+          "requests_per_second": 1000.1071027169842,
+          "p50_ms": 0.4690400019171648,
+          "p99_ms": 0.7622684970556293,
+          "scheduled_p99_ms": 0.8157554984791204,
+          "dispatch_p99_ms": 0.06662699888693169
+        },
+        "ranges": {
+          "requests_per_second": [
+            1000.1002542503463,
+            1000.1139511836221
+          ],
+          "p50_ms": [
+            0.46576900058425963,
+            0.4723110032500699
+          ],
+          "p99_ms": [
+            0.7609969979966991,
+            0.7635399961145595
+          ],
+          "scheduled_p99_ms": [
+            0.8145870015141554,
+            0.8169239954440854
+          ],
+          "dispatch_p99_ms": [
+            0.06032000237610191,
+            0.07293399539776146
+          ]
+        },
+        "median_background_responses_in_five_seconds": 20118.5
+      },
+      {
+        "jdk": 21,
+        "edition": "after",
+        "trials": 2,
+        "median": {
+          "requests_per_second": 1000.0927465735529,
+          "p50_ms": 0.6745079990650993,
+          "p99_ms": 1.0403585001768079,
+          "scheduled_p99_ms": 1.0972939999192022,
+          "dispatch_p99_ms": 0.10443550127092749
+        },
+        "ranges": {
+          "requests_per_second": [
+            1000.0762312107255,
+            1000.1092619363803
+          ],
+          "p50_ms": [
+            0.6744229976902716,
+            0.674593000439927
+          ],
+          "p99_ms": [
+            1.0205569997197017,
+            1.060160000633914
+          ],
+          "scheduled_p99_ms": [
+            1.0746330008259974,
+            1.119954999012407
+          ],
+          "dispatch_p99_ms": [
+            0.08627799979876727,
+            0.12259300274308771
+          ]
+        },
+        "median_background_responses_in_five_seconds": 20929.5
+      },
+      {
+        "jdk": 25,
+        "edition": "before",
+        "trials": 2,
+        "median": {
+          "requests_per_second": 1000.0834499667258,
+          "p50_ms": 0.4758124996442348,
+          "p99_ms": 0.7181194960139692,
+          "scheduled_p99_ms": 0.781216993345879,
+          "dispatch_p99_ms": 0.06670349830528721
+        },
+        "ranges": {
+          "requests_per_second": [
+            1000.0818240958587,
+            1000.0850758375929
+          ],
+          "p50_ms": [
+            0.47435399756068364,
+            0.4772710017277859
+          ],
+          "p99_ms": [
+            0.7156809951993637,
+            0.7205579968285747
+          ],
+          "scheduled_p99_ms": [
+            0.7740249930066057,
+            0.7884089936851524
+          ],
+          "dispatch_p99_ms": [
+            0.06067399954190478,
+            0.07273299706866965
+          ]
+        },
+        "median_background_responses_in_five_seconds": 19579.5
+      },
+      {
+        "jdk": 25,
+        "edition": "after",
+        "trials": 2,
+        "median": {
+          "requests_per_second": 1000.0462651130292,
+          "p50_ms": 0.6969444984861184,
+          "p99_ms": 1.0283545016136486,
+          "scheduled_p99_ms": 1.0919369997282047,
+          "dispatch_p99_ms": 0.09799699910217896
+        },
+        "ranges": {
+          "requests_per_second": [
+            1000.0269537271173,
+            1000.0655764989413
+          ],
+          "p50_ms": [
+            0.6956229990464635,
+            0.6982659979257733
+          ],
+          "p99_ms": [
+            1.0255550005240366,
+            1.0311540027032606
+          ],
+          "scheduled_p99_ms": [
+            1.090969002689235,
+            1.0929049967671745
+          ],
+          "dispatch_p99_ms": [
+            0.09794899960979819,
+            0.09804499859455973
+          ]
+        },
+        "median_background_responses_in_five_seconds": 20528.0
+      }
+    ],
+    "reusable-fairness": [
+      {
+        "jdk": 21,
+        "edition": "before",
+        "trials": 1,
+        "median": {
+          "requests_per_second": 1000.0986439294865,
+          "p50_ms": 0.46945099893491715,
+          "p99_ms": 0.7741029985481873,
+          "scheduled_p99_ms": 0.828869997349102,
+          "dispatch_p99_ms": 0.060917001974303275
+        },
+        "ranges": {
+          "requests_per_second": [
+            1000.0986439294865,
+            1000.0986439294865
+          ],
+          "p50_ms": [
+            0.46945099893491715,
+            0.46945099893491715
+          ],
+          "p99_ms": [
+            0.7741029985481873,
+            0.7741029985481873
+          ],
+          "scheduled_p99_ms": [
+            0.828869997349102,
+            0.828869997349102
+          ],
+          "dispatch_p99_ms": [
+            0.060917001974303275,
+            0.060917001974303275
+          ]
+        },
+        "median_background_responses_in_five_seconds": 19913
+      },
+      {
+        "jdk": 21,
+        "edition": "after",
+        "trials": 1,
+        "median": {
+          "requests_per_second": 1000.028167992757,
+          "p50_ms": 0.6580339977517724,
+          "p99_ms": 1.0155759955523536,
+          "scheduled_p99_ms": 1.085508003598079,
+          "dispatch_p99_ms": 0.09516200225334615
+        },
+        "ranges": {
+          "requests_per_second": [
+            1000.028167992757,
+            1000.028167992757
+          ],
+          "p50_ms": [
+            0.6580339977517724,
+            0.6580339977517724
+          ],
+          "p99_ms": [
+            1.0155759955523536,
+            1.0155759955523536
+          ],
+          "scheduled_p99_ms": [
+            1.085508003598079,
+            1.085508003598079
+          ],
+          "dispatch_p99_ms": [
+            0.09516200225334615,
+            0.09516200225334615
+          ]
+        },
+        "median_background_responses_in_five_seconds": 20983
+      },
+      {
+        "jdk": 25,
+        "edition": "before",
+        "trials": 1,
+        "median": {
+          "requests_per_second": 1000.10045128935,
+          "p50_ms": 0.4703230006271042,
+          "p99_ms": 0.7016269955784082,
+          "scheduled_p99_ms": 0.7662590069230646,
+          "dispatch_p99_ms": 0.0723510020179674
+        },
+        "ranges": {
+          "requests_per_second": [
+            1000.10045128935,
+            1000.10045128935
+          ],
+          "p50_ms": [
+            0.4703230006271042,
+            0.4703230006271042
+          ],
+          "p99_ms": [
+            0.7016269955784082,
+            0.7016269955784082
+          ],
+          "scheduled_p99_ms": [
+            0.7662590069230646,
+            0.7662590069230646
+          ],
+          "dispatch_p99_ms": [
+            0.0723510020179674,
+            0.0723510020179674
+          ]
+        },
+        "median_background_responses_in_five_seconds": 20025
+      },
+      {
+        "jdk": 25,
+        "edition": "after",
+        "trials": 1,
+        "median": {
+          "requests_per_second": 1000.0407768625711,
+          "p50_ms": 0.6954249984119087,
+          "p99_ms": 1.046213998051826,
+          "scheduled_p99_ms": 1.1048659944208339,
+          "dispatch_p99_ms": 0.10992099851137027
+        },
+        "ranges": {
+          "requests_per_second": [
+            1000.0407768625711,
+            1000.0407768625711
+          ],
+          "p50_ms": [
+            0.6954249984119087,
+            0.6954249984119087
+          ],
+          "p99_ms": [
+            1.046213998051826,
+            1.046213998051826
+          ],
+          "scheduled_p99_ms": [
+            1.1048659944208339,
+            1.1048659944208339
+          ],
+          "dispatch_p99_ms": [
+            0.10992099851137027,
+            0.10992099851137027
+          ]
+        },
+        "median_background_responses_in_five_seconds": 20475
+      }
+    ]
+  },
+  "validation": {
+    "native_trials": 128,
+    "native_measured_responses": 10322383,
+    "fairness_trials": 12,
+    "foreground_verified_responses": 60000,
+    "intentional_cleanup_trials": 1,
+    "audit_checks": 2275,
+    "jvm_units_inactive": 141,
+    "generator_lifecycles_reaped": 141,
+    "restored_build": {
+      "passed": true,
+      "production_classes": 603,
+      "source_sha256": "338f15eafccd642392b832d2c11941bc3a2eefae35549f96efe27e90e8a4034a",
+      "baseline_commit": "e78fe2e8f3dbed6083a73bae7c8dc215f5e49799"
+    }
+  },
+  "evidence_root": "nonblocking-validation/eight-experiments-20261020 beside the checkout"
+}
