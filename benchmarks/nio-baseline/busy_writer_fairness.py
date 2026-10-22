@@ -31,6 +31,7 @@ def options():
     parser.add_argument('--background-clients', type=int, default=8)
     parser.add_argument('--foreground-rps', type=int, default=1000)
     parser.add_argument('--nio-threads', type=int, default=1)
+    parser.add_argument('--protocol', choices=('http1', 'https1'), default='http1')
     parser.add_argument('--server-cpus', default='0-3,8-11')
     parser.add_argument('--generator-cpus', default='4-7,12-15')
     args = parser.parse_args()
@@ -76,24 +77,27 @@ def trial(c, tool, inputs, directory, jdk, edition, repeat, args):
     fixture = generator = log = None
     try:
         mode = 'PLATFORM' if jdk == 21 else 'VIRTUAL'
-        fixture = c.Server(inputs, directory, 'nio', 'http1', jdk_version=jdk,
+        fixture = c.Server(inputs, directory, 'nio', args.protocol, jdk_version=jdk,
                            java_options=[f'-Dcomparison.threading={mode}',
                                          f'-Dcomparison.nioThreads={args.nio_threads}'])
         fixture.ready()
         port = fixture.record['ready']['port']
-        with c.Wire(port) as wire:
+        secure = args.protocol == 'https1'
+        bulk_case = b.case('tlsbulk' if secure else 'h1bulk')
+        with c.Wire(port, tls=secure, alpn=['http/1.1']) as wire:
             wire.send(c.request('/mode'))
             reply = wire.response()
             assert reply['status'] == 200 and reply['body_preview'] == b.expected_mode('nio', jdk)
         fixture.record['mode_check'] = reply['body_preview']
-        row['bulk_probe_before'] = c.check(fixture, b.case('h1bulk'), inputs)
+        row['bulk_probe_before'] = c.check(fixture, bulk_case, inputs)
         command = [
             'taskset', '-c', c.GENERATOR_CPUS, str(tool),
             '-c', str(args.background_clients), '-t', str(min(4, args.background_clients)),
             '-m', '1', '-D', f'{args.warmup + args.duration + 6}s', '--warm-up-time', '1s',
-            '-N', '5s', '--h1', '--output-file', str(directory / 'background.json'),
+            '-N', '5s', '--h1', '--tls13-ciphers=TLS_AES_128_GCM_SHA256',
+            '-H', 'accept-encoding: identity', '--output-file', str(directory / 'background.json'),
             '--log-file', str(directory / 'background.tsv'),
-            f'http://127.0.0.1:{port}/download?size=1048576&compressibility=high']
+            f'{"https" if secure else "http"}://127.0.0.1:{port}/download?size=1048576&compressibility=high']
         row['background_command'] = command
         log = (directory / 'background.log').open('w')
         generator = c.subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
@@ -103,7 +107,7 @@ def trial(c, tool, inputs, directory, jdk, edition, repeat, args):
             assert generator.poll() is None and time.monotonic() < deadline
             time.sleep(.01)
         expected = hashlib.sha256(c.payload(inputs, 128)).hexdigest()
-        with c.Wire(port, timeout=args.warmup + args.duration + 15) as wire:
+        with c.Wire(port, tls=secure, alpn=['http/1.1'], timeout=args.warmup + args.duration + 15) as wire:
             fixture.phase = 'warmup'
             paced(c, wire, expected, args.warmup, args.foreground_rps)
             fixture.phase = 'measurement'
@@ -120,7 +124,7 @@ def trial(c, tool, inputs, directory, jdk, edition, repeat, args):
         assert generator.wait(timeout=args.warmup + args.duration + 15) == 0
         raw = b.read(directory / 'background.json')['measurements']
         audit = c.audit_requests(directory / 'background.tsv')
-        background_case = dict(b.case('h1bulk'), clients=args.background_clients)
+        background_case = dict(bulk_case, clients=args.background_clients)
         row['background_warmup_carryover'] = c.reconcile_native(audit, raw['requests'], background_case)
         assert raw['requests']['failed'] == raw['requests']['errored'] == raw['requests']['timeout'] == 0
         start = samples['epoch'] * 1e6
@@ -146,7 +150,7 @@ def trial(c, tool, inputs, directory, jdk, edition, repeat, args):
             dispatch_p99_ms=percentile(observations, 'dispatch_lateness_ms', .99),
             max_ms=max(sample['latency_ms'] for sample in observations))
         fixture.phase = 'recovery'
-        row['bulk_probe_after'] = c.check(fixture, b.case('h1bulk'), inputs)
+        row['bulk_probe_after'] = c.check(fixture, bulk_case, inputs)
         row['recovered'] = fixture.stats()
         assert row['measurement']['requests_per_second'] > args.foreground_rps * .98
         row['outcome'] = 'pass'

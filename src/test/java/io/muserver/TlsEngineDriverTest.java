@@ -29,6 +29,128 @@ import static org.junit.jupiter.api.Assertions.*;
 
 @Timeout(30)
 class TlsEngineDriverTest {
+    @ParameterizedTest @ValueSource(strings = {"TLSv1.2", "TLSv1.3"})
+    void renegotiationOrKeyUpdateCanFollowAnUndrainedCiphertextBatch(String protocol) throws Exception {
+        try (var pair = new Pair(protocol, 97, false, false)) {
+            pair.handshake();
+            byte[] expected = new byte[100000];
+            new Random(562).nextBytes(expected);
+            ByteBuffer source = ByteBuffer.wrap(expected);
+            assertEquals(0, pair.server.writePlaintext(source));
+            assertTrue(pair.server.encryptedOutputSize() > 32768);
+            pair.serverEngine.beginHandshake();
+            pair.until(() -> !source.hasRemaining() && pair.clientReceived.size() == expected.length,
+                () -> pair.server.writePlaintext(source));
+            assertArrayEquals(expected, pair.clientReceived.toByteArray());
+            // Receiving the old batch alone can finish before the peer processes the
+            // renegotiation/KeyUpdate. Require the transition and subsequent traffic too.
+            pair.until(() -> !pair.client.tasksPending() && !pair.server.tasksPending()
+                && pair.clientEngine.getHandshakeStatus() == javax.net.ssl.SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING
+                && pair.serverEngine.getHandshakeStatus() == javax.net.ssl.SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING
+                && pair.client.encryptedOutputSize() == 0 && pair.server.encryptedOutputSize() == 0, () -> { });
+            ByteBuffer request = ByteBuffer.wrap(new byte[]{1, 2, 3});
+            ByteBuffer response = ByteBuffer.wrap(new byte[]{4, 5, 6});
+            pair.until(() -> !request.hasRemaining() && !response.hasRemaining()
+                && pair.serverReceived.size() == 3 && pair.clientReceived.size() == expected.length + 3, () -> {
+                if (request.hasRemaining()) pair.client.writePlaintext(request);
+                if (response.hasRemaining()) pair.server.writePlaintext(response);
+            });
+            assertArrayEquals(new byte[]{1, 2, 3}, pair.serverReceived.toByteArray());
+            assertArrayEquals(new byte[]{4, 5, 6}, java.util.Arrays.copyOfRange(
+                pair.clientReceived.toByteArray(), expected.length, expected.length + 3));
+        }
+    }
+
+    @Test void failedSocketWriteReturnsTheCiphertextBatchWithoutAcknowledgingItsPlaintext() throws Exception {
+        try (var pair = new Pair("TLSv1.3", 4096, false, false)) {
+            pair.handshake();
+            ByteBuffer source = ByteBuffer.allocate(65536);
+            pair.server.writePlaintext(source);
+            assertNull(pair.serverOutputBuffers.acquire());
+            var cause = new IOException("Partial network write failed");
+            assertSame(cause, assertThrows(IOException.class, () -> pair.server.drainEncryptedTo(new Channel(bytes -> {
+                bytes.get(); throw cause;
+            }), 17)));
+            assertEquals(0, pair.server.encryptedOutputSize());
+            assertEquals(0, source.position());
+            assertSame(cause, assertThrows(IOException.class, () -> pair.server.writePlaintext(source)));
+            ByteBuffer lease = pair.serverOutputBuffers.acquire();
+            assertNotNull(lease); pair.serverOutputBuffers.release(lease);
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"TLSv1.2,false", "TLSv1.2,true", "TLSv1.3,false", "TLSv1.3,true"})
+    void coalescedRecordsRetainTheSourceUntilTheLastCiphertextByte(String protocol, boolean direct) throws Exception {
+        try (var pair = new Pair(protocol, 97, false, false)) {
+            pair.handshake();
+            byte[] expected = new byte[65536];
+            new Random(529).nextBytes(expected);
+            ByteBuffer storage = direct ? ByteBuffer.allocateDirect(expected.length + 11) : ByteBuffer.allocate(expected.length + 11);
+            storage.position(7).put(expected).flip().position(7);
+            ByteBuffer source = storage.asReadOnlyBuffer();
+            var output = new TransportOutputBuffer(8201, 65536, () -> {});
+            var progress = new TransportWriteProgress(() -> {});
+            var write = output.asynchronousWriter().write(source, progress);
+            var sink = new Channel(pair.server::writePlaintext);
+            assertEquals(0, output.drainTo(sink, 65536));
+            int packet = pair.server.encryptedOutputSize();
+            assertTrue(packet > 3 * 16384, "Several records must share the ciphertext batch");
+            assertNull(pair.serverOutputBuffers.acquire(), "A stalled batch holds the only shared lease");
+            ByteArrayOutputStream ciphertext = new ByteArrayOutputStream();
+            var channel = new Channel(bytes -> {
+                byte[] part = new byte[bytes.remaining()];
+                bytes.get(part); ciphertext.write(part); return part.length;
+            });
+            assertEquals(0, pair.server.drainEncryptedTo(new Channel(bytes -> 0), packet));
+            assertEquals(packet - 1, pair.server.drainEncryptedTo(channel, packet - 1));
+            assertEquals(0, output.drainTo(sink, 1));
+            assertFalse(progress.reached(1));
+            assertNull(pair.serverOutputBuffers.acquire());
+            assertEquals(1, pair.server.drainEncryptedTo(channel, 1));
+            ByteBuffer returned = pair.serverOutputBuffers.acquire();
+            assertNotNull(returned, "Ciphertext drainage releases the lease before plaintext acknowledgement");
+            returned.clear().put((byte) 99).flip(); // Another connection may already be using the lease.
+            pair.serverOutputBuffers.release(returned);
+            assertEquals(1, output.drainTo(sink, 1));
+            assertTrue(progress.reached(1));
+            assertFalse(write.isDone());
+            ByteBuffer encrypted = ByteBuffer.wrap(ciphertext.toByteArray());
+            int[] budgets = {3, 65536, 1, 8192, 97};
+            int[] turn = {0};
+            pair.until(() -> write.isDone() && pair.clientReceived.size() == expected.length, () -> {
+                // Deliver the captured prefix before allowing the final record onto the wire.
+                if (encrypted.hasRemaining()) pair.client.receive(encrypted);
+                else output.drainTo(sink, budgets[turn[0]++ % budgets.length]);
+            });
+            write.get();
+            assertArrayEquals(expected, pair.clientReceived.toByteArray());
+            assertEquals(7, source.position());
+            assertEquals(0, pair.server.encryptedOutputSize());
+        }
+    }
+
+    @Test
+    void busySharedCiphertextStorageFallsBackToTheConnectionBufferAndAbortReturnsItsLease() throws Exception {
+        try (var pair = new Pair("TLSv1.3", 4096, false, false)) {
+            pair.handshake();
+            ByteBuffer lease = pair.serverOutputBuffers.acquire();
+            assertNotNull(lease);
+            ByteBuffer source = ByteBuffer.wrap(new byte[65536]);
+            pair.server.writePlaintext(source);
+            assertTrue(pair.server.encryptedOutputSize() <= pair.server.session().getPacketBufferSize());
+            pair.serverOutputBuffers.release(lease);
+            pair.until(() -> source.position() > 0, () -> pair.server.writePlaintext(source));
+            pair.server.writePlaintext(source);
+            assertNull(pair.serverOutputBuffers.acquire());
+            pair.server.abort(new IOException("Cancel while the coalesced ciphertext is stalled"));
+            lease = pair.serverOutputBuffers.acquire();
+            assertNotNull(lease);
+            pair.serverOutputBuffers.release(lease);
+            assertThrows(IOException.class, () -> pair.server.writePlaintext(source));
+        }
+    }
+
     @ParameterizedTest
     @CsvSource({"TLSv1.2,1", "TLSv1.2,4096", "TLSv1.3,1", "TLSv1.3,4096"})
     void fragmentedMutualTlsNegotiatesMetadataAndExchangesBothDirections(String protocol, int fragment) throws Exception {
@@ -352,6 +474,7 @@ class TlsEngineDriverTest {
         final Semaphore ready = new Semaphore(0);
         final TlsEngineDriver client;
         final TlsEngineDriver server;
+        final TlsOutputBufferPool serverOutputBuffers = new TlsOutputBufferPool();
         final SSLEngine clientEngine;
         final SSLEngine serverEngine;
         final ByteArrayOutputStream clientReceived = new ByteArrayOutputStream();
@@ -375,7 +498,8 @@ class TlsEngineDriverTest {
             clientEngine.setSSLParameters(parameters);
             client = new TlsEngineDriver(clientEngine, tasks, ready::release);
             serverEngine = serverConfig.createEngine(true);
-            server = new TlsEngineDriver(serverEngine, tasks, ready::release);
+            server = new TlsEngineDriver(serverEngine, tasks, ready::release,
+                TlsEngineDriver.DEFAULT_MAX_BUFFER_SIZE, serverOutputBuffers);
         }
 
         static SSLContext clientContext(boolean provideClientCertificate) throws Exception {

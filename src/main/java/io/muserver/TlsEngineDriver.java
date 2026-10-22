@@ -23,9 +23,11 @@ import java.util.concurrent.RejectedExecutionException;
  * Delegated tasks run on a separate executor. No engine method is called while that batch runs.
  * The continuation only schedules transport work and must not block, throw, or call this driver.
  *
- * <p>Three bounded buffers own encrypted input, encrypted output, and decoded plaintext. A caller
- * must drain plaintext before another unwrap. Output may remain stalled while input progresses.
- * Application writes acknowledge plaintext only after its encrypted record has drained.</p>
+ * <p>Three bounded per-connection buffers own encrypted input, encrypted output, and decoded
+ * plaintext. Application output may borrow one larger owner-shared buffer to combine at most
+ * eight ready records. A caller must drain plaintext before another unwrap. Output may remain
+ * stalled while input progresses. Application writes acknowledge plaintext only after all its
+ * corresponding ciphertext has drained.</p>
  */
 final class TlsEngineDriver {
     static final int DEFAULT_MAX_BUFFER_SIZE = 256 * 1024;
@@ -34,6 +36,8 @@ final class TlsEngineDriver {
     private final Executor taskExecutor;
     private final Runnable continuation;
     private final int maxBufferSize;
+    private final @Nullable TlsOutputBufferPool outputBuffers;
+    private @Nullable ByteBuffer singleRecordOutput;
     private ByteBuffer encryptedInput; // write mode
     private ByteBuffer encryptedOutput; // read mode
     private ByteBuffer plaintext; // read mode
@@ -59,11 +63,17 @@ final class TlsEngineDriver {
     }
 
     TlsEngineDriver(SSLEngine engine, Executor taskExecutor, Runnable continuation, int maxBufferSize) throws SSLException {
+        this(engine, taskExecutor, continuation, maxBufferSize, null);
+    }
+
+    TlsEngineDriver(SSLEngine engine, Executor taskExecutor, Runnable continuation, int maxBufferSize,
+                    @Nullable TlsOutputBufferPool outputBuffers) throws SSLException {
         if (maxBufferSize < 1) throw new IllegalArgumentException("Positive TLS buffer bound required");
         this.engine = engine;
         this.taskExecutor = taskExecutor;
         this.continuation = continuation;
         this.maxBufferSize = maxBufferSize;
+        this.outputBuffers = outputBuffers;
         session = engine.getSession();
         encryptedInput = ByteBuffer.allocate(initialSize(session.getPacketBufferSize()));
         encryptedOutput = ByteBuffer.allocate(encryptedInput.capacity()).flip();
@@ -135,7 +145,10 @@ final class TlsEngineDriver {
         } catch (IOException | RuntimeException error) {
             restoreLimit = false;
             throw aborted(error);
-        } finally { if (restoreLimit) encryptedOutput.limit(limit); }
+        } finally {
+            if (restoreLimit) encryptedOutput.limit(limit);
+            if (!encryptedOutput.hasRemaining()) releaseOutputBatch();
+        }
     }
 
     int readPlaintext(ByteBuffer target) throws IOException {
@@ -148,6 +161,7 @@ final class TlsEngineDriver {
     /**
      * The caller retains its unconsumed prefix until a positive acknowledgement is returned. Wrapping
      * uses a duplicate: even consumed plaintext does not advance source until ciphertext drains.
+     * At most eight record wraps share one bounded call; handshake transitions stop that batch.
      * No reference to source or its storage is retained between calls. Suitable as the sink behind
      * TransportOutputBuffer; the same queued prefix must be supplied on each retry.
      */
@@ -166,9 +180,56 @@ final class TlsEngineDriver {
             if (!handshakeComplete || tasks != null || stalledWrite || encryptedOutput.hasRemaining()
                 || engine.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING
                 || !source.hasRemaining()) return 0;
-            wrap(source.duplicate(), true);
+            if (!wrapBatch(source)) wrap(source.duplicate(), true);
             return 0;
         } catch (IOException | RuntimeException error) { throw failed(error); }
+    }
+
+    /** Coalesce only already available plaintext, without enlarging every connection's buffers. */
+    private boolean wrapBatch(ByteBuffer source) throws SSLException {
+        if (outputBuffers == null || maxBufferSize < TlsOutputBufferPool.CAPACITY
+            || source.remaining() <= session.getApplicationBufferSize()
+            || session.getPacketBufferSize() > TlsOutputBufferPool.CAPACITY) return false;
+        ByteBuffer batch = outputBuffers.acquire();
+        if (batch == null) return false; // A stalled peer can retain only this owner's one lease.
+        singleRecordOutput = encryptedOutput;
+        encryptedOutput = batch;
+        ByteBuffer input = source.duplicate();
+        input.limit(input.position() + Math.min(input.remaining(), TlsOutputBufferPool.PLAINTEXT_BYTES));
+        boolean overflow = false;
+        for (int records = 0; records < 8; records++) {
+            SSLEngineResult.HandshakeStatus before = engine.getHandshakeStatus();
+            if (before != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING || outboundDone
+                || !input.hasRemaining() || batch.capacity() - batch.limit() < session.getPacketBufferSize()) break;
+            batch.position(batch.limit()).limit(batch.capacity());
+            SSLEngineResult result;
+            try { result = engine.wrap(input, batch); }
+            finally { batch.flip(); }
+            boolean progress = recordResult(result, before);
+            if (result.bytesConsumed() > 0) {
+                if (result.bytesProduced() == 0) throw new SSLException("TLS consumed plaintext without producing a record");
+                unacknowledgedPlaintext += result.bytesConsumed();
+            }
+            if (result.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
+                throw new SSLException("TLS wrap returned buffer underflow");
+            }
+            overflow = result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW;
+            if (!progress && !overflow) stalledWrite = true;
+            if (result.getStatus() != SSLEngineResult.Status.OK || !progress || result.bytesConsumed() == 0) break;
+        }
+        if (batch.hasRemaining()) return true;
+        // An unusual provider may require more space or a handshake transition. Let the
+        // ordinary single-record path retain its existing overflow/progress handling.
+        releaseOutputBatch();
+        return !overflow || engine.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING;
+    }
+
+    private void releaseOutputBatch() {
+        ByteBuffer ordinary = singleRecordOutput;
+        if (ordinary == null) return;
+        java.util.Objects.requireNonNull(outputBuffers).release(encryptedOutput);
+        encryptedOutput = ordinary;
+        singleRecordOutput = null;
     }
 
     /** Request an orderly outbound close after any already-wrapped plaintext is acknowledged. */
@@ -421,6 +482,7 @@ final class TlsEngineDriver {
         encryptedInput.clear();
         plaintext.clear().flip();
         unacknowledgedPlaintext = 0;
+        if (!encryptedOutput.hasRemaining()) releaseOutputBatch();
         revision++;
         return failure;
     }
@@ -428,6 +490,7 @@ final class TlsEngineDriver {
     private IOException aborted(Throwable cause) {
         IOException reason = failed(cause);
         encryptedOutput.clear().flip();
+        releaseOutputBatch();
         failureCloseFinished = true;
         return reason;
     }

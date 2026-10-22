@@ -29,6 +29,141 @@ import static org.junit.jupiter.api.Assertions.*;
 @Timeout(10)
 class TlsEngineDriverEdgeTest {
     @Test
+    void emptyBatchOverflowFallsBackToOrdinaryGrowthWithoutStallingTheWriter() throws Exception {
+        var engine = new Engine(NEED_WRAP);
+        var pool = new TlsOutputBufferPool();
+        var driver = new TlsEngineDriver(engine, task -> fail("Unexpected task"), () -> {},
+            TlsEngineDriver.DEFAULT_MAX_BUFFER_SIZE, pool);
+        engine.wraps.add((src, dst) -> engine.result(OK, FINISHED, 0, 0));
+        driver.advance();
+        engine.wraps.add((src, dst) -> {
+            assertEquals(TlsOutputBufferPool.CAPACITY, dst.remaining());
+            return engine.result(BUFFER_OVERFLOW, NOT_HANDSHAKING, 0, 0);
+        });
+        engine.wraps.add((src, dst) -> {
+            assertEquals(4, dst.remaining());
+            return engine.result(BUFFER_OVERFLOW, NOT_HANDSHAKING, 0, 0);
+        });
+        ByteBuffer source = ByteBuffer.allocate(10);
+        long before = driver.revision();
+        assertEquals(0, driver.writePlaintext(source));
+        assertTrue(driver.revision() > before, "Buffer growth must reschedule transport progression");
+        ByteBuffer lease = pool.acquire();
+        assertNotNull(lease); pool.release(lease);
+        engine.wraps.add((src, dst) -> { dst.put(src); return engine.result(OK, NOT_HANDSHAKING, 10, 10); });
+        assertEquals(0, driver.writePlaintext(source));
+        assertEquals(10, driver.encryptedOutputSize());
+        driver.abort(new IOException("Finished"));
+        lease = pool.acquire(); assertNotNull(lease); pool.release(lease);
+    }
+
+    @Test
+    void failureBeforeTheFirstCoalescedRecordReturnsTheUnusedLease() throws Exception {
+        var engine = new Engine(NEED_WRAP);
+        var pool = new TlsOutputBufferPool();
+        var driver = new TlsEngineDriver(engine, task -> fail("Unexpected task"), () -> {},
+            TlsEngineDriver.DEFAULT_MAX_BUFFER_SIZE, pool);
+        engine.wraps.add((src, dst) -> engine.result(OK, FINISHED, 0, 0));
+        driver.advance();
+        engine.wraps.add((src, dst) -> { throw new SSLException("No record produced"); });
+        assertThrows(SSLException.class, () -> driver.writePlaintext(ByteBuffer.allocate(10)));
+        ByteBuffer lease = pool.acquire();
+        assertNotNull(lease); pool.release(lease);
+        assertTrue(driver.advanceFailureClose());
+    }
+
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void coalescingStopsOnProviderStallOrOverflowWithoutDiscardingItsPrefix(boolean overflow) throws Exception {
+        var engine = new Engine(NEED_WRAP);
+        var pool = new TlsOutputBufferPool();
+        var driver = new TlsEngineDriver(engine, task -> fail("Unexpected task"), () -> {},
+            TlsEngineDriver.DEFAULT_MAX_BUFFER_SIZE, pool);
+        engine.wraps.add((src, dst) -> engine.result(OK, FINISHED, 0, 0));
+        driver.advance();
+        engine.wraps.add((src, dst) -> { dst.put(src.get()); return engine.result(OK, NOT_HANDSHAKING, 1, 1); });
+        engine.wraps.add((src, dst) -> engine.result(overflow ? BUFFER_OVERFLOW : OK, NOT_HANDSHAKING, 0, 0));
+        ByteBuffer source = ByteBuffer.wrap(new byte[]{9, 8, 7, 6, 5, 4});
+        assertEquals(0, driver.writePlaintext(source));
+        assertEquals(1, driver.encryptedOutputSize());
+        assertEquals(0, source.position());
+        assertTrue(engine.wraps.isEmpty());
+        assertNull(pool.acquire());
+        assertEquals(1, driver.drainEncryptedTo(new TlsEngineDriverTest.Channel(bytes -> {
+            assertEquals(9, bytes.get()); return 1;
+        }), 1));
+        ByteBuffer lease = pool.acquire();
+        assertNotNull(lease); pool.release(lease);
+        assertEquals(1, driver.writePlaintext(source));
+    }
+
+    @Test
+    void emptyCoalescingStallDoesNotRetryTheEngineAndReturnsTheLease() throws Exception {
+        var engine = new Engine(NEED_WRAP);
+        var pool = new TlsOutputBufferPool();
+        var driver = new TlsEngineDriver(engine, task -> fail("Unexpected task"), () -> {},
+            TlsEngineDriver.DEFAULT_MAX_BUFFER_SIZE, pool);
+        engine.wraps.add((src, dst) -> engine.result(OK, FINISHED, 0, 0));
+        driver.advance();
+        engine.wraps.add((src, dst) -> engine.result(OK, NOT_HANDSHAKING, 0, 0));
+        ByteBuffer source = ByteBuffer.allocate(10);
+        for (int i = 0; i < 100; i++) assertEquals(0, driver.writePlaintext(source));
+        assertTrue(engine.wraps.isEmpty());
+        ByteBuffer lease = pool.acquire();
+        assertNotNull(lease); pool.release(lease);
+    }
+
+    @Test
+    void coalescingStopsBeforeADelegatedTaskAndRetainsCiphertextAcrossThatTask() throws Exception {
+        var engine = new Engine(NEED_WRAP);
+        var pool = new TlsOutputBufferPool();
+        var tasks = new ArrayDeque<Runnable>();
+        var driver = new TlsEngineDriver(engine, tasks::add, () -> {},
+            TlsEngineDriver.DEFAULT_MAX_BUFFER_SIZE, pool);
+        engine.wraps.add((src, dst) -> engine.result(OK, FINISHED, 0, 0));
+        driver.advance();
+        engine.wraps.add((src, dst) -> { dst.put(src.get()); return engine.result(OK, NEED_TASK, 1, 1); });
+        engine.delegates.add(() -> engine.handshake = NOT_HANDSHAKING);
+        ByteBuffer source = ByteBuffer.allocate(10);
+        assertEquals(0, driver.writePlaintext(source));
+        assertTrue(driver.advance());
+        int calls = engine.calls;
+        assertEquals(0, driver.writePlaintext(source));
+        assertFalse(driver.advance());
+        assertEquals(calls, engine.calls);
+        assertNull(pool.acquire());
+        tasks.remove().run();
+        driver.advance();
+        driver.drainEncryptedTo(new TlsEngineDriverTest.Channel(bytes -> { bytes.get(); return 1; }), 1);
+        assertEquals(1, driver.writePlaintext(source));
+        ByteBuffer lease = pool.acquire();
+        assertNotNull(lease); pool.release(lease);
+    }
+
+    @Test
+    void failureInALaterCoalescedRecordPreservesItsPrefixUntilAlertDrainOrAbort() throws Exception {
+        var engine = new Engine(NEED_WRAP);
+        var pool = new TlsOutputBufferPool();
+        var driver = new TlsEngineDriver(engine, task -> fail("Unexpected task"), () -> {},
+            TlsEngineDriver.DEFAULT_MAX_BUFFER_SIZE, pool);
+        engine.wraps.add((src, dst) -> engine.result(OK, FINISHED, 0, 0));
+        driver.advance();
+        engine.wraps.add((src, dst) -> { dst.put(src.get()); return engine.result(OK, NOT_HANDSHAKING, 1, 1); });
+        engine.wraps.add((src, dst) -> { throw new SSLException("Later record failed"); });
+        ByteBuffer source = ByteBuffer.allocate(10);
+        assertThrows(SSLException.class, () -> driver.writePlaintext(source));
+        assertEquals(0, source.position());
+        assertEquals(1, driver.encryptedOutputSize());
+        assertNull(pool.acquire());
+        assertFalse(driver.advanceFailureClose());
+        driver.drainFailureTo(new TlsEngineDriverTest.Channel(bytes -> { bytes.get(); return 1; }), 1);
+        ByteBuffer lease = pool.acquire();
+        assertNotNull(lease); pool.release(lease);
+        assertThrows(SSLException.class, () -> driver.writePlaintext(source));
+        driver.abort(new IOException("Finished"));
+    }
+
+    @Test
     void outputOverflowGrowsEvenWhenTheProviderSizeHintDoesNotChange() throws Exception {
         var engine = new Engine(NEED_WRAP);
         engine.wraps.add((src, dst) -> {

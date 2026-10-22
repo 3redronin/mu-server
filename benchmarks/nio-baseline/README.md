@@ -4,6 +4,11 @@ Compare Mu3/Netty, pre-migration Mu4-blocking and optimized Mu4-NIO with one
 application fixture, source/class/dependency inventories and a native h2load
 generator. Production code and public async queue policy are outside this runner.
 
+The [23 October deep-profile investigation](deep-profile-20261023.md) uses a
+separate bounded async fixture to diagnose socket and HTTP/2 handoff costs,
+compare TLS batching, and test fairness. Its selected change and three-way
+results are recorded separately from the original workloads below.
+
 The short profile checks that the comparison works while the host is in use.
 Every busy-host or smoke measurement is explicitly excluded from performance
 conclusions, even when its correctness checks pass. Raw throughput, latency and

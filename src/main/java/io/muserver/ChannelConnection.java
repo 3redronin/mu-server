@@ -22,11 +22,10 @@ final class ChannelConnection implements ConnectionTransport {
     private static final int BUFFER_SIZE = 8192;
     // Preserve the blocking bridge's ring size; async output no longer copies through it.
     private static final int OUTPUT_BUFFER_SIZE = BUFFER_SIZE + Http2FrameHeader.FRAME_HEADER_LENGTH;
-    // Async sources are borrowed, so a full render turn/default DATA frame needs no larger ring.
-    private static final int TLS_ASYNC_WRITE_BUDGET = 16_384 + Http2FrameHeader.FRAME_HEADER_LENGTH;
-    // A TLS record includes framing/tag bytes in addition to its plaintext. Let an
-    // ordinary record drain in one bounded call rather than splitting off its trailer.
-    private static final int ENCRYPTED_WRITE_BUDGET = 64 * 1024;
+    // TLS can combine ready records in one owner-shared buffer without growing the output ring.
+    private static final int TLS_ASYNC_WRITE_BUDGET = TlsOutputBufferPool.PLAINTEXT_BYTES;
+    // Include record framing/tags so one ciphertext batch can drain in one bounded call.
+    private static final int ENCRYPTED_WRITE_BUDGET = TlsOutputBufferPool.CAPACITY;
     private static final int TURN_LIMIT = 16;
     private static final int PLAINTEXT_VISIT_BUDGET = TURN_LIMIT * OUTPUT_BUFFER_SIZE;
     // One plain write may use the remaining visit allowance without growing the output ring.
@@ -129,7 +128,7 @@ final class ChannelConnection implements ConnectionTransport {
                 if (proxyComplete) beginProtocolSetup();
             }
             boolean progress = false;
-            // Larger borrowed writes must not double one owner's plaintext service quantum.
+            // Coalescing writes must not enlarge one connection's plaintext service quantum.
             remainingWriteBudget = PLAINTEXT_VISIT_BUDGET;
             for (int turn = 0; turn < TURN_LIMIT && remainingWriteBudget > 0; turn++) {
                 progress = advance();
@@ -240,6 +239,9 @@ final class ChannelConnection implements ConnectionTransport {
                 int written = output.drainTo(tls == null ? channel : tlsSink,
                     Math.min(asyncWriteBudget(), remainingWriteBudget));
                 remainingWriteBudget -= written;
+                // Yield after a large TLS batch drains. Spending the tiny remainder of this
+                // visit can manufacture an extra small record instead of a full next batch.
+                if (tls != null && written >= TLS_ASYNC_WRITE_BUDGET / 2) remainingWriteBudget = 0;
                 if (written > 0) { networkProgress(); progress = true; }
                 // Wrapping can produce output without acknowledging plaintext yet.
                 if (tls != null && tls.revision() != beforeWrite) progress = true;
@@ -266,7 +268,8 @@ final class ChannelConnection implements ConnectionTransport {
         if (proxy != null) setupDeadline = System.nanoTime() + SETUP_TIMEOUT_NANOS;
         HttpsConfig config = loop.acceptor.httpsConfig();
         if (config != null) {
-            tls = new TlsEngineDriver(config.createEngine(http2Enabled), loop.tlsTasks, this::schedule);
+            tls = new TlsEngineDriver(config.createEngine(http2Enabled), loop.tlsTasks, this::schedule,
+                TlsEngineDriver.DEFAULT_MAX_BUFFER_SIZE, loop.tlsOutputBuffers);
             if (incoming.hasRemaining()) {
                 // Keep coalesced ciphertext independent of plaintext capacity. A provider may
                 // produce plaintext before it can admit all the prefetched encrypted bytes.
@@ -409,6 +412,7 @@ final class ChannelConnection implements ConnectionTransport {
 
     private void retire() {
         retired = true;
+        if (tls != null) tls.abort(new IOException("Transport retired"));
         tls = null;
         prefetchedCiphertext = null;
         http1 = null;

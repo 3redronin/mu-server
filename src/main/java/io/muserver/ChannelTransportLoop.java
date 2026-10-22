@@ -25,6 +25,7 @@ final class ChannelTransportLoop {
     final @Nullable HAProxyProtocolConfig proxyConfig;
     final Selector selector;
     final ThreadPoolExecutor tlsTasks;
+    final TlsOutputBufferPool tlsOutputBuffers = new TlsOutputBufferPool();
     private final Thread thread;
     private final Set<ChannelConnection> connections = new HashSet<>(); // Owner only.
     private final ConcurrentLinkedQueue<ChannelConnection> ready = new ConcurrentLinkedQueue<>();
