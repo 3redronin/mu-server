@@ -9,6 +9,10 @@ separate bounded async fixture to diagnose socket and HTTP/2 handoff costs,
 compare TLS batching, and test fairness. Its selected change and three-way
 results are recorded separately from the original workloads below.
 
+The [HTTP/2 worker-handoff experiments](#october-23-http2-worker-handoffs)
+follow that investigation, with separate dispatch counters, mixed-stream
+fairness checks and matched-rate latency controls.
+
 The short profile checks that the comparison works while the host is in use.
 Every busy-host or smoke measurement is explicitly excluded from performance
 conclusions, even when its correctness checks pass. Raw throughput, latency and
@@ -1287,3 +1291,166 @@ The next substantial hypothesis is reducing transport/HTTP/2 writer handoffs
 while preserving frame-level flow control, cancellation and fairness. These
 experiments do not prove that such a redesign will help, but they provide
 reasons to prefer investigating it over adopting these tuning tradeoffs.
+
+## October 23 HTTP/2 worker handoffs
+
+This investigation starts from `fdeb0518`, including its bounded TLS output
+coalescing. It tests whether fewer HTTP/2 writer dispatches can reduce CPU use
+without increasing response buffers, delaying cancellation or sacrificing
+small-stream latency. The [portable measurements](worker-handoffs-20261023.json)
+include every completed trial, source identities and ranges. These are local
+loopback indications, not a new release baseline: foreground CPU activity
+increased during the final three-server matrix, and all implementations slowed.
+
+The bulk fixture performs one bounded 1 MiB async write and completes the
+response. It uses eight connections, one stream each, four NIO owners, a
+65,535-byte stream window and a 16,777,215-byte connection window. TLS is 1.3
+with AES-128-GCM. Servers have a 512 MiB heap and 1 GiB cgroup limit with no
+swap; server and generator use separate logical CPU sets. Mu4 uses platform
+workers on Java 21 and virtual workers on Java 25; mu3 retains its defaults.
+The mu3 and blocking references are
+frozen earlier builds, identified in the JSON; blocking is not rebuilt from
+the candidate's source.
+
+Four variants continued a non-final DATA fragment on the transport owner after
+its previous fragment drained. They retained exclusive writer ownership,
+per-frame flow-control reservations, the source borrow and the normal final
+completion on a worker. Successive variants also yielded for unread input,
+yielded to the next selector turn, and disallowed continuation whenever another
+stream remained open.
+
+| Owner-continuation variant | Bulk throughput, Java 21 / 25 | CPU per response, Java 21 / 25 | Same-connection small-response p99 |
+| --- | --- | --- | --- |
+| Initial bounded continuation | -3.7% / -0.2% | -10.7% / -13.0% | Worse on both JDKs |
+| Also yield for input/read work | Not measured | Not measured | Worse on both JDKs |
+| Also yield between selector visits | +9.4% / +9.1% | -21.2% / -21.9% | About 18% / 16% worse |
+| Also require exactly one open stream | +7.3% / +9.1% | -20.5% / -21.9% | About 23% / 20% worse |
+
+Each percentage compares the median of two trials with its own alternating
+baseline. The fairness workload keeps a 1 MiB response continuously active
+while requesting 128-byte responses at 500/s on the same connection, with one
+NIO owner and a 2 MiB stream window. It hashes every completed body and reports both actual-send and
+scheduled latency. Its Python client is a contention probe, not a maximum-rate
+generator. Absolute timings differ between phases; compare within a phase.
+All four owner-continuation variants were discarded. The latency tradeoff
+persisted despite the extra guards. These measurements do not establish whether
+the remaining delay is in the server scheduler, socket queues or the client.
+
+The fifth variant handles a bounded prefix of valid WINDOW_UPDATE commands on
+the reader's existing worker while output is awaiting transport drainage. It
+acquires the writer's existing ownership guard. Overflow, closed-stream
+lifecycle work, SETTINGS, resets and all other commands stay in order for the
+ordinary writer; they do not wait for the socket to drain. Encoding, transport
+completion and application callbacks retain their previous execution paths.
+
+Separate instrumented runs measured writer submissions per completed response:
+
+| Diagnostic | Java 21 | Java 25 |
+| --- | ---: | ---: |
+| Baseline | 102 | 113 |
+| Owner continuation, final variant | 52 | 53 |
+| Reader applies valid credit | 88 | 92 |
+
+Counters include warm-up and probes; instrumented timings are excluded from
+speed comparisons. In the initial uninstrumented credit trials, CPU per bulk
+response fell about 5%. Longer same-connection fairness trials had overlapping
+p99 ranges: Java 21 baseline 2.280–2.600 ms versus candidate 2.280–2.359 ms;
+Java 25 baseline 2.259–2.280 ms versus candidate 2.251–2.461 ms. This does not
+establish a latency improvement. Tiny responses, eight streams sharing one
+connection, and very small flow windows showed no consistent benefit.
+
+A matched-rate control offered 1,000 bulk requests/s. Its first two Java 21
+pairs saved CPU but raised p99 from 2.410–2.495 ms to 2.681–2.742 ms. That
+prompted four further alternating pairs before selection. A sixth experiment
+coalesces only notifications for consecutive WINDOW_UPDATE frames, retaining
+all validation on the writer. It flushes the notification before other frame
+types, before error handling and at the end of each bounded reader turn.
+
+The four-pair Java 21 recheck did not reproduce the earlier p99 penalty:
+baseline p99 ranged from 2.795 to 3.302 ms and candidate p99 from 2.672 to
+2.919 ms, lower in three pairs and 1.5% higher in one. Median CPU cost was
+1,834 versus 1,817 microseconds per response, only a 0.9% reduction in this
+recheck. Both the initial adverse latency result and this mixed confirmation
+remain in the evidence. A fixed percentage speed or latency improvement is
+not established.
+
+The notification-only alternative was discarded. Its instrumented dispatches
+per response were 102.38 versus 102.05 on Java 21 and 113.45 versus 113.65 on
+Java 25. Uninstrumented median CPU changed by -0.1% / -0.5%, with overlapping
+ranges. The additional notification state and flush paths were not justified.
+
+The smaller-window fairness control used 65,535 bytes of stream credit so the
+reader encountered frequent window updates. The credit shortcut increased
+actual-send p99 in all four pairs: medians 0.534 to 0.563 ms on Java 21 and
+0.477 to 0.486 ms on Java 25, about 5.5% and 1.9%. Scheduled p99 also increased.
+These are small absolute differences, but they provide no evidence for keeping
+the extra credit-processing path without a latency tradeoff.
+
+A seventh variant skipped the shortcut whenever more frames were already
+buffered, prioritizing the reader's existing work. Its fresh paired control
+had flat actual-send p99 on Java 21 and a 2.1% increase on Java 25; scheduled
+p99 increased 1.9% / 5.2%. Bulk progress also fell 2.7% / 0.3%. This did not
+establish a clear win, so no further saturated throughput tests were run for
+that variant.
+
+**All seven experimental production changes were discarded.** The final
+production source is identical to `fdeb0518`, with SHA-256
+`8785d21fb584c43b2eda111b38ba8fe89151ec0da840fe8c37e3a6dbb9487704`.
+The retained changes are four regression cases and the configurable stream
+window in the fairness runner. The experiments show that substantial handoff
+savings are possible, but these implementations do not meet the combined CPU
+and latency goal. They do not prove that a future design cannot do so.
+
+The credit candidate passed `mvn clean verify` on Java 11, 17, 21 and 25, with
+NullAway enabled on Java 21. Each suite discovered 5,535 tests, with no failures
+or errors; Java 11/17 skipped the 176 virtual-thread-only cases. Added coverage
+checks command ordering, bounded credit processing, overflow, negative windows,
+retired streams and cancellation while transport still owns a response buffer.
+The notification alternative passed 135 focused cases, including credit
+arriving at the end of input and at the reader's 64-frame turn boundary.
+The buffered-frame guard also passed 135 focused cases. These candidate
+checks are separate from validation of the final restored production code.
+
+The final checkout passed 235 focused tests on each of Java 11, 17, 21 and 25,
+with no failures or skips and NullAway enabled on Java 21. The four retained
+cases check that credit at end-of-input resumes a blocked writer, including
+the 64-frame reader boundary, and that resets are processed while transport
+is stalled without releasing a borrowed response prematurely.
+
+The evidence audit passed 1,882 checks across 120 native and 68 fairness trials.
+Native records reconcile 6,493,758 measured successful responses. The fairness
+probes additionally hashed 440,000 measured foreground responses and 355,233
+completed bulk responses, including bulk warm-up. All 188 benchmark-owned JVM
+units are inactive and native generators were reaped. The audit also verifies
+the frozen candidate used by the full test matrix and the restored production
+digest and final test sources.
+
+The complete local evidence is beside the checkout in
+`nonblocking-validation/h2-handoffs-20261023/report.html`. It links frozen
+sources, patches, raw request timestamps, every comparison, test logs and the
+cleanup audit. The interrupted `bulk-credit` controller's final trial was
+already saved and complete; its recovered eight-trial ledger is kept beside
+the original incomplete aggregate. No failed launch is counted as a performance
+result. Native load uses body-hash probes before and after measurement; it
+does not hash every loaded response. Memory observations include whole-process
+RSS and cgroup usage, not just heap.
+
+To repeat a matched-rate comparison on this host with the frozen inputs:
+
+```sh
+../mu-conformance/.venv/bin/python \
+  ../nonblocking-validation/h2-handoffs-20261023/run.py \
+  --label credit-rate-repeat \
+  --before ../nonblocking-validation/deep-profile-20261023/release-selected \
+  --after ../nonblocking-validation/h2-handoffs-20261023/candidate-credit \
+  --roles nio --cases h2bulk --clients 8 --owners 4 --rate 1000 \
+  --warmup 10 --duration 20 --repeats 4 --jdks 21
+```
+
+Use a fresh label. For same-connection fairness, use
+`benchmarks/nio-baseline/h2_writer_fairness.py` with the corresponding
+`after-async` directories, `--warmup 5 --duration 20 --repeats 3 --jdks 21,25`
+and a fresh `--out` directory. This keeps diagnostic counts, saturated bulk
+throughput, matched-rate latency and mixed-stream fairness separate.
+The fairness runner also accepts `--stream-window 65535` to exercise frequent
+WINDOW_UPDATE traffic instead of its default 2 MiB stream window.

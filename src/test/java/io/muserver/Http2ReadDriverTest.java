@@ -674,6 +674,77 @@ class Http2ReadDriverTest {
         } finally { releaseHandler.countDown(); }
     }
 
+    @Test void windowUpdatesAndResetPreserveTheBorrowUntilTransportAcknowledgement() throws Exception {
+        var written = new CompletableFuture<java.util.concurrent.Future<@org.jspecify.annotations.Nullable Void>>();
+        try (var fixture = new Fixture((req, res) -> {
+            var async = req.handleAsync();
+            written.complete(async.write(ByteBuffer.wrap(new byte[65408])));
+            async.complete(); return true;
+        })) {
+            Session session = fixture.add(1024, true);
+            session.offer(preface(new Http2Settings(false, 4096, 100, 1, 16384, 32768)));
+            fixture.until(() -> !session.pendingOutput.isEmpty()); session.completeOutput();
+            session.offer(requestBytes(1)); fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.completeOutput(); // Response headers.
+            fixture.until(() -> !session.pendingOutput.isEmpty()); fixture.barrier();
+            var write = written.get(3, TimeUnit.SECONDS);
+            var first = session.pendingOutput.peek();
+            assertEquals(1, Http2FrameHeader.readFrom(first.bytes.duplicate()).length());
+            var updates = new ByteArrayOutputStream();
+            new Http2WindowUpdate(0, 100000).writeTo(null, updates);
+            new Http2WindowUpdate(1, 100000).writeTo(null, updates);
+            session.offer(updates.toByteArray()); fixture.barrier();
+            assertFalse(session.connection.testProbe().coordinator().hasCommands());
+            assertSame(first, session.pendingOutput.peek());
+            assertFalse(write.isDone());
+            session.holdAbortedOutput = true;
+            var reset = new ByteArrayOutputStream();
+            new Http2ResetStreamFrame(1, Http2ErrorCode.CANCEL.code()).writeTo(null, reset);
+            session.offer(reset.toByteArray()); fixture.barrier();
+            assertTrue(session.connection.testProbe().coordinator().resetRecordCount() > 0,
+                "Reset must be processed while transport is still stalled");
+            assertSame(first, session.pendingOutput.peek());
+            assertFalse(write.isDone(), "Reset must retain the transport borrow until acknowledgement");
+            session.holdAbortedOutput = false; session.failOutput();
+            assertThrows(ExecutionException.class, () -> write.get(3, TimeUnit.SECONDS));
+        }
+    }
+
+    @ParameterizedTest @ValueSource(ints = {1, 64, 65})
+    void windowUpdatesAtTheEndOfInputResumeAFlowControlledWriter(int count) throws Exception {
+        var written = new CompletableFuture<java.util.concurrent.Future<@org.jspecify.annotations.Nullable Void>>();
+        byte[] payload = new byte[count]; Arrays.fill(payload, (byte) 42);
+        try (var fixture = new Fixture((req, res) -> {
+            var async = req.handleAsync(); written.complete(async.write(ByteBuffer.wrap(payload)));
+            async.complete(); return true;
+        })) {
+            Session session = fixture.add(4096, true);
+            session.offer(preface(new Http2Settings(false, 4096, 100, 0, 16384, 32768)));
+            fixture.until(() -> !session.pendingOutput.isEmpty()); session.completeOutput();
+            session.offer(requestBytes(1)); fixture.until(() -> !session.pendingOutput.isEmpty());
+            session.completeOutput(); fixture.barrier();
+            var write = written.get(3, TimeUnit.SECONDS);
+            assertTrue(session.pendingOutput.isEmpty());
+            assertFalse(write.isDone());
+            var updates = new ByteArrayOutputStream();
+            for (int i = 0; i < count; i++) new Http2WindowUpdate(1, 1).writeTo(null, updates);
+            session.offer(updates.toByteArray());
+            while (!write.isDone()) {
+                fixture.until(() -> write.isDone() || !session.pendingOutput.isEmpty());
+                if (!session.pendingOutput.isEmpty()) session.completeOutput();
+            }
+            write.get(3, TimeUnit.SECONDS);
+            var bytes = ByteBuffer.wrap(session.output.toByteArray());
+            var body = new ByteArrayOutputStream();
+            while (bytes.hasRemaining()) {
+                var header = Http2FrameHeader.readFrom(bytes);
+                byte[] frame = new byte[header.length()]; bytes.get(frame);
+                if (header.frameType() == Http2FrameType.DATA) body.writeBytes(frame);
+            }
+            assertArrayEquals(payload, body.toByteArray());
+        }
+    }
+
     private static final class Fixture implements AutoCloseable {
         final AtomicInteger internalThreads = new AtomicInteger(), applicationThreads = new AtomicInteger();
         final ExecutorService internal = Executors.newSingleThreadExecutor(r -> new Thread(r, "h2-reader-internal-" + internalThreads.incrementAndGet()));

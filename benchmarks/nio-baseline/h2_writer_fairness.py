@@ -28,12 +28,16 @@ def options():
     parser.add_argument('--warmup', type=int, default=3)
     parser.add_argument('--duration', type=int, default=8)
     parser.add_argument('--nio-threads', type=int, default=1)
+    parser.add_argument('--stream-window', type=int, default=2 * 1048576,
+                        help='Initial per-stream flow-control credit in bytes')
     parser.add_argument('--server-cpus', default='0-3,8-11')
     parser.add_argument('--generator-cpus', default='4-7,12-15')
     args = parser.parse_args()
     for name in ('repeats', 'rate', 'warmup', 'duration', 'nio_threads'):
         if getattr(args, name) < 1:
             parser.error(name + ' must be positive')
+    if not 1 <= args.stream_window <= 2147483647:
+        parser.error('--stream-window must be between 1 and 2147483647 bytes')
     try:
         args.jdks = [int(jdk) for jdk in args.jdks.split(',')]
     except ValueError:
@@ -74,7 +78,7 @@ def trial(c, inp, directory, jdk, edition, repeat, a):
         assert sock.selected_alpn_protocol() == 'h2' and sock.cipher()[0] == 'TLS_AES_128_GCM_SHA256'
         h = H2Connection(config=H2Configuration(client_side=True, header_encoding='utf-8'))
         h.initiate_connection()
-        h.update_settings({SettingCodes.INITIAL_WINDOW_SIZE: 2 * 1048576})
+        h.update_settings({SettingCodes.INITIAL_WINDOW_SIZE: a.stream_window})
         h.increment_flow_control_window(16 * 1048576 - 65535)
         active = {}
         next_id = 1
