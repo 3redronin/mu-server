@@ -1454,3 +1454,174 @@ and a fresh `--out` directory. This keeps diagnostic counts, saturated bulk
 throughput, matched-rate latency and mixed-stream fairness separate.
 The fairness runner also accepts `--stream-window 65535` to exercise frequent
 WINDOW_UPDATE traffic instead of its default 2 MiB stream window.
+
+## Handlers waiting for a downstream service
+
+`downstream_wait.py` compares mu3, mu4-blocking and mu4-NIO while handlers wait
+for a separate loopback HTTP service. It measures both application styles:
+a handler that waits on the outbound future and an async handler that returns
+while the same outbound operation is pending. Both use one shared JDK HTTP
+client with eight named executor threads, HTTP/1 keepalive, a one-second
+connect timeout and a two-second whole-response deadline, including the body.
+The request timeout is also configured, but the fixture additionally times
+out a dependent future and cancels the original exchange when necessary.
+Both return the identical
+128-byte body through one bounded `AsyncHandle.write`. Holding the client and
+response API constant isolates the cost of retaining the handler during the
+wait; it is not a comparison of every synchronous and asynchronous client API.
+
+The dependency runs in a separate Python asyncio process, with timer-based
+delays and no artificial connection-pool limit. There is a direct-response
+control, a zero-delay downstream control, and 250 ms downstream waits. A 50 ms
+delay is available with `--delays 0,50,250`. An independent `/local` endpoint
+continues receiving fast requests while downstream calls are pending.
+
+Default loads are 400 background and 100 foreground requests/s. Background
+capacity is 256 HTTP/1 connections or eight TLS HTTP/2 connections with 32
+streams each. The foreground has its own connection using the same ingress
+protocol. Both generators pace against a global schedule and skip overdue
+slots instead of creating catch-up bursts. Exhausting background capacity
+also records a missed slot rather than queuing unbounded work. Every response
+body is validated. Raw background samples record dispatch lateness, failures,
+and warm-up/measurement phase; foreground samples contain both actual-send
+and scheduled latency, plus missed slots. This bounded workload is not an
+open-loop latency guarantee under overload.
+
+The initial matrix has 48 short trials: HTTP/1 direct, zero-delay blocking
+and async, and 250 ms blocking and async; HTTP/2 direct and 250 ms blocking
+and async; all three editions on Java 21 and 25. Each trial has three seconds
+of warm-up and five measured foreground seconds. Background traffic continues
+for one additional second to cover control/probe overhead. Reported background
+throughput counts completions in the exact foreground measurement window;
+raw samples retain the complete run. One repeat rotates edition order across
+cases. These runs validate the benchmark and provide indicative observations,
+not release rankings or a full architectural baseline.
+
+Mu4 uses PLATFORM handlers on Java 21 and VIRTUAL handlers on Java 25. Mu3
+uses its defaults. `/mode` verifies the actual worker and transport policy.
+Application waiting counters are separate from native thread counts, which
+also include transport, JDK HTTP client, GC and other JVM threads. CPU per
+successful response includes the outbound client. CPU snapshots bracket the
+foreground interval and include the small control overhead. RSS and cgroup
+memory are whole-process observations, including off-heap usage; their peaks
+and native thread peaks are sampled during measurement, not just heap totals.
+
+The server has a 512 MiB heap and a 1 GiB cgroup cap with no swap. Default CPU
+sets on this host are server `0-3,8-11`, generators `4-6,12-14`, and downstream
+`7,15`; these reserve separate physical cores and their SMT siblings. The
+runner saves CPU topology and verifies non-overlapping logical CPU sets;
+check the topology before using these defaults on another host. A direct
+downstream calibration offers twice the background rate. Missed offered load,
+generator CPU saturation and downstream timer lateness remain explicit report
+qualifications. The downstream service retains actual delay, timer lateness,
+active counts, completions and disconnects separately from server statistics.
+
+The fixture cancels outstanding outbound futures on response completion and
+shutdown. Front-end cancellation is best effort: the server may not deliver a
+completion notification while an application handler is blocked, and an
+HTTP/1 socket close is not necessarily a prompt cancellation signal. Validation
+records whether cancellation reached the outbound future or its finite request
+deadline settled the work. It also exercises downstream status/body errors,
+connection refusal, disconnects, timeouts before headers and after headers
+with a stalled body, timeout-to-504 mapping, recovery, overlapping
+requests, foreground progress and shutdown with pending operations. Injected
+startup and measurement failures verify that owned children are reaped; forced
+cleanup cannot count as a successful performance trial.
+
+Prepare new immutable inputs, validate, and run the short matrix on this host:
+
+```sh
+PYTHON=/home/daniel/Work/3redronin/mu-server/mu4/mu-conformance/.venv/bin/python
+INPUTS=../nonblocking-validation/downstream-wait-repeat/inputs
+
+"$PYTHON" benchmarks/nio-baseline/downstream_wait.py prepare \
+  --inputs ../nonblocking-validation/deep-profile-20261023/release-selected/after-async \
+  --out "$INPUTS"
+"$PYTHON" benchmarks/nio-baseline/downstream_wait.py validate \
+  --inputs "$INPUTS" --out ../nonblocking-validation/downstream-wait-repeat/validation
+"$PYTHON" benchmarks/nio-baseline/downstream_wait.py run \
+  --inputs "$INPUTS" --out ../nonblocking-validation/downstream-wait-repeat/comparison
+"$PYTHON" benchmarks/nio-baseline/audit_downstream_wait.py \
+  --inputs "$INPUTS" \
+  --comparison ../nonblocking-validation/downstream-wait-repeat/comparison \
+  --validation ../nonblocking-validation/downstream-wait-repeat/validation \
+  --out ../nonblocking-validation/downstream-wait-repeat/audit.json
+```
+
+Every output directory must be new. `prepare` verifies the parent manifest,
+copies its compiled production classes, and compiles the same fixture source
+unchanged against each edition with `--release 11`. It preserves the frozen
+mu3/blocking references and records the NIO source identity. These editions
+have different production revisions, so differences cannot be attributed
+solely to their transports. The runner snapshots its sources and Python package
+versions, records all launch commands, verifies manifests before and after the
+run, and checks actual JVM exit before resetting its owned systemd units.
+Earlier evidence is never rewritten. `report.html`, `summary.json`, raw samples,
+per-trial resource records, downstream observations and launch/cleanup evidence
+are saved beneath the chosen output directory.
+
+Run the focused harness tests with the same virtual environment:
+
+```sh
+"$PYTHON" -m unittest discover -s benchmarks/nio-baseline -p 'test_*.py'
+```
+
+### Initial downstream observations, 2026-10-24
+
+All 48 short trials passed, with no response/body failures and offered rates
+within the runner's 2% tolerance. Background throughput was 398.2–400.2/s;
+foreground throughput was 99.6–100.0/s. The generators recorded 51 missed
+background slots and eight missed foreground slots during the foreground
+measurement windows; these were not hidden by catch-up requests. Direct
+downstream calibration achieved 799.8/s at both zero and 250 ms delay, with
+timer-lateness p99 of 0.052 and 1.088 ms. Maximum background generator CPU
+use across the comparison was 0.328 cores, leaving substantial generator
+headroom for this offered load.
+
+The 250 ms cases held about 100 downstream operations in flight. Sampled peak
+native thread counts, including the outbound client and JVM threads, were:
+
+| Java | Ingress | Handler style | mu3 | mu4-blocking | mu4-NIO |
+| --- | --- | --- | ---: | ---: | ---: |
+| 21 | HTTP/1 | Blocking | 158 | 410 | 165 |
+| 21 | HTTP/1 | Async | 53 | 309 | 68 |
+| 21 | HTTP/2 TLS | Blocking | 146 | 173 | 173 |
+| 21 | HTTP/2 TLS | Async | 48 | 66 | 81 |
+| 25 | HTTP/1 | Blocking | 151 | 43 | 43 |
+| 25 | HTTP/1 | Async | 54 | 41 | 42 |
+| 25 | HTTP/2 TLS | Blocking | 145 | 41 | 50 |
+| 25 | HTTP/2 TLS | Async | 49 | 40 | 51 |
+
+These observations separate two costs. Async handlers remove the waiting
+application-worker population. On Java 21, mu4-blocking also retains platform
+threads for its HTTP/1 connections. Java 25 virtual threads greatly reduce
+both costs in native-thread terms. NIO still consumes application workers when
+the application chooses to block. Mu3's async handlers used fewer native threads
+than either Mu4 edition in both Java 21 protocols in this run.
+
+Whole-process RSS in the 250 ms cases ranged from 219–308 MiB for mu3,
+139–200 MiB for mu4-blocking, and 153–212 MiB for mu4-NIO. These are sampled,
+short-run observations, not steady-state memory requirements. Foreground
+actual-send p99 across the complete matrix ranged from 0.354 to 4.803 ms;
+scheduled p99 reached 8.648 ms. The short warm-up, single repeat and potentially
+busy host make CPU and latency rankings tentative. All three editions sustained
+this modest offered load; this is not a saturation or maximum-capacity result.
+
+The complete fault matrix passed all 24 edition/JDK/protocol/handler-style
+combinations, including a downstream that sends headers and then stalls its
+body. Both injected lifecycle failures were rejected as performance results
+and their children were reaped. The harness suite passed 60 tests, including
+20 new tests. An independent audit passed 1,458 checks, reconciling 95,943
+background and 23,992 foreground measured responses. All 74 owned JVM units
+were inactive and all 127 owned generator/dependency children were reaped.
+
+The portable results are in
+[`downstream-wait-20261024.json`](downstream-wait-20261024.json). The full local
+report is `../nonblocking-validation/downstream-wait-20261024/comparison/report.html`,
+with validation in `validation-deadline`, prepared inputs in `inputs-deadline`,
+and the independent audit in the campaign's `audit.json`. Earlier harness
+pilots remain separate from this completed comparison. The frozen references
+are mu3 `78f02551` and mu4-blocking `50ad1a70`; NIO production matches
+`fdeb0518`, with SHA-256
+`8785d21fb584c43b2eda111b38ba8fe89151ec0da840fe8c37e3a6dbb9487704`.
+This addition changes benchmark fixtures, runners, tests and evidence only.
