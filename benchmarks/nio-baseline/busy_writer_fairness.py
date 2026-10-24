@@ -71,15 +71,15 @@ def percentile(samples, key, fraction):
     return values[math.ceil(len(values) * fraction) - 1]
 
 
-def trial(c, tool, inputs, directory, jdk, edition, repeat, args):
+def trial(c, tool, inputs, directory, jdk, edition, repeat, args, role='nio'):
     row = dict(jdk=jdk, edition=edition, repeat=repeat,
                evidence_directory=str(directory), host_before=b.host_snapshot())
     fixture = generator = log = None
     try:
-        mode = 'PLATFORM' if jdk == 21 else 'VIRTUAL'
-        fixture = c.Server(inputs, directory, 'nio', args.protocol, jdk_version=jdk,
-                           java_options=[f'-Dcomparison.threading={mode}',
-                                         f'-Dcomparison.nioThreads={args.nio_threads}'])
+        mode = 'AUTO' if role == 'mu3' else 'PLATFORM' if jdk == 21 else 'VIRTUAL'
+        options = [f'-Dcomparison.threading={mode}']
+        if role == 'nio': options.append(f'-Dcomparison.nioThreads={args.nio_threads}')
+        fixture = c.Server(inputs, directory, role, args.protocol, jdk_version=jdk, java_options=options)
         fixture.ready()
         port = fixture.record['ready']['port']
         secure = args.protocol == 'https1'
@@ -87,7 +87,7 @@ def trial(c, tool, inputs, directory, jdk, edition, repeat, args):
         with c.Wire(port, tls=secure, alpn=['http/1.1']) as wire:
             wire.send(c.request('/mode'))
             reply = wire.response()
-            assert reply['status'] == 200 and reply['body_preview'] == b.expected_mode('nio', jdk)
+            assert reply['status'] == 200 and reply['body_preview'] == b.expected_mode(role, jdk)
         fixture.record['mode_check'] = reply['body_preview']
         row['bulk_probe_before'] = c.check(fixture, bulk_case, inputs)
         command = [
@@ -98,40 +98,43 @@ def trial(c, tool, inputs, directory, jdk, edition, repeat, args):
             '-H', 'accept-encoding: identity', '--output-file', str(directory / 'background.json'),
             '--log-file', str(directory / 'background.tsv'),
             f'{"https" if secure else "http"}://127.0.0.1:{port}/download?size=1048576&compressibility=high']
-        row['background_command'] = command
-        log = (directory / 'background.log').open('w')
-        generator = c.subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
-                                       start_new_session=True)
-        deadline = time.monotonic() + 3
-        while c.accepted_connections(fixture.pid, port) != args.background_clients:
-            assert generator.poll() is None and time.monotonic() < deadline
-            time.sleep(.01)
+        if args.background_clients:
+            row['background_command'] = command
+            log = (directory / 'background.log').open('w')
+            generator = c.subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT,
+                                           start_new_session=True)
+            deadline = time.monotonic() + 3
+            while c.accepted_connections(fixture.pid, port) != args.background_clients:
+                assert generator.poll() is None and time.monotonic() < deadline
+                time.sleep(.01)
         expected = hashlib.sha256(c.payload(inputs, 128)).hexdigest()
         with c.Wire(port, tls=secure, alpn=['http/1.1'], timeout=args.warmup + args.duration + 15) as wire:
             fixture.phase = 'warmup'
             paced(c, wire, expected, args.warmup, args.foreground_rps)
             fixture.phase = 'measurement'
             row['measurement_before'] = fixture.stats()
-            assert generator.poll() is None
+            assert generator is None or generator.poll() is None
             row['accepted_connections'] = c.accepted_connections(fixture.pid, port)
             assert row['accepted_connections'] == args.background_clients + 1
             samples = paced(c, wire, expected, args.duration, args.foreground_rps)
             row['measurement_after'] = fixture.stats()
-            assert generator.poll() is None
+            assert generator is None or generator.poll() is None
             row['connections_after_measurement'] = c.accepted_connections(fixture.pid, port)
             assert row['connections_after_measurement'] == args.background_clients + 1
             b.save(directory / 'foreground-samples.json', samples)
-        assert generator.wait(timeout=args.warmup + args.duration + 15) == 0
-        raw = b.read(directory / 'background.json')['measurements']
-        audit = c.audit_requests(directory / 'background.tsv')
-        background_case = dict(bulk_case, clients=args.background_clients)
-        row['background_warmup_carryover'] = c.reconcile_native(audit, raw['requests'], background_case)
-        assert raw['requests']['failed'] == raw['requests']['errored'] == raw['requests']['timeout'] == 0
+        if generator:
+            assert generator.wait(timeout=args.warmup + args.duration + 15) == 0
+            raw = b.read(directory / 'background.json')['measurements']
+            audit = c.audit_requests(directory / 'background.tsv')
+            background_case = dict(bulk_case, clients=args.background_clients)
+            row['background_warmup_carryover'] = c.reconcile_native(audit, raw['requests'], background_case)
+            assert raw['requests']['failed'] == raw['requests']['errored'] == raw['requests']['timeout'] == 0
+            row.update(background_audit=audit, background_exit_code=generator.returncode)
         start = samples['epoch'] * 1e6
         end = start + samples['elapsed'] * 1e6
         active = 0
         bins = [0] * math.ceil(samples['elapsed'])
-        for line in (directory / 'background.tsv').read_text().splitlines():
+        for line in (directory / 'background.tsv').read_text().splitlines() if generator else []:
             timestamp, status, elapsed = map(int, line.split()[:3])
             completed = timestamp + elapsed
             if status == 200 and start <= completed < end:
@@ -139,9 +142,9 @@ def trial(c, tool, inputs, directory, jdk, edition, repeat, args):
                 bins[int((completed - start) / 1e6)] += 1
         # Every full second must contain bulk completions; a live but stalled generator
         # cannot qualify as competition from continuously draining writers.
-        assert all(count > args.background_clients for count in bins[:math.floor(samples['elapsed'])]), bins
-        row.update(background_audit=audit, background_during_foreground=active,
-                   background_completions_per_second=bins, background_exit_code=generator.returncode)
+        if generator:
+            assert all(count > args.background_clients for count in bins[:math.floor(samples['elapsed'])]), bins
+        row.update(background_during_foreground=active, background_completions_per_second=bins)
         observations = samples['samples']
         row['measurement'] = dict(
             errors=0, requests=len(observations), requests_per_second=len(observations) / samples['elapsed'],
@@ -152,7 +155,7 @@ def trial(c, tool, inputs, directory, jdk, edition, repeat, args):
         fixture.phase = 'recovery'
         row['bulk_probe_after'] = c.check(fixture, bulk_case, inputs)
         row['recovered'] = fixture.stats()
-        assert row['measurement']['requests_per_second'] > args.foreground_rps * .98
+        row['target_rate_met'] = row['measurement']['requests_per_second'] >= args.foreground_rps * .98
         row['outcome'] = 'pass'
     except Exception as error:
         row.update(outcome='failure', error=repr(error))

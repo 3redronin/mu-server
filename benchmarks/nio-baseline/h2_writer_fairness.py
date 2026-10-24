@@ -51,7 +51,7 @@ def pct(values, fraction):
     return sorted(values)[math.ceil(len(values) * fraction) - 1]
 
 
-def trial(c, inp, directory, jdk, edition, repeat, a):
+def trial(c, inp, directory, jdk, edition, repeat, a, role='nio'):
     from h2.config import H2Configuration
     from h2.connection import H2Connection
     from h2.events import ResponseReceived, DataReceived, StreamEnded, StreamReset, ConnectionTerminated
@@ -59,10 +59,10 @@ def trial(c, inp, directory, jdk, edition, repeat, a):
     row = dict(jdk=jdk, edition=edition, repeat=repeat, evidence_directory=str(directory), host_before=b.host_snapshot())
     server = sock = None
     try:
-        mode = 'PLATFORM' if jdk == 21 else 'VIRTUAL'
-        server = c.Server(inp, directory, 'nio', 'h2', jdk_version=jdk,
-                          java_options=[f'-Dcomparison.threading={mode}',
-                                        f'-Dcomparison.nioThreads={a.nio_threads}'])
+        mode = 'AUTO' if role == 'mu3' else 'PLATFORM' if jdk == 21 else 'VIRTUAL'
+        options = [f'-Dcomparison.threading={mode}']
+        if role == 'nio': options.append(f'-Dcomparison.nioThreads={a.nio_threads}')
+        server = c.Server(inp, directory, role, 'h2', jdk_version=jdk, java_options=options)
         server.ready()
         port = server.record['ready']['port']
         row['check_before'] = c.check(server, b.case('h2bulk'), inp)
@@ -128,7 +128,7 @@ def trial(c, inp, directory, jdk, edition, repeat, a):
                     end = time.monotonic()
                     assert state['status'] == '200'
                     if state['kind'] == 'mode':
-                        assert state['body'].decode() == b.expected_mode('nio', jdk)
+                        assert state['body'].decode() == b.expected_mode(role, jdk)
                         row['mode_check'] = state['body'].decode()
                         server.record['mode_check'] = row['mode_check']
                         continue
@@ -170,7 +170,7 @@ def trial(c, inp, directory, jdk, edition, repeat, a):
                 submit('small', start + next_small / a.rate, next_small)
                 next_small += 1
             peak = max(peak, sum(x['kind'] == 'small' for x in active.values()))
-            if now < finish and bulk is None:
+            if now < finish and bulk is None and getattr(a, 'background', True):
                 submit('bulk')
             flush()
             if next_small == total and not any(x['kind'] == 'small' for x in active.values()):
@@ -179,6 +179,7 @@ def trial(c, inp, directory, jdk, edition, repeat, a):
             delay = min(0.01, max(0, due - time.monotonic()))
             if sock.pending() or select.select([sock], [], [], delay)[0]:
                 receive()
+        elapsed = max(a.duration, time.monotonic() - measure)
         row['after'] = server.stats()
         row['connections_after'] = c.accepted_connections(server.pid, port)
         assert row['connections_after'] == 1
@@ -191,9 +192,10 @@ def trial(c, inp, directory, jdk, edition, repeat, a):
         assert len(observations) == a.duration * a.rate
         bins = [sum(measure + i <= r['end'] < measure + i + 1 for r in bulk_results)
                 for i in range(a.duration)]
-        assert all(n > 0 for n in bins), bins
+        if getattr(a, 'background', True): assert all(n > 0 for n in bins), bins
         row['measurement'] = dict(
-            requests=len(observations), p50_ms=pct([r['latency_ms'] for r in observations], 0.5),
+            requests=len(observations), elapsed_seconds=elapsed, requests_per_second=len(observations) / elapsed,
+            p50_ms=pct([r['latency_ms'] for r in observations], 0.5),
             p99_ms=pct([r['latency_ms'] for r in observations], 0.99),
             scheduled_p99_ms=pct([r['scheduled_ms'] for r in observations], 0.99),
             dispatch_p99_ms=pct([r['late_ms'] for r in observations], 0.99),

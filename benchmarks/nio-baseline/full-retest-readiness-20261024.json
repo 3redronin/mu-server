@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "purpose": "Runner readiness and handoff; no full baseline performance results",
+  "campaign": "/home/daniel/Work/3redronin/mu-server/mu4/nonblocking-validation/full-retest-20261024",
+  "full_baseline_started": false,
+  "plan": {
+    "workloads": 104,
+    "comparison_groups": 560,
+    "jvm_trials": 1680,
+    "timed_hours": 35.6,
+    "warmup_seconds": 20,
+    "measurement_seconds": 60,
+    "comparison_repeats": 3,
+    "jdks": [
+      21,
+      25
+    ]
+  },
+  "source_sha256": {
+    "mu3": "f6c538c74df96cc2e7e479fb4f079cf5ff51a1fc177928b5895184156782fb8a",
+    "blocking": "a9b6ed96781de6fe6d221d2886264849c2ec1b4da3f408a8993ea6dcd8074014",
+    "nio": "8785d21fb584c43b2eda111b38ba8fe89151ec0da840fe8c37e3a6dbb9487704"
+  },
+  "runtime_versions": {
+    "21": "openjdk version \"21.0.12.1\" 2026-08-18 LTS\nOpenJDK Runtime Environment Temurin-21.0.12.1+1 (build 21.0.12.1+1-LTS)\nOpenJDK 64-Bit Server VM Temurin-21.0.12.1+1 (build 21.0.12.1+1-LTS, mixed mode, sharing)\n",
+    "25": "openjdk version \"25.0.4.1\" 2026-08-18 LTS\nOpenJDK Runtime Environment Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS)\nOpenJDK 64-Bit Server VM Temurin-25.0.4.1+1 (build 25.0.4.1+1-LTS, mixed mode, sharing)\n"
+  },
+  "validation": {
+    "complete": true,
+    "current_harness_unit_tests": 75,
+    "frozen_measurement_harness_unit_tests": 74,
+    "selected_smoke_trials": 102,
+    "selected_outcomes": {
+      "pass": 102
+    },
+    "all_smoke_attempt_trials": 105,
+    "all_attempt_outcomes": {
+      "pass": 104,
+      "cleanup failure": 1
+    },
+    "downstream_fault_combinations": 24,
+    "injected_lifecycle_failures": 2,
+    "original_trials_unchanged_after_pause_resume": 21,
+    "owned_jvm_units_inactive": 131,
+    "owned_processes_remaining": 0,
+    "extended_burst": [
+      {
+        "role": "blocking",
+        "jdk": 25,
+        "outcome": "pass",
+        "warmup_seconds": 3,
+        "measurement_seconds": 10,
+        "observed_peak_inflight": 8,
+        "requests": 320
+      },
+      {
+        "role": "nio",
+        "jdk": 25,
+        "outcome": "pass",
+        "warmup_seconds": 3,
+        "measurement_seconds": 10,
+        "observed_peak_inflight": 8,
+        "requests": 320
+      },
+      {
+        "role": "mu3",
+        "jdk": 25,
+        "outcome": "pass",
+        "warmup_seconds": 3,
+        "measurement_seconds": 10,
+        "observed_peak_inflight": 8,
+        "requests": 320
+      }
+    ]
+  },
+  "retained_finding": {
+    "outcome": "intermittent reference shutdown failure; not fixed",
+    "edition": "mu3",
+    "jdk": 25,
+    "workload": "raw-upload-h2",
+    "original_result": "smoke/attempts/comparison/0/25/raw-upload-h2/0/mu3/result.json",
+    "observation": "All 4443 measured responses succeeded. The server printed STOPPED but a non-daemon muhandler remained in RequestBodyReaderInputStreamAdapter.waitForData; the JVM required forced cleanup after ten seconds.",
+    "diagnostic": "../../full-retest-preparation-20261024/mu3-upload-diagnostic",
+    "diagnostic_plan": "Three fresh Java 25 mu3 trials, declared before running; all passed normal shutdown.",
+    "decision": "Retain failed attempt and retry the complete comparison once to finish runner validation. No check was weakened and no production input changed. The full baseline must stop and retain evidence if this happens again."
+  },
+  "files": {
+    "settings.json": "829bb9b5f8a2d63c589822c3b74a01c97148ff5920a5d745cde8f3b9bdce82e3",
+    "plan.json": "5901b12fe17bb74706f220443bd5da349a11e36a7ec6d2483310783867e60474",
+    "validation.json": "fb9cd1a20529c9112e6e579dae5de41ef293c300e00b33d401687b34ad0fe8d3",
+    "audit-code-manifest.json": "0c850701604a5003c1f687fbe4ead6da90fa29c56c5a38dc55babed30663f325",
+    "validation/smoke/audit.json": "53811720bc9652b6632309b87beb055e64bafe85ec41522cd7852165f2de0c74",
+    "validation/faults-0/validation.json": "ec3d8fcc0e393242499c6f815291a94f504a45ff60edf508d13fe34571c48e08",
+    "validation/resume-evidence.json": "501a94f8678b5bad4b538e20de82c115ed27252d0a0effce3fe4a3a2c49ec637",
+    "validation/current-unit-tests.log": "08e4d12f60d1c6b715604f17ec397f02845f9cffe596e73c0b5989c606fbcb09"
+  },
+  "extended_burst_audit": {
+    "path": "/home/daniel/Work/3redronin/mu-server/mu4/nonblocking-validation/full-retest-preparation-20261024/extended-burst/audit.json",
+    "sha256": "e45dc83cdc80c6e092947a5969eedd9a94025d825e04669cfb5d77fe298b0f59"
+  },
+  "interpretation": "Smoke timings are excluded from rankings. A prior mu3 shutdown failure remains a failure; a passing retry does not establish that defect is fixed. Full runs still stop on recurrence."
+}

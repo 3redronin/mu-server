@@ -1,5 +1,10 @@
 # Three-way NIO baseline
 
+For the complete current rerun, use the
+[full retest handoff](#full-retest-handoff-24-october-2026) below. The older
+commands and results remain historical evidence; their default input revisions
+must not be substituted for the newly frozen campaign.
+
 Compare Mu3/Netty, pre-migration Mu4-blocking and optimized Mu4-NIO with one
 application fixture, source/class/dependency inventories and a native h2load
 generator. Production code and public async queue policy are outside this runner.
@@ -1625,3 +1630,219 @@ are mu3 `78f02551` and mu4-blocking `50ad1a70`; NIO production matches
 `fdeb0518`, with SHA-256
 `8785d21fb584c43b2eda111b38ba8fe89151ec0da840fe8c37e3a6dbb9487704`.
 This addition changes benchmark fixtures, runners, tests and evidence only.
+
+## Full retest handoff, 24 October 2026
+
+`full_retest.py` prepares, validates, checkpoints, resumes and audits the whole
+collection. The campaign prepared on this workstation is:
+
+```text
+/home/daniel/Work/3redronin/mu-server/mu4/nonblocking-validation/full-retest-20261024
+```
+
+The long baseline has **not** been started. Its comparisons use frozen mu3
+`78f02551`, mu4-blocking `50ad1a70`, and current NIO production matching
+`fdeb0518` (source SHA-256
+`8785d21fb584c43b2eda111b38ba8fe89151ec0da840fe8c37e3a6dbb9487704`).
+These are different production revisions, so results compare complete editions;
+they cannot isolate transport implementation as the only cause of differences.
+
+Preparation is complete: 75 current harness unit tests passed, the selected
+102 smoke trials passed their independent audit, all 24 downstream fault
+combinations passed, and both injected lifecycle failures were rejected and
+cleaned up. Pause/resume preserved 21 original trial hashes. A separate
+3 s warm-up / 10 s measurement burst check passed for all three editions,
+verifying operation beyond the former eight-second script. All 131 JVM units
+from the main validation are inactive, with no owned processes remaining.
+The retained mu3 failure described below is included in the
+[portable readiness record](full-retest-readiness-20261024.json); it is not
+counted as a successful trial.
+
+### What the runner will execute
+
+There are **104 workloads, 560 comparison groups and 1,680 fresh JVM trials**.
+Every group runs all three editions consecutively. Main comparisons use 20 s
+warm-up, 60 s measurement and three repeats, rotating edition order so each
+edition occupies each position once. Both Java 21 and Java 25 are tested.
+Mu4 uses PLATFORM on 21 and VIRTUAL on 25; mu3 retains its defaults. The actual
+worker/transport policy is checked through `/mode`.
+
+| Family | Cases | Coverage |
+| --- | ---: | --- |
+| Core | 6 | Sync small, fixed/chunked HTTP/1 bulk, HTTPS bulk, H2 bulk and multiplexed small responses |
+| Isolation | 6 | HTTP/1, HTTPS and H2 foreground, alone and with 128 paused downloads |
+| Async | 10 | Bulk, multiplexing, two compression entropies, raw/multipart uploads, 256 connections |
+| Response sizes | 7 | TLS 16/64/128/256 KiB and small responses on eight HTTP/1, HTTPS or H2 connections |
+| H2 windows | 3 | Small and large receive windows; one multiplexed connection and eight separate connections |
+| Matched load | 3 | TLS 1 MiB at 4,000/s, TLS 64 KiB at 25,000/s, H2 1 MiB at 1,000/s |
+| Bounded output | 4 | Small fixed-rate and bulk TLS, alone and with 32 paused downloads |
+| Streaming | 5 | HTTPS and H2 controls, 128 paused peers, and 768 paused H2 peers |
+| Rounded H2 probes | 10 | Multiplexed download/upload, bursts, and shared-connection paused-stream fairness |
+| Density | 6 | HTTP/1 and HTTPS at 0/1,024/4,096 idle connections, 512 MiB total cap |
+| Heap tuning | 16 | 512/1,024 MiB caps, four heap sizes, zero and 4,096 idle TLS connections |
+| Heap confirmation | 4 | Independent confirmation of each selected heap, including zero-idle controls |
+| Busy writers | 8 | HTTP/1 and HTTPS with/without bulk writers; H2 shared-connection bulk with two windows |
+| Collectors | 4 | Explicit G1 small/HTTP1 bulk/H2 bulk, plus Serial small-response control |
+| Downstream waits | 12 | Direct controls and blocking/async handlers; HTTP/1 and H2; 0/50/250 ms delays |
+
+`plan.json` is the authoritative list of exact parameters and execution order.
+Heap tuning runs first, once per candidate, with 5 s warm-up and 10 s
+measurement. It chooses the smallest heap that sustains the fixed target with
+a complete cohort and a successful zero-idle control. If none qualifies, the
+recorded fallback chooses the best correctly completed rate, or the largest
+established cohort. `heap-selection.json` marks that fallback explicitly.
+Confirmation then uses fresh JVMs and the full three-repeat protocol. Never
+choose a different heap by looking at confirmation results.
+
+Allow **about 36 hours of timed work plus setup, verification and reporting**,
+spread across quiet sessions. Connection establishment and resource-limited
+cases can add substantial time. Do not shrink durations or omit difficult
+cases to finish in one night. Discarded optimization candidates, unbounded async
+writes and the old 1,024-paused-request admission-limit diagnostic are outside
+this baseline. No profiler is attached during measurements.
+
+Most trials have a 512 MiB heap, 1 GiB total cgroup cap and no swap. Density
+and heap experiments specify their own equal total caps. Compare whole-process
+RSS/cgroup observations, not heap alone: mu3 uses off-heap Netty memory.
+The server CPU set is `0-3,8-11`; native clients use `4-7,12-15`. Downstream
+tests use `4-6,12-14` for clients and `7,15` for the dependency. These sets match
+this workstation's physical cores and SMT siblings. The dependency is calibrated
+at twice the requested background rate in each session that runs those cases.
+
+### Instructions for the executing agent
+
+Use the existing prepared campaign. Do not rebuild, switch inputs, update its
+copied code or packages, change JDKs, or run the older controllers alongside it.
+Preparation froze source identities, compiled classes, dependencies, fixtures,
+controller code and runtime versions. Integrity checks run on resume and around
+measurements. The wrapper serializes its own campaigns and records owned
+processes; it does not prevent unrelated desktop activity or other benchmarks.
+
+Set these variables in the repository working directory:
+
+```sh
+PYTHON=/home/daniel/Work/3redronin/mu-server/mu4/mu-conformance/.venv/bin/python
+CAMPAIGN=/home/daniel/Work/3redronin/mu-server/mu4/nonblocking-validation/full-retest-20261024
+RUNNER="$CAMPAIGN/code/full_retest.py"
+AUDITOR="$CAMPAIGN/audit-code/full_retest.py"
+"$PYTHON" "$RUNNER" status --out "$CAMPAIGN"
+```
+
+Check that `validation.json` says `complete: true`. Its validation uses 102 short
+trials across all three editions and both JDKs, the Python harness tests and
+24 downstream fault/recovery combinations plus two injected lifecycle failures.
+Smoke cohorts are capped at 64 idle connections and eight paused peers; these
+checks establish runner readiness, not full-scale performance or capacity.
+Preparation also exposed an intermittent **mu3 Java 25 H2 upload shutdown
+failure**: all 4,443 measured responses succeeded, but after `STOPPED` a
+non-daemon handler remained in
+`RequestBodyReaderInputStreamAdapter.waitForData`. The runner rejected the
+trial because its JVM required forced cleanup. Three predeclared isolated
+diagnostic repeats passed; the complete comparison was then retried once to
+continue validation. The original failure and thread dump remain in
+`validation/smoke/attempts/comparison/0/25/raw-upload-h2/0/mu3/`, with the
+investigation in `validation/mu3-upload-shutdown-finding.json`.
+This is **not a fixed defect or a successful shutdown result**. The full runner
+still stops if it recurs; retain it as a reference-edition failure instead of
+repeatedly retrying for a clean benchmark.
+
+If validation was interrupted, resume it with:
+
+```sh
+"$PYTHON" "$AUDITOR" validate --out "$CAMPAIGN"
+```
+
+**Wait until the user has released the PC for a quiet session.** Then run:
+
+```sh
+"$PYTHON" "$RUNNER" run --out "$CAMPAIGN" --host-state quiet --max-hours 8
+```
+
+Repeat the same command in each later quiet session. Completed groups are
+skipped. The time limit is checked between complete three-edition groups, so
+the last group may run beyond eight hours. `--max-groups 1` is available for a
+single complete comparison. Use a persistent terminal session; do not launch
+another copy because terminal output appears quiet. Inspect `status` or the
+current group's worker log instead. The runner checkpoints after every trial
+and group, preserves previous attempts, and stops before a new group if less
+than 20 GiB of disk space remains. Keep the raw artifacts.
+
+To request an orderly pause from another terminal:
+
+```sh
+"$PYTHON" "$RUNNER" pause --out "$CAMPAIGN"
+```
+
+It finishes the current three-edition group and exits. Wait for `CHECKPOINT`
+before assuming measurement has stopped. If desktop use or another load
+overlapped measurements, pause first and invalidate that session once the runner
+has exited. Session IDs and timestamps are in `state.json`:
+
+```sh
+"$PYTHON" "$RUNNER" invalidate-session --out "$CAMPAIGN" \
+  --session 0 --reason 'Desktop work overlapped this session'
+"$PYTHON" "$RUNNER" run --out "$CAMPAIGN" --host-state quiet \
+  --max-hours 8 --retry-failed
+```
+
+Replace `0` and the reason with the actual session and observation. This reruns
+the whole affected comparisons and retains the original evidence and reason.
+For an interrupted or failed group, inspect its `result.json`, worker log,
+server log and cleanup records first. A documented resource limit is a valid
+capacity observation and can continue automatically; a generic connection
+error, incorrect body, missing population or cleanup failure cannot be silently
+relabelled as one. Use `--retry-failed` only after identifying a transient cause.
+Do not repeatedly retry a reproducible protocol/cleanup failure until it happens
+to pass. A change to measurement or production code requires new frozen inputs and validation;
+report the affected case rather than weakening its check or silently skipping it.
+
+After `status` shows every group complete:
+
+```sh
+"$PYTHON" "$AUDITOR" audit --out "$CAMPAIGN"
+"$PYTHON" "$RUNNER" report --out "$CAMPAIGN"
+```
+
+The deliverables are `report.html`, `summary.json`, `audit.json`,
+`heap-selection.json`, `settings.json`, `plan.json` and `state.json`, with their
+linked raw evidence. Do not call the baseline complete if the audit fails.
+The independent validator/auditor is pinned in `audit-code-manifest.json`;
+its receipts record the executed auditor hash. It reads both the per-result
+and per-launch worker-policy records used by the different workload families.
+Post-processing can be corrected without modifying the frozen measurement
+controller, inputs or completed trials. Newly prepared campaigns can use their
+own copied runner for both operations; the separate audit snapshot above is
+the one tested for this existing campaign.
+
+### How to summarize the results
+
+Compare mu3, mu4-blocking and mu4-NIO **within the same workload and JDK**.
+Report achieved throughput, p99 and available deeper tails, CPU per successful
+response, whole-process memory, native threads and correctness/capacity outcomes.
+Include both isolated and competing-work cases, and separate Java 21 platform
+workers from Java 25 virtual workers. Report clear wins, regressions and cases
+where the repeated ranges overlap; avoid one overall winner or averaging ratios
+across unrelated workloads.
+
+The report gives medians and ranges. `summary.json` also gives NIO/reference
+ratios paired by repeat, with the number of eligible pairs. Busy, smoke, tuning,
+failed, target-missing, generator-saturated and dependency-late observations are
+excluded from speed rankings. Three eligible paired repeats are needed for a
+settled speed comparison; fewer pairs do not establish that ranking. Resource
+limits and excluded raw results remain visible, including all older attempts
+in `state.json`.
+
+Matched-load latency is comparable only when both editions achieved the same
+target. A missed target remains a capacity finding. Native h2load latency is
+not an open-loop arrival-to-completion SLA; downstream probes account for missed
+scheduled slots, while the older writer probes allow bounded catch-up and save
+dispatch lateness. Do not mix these latency definitions or claim WAN behavior
+from loopback flow-control windows. Memory peaks are sampled process/cgroup
+observations, not a heap-only comparison or proof of long-term leak freedom.
+
+To prepare another campaign after an intentional code/runtime change, use a new
+output directory and rerun validation. `prepare` refuses production inputs that
+do not match the current NIO production source digest. The default source input
+is the verified selected async snapshot from 23 October, not the original
+pre-optimization NIO build. `--families` and `--cases` support separate diagnostic
+campaigns; do not use them to silently reduce this full baseline.

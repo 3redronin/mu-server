@@ -3,6 +3,7 @@
 import argparse
 import contextlib
 import html
+import math
 import os
 from pathlib import Path
 import shutil
@@ -52,7 +53,7 @@ def native_command(command, tool, window):
     return result
 
 
-def burst_command(command, directory, clients):
+def burst_command(command, directory, clients, seconds=8):
     """Eight total requests every 250 ms; timings continue past the run boundary."""
     result = list(command)
     index = result.index('--rps')
@@ -60,7 +61,7 @@ def burst_command(command, directory, clients):
     script = directory/'burst-timing.tsv'
     uri = result[-1]
     script.write_text(''.join(f'{100 + batch*250}\t{uri}\n'
-                             for batch in range(32) for _ in range(8//clients)))
+                             for batch in range(math.ceil(seconds * 4)) for _ in range(8//clients)))
     result[-1:-1] = ['--timing-script-file', str(script)]
     return result
 
@@ -85,7 +86,9 @@ def native_trial(c, inputs, directory, item, settings, tool):
     def popen(command, *args, **kwargs):
         command = native_command(command, tool, item['window_bits'])
         if isinstance(command, (list, tuple)) and str(tool) in command:
-            if item.get('burst'): command = burst_command(command, directory, item['case']['clients'])
+            if item.get('burst'):
+                command = burst_command(command, directory, item['case']['clients'],
+                                        settings['warmup'] + settings['duration'] + 5)
             commands.append(command)
         return original(command, *args, **kwargs)
     c.subprocess.Popen = popen
@@ -98,7 +101,7 @@ def native_trial(c, inputs, directory, item, settings, tool):
     if raw_path.exists() and 'measurement' in row:
         raw = b.read(raw_path)['measurements']
         row['tails'] = tail_percentiles(raw['performance']['request'], raw['requests']['done'])
-    if (directory/'requests.tsv').exists():
+    if item.get('observe_overlap', True) and (directory/'requests.tsv').exists():
         row['observed_peak_inflight'] = overlap(directory/'requests.tsv')
         if item.get('burst') and row['observed_peak_inflight'] < 4:
             row.update(outcome='insufficient request overlap',error='Burst failed to exercise at least four overlapping requests')
@@ -299,11 +302,11 @@ def fairness_trial(c, inputs, directory, item, settings):
     return row
 
 
-def finish_row(row):
+def finish_row(row, host_state='busy', profile='smoke'):
     error = d.shutdown_error(row.get('launch', {}))
     if error and row['outcome'] == 'pass': row.update(outcome='cleanup failure', error=error)
     row['target_rate_met'] = row.get('measurement', {}).get('requests_per_second', 0) >= .98*row['target_rps']
-    row['performance_exclusions'] = b.exclusions(row, 'busy', 'smoke')
+    row['performance_exclusions'] = b.exclusions(row, host_state, profile)
     samples = row.get('launch', {}).get('samples', [])
     measured = [s for s in samples if s['phase'] == 'measurement']
     row['measurement_peak_mib'] = max([s['cgroup']['current'] for s in measured]+[0])/1048576
